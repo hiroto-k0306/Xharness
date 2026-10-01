@@ -149,6 +149,19 @@ export function Sidebar(p: SidebarProps) {
                     >
                       <div className={styles.title}>{s.title}</div>
                       <div className={styles.meta}>
+                        {!!Object.values(view?.agents ?? {}).filter(
+                          (a) => a.status === "running",
+                        ).length && (
+                          <span>
+                            ●{" "}
+                            {
+                              Object.values(view?.agents ?? {}).filter(
+                                (a) => a.status === "running",
+                              ).length
+                            }{" "}
+                            agents
+                          </span>
+                        )}
                         {s.permissionMode && (
                           <span
                             style={{

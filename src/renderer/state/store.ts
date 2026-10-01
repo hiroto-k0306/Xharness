@@ -12,12 +12,24 @@ import {
 } from "../../shared/ipc.js";
 
 export interface PendingPermission {
+  agentId?: string;
+  plan?: unknown[];
   requestId: string;
   receiptId?: string;
   tool: string;
   summary: string;
 }
 export interface SessionView {
+  agents?: Record<
+    string,
+    Extract<UiEvent, { type: "agent" }> & {
+      text?: string;
+      items?: TranscriptItem[];
+    }
+  >;
+  activeAgent?: string;
+  workflow?: Extract<UiEvent, { type: "workflow" }>;
+  agentSteps?: Record<string, Extract<UiEvent, { type: "agent_step" }>>;
   stepCount?: number;
   receipts?: Receipt[];
   items: TranscriptItem[];
@@ -54,11 +66,35 @@ let noticeSeq = 0;
 export const notice = (
   tone: "dim" | "warn" | "err",
   text: string,
-): TranscriptItem => ({ kind: "notice", id: `n${++noticeSeq}`, tone, text });
+): Extract<TranscriptItem, { kind: "notice" }> => ({
+  kind: "notice",
+  id: `n${++noticeSeq}`,
+  tone,
+  text,
+});
 
 /** main から届くイベントを反映するだけの純関数(レンダラは状態を持たない: §16.4) */
 export function applyEvent(s: EventState, e: UiEvent): EventState {
   switch (e.type) {
+    case "workflow":
+      return put(s, e.sessionId, {
+        ...view(s, e.sessionId),
+        workflow: e,
+        items:
+          view(s, e.sessionId).workflow?.phase === e.phase ||
+          ["off", "classify"].includes(e.phase)
+            ? view(s, e.sessionId).items
+            : [
+                ...view(s, e.sessionId).items,
+                { ...notice("dim", `Workflow · ${e.phase}`), phase: e.phase },
+              ],
+      });
+    case "agent_step":
+      return put(s, e.sessionId, {
+        ...view(s, e.sessionId),
+        agentSteps: { ...view(s, e.sessionId).agentSteps, [e.agentId]: e },
+        activeAgent: e.agentId,
+      });
     case "repository_progress":
       return { ...s, repositoryProgress: e.message };
     case "receipt_history":
@@ -117,6 +153,7 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
         ...view(s, e.sessionId),
         stepCount: e.round,
         step: { step: e.step, node: e.node, round: e.round },
+        activeAgent: "main",
       });
     case "text_delta": {
       const v = view(s, e.sessionId);
@@ -166,6 +203,8 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
           receiptId: e.receiptId,
           tool: e.tool,
           summary: e.summary,
+          plan: e.plan,
+          agentId: e.agentId,
         },
       });
     case "permission_resolved": {
@@ -198,9 +237,39 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
           )
         : s;
     }
-    // Phase 2 では表示しない(Receipts / UsagePopover / AgentsPanel は Phase 4-5)
-    case "agent":
-      return s;
+    case "agent": {
+      if (!e.sessionId) return s;
+      const v = view(s, e.sessionId);
+      return put(s, e.sessionId, {
+        ...v,
+        agents: {
+          ...v.agents,
+          [e.agentId]: { ...v.agents?.[e.agentId], ...e },
+        },
+      });
+    }
+    case "agent_text": {
+      const v = view(s, e.sessionId),
+        agent = v.agents?.[e.agentId];
+      if (!agent) return s;
+      return put(s, e.sessionId, {
+        ...v,
+        agents: {
+          ...v.agents,
+          [e.agentId]: { ...agent, text: (agent.text ?? "") + e.text },
+        },
+      });
+    }
+    case "agent_transcript": {
+      const v = view(s, e.sessionId),
+        agent = v.agents?.[e.agentId];
+      return agent
+        ? put(s, e.sessionId, {
+            ...v,
+            agents: { ...v.agents, [e.agentId]: { ...agent, items: e.items } },
+          })
+        : s;
+    }
   }
 }
 

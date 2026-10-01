@@ -1,0 +1,157 @@
+.side {
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--side-bg);
+  font-size: 12px;
+  width: 252px;
+}
+.newBtn {
+  margin: 12px 12px 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--claude);
+  border-radius: 4px;
+  color: var(--claude);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.newBtn kbd {
+  font: inherit;
+  font-size: 10px;
+  color: var(--dim);
+}
+.search {
+  margin: 0 12px 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  outline: none;
+}
+.search:focus {
+  border-color: var(--claude);
+}
+.filter {
+  margin: 0 12px 4px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--dim);
+}
+.list {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 6px 10px;
+}
+.group {
+  margin-bottom: 4px;
+}
+.other {
+  border-top: 1px dashed var(--line);
+  padding-top: 4px;
+  margin-top: 6px;
+}
+.head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 14px 1fr auto;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px 2px;
+  font-weight: 600;
+  text-align: left;
+}
+.head:hover .name {
+  color: var(--claude);
+}
+.other .name {
+  color: var(--dim);
+}
+.fold {
+  color: var(--dim);
+  font-size: 10px;
+  display: inline-block;
+  transform: rotate(-90deg);
+  transition: transform 0.15s;
+}
+.foldOpen {
+  transform: none;
+}
+.count {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dim);
+}
+.path {
+  font-size: 10px;
+  color: var(--dim);
+  padding: 0 8px 4px 26px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sess {
+  display: block;
+  width: calc(100% - 18px);
+  margin-left: 18px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border-left: 2px solid transparent;
+  text-align: left;
+}
+.sess:hover {
+  background: var(--panel);
+}
+.cur {
+  background: var(--panel);
+  border-left-color: var(--claude);
+}
+.askRow {
+  border-left-color: var(--warn);
+  background: #221d14;
+}
+.title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta {
+  font-size: 10px;
+  color: var(--dim);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.pdot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+/* 裏で動いているセッション: 現在の STEP の役割色で明滅(§16.3) */
+.live {
+  color: var(--glow, var(--code));
+  animation: blink 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live {
+    animation: none;
+  }
+}
+.empty {
+  padding: 12px 8px;
+  color: var(--dim);
+  font-size: 11px;
+}
+.foot {
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--dim);
+  font-size: 11px;
+}

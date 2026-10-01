@@ -1,0 +1,75 @@
+.bar {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 0 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.bar button {
+  -webkit-app-region: no-drag;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Silkscreen", monospace;
+  color: var(--claude);
+  font-size: 13px;
+  letter-spacing: 1px;
+  width: 232px;
+}
+.ws {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+  max-width: 460px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ws:hover,
+.ws.open {
+  border-color: var(--claude);
+}
+.branch {
+  color: var(--code);
+}
+.caret {
+  color: var(--dim);
+}
+.spacer {
+  flex: 1;
+}
+.fake {
+  border: 1px solid var(--warn);
+  color: var(--warn);
+  border-radius: 3px;
+  padding: 0 6px;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.conn {
+  display: flex;
+  gap: 14px;
+  color: var(--dim);
+}
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-left: 5px;
+  vertical-align: 1px;
+}
+/* OS 標準のボタン(最小化・最大化・閉じる)が重なる領域を空けておく */
+.overlay {
+  width: calc(100vw - env(titlebar-area-width, calc(100vw - 138px)));
+  min-width: 0;
+}

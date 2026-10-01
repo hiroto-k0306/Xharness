@@ -1,0 +1,22 @@
+.win {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  position: relative;
+  min-width: 0;
+}
+.boot {
+  padding: 24px;
+  color: var(--dim);
+}
+.body {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  min-height: 0;
+}
+.content {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  min-height: 0;
+  min-width: 0;
+}

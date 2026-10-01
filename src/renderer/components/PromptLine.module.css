@@ -1,0 +1,51 @@
+.prompt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 20px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+.blocked {
+  border-top-color: var(--warn);
+}
+.cwd {
+  color: var(--codex);
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gt {
+  color: var(--claude);
+}
+.input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  resize: none;
+  field-sizing: content;
+  max-height: 10em;
+  line-height: 1.55;
+  caret-color: var(--text);
+}
+.input::placeholder {
+  color: var(--dim);
+}
+.chip {
+  border: 1px solid var(--line);
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+}

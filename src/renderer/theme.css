@@ -1,0 +1,139 @@
+/* DESIGN.md §16.2 のトークン。フォントは @fontsource から同梱(オフライン動作)。 */
+@import "@fontsource/jetbrains-mono/latin-400.css";
+@import "@fontsource/jetbrains-mono/latin-600.css";
+@import "@fontsource/jetbrains-mono/latin-700.css";
+@import "@fontsource/silkscreen/latin-400.css";
+@import "@fontsource/silkscreen/latin-700.css";
+
+:root {
+  --bg: #141518;
+  --panel: #1b1d21;
+  --panel-head: #22252b;
+  --line: #2c3037;
+  --text: #d4d7dd;
+  --dim: #6c727d;
+  --claude: #e2804f;
+  --claude-shadow: #7a3a1d;
+  --codex: #6b8fe0;
+  --code: #62b07a;
+  --tool: #9a86d6;
+  --warn: #d9a54a;
+  --err: #e06363;
+  --side-bg: #121316;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  background: var(--bg);
+  color: var(--text);
+  font:
+    13px/1.55 "JetBrains Mono",
+    ui-monospace,
+    Consolas,
+    monospace;
+  overflow: hidden;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+b {
+  font-weight: 700;
+}
+
+/* 実行中ステップ: 枠の周りを光が回る(§16.3)。色は --glow(役割色)で指定する */
+@property --spin {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+.running {
+  position: relative;
+  animation: glow 2.4s ease-in-out infinite;
+}
+.running::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--spin),
+    transparent 0deg,
+    transparent 200deg,
+    color-mix(in srgb, var(--glow) 40%, transparent) 260deg,
+    var(--glow) 320deg,
+    #ffffff 345deg,
+    var(--glow) 360deg
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: spin 1.6s linear infinite;
+  pointer-events: none;
+}
+/* 権限待ち: 回転は止め、warn 色の明滅だけにする */
+.waiting {
+  position: relative;
+  animation: glow 1.6s ease-in-out infinite;
+  --glow: var(--warn);
+}
+@keyframes spin {
+  to {
+    --spin: 360deg;
+  }
+}
+@keyframes glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--glow) 35%, transparent),
+      0 0 8px color-mix(in srgb, var(--glow) 25%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--glow) 55%, transparent),
+      0 0 18px color-mix(in srgb, var(--glow) 45%, transparent);
+  }
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .running,
+  .running::after,
+  .waiting {
+    animation: none;
+  }
+  .running,
+  .waiting {
+    box-shadow: 0 0 0 1px var(--glow);
+  }
+  .running::after {
+    display: none;
+  }
+}

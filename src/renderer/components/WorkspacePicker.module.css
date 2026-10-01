@@ -1,0 +1,112 @@
+.pop {
+  position: absolute;
+  top: 40px;
+  left: 252px;
+  z-index: 10;
+  width: 460px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+}
+.seg {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+}
+.seg button {
+  flex: 1;
+  padding: 8px;
+  color: var(--dim);
+  border-bottom: 2px solid transparent;
+}
+.seg button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.seg .on {
+  color: var(--text);
+  border-bottom-color: var(--claude);
+}
+.sec {
+  padding: 10px 14px;
+}
+.sec + .sec {
+  border-top: 1px solid var(--line);
+}
+.lbl {
+  font-size: 10px;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.recent {
+  display: flex;
+  align-items: center;
+  border-radius: 3px;
+}
+.recent:hover,
+.cur {
+  background: var(--panel-head);
+}
+.rowBtn {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 8px;
+  padding: 5px 6px;
+  align-items: center;
+  text-align: left;
+}
+.root {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  color: var(--dim);
+  font-size: 11px;
+}
+.forget {
+  color: var(--dim);
+  padding: 0 8px;
+}
+.forget:hover {
+  color: var(--err);
+}
+.opt {
+  display: block;
+  padding: 3px 0;
+}
+.disabled {
+  opacity: 0.55;
+}
+.sub {
+  display: block;
+  font-size: 11px;
+  color: var(--dim);
+  padding-left: 20px;
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.btn {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 12px;
+}
+.btn kbd {
+  font: inherit;
+  color: var(--dim);
+  margin-left: 8px;
+  font-size: 10px;
+}
+.primary {
+  border-color: var(--claude);
+  color: var(--claude);
+}

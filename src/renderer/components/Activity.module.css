@@ -57,6 +57,20 @@
   padding: 4px 24px;
   font-size: 11px;
 }
+.replayButton {
+  margin-left: 12px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  font: inherit;
+  cursor: pointer;
+}
+.replayControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 .row {
   width: 100%;
   min-width: 650px;

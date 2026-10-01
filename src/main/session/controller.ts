@@ -1,5 +1,9 @@
+import { loadModelCatalog } from "../config/model-catalog.js";
+import { validatePlan, type PlanItem } from "../workflow/plan-validate.js";
+import { projectHookApproval } from "../hooks/shell-hooks.js";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile, rename } from "node:fs/promises";
+import { parse, stringify } from "yaml";
 import { join, resolve } from "node:path";
 import {
   isEffort,
@@ -9,7 +13,8 @@ import {
 } from "../config/config.js";
 import { Router } from "../core/router.js";
 import { redact } from "../core/redact.js";
-import { runTurn, type Receipt as LoopReceipt } from "../core/loop.js";
+import { type Receipt as LoopReceipt } from "../core/loop.js";
+import { childNeedsAsk } from "../agents/permissions.js";
 import { type Message } from "../core/types.js";
 import { type Provider } from "../providers/provider.js";
 import { FileAccess, fileTools } from "../tools/files.js";
@@ -44,6 +49,9 @@ import { summarizeInput } from "../../shared/summary.js";
 import { itemsFromMessages } from "./transcript.js";
 import { ReceiptStore } from "./receipts.js";
 import { Repository } from "./repository.js";
+import { WorkflowRuntime } from "../workflow/runtime.js";
+import { loadAgentConfig } from "../agents/definitions.js";
+import { waveChecks } from "../workflow/wave-checks.js";
 import { JsonFile } from "./store.js";
 import {
   prepareHistory,
@@ -81,6 +89,12 @@ export interface ControllerOptions {
 }
 
 interface Runtime {
+  hookApproval?: {
+    fingerprint: string;
+    approve(signal: AbortSignal): Promise<boolean>;
+  };
+  workflow?: WorkflowRuntime;
+  permissionTail?: Promise<void>;
   asked?: boolean;
   mainConfig?: MainConfig;
   checkpoint?: Checkpoint;
@@ -93,6 +107,7 @@ interface Runtime {
   abort?: AbortController;
   status: SessionStatus;
   pending?: {
+    plan?: PlanItem[];
     requestId: string;
     resolve(decision: PermissionDecision): void;
   };
@@ -133,14 +148,15 @@ export class SessionController {
   private readonly repository: Repository;
   private readonly workspaces: WorkspaceStore;
   private current: string | null = null;
-  private readonly model: string;
-  private readonly effort: Effort;
+  private model: string;
+  private effort: Effort;
   private warnings: string[];
   private stopped = false;
   private repositoryAbort?: AbortController;
   private readonly worktreeBusy = new Set<string>();
   private gitAvailable = true;
   private readonly clean: (text: string) => string;
+  private readonly quota: Partial<Record<"claude" | "codex", number>> = {};
 
   constructor(private readonly options: ControllerOptions) {
     this.sessions = new SessionStore(options.home);
@@ -209,6 +225,15 @@ export class SessionController {
     const workspaces = await this.workspaces.summaries();
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
+      models: loadModelCatalog()
+        .filter((m) => m.enabled)
+        .map((m) => ({
+          id: m.id,
+          provider: m.provider,
+          label: (m as typeof m & { displayName?: string }).displayName ?? m.id,
+          efforts: Object.keys(m.efforts ?? {}) as Effort[],
+          defaultEffort: m.defaultEffort,
+        })),
       phase4: this.options.phase4,
       gitAvailable: this.gitAvailable,
       fallback: this.current
@@ -421,6 +446,52 @@ export class SessionController {
           if (rt) this.release(rt);
           return { ok: true };
         }
+        case "plan_response": {
+          const rt = this.runtimes.get(command.sessionId);
+          if (!rt?.pending?.plan || rt.pending.requestId !== command.requestId)
+            return { ok: false, error: "No such plan approval" };
+          const validation = validatePlan(command.items, loadModelCatalog(), {
+            aliases: rt.mainConfig?.aliases ?? this.options.aliases,
+          });
+          if (validation.errors.length)
+            return { ok: false, error: "Invalid plan assignment" };
+          rt.pending.plan.splice(
+            0,
+            rt.pending.plan.length,
+            ...(structuredClone(command.items) as PlanItem[]),
+          );
+          rt.pending.resolve("allow");
+          return { ok: true };
+        }
+        case "set_default_model": {
+          const model = loadModelCatalog().find(
+            (m) => m.enabled && m.id === command.model,
+          );
+          if (
+            !model ||
+            (command.effort && model.efforts && !model.efforts[command.effort])
+          )
+            return { ok: false, error: "Unavailable model or effort" };
+          const path = join(this.options.home, "config.yaml");
+          let doc: Record<string, unknown> = {};
+          try {
+            doc = parse(await readFile(path, "utf8")) ?? {};
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+          if (!doc || typeof doc !== "object" || Array.isArray(doc))
+            throw new Error("Invalid configuration");
+          const effort = command.effort ?? model.defaultEffort ?? "high";
+          doc.main = { model: command.model, effort };
+          const temp = path + "." + randomUUID() + ".tmp";
+          await mkdir(this.options.home, { recursive: true });
+          await writeFile(temp, stringify(doc));
+          await rename(temp, path);
+          if (!this.options.cliModel) this.model = command.model;
+          if (!this.options.cliEffort) this.effort = effort;
+          await this.emitState();
+          return { ok: true };
+        }
         case "permission_response": {
           const rt = this.runtimes.get(command.sessionId);
           if (rt?.pending?.requestId !== command.requestId)
@@ -600,8 +671,32 @@ export class SessionController {
       return this.setModel(sessionId, model, effort as Effort | undefined);
     }
     const rt = await this.load(sessionId);
-    if (rt.status !== "idle")
+    if (rt.status !== "idle") {
+      if (/^\/(?:phase|review)(?:\s|$)/.test(text.trim()) && rt.workflow) {
+        const [command, phase, extra] = text.trim().split(/\s+/);
+        if (extra || (command === "/review" && phase))
+          return { ok: false, error: "Invalid phase command" };
+        rt.workflow.queuePhase(
+          command === "/review" ? "review" : (phase ?? ""),
+        );
+        this.options.emit({
+          type: "notice",
+          sessionId,
+          tone: "dim",
+          message: "段階の変更を次の STEP 6 終了時に反映します",
+        });
+        return { ok: true };
+      }
       return { ok: false, error: "Turn already running" };
+    }
+    if (/^\/(?:phase|review)(?:\s|$)/.test(text.trim())) {
+      const [command, phase, extra] = text.trim().split(/\s+/);
+      if (!rt.workflow || extra || (command === "/review" && phase))
+        return { ok: false, error: "No workflow or invalid phase command" };
+      const requested = command === "/review" ? "review" : (phase ?? "");
+      rt.workflow.manualPhase(requested);
+      if (requested !== "review") return { ok: true };
+    }
     if (
       !session.readOnly &&
       !session.worktree &&
@@ -681,6 +776,14 @@ export class SessionController {
     if (!resolved || !known) return { ok: false, error: "Unknown model" };
     if (effort !== undefined && !isEffort(effort))
       return { ok: false, error: "Unknown effort" };
+    const catalog = loadModelCatalog().find(
+      (m) => m.enabled && m.id === resolved.model,
+    );
+    if (
+      resolved.model !== "fake" &&
+      (!catalog || (effort && catalog.efforts && !catalog.efforts[effort]))
+    )
+      return { ok: false, error: "Unavailable model or effort" };
     await this.sessions.save({
       ...session,
       model: resolved.model,
@@ -866,10 +969,177 @@ export class SessionController {
         !session.workspaceId,
         rt.config,
       );
-      const result = await runTurn(
+      const agentConfig = await loadAgentConfig(
+        this.options.home,
+        session.workspaceId ? session.cwd : undefined,
+      );
+      if (
+        !rt.workflow ||
+        (!rt.workflow.manualReview &&
+          ["off", "complete", "attention"].includes(rt.workflow.state.phase))
+      ) {
+        const fingerprint = JSON.stringify(agentConfig.hooks ?? []);
+        const approveHooks =
+          rt.hookApproval?.fingerprint === fingerprint
+            ? rt.hookApproval.approve
+            : projectHookApproval(agentConfig.hooks ?? [], (hooks, signal) =>
+                this.askPermission(
+                  session,
+                  rt,
+                  { name: "ProjectHooks", input: { hooks } },
+                  undefined,
+                  signal,
+                  true,
+                ),
+              );
+        rt.hookApproval = { fingerprint, approve: approveHooks };
+        rt.workflow = new WorkflowRuntime({
+          approveHooks: (_hooks, signal) => approveHooks(signal),
+          home: this.options.home,
+          parentId: sessionId,
+          cwd: session.cwd,
+          config: agentConfig,
+          quota: this.quota,
+          aliases: rt.mainConfig?.aliases ?? this.options.aliases,
+          router: new Router(
+            this.options.providers ?? [this.options.provider],
+            rt.mainConfig?.fallback ?? this.options.fallback,
+            rt.mainConfig?.aliases ?? this.options.aliases,
+          ),
+          createTools: (cwd) => {
+            const tools = (this.options.createTools ?? defaultTools)(
+              cwd,
+              session.readOnly,
+            );
+            if (web?.enabled)
+              for (const [name, tool] of webTools(
+                () => this.options.provider,
+                web.searchMode,
+                this.options.fake,
+              ))
+                tools.set(name, tool);
+            return tools;
+          },
+          permission: async (call, context, signal) =>
+            call.name === "ReportDone"
+              ? Promise.resolve(true)
+              : this.askPermission(
+                  { ...session, cwd: context.cwd },
+                  rt,
+                  call,
+                  undefined,
+                  signal,
+                  await childNeedsAsk(call, context),
+                  context.name,
+                  context.id,
+                ),
+          approve: (items, notes, warnings, signal) =>
+            this.askPermission(
+              session,
+              rt,
+              { name: "SubmitPlan", input: { items, notes, warnings } },
+              undefined,
+              signal,
+              true,
+            ),
+          onStatus: (context, model, status) =>
+            emit({
+              type: "agent",
+              sessionId,
+              agentId: context.id,
+              name: context.name,
+              model,
+              status,
+              branch: context.branch,
+            }),
+          onTranscript: (context, messages) =>
+            emit({
+              type: "agent_transcript",
+              sessionId,
+              agentId: context.id,
+              items: itemsFromMessages(safeInput(messages, clean) as Message[]),
+            }),
+          onEvent: (context, event) => {
+            if (event.type === "text_delta")
+              emit({
+                type: "agent_text",
+                sessionId,
+                agentId: context.id,
+                text: clean(event.text),
+              });
+            if (event.type === "receipt") {
+              if (event.receipt.provider === "hook" && !event.receipt.tool)
+                return;
+              const receipt = toReceipt(
+                event.receipt,
+                sessionId,
+                pad(++rt.receiptSeq),
+              );
+              receipt.agentId = context.id;
+              receipt.input = safeInput(receipt.input, clean);
+              receipt.output = clean(receipt.output ?? "");
+              receipt.summary = context.name + " · " + clean(receipt.summary);
+              record(receipt);
+            }
+            if (event.type === "step")
+              emit({
+                type: "agent_step",
+                sessionId,
+                agentId: context.id,
+                step: event.step,
+                round: event.round,
+              });
+            if (event.type === "usage") {
+              this.updateQuota(event);
+              emit({ ...event });
+            }
+          },
+          onPhase: (workflow) => {
+            emit({ type: "workflow", sessionId, ...workflow });
+            if (["complete", "attention"].includes(workflow.phase))
+              emit({
+                type: "notice",
+                sessionId,
+                tone: workflow.phase === "complete" ? "dim" : "warn",
+                message: clean(
+                  (workflow.phase === "complete"
+                    ? "レビュー完了。修正必須の指摘はありません。"
+                    : "レビューの往復上限に達しました。残る必須指摘を確認してください。") +
+                    workflow.findings
+                      .map(
+                        (f) =>
+                          `\n${f.severity}: ${f.file}${f.line ? `:${f.line}` : ""} — ${f.message}`,
+                      )
+                      .join(""),
+                ),
+              });
+          },
+          redact: clean,
+          waveChecks: waveChecks(
+            agentConfig.waveChecks,
+            shellSearchTools(session.cwd).get("Bash")!,
+            (_hooks, signal) => approveHooks(signal),
+            (hook, output, ok, durationMs) =>
+              record({
+                id: pad(++rt.receiptSeq),
+                sessionId,
+                ts: Date.now(),
+                provider: "harness",
+                kind: "tool",
+                tool: "WaveCheck",
+                decision: ok ? "allow" : "deny",
+                durationMs,
+                summary: `WaveCheck ${hook.id}: ${ok ? "passed" : "failed"}`,
+                input: safeInput(hook, clean),
+                output: clean(output),
+              }),
+          ),
+        });
+      }
+      const result = await rt.workflow.run(
         {
           prepareContext: this.options.phase4
-            ? async (messages, route, signal) => {
+            ? async (messages, route, signal, context) => {
                 signal.throwIfAborted();
                 const limit = route.provider
                   .models()
@@ -880,8 +1150,10 @@ export class SessionController {
                   threshold: rt.config?.context.compactThreshold ?? 0.8,
                   overhead:
                     estimateTokens({
-                      system,
-                      tools: [...rt.tools!.values()].map((t) => t.spec),
+                      system: context?.system ?? system,
+                      tools:
+                        context?.tools ??
+                        [...rt.tools!.values()].map((t) => t.spec),
                     }) + 4096,
                 });
                 if (prepared.compacted && prepared.checkpoint) {
@@ -985,6 +1257,7 @@ export class SessionController {
                 emit({ ...event, sessionId });
                 break;
               case "usage":
+                this.updateQuota(event);
                 emit({
                   type: "usage",
                   provider: event.provider,
@@ -1035,7 +1308,11 @@ export class SessionController {
                   type: "tool_call",
                   sessionId,
                   receiptId,
-                  provider: activeProvider,
+                  provider:
+                    resolveModel(
+                      rt.workflow?.mainModel ??
+                        (this.sessions.get(sessionId) ?? session).model,
+                    )?.provider ?? activeProvider,
                   tool: event.name,
                   input: safeInput(event.input, clean),
                 });
@@ -1043,7 +1320,7 @@ export class SessionController {
               }
               case "receipt": {
                 const r = event.receipt;
-                if (r.provider === "hook") break;
+                if (r.provider === "hook" && !r.tool) break;
                 if (r.provider === "tool") {
                   const call = calls.shift();
                   if (call)
@@ -1056,6 +1333,7 @@ export class SessionController {
                 }
                 const receipt = toReceipt(r, sessionId, pad(++rt.receiptSeq));
                 receipt.input = safeInput(receipt.input, clean);
+                receipt.summary = clean(receipt.summary);
                 if (receipt.output) receipt.output = clean(receipt.output);
                 record(receipt);
                 break;
@@ -1084,7 +1362,9 @@ export class SessionController {
       stopCause = result.stopCause;
     } catch {
       flush();
-      emit({ type: "error", sessionId, message: "内部エラーで停止しました" });
+      stopCause = abort.signal.aborted ? "aborted" : "step_failed";
+      if (!abort.signal.aborted)
+        emit({ type: "error", sessionId, message: "内部エラーで停止しました" });
     }
     try {
       await Promise.all(receiptWrites);
@@ -1128,6 +1408,15 @@ export class SessionController {
           typeof (value as Checkpoint).summary === "string"),
     );
   }
+
+  private updateQuota(event: Extract<UiEvent, { type: "usage" }>) {
+    const used =
+      event.windows?.find((w) => w.windowMinutes === 300)?.usedPercent ??
+      event.window5h;
+    if (typeof used === "number" && Number.isFinite(used))
+      this.quota[event.provider] = used;
+    else delete this.quota[event.provider];
+  }
   private async record(rt: Runtime, receipt: Receipt) {
     await this.receipts.append(receipt.sessionId, [receipt], this.clean);
     (rt.receipts ??= []).push(receipt);
@@ -1139,6 +1428,42 @@ export class SessionController {
     call: { name: string; input: unknown },
     receiptId: string | undefined,
     signal: AbortSignal,
+    forceAsk = false,
+    agentName?: string,
+    agentId?: string,
+  ): Promise<boolean> {
+    const previous = rt.permissionTail ?? Promise.resolve();
+    let release!: () => void;
+    rt.permissionTail = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous.catch(() => undefined);
+    try {
+      if (signal.aborted) return false;
+      return await this.askPermissionNow(
+        session,
+        rt,
+        call,
+        receiptId,
+        signal,
+        forceAsk,
+        agentName,
+        agentId,
+      );
+    } finally {
+      release();
+    }
+  }
+
+  private async askPermissionNow(
+    session: StoredSession,
+    rt: Runtime,
+    call: { name: string; input: unknown },
+    receiptId: string | undefined,
+    signal: AbortSignal,
+    forceAsk: boolean,
+    agentName?: string,
+    agentId?: string,
   ): Promise<boolean> {
     const fullCall = { ...call, id: "permission" };
     rt.asked = false;
@@ -1157,18 +1482,42 @@ export class SessionController {
           sessionRules: rt.sessionRules,
         },
       );
-      if (decision !== "ask") return decision === "allow";
-    } else if (rt.always.has(call.name)) return true;
+      if (decision === "deny") return false;
+      if (decision === "allow" && !forceAsk) return true;
+    } else if (!forceAsk && rt.always.has(call.name)) return true;
     const requestId = randomUUID().slice(0, 8);
     rt.asked = true;
     rt.status = "ask";
     this.options.emit({
       type: "permission_request",
+      agentId,
+      ...(call.name === "SubmitPlan"
+        ? {
+            plan: safeInput(
+              (call.input as { items: PlanItem[] }).items.map((item) => ({
+                ...item,
+                assignee: {
+                  ...item.assignee,
+                  model:
+                    resolveModel(
+                      item.assignee.model,
+                      rt.mainConfig?.aliases ?? this.options.aliases,
+                    )?.model ?? item.assignee.model,
+                },
+              })),
+              this.clean,
+            ) as unknown[],
+          }
+        : {}),
       sessionId: session.id,
       requestId,
       receiptId,
       tool: call.name,
-      summary: summarizeInput(call.name, call.input, this.clean, 300),
+      summary:
+        (agentName ? `${agentName} · ` : "") +
+        (["SubmitPlan", "ProjectHooks"].includes(call.name)
+          ? this.clean(JSON.stringify(call.input))
+          : summarizeInput(call.name, call.input, this.clean, 300)),
     });
     void this.emitState();
     const decision = await new Promise<PermissionDecision>(
@@ -1179,13 +1528,21 @@ export class SessionController {
           resolveDecision(d);
         };
         const onAbort = () => done("deny");
-        rt.pending = { requestId, resolve: done };
+        rt.pending = {
+          requestId,
+          resolve: done,
+          ...(call.name === "SubmitPlan"
+            ? { plan: (call.input as { items: PlanItem[] }).items }
+            : {}),
+        };
         if (signal.aborted) onAbort();
         else signal.addEventListener("abort", onAbort, { once: true });
       },
     );
     rt.status = "running";
-    if (decision === "always" && rt.config) {
+    if (forceAsk) {
+      /* Approval is always per request; never persist it. */
+    } else if (decision === "always" && rt.config) {
       const grant = grantFor({
         ...fullCall,
         input: safeInput(fullCall.input, this.clean),
@@ -1238,7 +1595,13 @@ function toReceipt(r: LoopReceipt, sessionId: string, id: string): Receipt {
     provider: isTool ? "harness" : (r.provider as Receipt["provider"]),
     model: r.model,
     kind:
-      r.decision === "fallback" ? "fallback" : isTool ? "tool" : "model_call",
+      r.provider === "hook"
+        ? "hook"
+        : r.decision === "fallback"
+          ? "fallback"
+          : isTool
+            ? "tool"
+            : "model_call",
     input: r.input,
     output: r.output,
     tool: r.tool,
@@ -1248,7 +1611,10 @@ function toReceipt(r: LoopReceipt, sessionId: string, id: string): Receipt {
       inputTokens: r.usage.inputTokens,
       outputTokens: r.usage.outputTokens,
     },
-    summary: `${r.tool ?? r.model}: ${r.decision}`,
+    summary:
+      r.provider === "hook"
+        ? `hook ${r.timing}:${r.step} → ${r.tool ?? "workflow"} ${r.decision}`
+        : `${r.tool ?? r.model}: ${r.decision}`,
   };
 }
 

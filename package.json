@@ -8,6 +8,7 @@
     "node": ">=22 <23"
   },
   "scripts": {
+    "postinstall": "node node_modules/electron/install.js",
     "test": "vitest run --exclude=spike/.out/** --exclude=.tools/** --exclude=dist/**",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

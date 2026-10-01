@@ -54,6 +54,15 @@ pnpm typecheck     # tsc --noEmit
 pnpm spike:<name>  # Phase 0 の疎通確認スクリプト(docs/phase0-runbook.md)
 ```
 
+## クラウド環境(Linux)で作業する場合
+
+Codex クラウドや Claude Code on the web など、Linux のクラウド環境で作業するときの追加ルール。
+
+- **実 API へ通信しない**: Claude / ChatGPT のエンドポイントを呼ばない。確認は `test/fixtures/` の再生と `--fake`(FakeProvider)で行う
+- **資格情報を要求・作成しない**: `~/.claude/.credentials.json` と `~/.codex/auth.json` を作らない・人間に貼らせない。無いことを前提にコードとテストを書く
+- **PowerShell 依存のテストは実行しない**: Linux では `pwsh` が無く落ちるため、`it.skipIf` で除外する。手元(Windows)で必要な確認は、最後の報告に「手元で実施が必要」として列挙する
+- **exe を作らない**: `electron-builder` による exe / インストーラの作成は手元で行う。クラウドでは `electron-vite build` が通るところまで確認する
+
 ## コミット
 
 - メッセージは日本語可。形式: `<領域>: <やったこと>`(例: `spike(claude): ツール呼び出しの往復を確認`)

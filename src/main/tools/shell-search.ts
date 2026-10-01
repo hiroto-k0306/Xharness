@@ -89,6 +89,12 @@ export function shellSearchTools(cwd: string): ToolRegistry {
             "!*.credentials.json",
             "--glob",
             "!.git/**",
+            "--glob",
+            "!.env*",
+            "--glob",
+            "!id_rsa",
+            "--glob",
+            "!id_ed25519",
           ];
           const parameters =
             name === "Glob"

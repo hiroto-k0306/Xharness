@@ -74,5 +74,8 @@
       "esbuild",
       "sharp"
     ]
+  },
+  "dependencies": {
+    "undici": "^7.30.0"
   }
 }

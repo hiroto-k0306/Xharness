@@ -1,0 +1,47 @@
+import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { type Receipt } from "../../shared/ipc.js";
+export class ReceiptStore {
+  private chains = new Map<string, Promise<void>>();
+  constructor(private readonly home: string) {}
+  private path(id: string) {
+    if (!/^[\w-]+$/.test(id)) throw new Error("Invalid session id");
+    return join(this.home, "receipts", `${id}.jsonl`);
+  }
+  async read(id: string): Promise<Receipt[]> {
+    try {
+      return (await readFile(this.path(id), "utf8"))
+        .split(/\r?\n/)
+        .flatMap((line) => {
+          try {
+            const r = JSON.parse(line) as Receipt;
+            return r.sessionId === id && typeof r.id === "string" ? [r] : [];
+          } catch {
+            return [];
+          }
+        });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+  }
+  async append(
+    id: string,
+    receipts: Receipt[],
+    clean: (text: string) => string,
+  ) {
+    if (!receipts.length) return;
+    const path = this.path(id);
+    const text =
+      receipts.map((r) => clean(JSON.stringify(r))).join("\n") + "\n";
+    const job = (this.chains.get(id) ?? Promise.resolve()).then(async () => {
+      await mkdir(join(this.home, "receipts"), { recursive: true });
+      await appendFile(path, text);
+    });
+    this.chains.set(
+      id,
+      job.catch(() => undefined),
+    );
+    return job;
+  }
+}

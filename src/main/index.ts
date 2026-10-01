@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseStartupArgs, resolveStartup } from "./config/config.js";
 import { readLocalSecrets } from "./auth/local-secrets.js";
 import { ClaudeAdapter } from "./providers/claude/adapter.js";
+import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
 import { createHost, registerIpc, sendEvent } from "./ipc.js";
@@ -74,18 +75,13 @@ async function start() {
   // --fake は設定ファイルを読まず、通信もしない。
   let main: Awaited<ReturnType<typeof resolveStartup>>;
   try {
-    main = fake
-      ? {
-          choice: { provider: "claude", model: "fake", effort: "high" },
-          aliases: {},
-          warnings: [],
-        }
-      : await resolveStartup({
-          home,
-          cliModel: startup.model,
-          cliEffort: startup.effort,
-          supported: ["claude"],
-        });
+    main = await resolveStartup({
+      home,
+      cliModel: startup.model ?? (fake ? "fake" : undefined),
+      cliEffort: startup.effort,
+      supported: ["claude", "codex"],
+      ...(fake ? { read: async () => "" } : {}),
+    });
   } catch (error) {
     dialog.showErrorBox(
       "XHarness",
@@ -94,10 +90,27 @@ async function start() {
     app.exit(1);
     return;
   }
+  const providers = fake
+    ? [
+        new FakeProvider({ fixturesDir: fixtures, quota: true }),
+        new FakeProvider({
+          provider: "codex",
+          quota: true,
+          fixturesDir: app.isPackaged
+            ? join(process.resourcesPath, "fixtures-codex")
+            : join(app.getAppPath(), "test/fixtures/codex"),
+        }),
+      ]
+    : [new ClaudeAdapter(), new CodexAdapter()];
   controller = new SessionController({
-    provider: fake
-      ? new FakeProvider({ fixturesDir: fixtures })
-      : new ClaudeAdapter(),
+    phase4: true,
+    cliModel: startup.model,
+    cliEffort: startup.effort as
+      "low" | "medium" | "high" | "xhigh" | "max" | undefined,
+    provider: providers.find((p) => p.id === main.choice.provider)!,
+    providers,
+    fallback: main.fallback,
+    web: main.web,
     model: main.choice.model,
     effort: main.choice.effort,
     aliases: main.aliases,
@@ -111,6 +124,14 @@ async function start() {
     emit: (event) => sendEvent(window, event),
   });
   await controller.init();
+  if (startup.resume) {
+    const resumed = await controller.handle({
+      type: "open_session",
+      sessionId: startup.resume,
+    });
+    if (!resumed.ok)
+      dialog.showErrorBox("XHarness", "指定されたセッションを再開できません");
+  }
   registerIpc(
     () => controller!,
     () => window,

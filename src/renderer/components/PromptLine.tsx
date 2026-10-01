@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import styles from "./PromptLine.module.css";
 
 export interface PromptLineProps {
+  mode?: "default" | "acceptEdits" | "plan";
+  readOnly?: boolean;
+  onMode?(mode: "default" | "acceptEdits" | "plan"): void;
   cwdLabel: string;
   running: boolean;
   /** 権限待ち。入力は止め、y / a / n を PermissionInline が受ける */
@@ -57,12 +60,32 @@ export function PromptLine(p: PromptLineProps) {
         <i className={styles.dot} style={{ background: p.modelColor }} />
         {p.modelLabel}
       </span>
-      <span
-        className={styles.chip}
-        title="権限は全ツール ask(Phase 4 でルール化)"
-      >
-        ask
-      </span>
+      {p.mode ? (
+        <select
+          className={styles.chip}
+          aria-label="permission mode"
+          disabled={p.readOnly}
+          value={p.mode}
+          title="Permission mode (Shift+Tab)"
+          style={{
+            color: p.mode === "acceptEdits" ? "var(--warn)" : "var(--dim)",
+          }}
+          onChange={(e) =>
+            p.onMode?.(e.target.value as "default" | "acceptEdits" | "plan")
+          }
+        >
+          <option value="default">default</option>
+          <option value="acceptEdits">acceptEdits</option>
+          <option value="plan">plan</option>
+        </select>
+      ) : (
+        <span
+          className={styles.chip}
+          title="権限は全ツール ask(Phase 4 でルール化)"
+        >
+          ask
+        </span>
+      )}
     </div>
   );
 }

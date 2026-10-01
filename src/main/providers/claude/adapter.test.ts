@@ -28,6 +28,13 @@ const request: ProviderRequest = {
   tools: [],
   maxOutputTokens: 64,
 };
+it("offers only the confirmed hosted search version when explicitly requested", () => {
+  const body = toClaudeRequest({ ...request, webSearch: { mode: "live" } });
+  expect(body.tools).toEqual([
+    { type: "web_search_20250305", name: "web_search", max_uses: 1 },
+  ]);
+  expect(toClaudeRequest(request).tools).toBeUndefined();
+});
 function response(events: { event: string; data: string }[]) {
   const bytes = new TextEncoder().encode(
     events.map((e) => `event: ${e.event}\r\ndata: ${e.data}\r\n\r\n`).join(""),
@@ -421,6 +428,7 @@ describe("rate limits and safe failures", () => {
     expect(
       await collect(new Response("ignored", { status: 429, headers })),
     ).toEqual([
+      expect.objectContaining({ type: "usage", provider: "claude" }),
       { type: "rate_limited", scope: "7d", retryAfterSec: expect.any(Number) },
     ]);
   });

@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { isEffort, resolveModel } from "../config/config.js";
+import {
+  isEffort,
+  resolveModel,
+  loadMainConfig,
+  type MainConfig,
+} from "../config/config.js";
+import { Router } from "../core/router.js";
 import { redact } from "../core/redact.js";
 import { runTurn, type Receipt as LoopReceipt } from "../core/loop.js";
 import { type Message } from "../core/types.js";
@@ -9,6 +15,14 @@ import { type Provider } from "../providers/provider.js";
 import { FileAccess, fileTools } from "../tools/files.js";
 import { type ToolRegistry } from "../tools/registry.js";
 import { shellSearchTools } from "../tools/shell-search.js";
+import { webTools } from "../tools/web.js";
+import {
+  loadProjectConfig,
+  projectMemory,
+  saveRule,
+  type ProjectConfig,
+} from "../config/project.js";
+import { decidePermission, grantFor, type Rule } from "../core/permissions.js";
 import {
   STEP_NODES,
   type AppState,
@@ -28,12 +42,26 @@ import {
 } from "./store.js";
 import { summarizeInput } from "../../shared/summary.js";
 import { itemsFromMessages } from "./transcript.js";
+import { ReceiptStore } from "./receipts.js";
+import { Repository } from "./repository.js";
+import { JsonFile } from "./store.js";
+import {
+  prepareHistory,
+  estimateTokens,
+  type Checkpoint,
+} from "../context/compactor.js";
 
 export interface Host {
   pickFolder(): Promise<string | undefined>;
 }
 export interface ControllerOptions {
+  cliModel?: string;
+  cliEffort?: Effort;
+  phase4?: boolean;
+  web?: { enabled: boolean; searchMode: "live" | "cached" };
   provider: Provider;
+  providers?: Provider[];
+  fallback?: Partial<Record<"claude" | "codex", string>>;
   /** 新しいセッションの既定モデルと effort(--model > 設定ファイル > claude:opus / high) */
   model: string;
   effort?: Effort;
@@ -53,6 +81,12 @@ export interface ControllerOptions {
 }
 
 interface Runtime {
+  asked?: boolean;
+  mainConfig?: MainConfig;
+  checkpoint?: Checkpoint;
+  receipts?: Receipt[];
+  config?: ProjectConfig;
+  sessionRules?: Rule[];
   messages: Message[];
   loaded: boolean;
   persisted: number;
@@ -73,6 +107,8 @@ interface Runtime {
 }
 
 const STOP_NOTICE: Record<string, string> = {
+  context_overflow:
+    "圧縮後もコンテキスト上限に収まりません。入力を短くするか新しいセッションを開始してください",
   rate_limited: "枠の上限に達しました。時間をおいて再試行してください",
   authentication:
     "認証エラー: 公式 CLI (claude / codex) で更新・再ログインしてから再試行してください",
@@ -93,16 +129,23 @@ const pad = (n: number) => "#" + String(n).padStart(4, "0");
 export class SessionController {
   private readonly runtimes = new Map<string, Runtime>();
   private readonly sessions: SessionStore;
+  private readonly receipts: ReceiptStore;
+  private readonly repository: Repository;
   private readonly workspaces: WorkspaceStore;
   private current: string | null = null;
   private readonly model: string;
   private readonly effort: Effort;
   private warnings: string[];
   private stopped = false;
+  private repositoryAbort?: AbortController;
+  private readonly worktreeBusy = new Set<string>();
+  private gitAvailable = true;
   private readonly clean: (text: string) => string;
 
   constructor(private readonly options: ControllerOptions) {
     this.sessions = new SessionStore(options.home);
+    this.receipts = new ReceiptStore(options.home);
+    this.repository = new Repository(options.home);
     this.workspaces = new WorkspaceStore(options.home);
     this.model = options.model;
     this.effort = options.effort ?? "high";
@@ -113,6 +156,13 @@ export class SessionController {
   async init() {
     await Promise.all([this.sessions.load(), this.workspaces.load()]);
     this.sessions.fillDefaults({ model: this.model, effort: this.effort });
+    if (this.options.phase4) {
+      this.gitAvailable = await this.repository.available();
+      if (!this.gitAvailable)
+        this.warnings.push(
+          "Git が見つかりません。フォルダモードで使ってください",
+        );
+    }
     // 壊れた索引を退避したことなどは、最初の新規セッションで知らせる
     this.warnings.push(...this.sessions.warnings, ...this.workspaces.warnings);
   }
@@ -137,11 +187,19 @@ export class SessionController {
     const rt = this.runtime(id);
     // 同時に呼ばれても履歴の読み込みは1回だけ(後から届いた読み込みで追記済みの履歴を上書きしない)
     if (!rt.loaded)
-      rt.loading ??= this.sessions.messages(id).then((messages) => {
+      rt.loading ??= Promise.all([
+        this.sessions.messages(id),
+        this.receipts.read(id),
+      ]).then(([messages, receipts]) => {
         if (rt.loaded) return;
         rt.messages = messages;
         rt.persisted = messages.length;
         rt.loaded = true;
+        rt.receipts = receipts;
+        rt.receiptSeq = Math.max(
+          0,
+          ...receipts.map((r) => Number(r.id.slice(1)) || 0),
+        );
       });
     if (!rt.loaded) await rt.loading;
     return rt;
@@ -151,10 +209,18 @@ export class SessionController {
     const workspaces = await this.workspaces.summaries();
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
+      phase4: this.options.phase4,
+      gitAvailable: this.gitAvailable,
+      fallback: this.current
+        ? (this.runtimes.get(this.current)?.mainConfig?.fallback ??
+          this.options.fallback)
+        : this.options.fallback,
       sessions: this.sessions.list().map((s) => ({
         ...s,
         status: this.runtimes.get(s.id)?.status ?? "idle",
-        branch: s.workspaceId ? branch.get(s.workspaceId) : undefined,
+        branch:
+          s.worktree?.branch ??
+          (s.workspaceId ? branch.get(s.workspaceId) : undefined),
       })),
       workspaces,
       currentSessionId: this.current,
@@ -171,13 +237,153 @@ export class SessionController {
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
       switch (command.type) {
+        case "restore_worktree": {
+          const session = this.sessions.get(command.sessionId);
+          const root =
+            session?.workspaceId &&
+            this.workspaces.get(session.workspaceId)?.root;
+          if (
+            !session?.worktree ||
+            !root ||
+            this.runtime(session.id).status !== "idle" ||
+            this.worktreeBusy.has(root)
+          )
+            return { ok: false, error: "Worktree unavailable or busy" };
+          this.worktreeBusy.add(root);
+          try {
+            await this.repository.restore(
+              root,
+              session.worktree,
+              command.confirmed,
+              new AbortController().signal,
+            );
+            this.runtime(session.id).tools = undefined;
+            await this.emitState();
+            return { ok: true };
+          } finally {
+            this.worktreeBusy.delete(root);
+          }
+        }
+        case "open_repository": {
+          if (this.options.fake)
+            return {
+              ok: false,
+              error: "Repository network operations are disabled in fake mode",
+            };
+          if (this.repositoryAbort)
+            return { ok: false, error: "Repository operation busy" };
+          this.repositoryAbort = new AbortController();
+          let result;
+          try {
+            result = await this.repository.open(
+              command,
+              this.repositoryAbort.signal,
+              (message) =>
+                this.options.emit({ type: "repository_progress", message }),
+            );
+          } finally {
+            this.repositoryAbort = undefined;
+          }
+          const workspaceId = await this.workspaces.add(
+            result.root,
+            Date.now(),
+            result.remoteUrl,
+          );
+          await this.emitState();
+          return { ok: true, workspaceId };
+        }
+        case "finish_worktree": {
+          const session = this.sessions.get(command.sessionId);
+          const root =
+            session?.workspaceId &&
+            this.workspaces.get(session.workspaceId)?.root;
+          if (
+            !session?.worktree ||
+            !root ||
+            this.runtime(session.id).status !== "idle" ||
+            this.worktreeBusy.has(root)
+          )
+            return { ok: false, error: "Worktree unavailable or busy" };
+          if (
+            command.action === "merge" &&
+            this.sessions
+              .list()
+              .some(
+                (s) =>
+                  s.workspaceId === session.workspaceId &&
+                  !s.worktree &&
+                  !s.readOnly &&
+                  (this.runtimes.get(s.id)?.status ?? "idle") !== "idle",
+              )
+          )
+            return { ok: false, error: "Workspace writer busy" };
+          this.worktreeBusy.add(root);
+          try {
+            await this.repository.finish(
+              root,
+              session.worktree,
+              command.action,
+              !!command.confirmed,
+              new AbortController().signal,
+            );
+            if (
+              command.action === "remove" ||
+              command.action === "remove_branch"
+            ) {
+              await this.sessions.save({
+                ...session,
+                worktree: undefined,
+                cwd: root,
+              });
+              this.runtime(session.id).tools = undefined;
+            }
+            await this.emitState();
+            return { ok: true };
+          } finally {
+            this.worktreeBusy.delete(root);
+          }
+        }
+        case "abort_repository":
+          this.repositoryAbort?.abort();
+          return { ok: true };
+        case "set_mode": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || (session.readOnly && command.mode !== "plan"))
+            return { ok: false, error: "Mode unavailable" };
+          await this.sessions.save({
+            ...session,
+            permissionMode: command.mode,
+          });
+          const rt = await this.load(session.id);
+          await this.record(rt, {
+            id: pad(++rt.receiptSeq),
+            sessionId: session.id,
+            ts: Date.now(),
+            provider: "harness",
+            kind: "permission",
+            durationMs: 0,
+            summary: `Mode: ${command.mode}`,
+          });
+          await this.emitState();
+          return { ok: true };
+        }
         case "ready": {
           await this.emitState();
-          if (this.current) await this.emitTranscript(this.current);
+          if (this.current) {
+            await this.emitTranscript(this.current);
+            const session = this.sessions.get(this.current);
+            if (session) await this.reportMissingCwd(session);
+          }
           return { ok: true };
         }
         case "new_session":
-          return await this.newSession(command.workspaceId, !!command.readOnly);
+          return await this.newSession(
+            command.workspaceId,
+            !!command.readOnly,
+            command.isolated,
+            command.baseBranch,
+            command.newBranch,
+          );
         case "open_session": {
           if (!this.sessions.get(command.sessionId))
             return { ok: false, error: "Unknown session" };
@@ -232,6 +438,9 @@ export class SessionController {
   private async newSession(
     workspaceId: string | null,
     readOnly: boolean,
+    isolated = false,
+    baseBranch?: string,
+    newBranch?: string,
   ): Promise<CommandResult> {
     const id = randomUUID().slice(0, 8);
     let cwd: string;
@@ -239,6 +448,8 @@ export class SessionController {
       const ws = this.workspaces.get(workspaceId);
       if (!ws) return { ok: false, error: "Unknown workspace" };
       cwd = ws.root;
+      if (this.worktreeBusy.has(cwd))
+        return { ok: false, error: "Workspace writer busy" };
       const missing = await missingDirectory(cwd);
       if (missing) {
         this.options.emit({
@@ -255,17 +466,55 @@ export class SessionController {
       await mkdir(cwd, { recursive: true });
     }
     const now = Date.now();
+    const worktree =
+      isolated && workspaceId
+        ? await this.repository.createWorktree(
+            cwd,
+            workspaceId,
+            id,
+            new AbortController().signal,
+            baseBranch,
+            newBranch,
+          )
+        : undefined;
+    if (worktree) cwd = worktree.path;
+    const projectMain =
+      this.options.phase4 && workspaceId && !this.options.fake
+        ? await loadMainConfig(
+            this.options.home,
+            undefined,
+            this.workspaces.get(workspaceId)?.root,
+          )
+        : undefined;
     const session: StoredSession = {
       id,
       title: "New session",
       workspaceId,
       cwd,
+      worktree,
       readOnly,
-      model: this.model,
-      effort: this.effort,
+      model: this.options.cliModel
+        ? this.model
+        : (projectMain?.choice.model ?? this.model),
+      effort:
+        this.options.cliEffort ?? projectMain?.choice.effort ?? this.effort,
       createdAt: now,
       updatedAt: now,
       providers: [],
+      ...(this.options.phase4
+        ? {
+            permissionMode: readOnly
+              ? "plan"
+              : (
+                  await loadProjectConfig(
+                    this.options.home,
+                    workspaceId
+                      ? this.workspaces.get(workspaceId)?.root
+                      : undefined,
+                  )
+                ).permissions.mode,
+          }
+        : {}),
     };
     await this.sessions.save(session);
     this.runtime(id).loaded = true;
@@ -285,15 +534,98 @@ export class SessionController {
       sessionId: id,
       items: itemsFromMessages(loaded.messages),
     });
+    this.options.emit({
+      type: "receipt_history",
+      sessionId: id,
+      receipts: loaded.receipts ?? [],
+    });
   }
 
   private async send(sessionId: string, text: string): Promise<CommandResult> {
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, error: "Unknown session" };
     if (this.stopped) return { ok: false, error: "Shutting down" };
+    const root =
+      session.workspaceId && this.workspaces.get(session.workspaceId)?.root;
+    if (root && this.worktreeBusy.has(root))
+      return { ok: false, error: "Workspace writer busy" };
+    if (/^\/mode(?:\s|$)/.test(text.trim())) {
+      const [, mode, extra] = text.trim().split(/\s+/);
+      if (extra || !["default", "acceptEdits", "plan"].includes(mode ?? ""))
+        return { ok: false, error: "Usage: /mode default|acceptEdits|plan" };
+      return this.handle({
+        type: "set_mode",
+        sessionId,
+        mode: mode as "default" | "acceptEdits" | "plan",
+      });
+    }
+    if (text.trim() === "/compact") {
+      const rt = await this.load(sessionId);
+      if (rt.status !== "idle")
+        return { ok: false, error: "Turn already running" };
+      rt.checkpoint ??= await this.checkpointFile(sessionId).read(undefined);
+      const result = prepareHistory(rt.messages, {
+        checkpoint: rt.checkpoint,
+        threshold: 0.8,
+        force: true,
+      });
+      if (result.checkpoint) {
+        rt.checkpoint = result.checkpoint;
+        await this.checkpointFile(sessionId).write(result.checkpoint);
+      }
+      if (result.compacted)
+        await this.record(rt, {
+          id: pad(++rt.receiptSeq),
+          sessionId,
+          ts: Date.now(),
+          provider: "harness",
+          kind: "compact",
+          durationMs: 0,
+          summary: "Manual compact",
+        });
+      this.options.emit({
+        type: "notice",
+        tone: "dim",
+        sessionId,
+        message: result.compacted
+          ? "古い履歴を圧縮しました（元の履歴は保存済み）"
+          : "圧縮できる古い履歴がありません",
+      });
+      return { ok: true };
+    }
+    if (/^\/model(?:\s|$)/.test(text.trim())) {
+      const [, model, effort, extra] = text.trim().split(/\s+/);
+      if (!model || extra || (effort !== undefined && !isEffort(effort)))
+        return { ok: false, error: "Usage: /model provider:model [effort]" };
+      return this.setModel(sessionId, model, effort as Effort | undefined);
+    }
     const rt = await this.load(sessionId);
     if (rt.status !== "idle")
       return { ok: false, error: "Turn already running" };
+    if (
+      !session.readOnly &&
+      !session.worktree &&
+      session.workspaceId &&
+      this.sessions
+        .list()
+        .some(
+          (other) =>
+            other.id !== sessionId &&
+            other.workspaceId === session.workspaceId &&
+            !other.readOnly &&
+            !other.worktree &&
+            this.runtimes.get(other.id)?.status !== undefined &&
+            this.runtimes.get(other.id)?.status !== "idle",
+        )
+    ) {
+      this.options.emit({
+        type: "error",
+        sessionId,
+        message:
+          "同じワークスペースで書き込みセッションが実行中です。読み取り専用か worktree を使ってください",
+      });
+      return { ok: false, error: "Workspace writer busy" };
+    }
     // 確認より前に同期的に予約する(次の await の間に届いた二重送信を弾く)
     rt.status = "running";
     // 作業フォルダが無いときは、モデルを呼ばずツールも動かさずに知らせる(§18.4)
@@ -331,10 +663,21 @@ export class SessionController {
   ): Promise<CommandResult> {
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, error: "Unknown session" };
-    const resolved = resolveModel(spec, this.options.aliases);
+    const cfg = this.options.phase4
+      ? await loadMainConfig(
+          this.options.home,
+          undefined,
+          session.workspaceId
+            ? this.workspaces.get(session.workspaceId)?.root
+            : undefined,
+        )
+      : undefined;
+    const resolved = resolveModel(spec, cfg?.aliases ?? this.options.aliases);
     const known =
       resolved &&
-      this.options.provider.models().some((m) => m.id === resolved.model);
+      (this.options.providers ?? [this.options.provider]).some((p) =>
+        p.models().some((m) => m.id === resolved.model),
+      );
     if (!resolved || !known) return { ok: false, error: "Unknown model" };
     if (effort !== undefined && !isEffort(effort))
       return { ok: false, error: "Unknown effort" };
@@ -374,6 +717,7 @@ export class SessionController {
   /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
   async shutdown(timeoutMs = 3000): Promise<void> {
     this.stopped = true;
+    this.repositoryAbort?.abort();
     const running: Promise<void>[] = [];
     for (const rt of this.runtimes.values()) {
       this.release(rt);
@@ -385,8 +729,24 @@ export class SessionController {
     ]);
   }
 
-  private async system(cwd: string): Promise<string> {
+  private async system(
+    cwd: string,
+    scratch = false,
+    config?: ProjectConfig,
+  ): Promise<string> {
     let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7. Tool dates use ISO 8601. Respect project instructions. Reply in Japanese unless asked otherwise.`;
+    if (config)
+      return (
+        system +
+        "\n\n" +
+        this.clean(
+          await projectMemory(
+            this.options.home,
+            scratch ? undefined : cwd,
+            config.context.memoryFiles,
+          ),
+        )
+      );
     for (const name of ["AGENTS.md", "CLAUDE.md"]) {
       try {
         system +=
@@ -400,14 +760,23 @@ export class SessionController {
   }
 
   private async runSession(session: StoredSession, rt: Runtime, text: string) {
+    const receiptWrites: Promise<void>[] = [];
     const { emit } = this.options;
     const sessionId = session.id;
     const clean = this.clean;
+    const record = (receipt: Receipt) => {
+      const write = this.receipts.append(sessionId, [receipt], clean);
+      void write.catch(() => undefined);
+      receiptWrites.push(write);
+      (rt.receipts ??= []).push(receipt);
+      emit({ type: "receipt", receipt });
+    };
     const abort = new AbortController();
     rt.abort = abort;
     const calls: { callId: string; receiptId: string }[] = [];
     const receiptByCall = new Map<string, string>();
     let buffer = "";
+    let activeProvider = this.options.provider.id;
     const messageId = () => `${sessionId}-m${rt.messageSeq}`;
     const flush = () => {
       if (buffer)
@@ -445,37 +814,187 @@ export class SessionController {
     let stopCause = "step_failed";
     try {
       rt.tools ??= (this.options.createTools ?? defaultTools)(
+        // Per-session policies are evaluated at the permission gate.
         session.cwd,
         session.readOnly,
       );
+      if (this.options.phase4)
+        rt.config = await loadProjectConfig(
+          this.options.home,
+          session.workspaceId
+            ? this.workspaces.get(session.workspaceId)?.root
+            : undefined,
+        );
+      if (this.options.phase4)
+        rt.mainConfig = await loadMainConfig(
+          this.options.home,
+          undefined,
+          session.workspaceId
+            ? this.workspaces.get(session.workspaceId)?.root
+            : undefined,
+        );
+      const web = rt.mainConfig?.web ?? this.options.web;
+      rt.tools.delete("WebSearch");
+      rt.tools.delete("WebFetch");
+      if (web?.enabled) {
+        for (const [name, tool] of webTools(
+          () =>
+            new Router(
+              this.options.providers ?? [this.options.provider],
+            ).provider((this.sessions.get(sessionId) ?? session).model),
+          web.searchMode,
+          this.options.fake,
+          (event) => {
+            if (event.type === "usage")
+              emit({
+                type: "usage",
+                provider: event.provider,
+                windows: event.windows,
+                window5h: event.windows.find((w) => w.windowMinutes === 300)
+                  ?.usedPercent,
+                weekly: event.windows.find((w) => w.windowMinutes === 10080)
+                  ?.usedPercent,
+              });
+          },
+        ))
+          rt.tools.set(name, tool);
+      }
+      if (this.options.phase4 && !rt.checkpoint)
+        rt.checkpoint = await this.checkpointFile(sessionId).read(undefined);
+      const system = await this.system(
+        session.cwd,
+        !session.workspaceId,
+        rt.config,
+      );
       const result = await runTurn(
         {
+          prepareContext: this.options.phase4
+            ? async (messages, route, signal) => {
+                signal.throwIfAborted();
+                const limit = route.provider
+                  .models()
+                  .find((m) => m.id === route.model)?.contextTokens;
+                const prepared = prepareHistory(messages, {
+                  checkpoint: rt.checkpoint,
+                  limit,
+                  threshold: rt.config?.context.compactThreshold ?? 0.8,
+                  overhead:
+                    estimateTokens({
+                      system,
+                      tools: [...rt.tools!.values()].map((t) => t.spec),
+                    }) + 4096,
+                });
+                if (prepared.compacted && prepared.checkpoint) {
+                  rt.checkpoint = prepared.checkpoint;
+                  await this.checkpointFile(sessionId).write(
+                    prepared.checkpoint,
+                  );
+                  const receipt: Receipt = {
+                    id: pad(++rt.receiptSeq),
+                    sessionId,
+                    ts: Date.now(),
+                    provider: "harness",
+                    kind: "compact",
+                    durationMs: 0,
+                    summary: `Compacted ${prepared.checkpoint.covered} older messages`,
+                  };
+                  record(receipt);
+                }
+                return {
+                  messages: prepared.messages,
+                  ...(!prepared.fits ? { stop: "context_overflow" } : {}),
+                };
+              }
+            : undefined,
           provider: this.options.provider,
+          router: this.options.providers
+            ? new Router(
+                this.options.providers,
+                rt.mainConfig?.fallback ?? this.options.fallback,
+                rt.mainConfig?.aliases ?? this.options.aliases,
+              )
+            : undefined,
+          sessionId,
+          onFallback: async (route) => {
+            activeProvider = route.provider.id;
+            const latest = this.sessions.get(sessionId) ?? session;
+            await this.sessions.save({
+              ...latest,
+              model: route.model,
+              effort: route.reasoning?.effort ?? latest.effort,
+            });
+            emit({
+              type: "error",
+              sessionId,
+              message: `↻ fallback: ${route.model}`,
+            });
+            await this.emitState();
+          },
           model: session.model,
           reasoning: { effort: session.effort },
           // 各周の STEP 1 で、このセッションの最新のモデルを読む
           current: () => {
             const latest = this.sessions.get(sessionId) ?? session;
+            activeProvider =
+              resolveModel(latest.model)?.provider ?? this.options.provider.id;
             return {
               model: latest.model,
               reasoning: { effort: latest.effort },
             };
           },
-          system: await this.system(session.cwd),
+          system,
           messages: rt.messages,
           tools: rt.tools,
           redact: clean,
           sleep: this.options.sleep,
-          permission: (call, signal) =>
-            this.askPermission(
+          permission: async (call, signal) => {
+            const started = Date.now();
+            const allowed = await this.askPermission(
               session,
               rt,
               call,
               receiptByCall.get(call.id),
               signal,
-            ),
+            );
+            if (this.options.phase4) {
+              const receipt: Receipt = {
+                id: pad(++rt.receiptSeq),
+                sessionId,
+                ts: Date.now(),
+                provider: "harness",
+                kind: "permission",
+                tool: call.name,
+                decision: rt.asked
+                  ? allowed
+                    ? "ask→allow"
+                    : "ask→deny"
+                  : allowed
+                    ? "allow"
+                    : "deny",
+                durationMs: Date.now() - started,
+                summary: `${call.name}: ${allowed ? "allow" : "deny"}`,
+                input: safeInput(call.input, clean),
+              };
+              record(receipt);
+            }
+            return allowed;
+          },
           onEvent: (event) => {
             switch (event.type) {
+              case "tool_progress":
+                emit({ ...event, sessionId });
+                break;
+              case "usage":
+                emit({
+                  type: "usage",
+                  provider: event.provider,
+                  windows: event.windows,
+                  window5h: event.windows.find((w) => w.windowMinutes === 300)
+                    ?.usedPercent,
+                  weekly: event.windows.find((w) => w.windowMinutes === 10080)
+                    ?.usedPercent,
+                });
+                break;
               case "step":
                 emit({
                   type: "step",
@@ -516,7 +1035,7 @@ export class SessionController {
                   type: "tool_call",
                   sessionId,
                   receiptId,
-                  provider: this.options.provider.id,
+                  provider: activeProvider,
                   tool: event.name,
                   input: safeInput(event.input, clean),
                 });
@@ -535,10 +1054,10 @@ export class SessionController {
                       isError: r.decision === "error",
                     });
                 }
-                emit({
-                  type: "receipt",
-                  receipt: toReceipt(r, sessionId, pad(++rt.receiptSeq)),
-                });
+                const receipt = toReceipt(r, sessionId, pad(++rt.receiptSeq));
+                receipt.input = safeInput(receipt.input, clean);
+                if (receipt.output) receipt.output = clean(receipt.output);
+                record(receipt);
                 break;
               }
               case "rate_limited":
@@ -568,6 +1087,7 @@ export class SessionController {
       emit({ type: "error", sessionId, message: "内部エラーで停止しました" });
     }
     try {
+      await Promise.all(receiptWrites);
       await this.sessions.append(
         sessionId,
         rt.messages.slice(rt.persisted),
@@ -595,6 +1115,24 @@ export class SessionController {
     await this.emitState();
   }
 
+  private checkpointFile(id: string) {
+    if (!/^[\w-]+$/.test(id)) throw new Error("Invalid session id");
+    return new JsonFile<Checkpoint | undefined>(
+      join(this.options.home, "context", `${id}.json`),
+      (value): value is Checkpoint | undefined =>
+        value === undefined ||
+        (!!value &&
+          typeof value === "object" &&
+          Number.isSafeInteger((value as Checkpoint).covered) &&
+          (value as Checkpoint).covered >= 0 &&
+          typeof (value as Checkpoint).summary === "string"),
+    );
+  }
+  private async record(rt: Runtime, receipt: Receipt) {
+    await this.receipts.append(receipt.sessionId, [receipt], this.clean);
+    (rt.receipts ??= []).push(receipt);
+    this.options.emit({ type: "receipt", receipt });
+  }
   private async askPermission(
     session: StoredSession,
     rt: Runtime,
@@ -602,9 +1140,27 @@ export class SessionController {
     receiptId: string | undefined,
     signal: AbortSignal,
   ): Promise<boolean> {
-    // §9「このセッション中許可」。Phase 4 までルール機能は無く、既定は全ツール ask。
-    if (rt.always.has(call.name)) return true;
+    const fullCall = { ...call, id: "permission" };
+    rt.asked = false;
+    if (rt.config) {
+      const latest = this.sessions.get(session.id) ?? session;
+      const decision = await decidePermission(
+        fullCall,
+        {
+          ...rt.config.permissions,
+          mode: latest.permissionMode ?? rt.config.permissions.mode,
+        },
+        session.cwd,
+        {
+          readOnly: latest.readOnly,
+          scratch: !latest.workspaceId,
+          sessionRules: rt.sessionRules,
+        },
+      );
+      if (decision !== "ask") return decision === "allow";
+    } else if (rt.always.has(call.name)) return true;
     const requestId = randomUUID().slice(0, 8);
+    rt.asked = true;
     rt.status = "ask";
     this.options.emit({
       type: "permission_request",
@@ -629,7 +1185,17 @@ export class SessionController {
       },
     );
     rt.status = "running";
-    if (decision === "always") rt.always.add(call.name);
+    if (decision === "always" && rt.config) {
+      const grant = grantFor({
+        ...fullCall,
+        input: safeInput(fullCall.input, this.clean),
+      });
+      await saveRule(this.options.home, grant);
+      rt.config.permissions.rules.push(grant);
+    } else if (decision === "session" && rt.config)
+      (rt.sessionRules ??= []).push(grantFor(fullCall));
+    else if (decision === "always" || decision === "session")
+      rt.always.add(call.name);
     this.options.emit({
       type: "permission_resolved",
       sessionId: session.id,
@@ -671,7 +1237,10 @@ function toReceipt(r: LoopReceipt, sessionId: string, id: string): Receipt {
     ts: Date.parse(r.completedAt),
     provider: isTool ? "harness" : (r.provider as Receipt["provider"]),
     model: r.model,
-    kind: isTool ? "tool" : "model_call",
+    kind:
+      r.decision === "fallback" ? "fallback" : isTool ? "tool" : "model_call",
+    input: r.input,
+    output: r.output,
     tool: r.tool,
     decision: isTool ? (r.decision === "error" ? "deny" : "allow") : undefined,
     durationMs,

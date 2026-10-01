@@ -9,6 +9,7 @@ directories:
 files:
   - out/**
   - package.json
+  - catalog/models.yaml
   - "!**/*.map"
 # --fake 用の fixtures(実レスポンスの録画。秘密値は除去済み)を exe に同梱する
 extraResources:
@@ -18,6 +19,15 @@ extraResources:
       - phase1-haiku-text.json
       - phase1-headless-read-1.json
       - phase1-headless-read-2.json
+      - phase3-web-haiku.json
+  - from: test/fixtures/codex
+    to: fixtures-codex
+    filter:
+      - x2-gpt-6-luna.json
+      - x3-tool-1.json
+      - x3-tool-2.json
+      - x4-gpt-6-luna-max.json
+      - phase3-web-live.json
 win:
   target: [nsis, portable]
   icon: resources/icon.ico

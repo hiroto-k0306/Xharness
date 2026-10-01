@@ -18,6 +18,8 @@ export type StepNode = (typeof STEP_NODES)[number];
 
 /** DESIGN.md §16.5 */
 export interface Receipt {
+  input?: unknown;
+  output?: string;
   id: string;
   sessionId: string;
   ts: number;
@@ -43,6 +45,8 @@ export const EFFORT_VALUES: readonly Effort[] = [
 export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
+  worktree?: { path: string; branch: string; baseBranch: string };
+  permissionMode?: "default" | "acceptEdits" | "plan";
   id: string;
   title: string;
   /** null = ワークスペース指定なし(「その他」§18.5) */
@@ -69,6 +73,9 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  gitAvailable?: boolean;
+  phase4?: boolean;
+  fallback?: Partial<Record<ProviderName, string>>;
   sessions: SessionSummary[];
   workspaces: WorkspaceSummary[];
   currentSessionId: string | null;
@@ -97,6 +104,10 @@ export type TranscriptItem =
  * "state" / "transcript" / "user_message" / "turn" / "tool_result" / "permission_resolved" も追加分。
  */
 export type UiEvent =
+  | { type: "tool_progress"; sessionId: string; index: number; total: number }
+  | { type: "notice"; sessionId: string; message: string; tone: "dim" | "warn" }
+  | { type: "repository_progress"; message: string }
+  | { type: "receipt_history"; sessionId: string; receipts: Receipt[] }
   | { type: "user_message"; sessionId: string; messageId: string; text: string }
   | {
       type: "step";
@@ -133,7 +144,7 @@ export type UiEvent =
       type: "permission_resolved";
       sessionId: string;
       requestId: string;
-      decision: "allow" | "always" | "deny";
+      decision: PermissionDecision;
     }
   | { type: "receipt"; receipt: Receipt }
   | {
@@ -141,6 +152,12 @@ export type UiEvent =
       provider: ProviderName;
       window5h?: number;
       weekly?: number;
+      windows?: {
+        name: string;
+        usedPercent?: number;
+        windowMinutes?: number;
+        resetAt?: string;
+      }[];
     }
   | {
       type: "agent";
@@ -159,10 +176,16 @@ export type UiEvent =
   | { type: "state"; state: AppState }
   | { type: "transcript"; sessionId: string; items: TranscriptItem[] };
 
-export type PermissionDecision = "allow" | "always" | "deny";
+export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
+  | {
+      type: "set_mode";
+      sessionId: string;
+      mode: "default" | "acceptEdits" | "plan";
+    }
   | { type: "ready" }
+  | { type: "abort_repository" }
   | { type: "send"; sessionId: string; text: string }
   | { type: "abort"; sessionId: string }
   | {
@@ -173,7 +196,28 @@ export type HarnessCommand =
     }
   | { type: "set_model"; sessionId: string; model: string; effort?: Effort }
   | { type: "close_session"; sessionId: string }
-  | { type: "new_session"; workspaceId: string | null; readOnly?: boolean }
+  | {
+      type: "new_session";
+      workspaceId: string | null;
+      readOnly?: boolean;
+      isolated?: boolean;
+      baseBranch?: string;
+      newBranch?: string;
+    }
+  | {
+      type: "open_repository";
+      url: string;
+      destination?: string;
+      branch?: string;
+      shallow?: boolean;
+    }
+  | {
+      type: "finish_worktree";
+      sessionId: string;
+      action: "keep" | "merge" | "remove" | "remove_branch";
+      confirmed?: boolean;
+    }
+  | { type: "restore_worktree"; sessionId: string; confirmed: boolean }
   | { type: "open_session"; sessionId: string }
   | { type: "pick_folder" }
   | { type: "forget_workspace"; workspaceId: string };
@@ -204,6 +248,7 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   const c = value as Record<string, unknown>;
   switch (c.type) {
     case "ready":
+    case "abort_repository":
     case "pick_folder":
       return { type: c.type };
     case "send":
@@ -219,6 +264,7 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
         str(c.requestId) &&
         (c.decision === "allow" ||
           c.decision === "always" ||
+          c.decision === "session" ||
           c.decision === "deny")
         ? {
             type: "permission_response",
@@ -238,6 +284,15 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
             effort: c.effort as Effort | undefined,
           }
         : undefined;
+    case "set_mode":
+      return str(c.sessionId) &&
+        ["default", "acceptEdits", "plan"].includes(String(c.mode))
+        ? {
+            type: "set_mode",
+            sessionId: c.sessionId,
+            mode: c.mode as "default" | "acceptEdits" | "plan",
+          }
+        : undefined;
     case "close_session":
       return str(c.sessionId)
         ? { type: "close_session", sessionId: c.sessionId }
@@ -248,6 +303,41 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
             type: "new_session",
             workspaceId: c.workspaceId,
             readOnly: c.readOnly === true,
+            ...(c.isolated === undefined
+              ? {}
+              : { isolated: c.isolated === true }),
+            ...(str(c.baseBranch) ? { baseBranch: c.baseBranch } : {}),
+            ...(str(c.newBranch) ? { newBranch: c.newBranch } : {}),
+          }
+        : undefined;
+    case "open_repository":
+      return str(c.url, 2000) &&
+        (c.destination === undefined || str(c.destination, 2000)) &&
+        (c.branch === undefined || str(c.branch))
+        ? {
+            type: "open_repository",
+            url: c.url,
+            destination: c.destination as string | undefined,
+            branch: c.branch as string | undefined,
+            shallow: c.shallow === true,
+          }
+        : undefined;
+    case "finish_worktree":
+      return str(c.sessionId) &&
+        ["keep", "merge", "remove", "remove_branch"].includes(String(c.action))
+        ? {
+            type: "finish_worktree",
+            sessionId: c.sessionId,
+            action: c.action as "keep" | "merge" | "remove" | "remove_branch",
+            confirmed: c.confirmed === true,
+          }
+        : undefined;
+    case "restore_worktree":
+      return str(c.sessionId)
+        ? {
+            type: "restore_worktree",
+            sessionId: c.sessionId,
+            confirmed: c.confirmed === true,
           }
         : undefined;
     case "open_session":

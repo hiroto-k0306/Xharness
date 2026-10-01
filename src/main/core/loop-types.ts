@@ -12,6 +12,7 @@ import {
   type ToolRegistry,
 } from "../tools/registry.js";
 import { type HookResult, type Immutable } from "../hooks/step-hooks.js";
+import { type Route, type Router } from "./router.js";
 
 export type StepName =
   "context" | "model" | "tool_use" | "gate" | "act" | "receipt";
@@ -26,6 +27,8 @@ export interface Step {
   run(ctx: LoopContext, signal: AbortSignal): Promise<StepOutcome>;
 }
 export interface Receipt {
+  input?: unknown;
+  output?: string;
   round: number;
   provider: string;
   model: string;
@@ -48,6 +51,11 @@ export interface PendingCall {
   counted?: boolean;
 }
 export interface LoopContext {
+  contextView?: Message[];
+  contextLength?: number;
+  route?: Route;
+  fallbackRoute?: Route;
+  visitedModels: Set<string>;
   round: number;
   messages: Message[];
   request?: ProviderRequest;
@@ -77,7 +85,16 @@ export type StepHook = (
   signal: AbortSignal,
 ) => Promise<HookResult>;
 export interface LoopOptions {
+  prepareContext?(
+    messages: Message[],
+    route: Route,
+    signal: AbortSignal,
+  ): Promise<{ messages: Message[]; stop?: string }>;
   provider: Provider;
+  router?: Router;
+  sessionId?: string;
+  retryWaitSec?: number;
+  onFallback?(route: Route): Promise<void> | void;
   model: string;
   system: string;
   messages: Message[];
@@ -89,6 +106,7 @@ export interface LoopOptions {
     event:
       | ProviderEvent
       | { type: "step"; step: StepName; round: number }
+      | { type: "tool_progress"; index: number; total: number }
       | { type: "receipt"; receipt: Receipt },
   ): void;
   /**
@@ -109,6 +127,7 @@ export function createLoopContext(options: LoopOptions): LoopContext {
   )
     throw new Error("Invalid round limit");
   return {
+    visitedModels: new Set(),
     round: 1,
     messages: structuredClone(options.messages),
     receipts: [],

@@ -57,6 +57,7 @@ beforeEach(async () => {
     app: null,
     views: {},
     prefs: {
+      heroOpen: true,
       sidebarOpen: true,
       collapsed: {},
       sort: "recent",

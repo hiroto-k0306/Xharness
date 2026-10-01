@@ -1,4 +1,5 @@
 .side {
+  position: relative;
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -6,6 +7,16 @@
   background: var(--side-bg);
   font-size: 12px;
   width: 252px;
+}
+.resize {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
 }
 .newBtn {
   margin: 12px 12px 8px;

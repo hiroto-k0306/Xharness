@@ -41,6 +41,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - `test/fixtures/` に保存するときは、リクエストヘッダの `Authorization` と `chatgpt-account-id` を必ず取り除く。保存前にマスク処理を通す
 - `~/.claude/.credentials.json` と `~/.codex/auth.json` は**読むだけ**。Phase 0 では書き換えない
   - 例外（ユーザー承認 2026-10-01）: C5 / X7 の更新試験に限り、公式 CLI 自身による更新を許可する。XHarness のスクリプトは読み取りと変化の比較のみ行い、自前 refresh・資格情報編集・秘密値の保存は行わない
+  - 例外（ユーザー承認 2026-10-01）: Phase 3 の期限切れ解消にも公式 Claude CLI による更新を許可。XHarness の資格情報読み取りのみ・自前 refresh なしの制約は同じ。
 - トークンをレンダラプロセス(画面側)に渡さない
 - 使用量を無駄にしない: Phase 0 の試験リクエストは最小限にし、短いプロンプトと軽いモデルを使う(手順書の指定どおり)
 

@@ -3,7 +3,13 @@ import { STEPS, stepColor } from "../state/steps.js";
 import styles from "./StepTabs.module.css";
 
 export interface StepTabsProps {
-  active?: { step: StepNumber; node: StepNode; round: number };
+  active?: {
+    step: StepNumber;
+    node: StepNode;
+    round: number;
+    index?: number;
+    total?: number;
+  };
   /** 権限待ち(STEP 4)。回転を止めて warn 色の明滅にする */
   waiting: boolean;
   model: string;
@@ -54,6 +60,9 @@ export function StepTabs({ active, waiting, model }: StepTabsProps) {
           >
             <span className={styles.n}>{n}/6</span>
             {s.label}
+            {isActive && s.node === "act" && active?.total && active.total > 1
+              ? ` (${active.index}/${active.total})`
+              : ""}
           </div>
         );
       })}

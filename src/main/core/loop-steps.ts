@@ -1,5 +1,6 @@
 import { type ContentBlock } from "./types.js";
 import { type ProviderEvent } from "../providers/provider.js";
+import { messagesForProvider } from "./messages.js";
 import { trimOutput } from "../tools/registry.js";
 import {
   type LoopContext,
@@ -92,14 +93,36 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
       name: "context",
       async run(ctx, signal) {
         signal.throwIfAborted();
-        const now = options.current?.();
-        ctx.request = {
+        const now = ctx.fallbackRoute ?? options.current?.() ?? ctx.route;
+        ctx.route = {
+          provider:
+            ctx.fallbackRoute?.provider ??
+            options.router?.provider(now?.model ?? options.model) ??
+            options.provider,
           model: now?.model ?? options.model,
+          reasoning: now ? now.reasoning : options.reasoning,
+        };
+        ctx.fallbackRoute = undefined;
+        ctx.visitedModels.add(ctx.route.model);
+        const prepared = await options.prepareContext?.(
+          ctx.messages,
+          ctx.route,
+          signal,
+        );
+        if (prepared?.stop) return { kind: "stop", reason: prepared.stop };
+        ctx.contextView = prepared?.messages;
+        ctx.contextLength = ctx.messages.length;
+        ctx.request = {
+          sessionId: options.sessionId,
+          model: ctx.route.model,
           system: options.system,
-          messages: structuredClone(ctx.messages),
+          messages: messagesForProvider(
+            ctx.contextView ?? ctx.messages,
+            ctx.route.provider.id,
+          ),
           tools: [...options.tools.values()].map((t) => t.spec),
           maxOutputTokens: options.maxOutputTokens,
-          reasoning: now ? now.reasoning : options.reasoning,
+          reasoning: ctx.route.reasoning,
         };
         return { kind: "next", to: "model" };
       },
@@ -113,12 +136,21 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
         // Hooks may append new information before this attempt; history stays intact.
         ctx.request = {
           ...ctx.request,
-          messages: structuredClone(ctx.messages),
+          messages: messagesForProvider(
+            ctx.contextView
+              ? [
+                  ...ctx.contextView,
+                  ...ctx.messages.slice(
+                    ctx.contextLength ?? ctx.messages.length,
+                  ),
+                ]
+              : ctx.messages,
+            (ctx.route?.provider ?? options.provider).id,
+          ),
         };
-        for await (const event of options.provider.stream(
-          ctx.request,
-          signal,
-        )) {
+        for await (const event of (
+          ctx.route?.provider ?? options.provider
+        ).stream(ctx.request, signal)) {
           signal.throwIfAborted();
           options.onEvent?.(event);
           if (event.type === "message_done") ctx.completion = event;
@@ -130,7 +162,7 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
           const delay =
             failure?.type === "rate_limited"
               ? failure.retryAfterSec === undefined ||
-                failure.retryAfterSec > 30
+                failure.retryAfterSec > (options.retryWaitSec ?? 60)
                 ? undefined
                 : failure.retryAfterSec * 1000
               : failure?.type === "error" && failure.error.retryable
@@ -139,6 +171,34 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
           if (delay !== undefined && ctx.modelAttempts < 3) {
             ctx.modelAttempts++;
             return { kind: "retry", afterMs: delay };
+          }
+          if (failure?.type === "rate_limited") {
+            const route = options.router?.fallback(
+              (ctx.route?.provider ?? options.provider).id,
+              ctx.request.reasoning?.effort,
+              ctx.visitedModels,
+            );
+            if (route) {
+              await options.onFallback?.(route);
+              ctx.fallbackRoute = route;
+              ctx.modelAttempts = 0;
+              const receipt: Receipt = {
+                round: ctx.round,
+                provider: (ctx.route?.provider ?? options.provider).id,
+                model: ctx.request.model,
+                decision: "fallback",
+                detail: `Fallback to ${route.model}`,
+                startedAt: ctx.startedAt,
+                completedAt: new Date().toISOString(),
+              };
+              ctx.receipts.push(receipt);
+              options.onEvent?.({ type: "receipt", receipt });
+              return {
+                kind: "fallback",
+                to: "context",
+                reason: "rate_limited",
+              };
+            }
           }
           return {
             kind: "stop",
@@ -194,6 +254,11 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
       name: "act",
       async run(ctx, signal) {
         const execute = async (item: PendingCall) => {
+          options.onEvent?.({
+            type: "tool_progress",
+            index: ctx.pending.indexOf(item) + 1,
+            total: ctx.pending.length,
+          });
           if (ctx.stopCause) {
             item.result = {
               content: "Stopped after consecutive errors",
@@ -244,16 +309,22 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
           const entries: Receipt[] = [
             {
               round: ctx.round,
-              provider: options.provider.id,
+              provider: (ctx.route?.provider ?? options.provider).id,
               model: ctx.request?.model ?? options.model,
               decision: ctx.stopCause ?? ctx.completion?.stopReason ?? "failed",
               startedAt: ctx.startedAt,
               completedAt,
               usage: ctx.completion?.usage,
+              input: ctx.request,
+              output: ctx.completion
+                ? JSON.stringify(ctx.completion.message)
+                : undefined,
             },
             ...ctx.pending.map((item) => ({
               round: ctx.round,
               provider: "tool",
+              input: item.call.input,
+              output: item.result?.content,
               model: ctx.request?.model ?? options.model,
               tool: item.call.name,
               decision: item.result?.isError ? "error" : "allow",

@@ -5,6 +5,8 @@ import { type SessionView } from "../state/store.js";
 import styles from "./Sidebar.module.css";
 
 export interface SidebarProps {
+  width?: number;
+  onResize?(width: number): void;
   app: {
     sessions: SessionSummary[];
     workspaces: Parameters<typeof groupSessions>[0]["workspaces"];
@@ -30,7 +32,47 @@ export function Sidebar(p: SidebarProps) {
   const groups = groupSessions(p.app, { search: p.search, sort: p.sort });
   const total = p.app.sessions.length;
   return (
-    <aside className={styles.side} aria-label="sessions">
+    <aside
+      className={styles.side}
+      aria-label="sessions"
+      style={p.width ? { width: p.width } : undefined}
+    >
+      {p.onResize && (
+        <div
+          role="separator"
+          aria-label="sidebar width"
+          aria-orientation="vertical"
+          aria-valuemin={200}
+          aria-valuemax={400}
+          aria-valuenow={p.width ?? 252}
+          tabIndex={0}
+          className={styles.resize}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+              e.preventDefault();
+              p.onResize?.(
+                Math.max(
+                  200,
+                  Math.min(
+                    400,
+                    (p.width ?? 252) + (e.key === "ArrowRight" ? 10 : -10),
+                  ),
+                ),
+              );
+            }
+          }}
+          onPointerDown={(e) => {
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            if (e.currentTarget.hasPointerCapture(e.pointerId))
+              p.onResize?.(Math.max(200, Math.min(400, e.clientX)));
+          }}
+          onPointerUp={(e) =>
+            e.currentTarget.releasePointerCapture(e.pointerId)
+          }
+        />
+      )}
       <button type="button" className={styles.newBtn} onClick={p.onNew}>
         <span>+ new session</span>
         <kbd>Ctrl+N</kbd>
@@ -107,6 +149,18 @@ export function Sidebar(p: SidebarProps) {
                     >
                       <div className={styles.title}>{s.title}</div>
                       <div className={styles.meta}>
+                        {s.permissionMode && (
+                          <span
+                            style={{
+                              color:
+                                s.permissionMode === "acceptEdits"
+                                  ? "var(--warn)"
+                                  : "var(--dim)",
+                            }}
+                          >
+                            {s.permissionMode}
+                          </span>
+                        )}
                         {s.providers.map((pr) => (
                           <i
                             key={pr}

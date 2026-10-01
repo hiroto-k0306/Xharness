@@ -1,4 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import {
+  Hero,
+  LoopFlow,
+  Receipts,
+  UsagePopover,
+} from "./components/Activity.js";
 import { PermissionInline } from "./components/PermissionInline.js";
 import { PromptLine } from "./components/PromptLine.js";
 import { Sidebar } from "./components/Sidebar.js";
@@ -18,6 +24,8 @@ function modelLabel(model: string, effort: string): string {
 }
 
 export function App() {
+  const [pane, setPane] = useState("transcript");
+  const [usageOpen, setUsageOpen] = useState(false);
   const s = useStore();
   const { app, views, prefs } = s;
   useEffect(() => s.start(), []);
@@ -32,6 +40,27 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
+      if (mod && key === "u") {
+        e.preventDefault();
+        setUsageOpen((v) => !v);
+        return;
+      }
+      if (mod && key === "h") {
+        e.preventDefault();
+        s.setPrefs({ heroOpen: !prefs.heroOpen });
+        return;
+      }
+      if (e.shiftKey && e.key === "Tab" && current) {
+        e.preventDefault();
+        const modes = ["default", "acceptEdits", "plan"] as const;
+        const index = modes.indexOf(session?.permissionMode ?? "default");
+        void window.harness.command({
+          type: "set_mode",
+          sessionId: current,
+          mode: modes[(index + 1) % 3]!,
+        });
+        return;
+      }
       if (mod && key === "n") {
         e.preventDefault();
         void s.newSession(session?.workspaceId ?? null, session?.readOnly);
@@ -57,18 +86,32 @@ export function App() {
   return (
     <div className={styles.win}>
       <TitleBar
+        usage={
+          <UsagePopover
+            usage={s.usage}
+            fallback={app.fallback}
+            open={usageOpen}
+            onToggle={() => setUsageOpen((v) => !v)}
+            onClose={() => setUsageOpen(false)}
+          />
+        }
         workspaceName={workspace?.name}
-        branch={workspace?.branch}
+        branch={session?.branch ?? workspace?.branch}
         pickerOpen={prefs.pickerOpen}
         onTogglePicker={() => s.setPrefs({ pickerOpen: !prefs.pickerOpen })}
         fake={app.fake}
       />
       {prefs.pickerOpen && (
         <WorkspacePicker
+          fake={app.fake}
+          gitAvailable={app.gitAvailable}
+          progress={s.repositoryProgress}
           workspaces={app.workspaces}
           currentId={session?.workspaceId ?? null}
           onPickFolder={s.pickFolder}
-          onStart={(id, readOnly) => void s.newSession(id, readOnly)}
+          onStart={(id, readOnly, isolated, base, branch) =>
+            void s.newSession(id, readOnly, isolated, base, branch)
+          }
           onForget={(id) =>
             void window.harness.command({
               type: "forget_workspace",
@@ -81,6 +124,12 @@ export function App() {
       <div className={styles.body} data-sidebar={prefs.sidebarOpen}>
         {prefs.sidebarOpen && (
           <Sidebar
+            width={prefs.sidebarWidth}
+            onResize={
+              app.phase4
+                ? (sidebarWidth) => s.setPrefs({ sidebarWidth })
+                : undefined
+            }
             app={app}
             views={views}
             collapsed={prefs.collapsed}
@@ -96,20 +145,132 @@ export function App() {
           />
         )}
         <main className={styles.content}>
+          {session?.worktree && (
+            <div>
+              <span>worktree · {session.worktree.branch} </span>
+              <button
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      "消えた worktree を保存済みブランチから復元しますか？",
+                    )
+                  )
+                    return;
+                  const result = await window.harness.command({
+                    type: "restore_worktree",
+                    sessionId: session.id,
+                    confirmed: true,
+                  });
+                  if (!result.ok)
+                    s.apply({
+                      type: "error",
+                      sessionId: session.id,
+                      message: result.error,
+                    });
+                }}
+              >
+                復元
+              </button>
+              <select
+                aria-label="worktree action"
+                defaultValue="keep"
+                onChange={async (e) => {
+                  const action = e.target.value as
+                    "keep" | "merge" | "remove" | "remove_branch";
+                  if (
+                    action !== "keep" &&
+                    !window.confirm(
+                      action === "merge"
+                        ? "元のリポジトリへマージしますか？"
+                        : "worktree を削除しますか？未コミットの変更も失われます。",
+                    )
+                  ) {
+                    e.target.value = "keep";
+                    return;
+                  }
+                  const result = await window.harness.command({
+                    type: "finish_worktree",
+                    sessionId: session.id,
+                    action,
+                    confirmed: true,
+                  });
+                  if (!result.ok)
+                    s.apply({
+                      type: "error",
+                      sessionId: session.id,
+                      message: result.error,
+                    });
+                  e.target.value = "keep";
+                }}
+              >
+                <option value="keep">残す</option>
+                <option value="merge">元のブランチへマージ</option>
+                <option value="remove">ブランチを残して削除</option>
+                <option value="remove_branch">worktree とブランチを削除</option>
+              </select>
+            </div>
+          )}
+          {app.phase4 && (
+            <Hero
+              model={model}
+              view={view}
+              open={prefs.heroOpen}
+              onToggle={() => s.setPrefs({ heroOpen: !prefs.heroOpen })}
+            />
+          )}
           <StepTabs active={view?.step} waiting={waiting} model={model} />
-          <Transcript
-            items={view?.items ?? []}
-            running={!!view?.running}
-            model={model}
-          />
+          {app.phase4 && (
+            <div
+              className={styles.paneTabs}
+              role="tablist"
+              aria-label="session panels"
+            >
+              <button
+                role="tab"
+                aria-selected={pane === "transcript"}
+                onClick={() => setPane("transcript")}
+              >
+                Transcript
+              </button>
+              <button
+                role="tab"
+                aria-selected={pane === "flow"}
+                onClick={() => setPane("flow")}
+              >
+                LoopFlow
+              </button>
+            </div>
+          )}
+          <div className={styles.middle} data-pane={pane}>
+            <Transcript
+              items={view?.items ?? []}
+              running={!!view?.running}
+              model={model}
+            />
+            {app.phase4 && <LoopFlow view={view} model={model} />}
+          </div>
+          {app.phase4 && <Receipts receipts={view?.receipts} />}
           {view?.pending && (
             <PermissionInline
+              persistent={app.phase4}
               tool={view.pending.tool}
               summary={view.pending.summary}
               onRespond={s.respond}
             />
           )}
           <PromptLine
+            mode={
+              app.phase4 ? (session?.permissionMode ?? "default") : undefined
+            }
+            readOnly={session?.readOnly}
+            onMode={(mode) => {
+              if (current)
+                void window.harness.command({
+                  type: "set_mode",
+                  sessionId: current,
+                  mode,
+                });
+            }}
             cwdLabel={workspace?.name ?? (session ? "scratch" : "~")}
             running={!!view?.running}
             blocked={waiting}

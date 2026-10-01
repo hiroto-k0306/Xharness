@@ -19,6 +19,18 @@ export interface ProviderRequest {
   tools: ToolSpec[];
   maxOutputTokens?: number;
   reasoning?: { effort: ReasoningEffort };
+  sessionId?: string;
+  /** Only standalone WebSearch tool calls opt into a hosted search. */
+  webSearch?: { mode: "live" | "cached" };
+}
+
+export interface QuotaUsage {
+  windows: {
+    name: string;
+    usedPercent?: number;
+    windowMinutes?: number;
+    resetAt?: string;
+  }[];
 }
 
 export interface ProviderError {
@@ -31,6 +43,7 @@ export interface ProviderError {
 export type StopReason =
   "end_turn" | "tool_use" | "max_tokens" | "refusal" | "other";
 export type ProviderEvent =
+  | ({ type: "usage"; provider: ProviderId } & QuotaUsage)
   | { type: "text_delta"; text: string }
   | { type: "reasoning_delta"; text: string }
   | { type: "tool_use"; id: string; name: string; input: unknown }

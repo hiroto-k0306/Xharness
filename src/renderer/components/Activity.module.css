@@ -1,0 +1,128 @@
+.hero {
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--line);
+  color: var(--dim);
+  font-size: 11px;
+}
+.hero h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  color: var(--claude);
+  font-family: Silkscreen, monospace;
+}
+.hero p {
+  margin: 4px 0;
+}
+.hero button,
+.usage button,
+.details button {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.flow {
+  min-width: 220px;
+  width: 280px;
+  padding: 16px;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+}
+.node {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.node div {
+  color: var(--dim);
+  margin-top: 4px;
+}
+.receipts {
+  border-top: 1px solid var(--line);
+  position: relative;
+  min-height: 30px;
+  max-height: 160px;
+  overflow: auto;
+}
+.heading {
+  color: var(--dim);
+  padding: 4px 24px;
+  font-size: 11px;
+}
+.row {
+  width: 100%;
+  min-width: 650px;
+  padding: 4px 24px;
+  display: grid;
+  grid-template-columns: 55px 65px minmax(90px, 1fr) 85px 75px 110px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font-size: 11px;
+}
+.row:hover {
+  background: var(--panel-head);
+}
+.details {
+  position: fixed;
+  inset: 15% 10%;
+  padding: 20px;
+  z-index: 25;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  overflow: auto;
+}
+.details pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+}
+.usage {
+  -webkit-app-region: no-drag;
+  position: relative;
+  font-size: 11px;
+}
+.pop {
+  position: absolute;
+  top: 30px;
+  right: 0;
+  width: 300px;
+  padding: 16px;
+  z-index: 30;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.pop section {
+  margin-bottom: 12px;
+}
+.pop progress {
+  width: 100%;
+  display: block;
+  accent-color: var(--warn);
+}
+.toast {
+  position: fixed;
+  top: 45px;
+  right: 20px;
+  background: var(--panel);
+  padding: 10px;
+  color: var(--err);
+  border: 1px solid var(--err);
+  z-index: 40;
+}
+@media (max-width: 900px) {
+  .hero {
+    padding: 6px 12px;
+  }
+}

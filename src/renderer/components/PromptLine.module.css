@@ -35,6 +35,8 @@
   color: var(--dim);
 }
 .chip {
+  background: var(--panel);
+  font-family: inherit;
   border: 1px solid var(--line);
   padding: 1px 8px;
   border-radius: 3px;

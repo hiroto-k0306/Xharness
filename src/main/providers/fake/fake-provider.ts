@@ -7,6 +7,10 @@ import {
   type ProviderRequest,
 } from "../provider.js";
 import { decodeClaudeStream } from "../claude/stream.js";
+import { decodeCodexStream } from "../codex/stream.js";
+import { type ProviderId } from "../../core/types.js";
+import { claudeUsage } from "../claude/usage.js";
+import { codexUsage } from "../codex/usage.js";
 
 /** FakeProvider が1回の stream() で再現する応答。 */
 export type FakeStep =
@@ -23,6 +27,8 @@ export type FakeStep =
   | { type: "error"; kind: "transport" | "request" | "authentication" };
 
 export interface FakeProviderOptions {
+  quota?: boolean;
+  provider?: ProviderId;
   /** 既定: <cwd>/test/fixtures/claude */
   fixturesDir?: string;
   /** 与えると順番に消費する。尽きたら keyword ルーティングへ戻る */
@@ -32,6 +38,7 @@ export interface FakeProviderOptions {
 }
 
 interface FixtureFile {
+  responseHeaders?: { all: Record<string, string> };
   status: number;
   events: { event: string; data: string }[];
 }
@@ -57,7 +64,29 @@ function endsWithToolResult(request: ProviderRequest): boolean {
  *   "slow"  → イベント間に遅延(Esc / 中断の確認用)
  *   他      → pong のテキスト応答
  */
-export function routeFake(request: ProviderRequest): FakeStep {
+export function routeFake(
+  request: ProviderRequest,
+  provider: ProviderId = "claude",
+): FakeStep {
+  if (request.webSearch)
+    return {
+      type: "fixture",
+      name: provider === "codex" ? "phase3-web-live" : "phase3-web-haiku",
+    };
+  if (provider === "codex") {
+    if (endsWithToolResult(request))
+      return { type: "fixture", name: "x3-tool-2" };
+    const text = lastUserText(request).toLowerCase();
+    if (text.includes("429")) return { type: "rate_limited", retryAfterSec: 3 };
+    if (text.includes("read") || text.includes("tool"))
+      return { type: "fixture", name: "x3-tool-1" };
+    return {
+      type: "fixture",
+      name: "x2-gpt-6-luna",
+      ...(text.includes("cut") ? { cutAfterEvents: 4 } : {}),
+      ...(text.includes("slow") ? { delayMs: 400 } : {}),
+    };
+  }
   if (endsWithToolResult(request))
     return { type: "fixture", name: "phase1-headless-read-2" };
   const text = lastUserText(request).toLowerCase();
@@ -104,18 +133,29 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * 認証情報は読まない・要求しない。DESIGN.md §6 の Provider に準拠。
  */
 export class FakeProvider implements Provider {
-  readonly id = "claude";
+  readonly id: ProviderId;
   private readonly script: FakeStep[];
   constructor(private readonly options: FakeProviderOptions = {}) {
     this.script = [...(options.script ?? [])];
+    this.id = options.provider ?? "claude";
   }
   models(): ModelInfo[] {
-    return [{ id: "fake", contextTokens: null }];
+    return this.id === "codex"
+      ? ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"].map((id) => ({
+          id,
+          contextTokens: 272000,
+        }))
+      : [
+          "fake",
+          "claude-haiku-4-5-20251001",
+          "claude-opus-5-5",
+          "claude-sonnet-5-5",
+        ].map((id) => ({ id, contextTokens: id.includes("haiku") ? 200000 : 1000000 }));
   }
   private async load(name: string): Promise<FixtureFile> {
     if (!/^[\w.-]+$/.test(name)) throw new Error("Invalid fixture name");
     const dir =
-      this.options.fixturesDir ?? join(process.cwd(), "test/fixtures/claude");
+      this.options.fixturesDir ?? join(process.cwd(), "test/fixtures", this.id);
     return JSON.parse(
       await readFile(join(dir, `${name}.json`), "utf8"),
     ) as FixtureFile;
@@ -125,7 +165,7 @@ export class FakeProvider implements Provider {
     signal: AbortSignal,
   ): AsyncGenerator<ProviderEvent> {
     this.options.onRequest?.(structuredClone(request));
-    const step = this.script.shift() ?? routeFake(request);
+    const step = this.script.shift() ?? routeFake(request, this.id);
     try {
       signal.throwIfAborted();
       if (step.type === "rate_limited") {
@@ -148,12 +188,16 @@ export class FakeProvider implements Provider {
         return;
       }
       const file = await this.load(step.name);
+      if (this.options.quota) yield { type: "usage", provider: this.id,
+        ...(this.id === "claude" ? claudeUsage : codexUsage)(new Headers(file.responseHeaders?.all)) };
       const events =
         step.cutAfterEvents === undefined
           ? file.events
           : file.events.slice(0, step.cutAfterEvents);
       let completed = false;
-      for await (const event of decodeClaudeStream(sse(events))) {
+      for await (const event of (this.id === "codex"
+        ? decodeCodexStream
+        : decodeClaudeStream)(sse(events))) {
         signal.throwIfAborted();
         if (step.delayMs) await sleep(step.delayMs, signal);
         if (event.type === "message_done") completed = true;

@@ -109,6 +109,7 @@ export async function gitInfo(
 }
 
 type WorkspaceItem = {
+  remoteUrl?: string;
   id: string;
   root: string;
   name: string;
@@ -139,17 +140,20 @@ export class WorkspaceStore {
   async load() {
     this.items = await this.file.read([]);
   }
-  async add(root: string, now = Date.now()) {
+  async add(root: string, now = Date.now(), remoteUrl?: string) {
     const abs = resolve(root);
     const id = workspaceId(abs);
     const existing = this.items.find((w) => w.id === id);
-    if (existing) existing.lastOpenedAt = now;
-    else
+    if (existing) {
+      existing.lastOpenedAt = now;
+      existing.remoteUrl ??= remoteUrl;
+    } else
       this.items.push({
         id,
         root: abs,
         name: basename(abs) || abs,
         lastOpenedAt: now,
+        remoteUrl,
       });
     this.git.delete(abs);
     await this.file.write(this.items);
@@ -180,7 +184,7 @@ export class WorkspaceStore {
       const g = cached.info;
       out.push({
         ...w,
-        kind: g.git ? "git" : "no git",
+        kind: w.remoteUrl ? "cloned" : g.git ? "git" : "no git",
         branch: g.branch,
       });
     }

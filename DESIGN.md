@@ -233,7 +233,7 @@ interface ProviderRequest {
   messages: Message[];
   tools: ToolSpec[];
   maxOutputTokens?: number;
-  reasoning?: { effort: "low" | "medium" | "high" };
+  reasoning?: { effort: "low" | "medium" | "high" | "xhigh" | "max" };
 }
 
 type ProviderEvent =
@@ -264,12 +264,14 @@ type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "other";
 | system 制約 | 第1ブロックに `You are Claude Code, Anthropic's official CLI for Claude.` を常に置き、自前指示は第2ブロック以降に置く（Phase 1 指示）。Adapter から Haiku / Opus 5.5 / Sonnet 5.5 の識別文 + 自前指示で HTTP 200 / end_turn を確認 |
 | 資格情報 | `~/.claude/.credentials.json` の `claudeAiOauth.{accessToken, refreshToken, expiresAt}`(Windows/Linux。macOSはキーチェーン) |
 | プロンプトキャッシュ | system と tools 末尾、直近メッセージに `cache_control` を付与(枠節約に効く) |
+| effort / thinking | Opus/Sonnet 5.5 は `output_config.effort` を明示し既定 high（low/medium/high/xhigh/max）。Haiku は送らない。thinking は省略してネイティブ動作を維持し、tool_choice は auto のみ。履歴は追記し、同一プロバイダの thinking/signature は変更せず返す |
 
 ストリーム処理: `content_block_start` / `content_block_delta`(`text_delta`, `input_json_delta`, `thinking_delta`)/ `content_block_stop` / `message_delta`(stop_reason, usage)を組み立てる。
 
 C2 の実測: Haiku は `pong` / `end_turn`。Opus 5.5 は識別文ありで HTTP 200 / `pong` / `end_turn`、system なしは成功後の再確認も含め3回 HTTP 429。成功した識別文ありの構成を採用するが、429の原因は未確定。
 使用量ヘッダとして `anthropic-ratelimit-unified-{5h,7d}-utilization` と `-reset` を確認。
 Phase 1: SSE は Content-Type で判定せず、CRLF を含む行区切りで読む。429 の待ち時間は代表枠の `anthropic-ratelimit-unified-*-reset`（Unix 秒）から算出する。reset 自体が欠ける実レスポンスでは待ち時間を未定義にし、推測して自動再送しない。
+Phase 1 の補正: Opus/Sonnet 5.5 に `output_config.effort: high`、thinking 省略、`tool_choice: auto` を各1回送り、両方 HTTP 200 / pong / end_turn。low/medium/xhigh/max は [公式 effort 仕様](https://platform.claude.com/docs/en/build-with-claude/effort) に基づき登録し、実通信は high のみ。履歴と thinking/signature を変えない追記・返送は変換とループのテストで確認。
 C5 の CLI 起動は Haiku で成功し、起動後の読み直しも HTTP 200。期限前のためトークンは変化せず、実更新・期限切れエラーは未実測。自前 refresh は行わず、公式 CLI に更新を委ねる。
 根拠と試験条件: [docs/phase0-findings.md](docs/phase0-findings.md)。Phase 0 のゲートは完了。
 
@@ -975,6 +977,7 @@ interface Step {
 - Agent Loop は「今の STEP を実行 → 戻り値に従って次へ」を繰り返すだけの小さな状態機械にする
 - 各 STEP は単体でテストできる(`LoopContext` を偽物にして入れる)
 - STEP の前後にユーザー定義の処理を差し込める(§19.10)
+- Phase 1 の実装: `loop-types.ts` に Step / StepOutcome / LoopContext、`loop-steps.ts` に単独実行できる6 STEP、`loop.ts` に戻り値を dispatch する状態機械を置く。retry は同じ STEP に戻り、失敗・停止・中断も receipt を経て終了する。fallback の遷移型は扱うが、実モデル切替は Phase 3。
 
 ### 19.9 未決事項
 - [ ] 上限値(§19.5)の既定値
@@ -1007,6 +1010,8 @@ type HookResult =
   | { kind: "block"; reason: string }                     // その操作を止める(before のみ)
   | { kind: "stop"; reason: string };                     // ループを止める
 ```
+
+Phase 1 の入り口は `beforeStep / afterStep: Promise<HookResult>`。HookContext は履歴を含む凍結スナップショットとし、既存メッセージや thinking の変更を許さない。inject はツールの未処理 ID があれば tool_result に追加し、それ以外は user メッセージとして追記する。before の block は実行をスキップし、未処理ツールにエラーを返す。stop とフック例外もツール ID と receipt を閉じて終了する。after の block は無効。after:receipt の inject は end_turn 後も上限内で次周を起動できる。フック結果も provider:hook の receipt に残す。
 
 - **フックを実行できる場所**: どの STEP の before / after でもよい。よく使う例:
   | 例 | 位置 | 結果 |

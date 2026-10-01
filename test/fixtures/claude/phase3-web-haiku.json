@@ -1,0 +1,171 @@
+{
+  "status": 200,
+  "requestHeaders": {
+    "anthropic-beta": "oauth-2025-04-20",
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json"
+  },
+  "requestBody": {
+    "model": "claude-haiku-4-5-20251001",
+    "system": [
+      {
+        "type": "text",
+        "text": "You are Claude Code, Anthropic's official CLI for Claude."
+      },
+      {
+        "type": "text",
+        "text": "Be concise. Search no more than once."
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Use web search exactly once to find the official Node.js website. Reply only with its URL."
+          }
+        ]
+      }
+    ],
+    "max_tokens": 1024,
+    "stream": true,
+    "tools": [
+      {
+        "type": "web_search_20250305",
+        "name": "web_search",
+        "max_uses": 1
+      }
+    ],
+    "tool_choice": {
+      "type": "auto"
+    }
+  },
+  "responseHeaders": {
+    "all": {
+      "anthropic-ratelimit-unified-5h-reset": "1790872200",
+      "anthropic-ratelimit-unified-5h-status": "allowed",
+      "anthropic-ratelimit-unified-5h-utilization": "0.0",
+      "anthropic-ratelimit-unified-7d-reset": "1791115200",
+      "anthropic-ratelimit-unified-7d-status": "allowed_warning",
+      "anthropic-ratelimit-unified-7d-surpassed-threshold": "0.75",
+      "anthropic-ratelimit-unified-7d-utilization": "0.84",
+      "anthropic-ratelimit-unified-fallback-percentage": "0.5",
+      "anthropic-ratelimit-unified-overage-disabled-reason": "org_level_disabled",
+      "anthropic-ratelimit-unified-overage-status": "rejected",
+      "anthropic-ratelimit-unified-representative-claim": "seven_day",
+      "anthropic-ratelimit-unified-reset": "1791115200",
+      "anthropic-ratelimit-unified-status": "allowed_warning",
+      "anthropic-ratelimit-unified-upgrade-paths": "upgrade_plan",
+      "cache-control": "no-cache",
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "a43b266aff908a51-NRT",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+      "content-type": "text/event-stream; charset=utf-8",
+      "date": "Thu, 01 Oct 2026 11:33:01 GMT",
+      "request-id": "req_011CfbSjGYxmL5ARNS8mM6VW",
+      "server": "cloudflare",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "traceresponse": "00-60cdbd60d32e7f1f4b6d4b702c14e627-74a835356798e64d-01",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-robots-tag": "none"
+    },
+    "usage": {
+      "anthropic-ratelimit-unified-5h-reset": "1790872200",
+      "anthropic-ratelimit-unified-5h-status": "allowed",
+      "anthropic-ratelimit-unified-5h-utilization": "0.0",
+      "anthropic-ratelimit-unified-7d-reset": "1791115200",
+      "anthropic-ratelimit-unified-7d-status": "allowed_warning",
+      "anthropic-ratelimit-unified-7d-surpassed-threshold": "0.75",
+      "anthropic-ratelimit-unified-7d-utilization": "0.84",
+      "anthropic-ratelimit-unified-fallback-percentage": "0.5",
+      "anthropic-ratelimit-unified-overage-disabled-reason": "org_level_disabled",
+      "anthropic-ratelimit-unified-overage-status": "rejected",
+      "anthropic-ratelimit-unified-representative-claim": "seven_day",
+      "anthropic-ratelimit-unified-reset": "1791115200",
+      "anthropic-ratelimit-unified-status": "allowed_warning",
+      "anthropic-ratelimit-unified-upgrade-paths": "upgrade_plan"
+    }
+  },
+  "events": [
+    {
+      "event": "message_start",
+      "data": "{\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011CfbSjH6Tk4xMJrekSWAzx\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":2258,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":21,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}}"
+    },
+    {
+      "event": "content_block_start",
+      "data": "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"server_tool_use\",\"id\":\"srvtoolu_011FUFY4khkLoiSysD7EKeJ1\",\"name\":\"web_search\",\"input\":{}}}"
+    },
+    {
+      "event": "ping",
+      "data": "{\"type\":\"ping\"}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"query\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\": \\\"off\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"icial N\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"ode.js \"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"website\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"}\"}}"
+    },
+    {
+      "event": "content_block_stop",
+      "data": "{\"type\":\"content_block_stop\",\"index\":0}"
+    },
+    {
+      "event": "content_block_start",
+      "data": "{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"web_search_tool_result\",\"tool_use_id\":\"srvtoolu_011FUFY4khkLoiSysD7EKeJ1\",\"content\":[{\"type\":\"web_search_result\",\"title\":\"GitHub - nodejs/nodejs.org: The Node.js® Website\",\"url\":\"https://github.com/nodejs/nodejs.org\",\"encrypted_content\":\"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\",\"page_age\":\"1244 days ago\"},{\"type\":\"web_search_result\",\"title\":\"Node.js — About Node.js®\",\"url\":\"https://nodejs.org/en/about\",\"encrypted_content\":\"EuoJCioIFBgCIiRiMTRlNDNkZC04ZDQwLTQ3MTgtOTc3Yi0xMTI5NzZkMjY1ZTMSDAyzVZ1LvQqi4zQdghoMlnTje8TQTuaHD565IjAdw4cYnfAdNDBlAvyJEbmHMznIQ6My7edco7dJQqxUFpC29EUSX+GZKA2RcNtx0Gwq7QjKfw0j+ZRNlFN/MGlliad4Hh94zP3B9Rs1mcvCt3jtMu4PdtCP4ULLAshV0v5ng0qp2+ndg/B7nAxYH8ZsVrVGZB/cZlpkGAlj1kF+mmNLfPl6Ypl+QPXQ2YHTHTFgosmWqidM4mVcsROoH/SUyTbKg8Rh0ZsL2LKP9dAgvhuUfZtB0CMnlyfOdVAtfVJ4jG/0IkUrb8AFGN+jNNlwEFSjm7titjgUC15r0T5dwn5drPlQT8HE+aYAkqxZGK8dzrL9qr7iDL18QOWXqtdmQy9eRUJOzlsHCstTPs3a2XVHj8VmdeXektINBXBpVEioqmsAlDNoeSO8XlblzkEF2X+pfc14ZNm8KVBPcifL1L2JYpgO/gBQduSOzGTz3ldgL6M6IHn+RvvVLeW+MlEbVNki/P+jgI6ZIl/19rJZXlVj3xih0HCVofGFwqGiptcpk+nWhylJJUXyyIjDMo4WtrnLH35wxNPLWTx3zp6/Hv9PqnZlmFXqIfOOoxJaXZBkGOwLor65KZNvPog9RASL3HQpZdAkU603i/HPIS7hqQ8qCJt+DMtYea+kQDzBb8v1Ryb5YYIMzpHJKLHtOXc8fTSyrPq8z0mtHTINCFC2aU+MIDn2aVKv9rg5qSmi8TpMVMZNka8DrcjHJQS47DLF42zbntOHaugguwIC+mG4rpYr6HRRYIrzRxtXE08ZrkGz/s1J0BNPsSZz5LVbiPmkiftt4UOBPTN6pw0KKw74eqD4jc9Ch+hI9YOT2sYINMl3jYJcgP6ivT3y8kU4QHQ4AySjcbBN9hZ6/fqjMCBDTbVNvmGNp9wVUNBxJOWku8jOuMKq8Ot/eUyNkRPzZOK7nW9sVX+RQZrmmcu1jNtETDqjxGxureKnQAhBw7VSj9JSIFFj/9+kpXa3cLP9r2G5h15+kdtIX5UrpHf0kfVhiCHVcj4W4zQzPRomqCji0aT5mT9zWVkQRdsfa3E+SLg1jShUo2o9mAmbJF2y4ZmqX2Ld4MyYxNrSZ8vQvrZo+BJjiHQMqvJ6PARGnpij17sXz9VqgJr4Ka4K99Qxewd825ASIzdm/eoWtfYVzCD7ruOjuL9/2TTaVXisRZE3s3Rw593ULh88Yk4GThNJJbfc0sayfle4kMySuTVKsu6hY24q5QDFn1QrHyC5+PDPyNQwJdnkoJ6jnEslgkTTeHtQQRe9n605U3wqS/YGqF6qWLItDI07nN+QArBKjjvUVD9j74Tr2Gsi8pkGhAdlqiydhsRdRfePsyxbdy6iE4el7/exKY72cm/sjAxdpDc3ULorpt2+1PTIYHl5E43fxasbs3EPnpyfmxhbdRL5oiGvHunUbPoP9avNeDKzLc6QWjOHTpwFNt1xGcKXtu+IBXlea6hAKT52xDip6l4Fsu3AndSEQuzyMaOLPrL4ylQQbUt1SUlollB6c7gWGEmKY8TTAM6E0H+S/POzCq1BfYw2pzqSvIDuBzGDrdv6zzW+lXCM2N0s54Mlb5suijL0TDH7xBgD\",\"page_age\":\"65 days ago\"},{\"type\":\"web_search_result\",\"title\":\"Node.js · GitHub\",\"url\":\"https://github.com/nodejs\",\"encrypted_content\":\"EqIKCioIFBgCIiRiMTRlNDNkZC04ZDQwLTQ3MTgtOTc3Yi0xMTI5NzZkMjY1ZTMSDNztmNh0dz5c/faR7BoMzbC3l1gIQj2N8c7YIjAY1wZFzCZT2yjr8fY3I2uNug5p49guvwETXwEM6xyhv0lbg/Ef8vpytDsfAO5rwXAqpQnpiLwbBrjVv6bsAbcsrsBSpu0GuJllEg4G33vi5UqBTqsNtbQb9/+Gyjd8QuNgWq5kyu6RxhTu75UHl4rtpnSogxXIWAEfKhio5J1JbU+sf+MhEcjFD2uB/uCCt+dVMss4JfmiBE64sCm/UV0AYjsgDufexZV4mqkCp9c6/4CvRogR4lGWGtSCwmiu9KaARclbAVqYebglQ+hvDunAyk1sikoCLAGhbAakVHnJ8TuHYQ2rjIGUaa/vDqiMGH5K5x9Hfla3x1Edl3aZy5L4pHjgF5SF5H4BVnj4eYuWwsYT+y23Tg3ehF6nm+th/Dh/+8qsvNt/JkowEZsMkx6bK+LpQiwBCkKf+V32gEUkE7XFvvcEZc4NfD4LVNLIfIDAzC3+IFXbA217LbFgQWXfaVBjmfMoR47ifJzjvpCbOT5Moxv7nC+jxncY33wGDOd/+l1dpqL3oE/Lm/6u5M12W5ulPB9CdJwb8s9r+pI5kVc7PM7Nl7cUZ/ka25EisdhcsZAVnGz6dyz7tCLml8mJQ+Xe1kTWmMIiL88n5WI4z3+jtb07n1NErdXmt2xBLct9B07PYnBx8sNtW114J4DMGA4QAs0ludD85nsWHxjBwpPjGfZ59KCQX2fhwinTlxKsBKi8hytGFOTKvthUu104LVWXSrKBzPSJxlL12Rs3q9wtwzYXvffsYAK+3CbrYIvfrO+bYvj81DTeZbQelAELy6xUUOeK+KaWH4sl3m+t3mw1k/qC4P2kMUnIrgvfbTmzR5rlrdj4POvCc/lqw4Ot5ucb5pnc9PruEgsDrBgIig75sgiIb30raBmPQwBR1vq3uGI+wM+orJJCdJZS4PD1TuOhN5zfuTswNKO08a4lBb9NxOyBXLcxhx2DLou/v2TRA+IwWMHaFFy+EF98IRb+/nd06dKtCMYRSXvF3Z/rM7qrqFG1yp5jwZTe0McXG93n3mlcRdYRnkWCg3dNkQ9kl7TyJpBXNwtYLOoTpAWkrlH+Voklqf0MvalAixsUpPoxk4M1eEpKquAJnt2vvLnat8zPA6J0RwkNPjdGdjXcQEfGgu5Ho6Gy9YLJMbu+DtWg87Lvq9LvFMrWQXlRaJq11TU6/jo4XjXqYTjKTLZJ4blOTvALGQvLzUganFlIp1u1i/QIsKs2N/pVNO6aVJDn+Bx0Aetw+9hzAaWhVJZ7jTZk0IpDKSenLkWeINEGWZH3iFFTHcSoYCnhTOlvqXfESCDif8ny8uPFv6gHv1nzcHxvgeYHR4QOkArSbZ2X/bbN9oIB9VGIFavANtfvPkGqIhwluuNu30TJ+JcsBqwD6cWei9bSpopMKL5JRPAB8wVmkhsRzhtipSA375dBRD6CqNp9V0Gj4CZDEQaL3dmIij5MRDyBh6BxwQMYBm5qbTl6wzLxjDn0DjDma/xUijje1Q5IvUSp30LzjL2Qf/TzUSi86WyOpaxoR3OhSDfHEahVDLlcu7Bt7194OG6ZvrfpJOipGvb/DIAPah0tdQoFQSVIIUijtFCgEwXl4/MnmK0IXRNobVHfuOuk1DgxgCeFBMtE0hmbELgppyblcTNNln0NJhOnrVn8GAM=\",\"page_age\":\"1232 days ago\"},{\"type\":\"web_search_result\",\"title\":\"How to Create a Website Using Node.js and Express\",\"url\":\"https://www.computerhope.com/issues/ch002070.htm\",\"encrypted_content\":\"EuQICioIFBgCIiRiMTRlNDNkZC04ZDQwLTQ3MTgtOTc3Yi0xMTI5NzZkMjY1ZTMSDGZuhHs8wxQX05PmThoMlEOFj5y8QGUih3KxIjChCZUq7VdQHYRZdKIBsBsjoCqZmeyXV1crSF6zJ6ZOAeNHmHKYqb/f2Vl/kKLviYsq5weTEBLkyYDX5NYBLKwdsRD03R0gwGZuHD85lkRF9EmJ4OnTp+uclsPe4rlouTLGWvUqGN1RpIgSOQ4eFWVA3LyqOvNhJF5lughDTfXvg2LPeNHUCkHV+Roaa/KZ6NQ04iqCrvqsYMlh+YzYEquQzpETq2T5/ek+6aYCKFEOxe0UnTRMSQ0Ah7IhxyfCQfUvhdPa6di4IMU4ZVJ7hGJBfEkN6JGbW0VKxAqPJRnms2vXcvxoUO+V2UwP5FStSaLFEsuGOL3Iucz1pAFiquCx5leElCGMP6OrcFdzhhU6F3A3gAwqsoQC4Sasps3P1ec6hshpvR0Apd/revuD8mcYMByAnycUXWlNHHWj8ILirSYQgp5Pa2+u/48uKcmoQtFJEbUqSGcXJ+D51yvobzQWROYu7S67BWVZr4WkbGu04G65tFtpStM8O+O+MX+IVCvppxGW6Rl1soQdiv4n1Bt3eZZDCPhr37VAyqentzM0zbYKoqEDQ9Ll71cWB3dGLgwsqonZ7LFAeP+W4qCPqYxIuDGUy1qmnFecUotuodQzcOTFTnIM8uU3cRock4vZ9mwKyBiRxeIA43ufiEt61IrzOc6VhwwTizCn7Yv2YG09xzGKLHu/ZvNSEKUZc22WrQhYC7Lb0OIjbOE8B4quZd7G6UwQGg6B7ul9IqEwl9MH1SYoRUl6+wTA6yyhKZ7V//XWFByLOXWPftqKf3hSJAZYuYHahwFAQ3HgPlrb/dT/trtTZuniR3rKiRuCytld51s+xvSzRedaa+B4gZsOLd/bF5HILmWFCqhKUQwEp8ri5Sh0t2rwu8aZySJQ2NDI016nJ4SeUTUZGPurSYHvwaIYrU6iIqkm6lDAHRjQc0tU7lfSQdt2NFMR8h9ATzV3pmQKCy2O0Oc438a9DqfcXLSSutzfgyY9szsx4k0crllAVfJzt7U0njTIL9rKj3k+QNwMIXn3HOs2xw14+Bns0ifoE95rwoykqwqwwDlGNE4R72PTN/K2WTPbbbXyvuNUZAvFpigfWQkxHIY+t9mhpSvcXcxM8AyVHcxfTIVKGJ09peXhazz2o54I7ubIS3OgAxzT1dktMpxzph4k36uH0Dcjc1KG0lc5xUpzm/oUKl/mMTTvbR8RO6Kr+CDSCBgv77LE0pF3kAOxkiDmWi5IJgTRpv5gvWb1WPvNz4xl8+V7gGKXVGi9dTf8495LheVaGO42GyXkLscNFOpQOnBP/lnx4jUs1AY/6qkrwofuPUjUhPeVVIrAlElGlUuriej+Fp0kpx2213J0hHLY7CNS26I+ArdlVt4ia7O10Ihcmo3O8MwOkbqqthW51T0YAw==\",\"page_age\":\"487 days ago\"},{\"type\":\"web_search_result\",\"title\":\"Node.js\",\"url\":\"https://en.wikipedia.org/wiki/Node.js\",\"encrypted_content\":\"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\",\"page_age\":null},{\"type\":\"web_search_result\",\"title\":\"Node.js Tutorial\",\"url\":\"https://www.w3schools.com/nodejs/\",\"encrypted_content\":\"EocGCioIFBgCIiRiMTRlNDNkZC04ZDQwLTQ3MTgtOTc3Yi0xMTI5NzZkMjY1ZTMSDMxx0ekCPujPSrlT8xoMprArGKI1jkDf9PlyIjCCCe4N/ZfH4Gga7D5P2LUWjhpJ46h4wSLE08/HRRRFK7ndsyal0g0Q+4f5/Ay6Z70qigUYL+Rq8WYLoRuginVx0yiyHs3e82XXbv0F6V9gffZIYy7dqJoJR4PD2Sxps8ZkGN7qTGBJj5IsnwUHvLvEIdqjVooQlnVIAh4Zv2o1YwCDyi9v/tPHuxdSCq5PtqBUpqfGTJ2xTyRl39QnwCP6EHOnjWE3r7FsidddsJEGyVCfAs8kPorkAm+kfuYBNHNLbhqmDnl6gjkAqQ0n+Np47TjjxbMeLbZQDNA6bsKWAxlDY3oVzfvdTjR11pwdrCKrTUrS4OwcXfbwOuuYhMSlyZhu+ycpI+HAIhzhB/ND8OnyQL8SSV1fmB1cJC8G4iK3N5mnkQOKoi9Qg5sMhtsj1imoG0uu6rsVN0ygH9xNIXskDXNnvmn1OcWBg5tFT6zIxkyC4ttHoLGdDpM1Dpme2zXF6uzQjgQFVL3ADi8Q+hchmYlt9ApAcDhwOf0L85DTD+9AX/Ev7GPXiPHCF2fHG4GTSGRYuVh4t5xbdehDqwnObc6bTAOHVgqD7AvK+Ig1qv8PJGiqc0Oych0ULxLdqOotrRu1BaJmPBHb9KU8OGhHY7E20D96lcv46PJq1M2thCXlwsA7k7i4ZYhY00optYqYjkQwftVX0x8uzJhrg/VawdgRs3KW8I9trYylVtereDEMIOPzmscu2eMUETbsaY8/U11CqKX9bBgWRZHtTq9ygRPD+uoYa73KwknLu6A+bJkI+9UE5rNkcWdUA0m+NpQ1fHtPiWDAWxyWwIZIhZ18ryrwKlZ3b8pVB1Pz6Rd/uKJepC0HB8Z9yURudFquJ39r19iZX1Xis3HdvZxN1ll1YgceCNoAxA+UP1txm8mfzXGT++/cY3gEXJ7nXZc+tQcdEDIGyL0S3W++cxgD\",\"page_age\":\"470 days ago\"},{\"type\":\"web_search_result\",\"title\":\"Node.js — Run JavaScript Everywhere\",\"url\":\"https://nodejs.org/en\",\"encrypted_content\":\"EpcFCioIFBgCIiRiMTRlNDNkZC04ZDQwLTQ3MTgtOTc3Yi0xMTI5NzZkMjY1ZTMSDKfZcKE/ClnXPxbBXhoMPRPXY5UwAE6j0QvmIjAWQ6W7EvgSt5xeLvtguydYLE15R6/E2CKFTd/l85IrlyYCIO1kMzhbXJGl5GyGj00qmgSVgjstEqhJp5nvGtF/UMJyezUQOkIp70wAmFCm0bj2bzeH97jK6+PxMyNJ1lc88e3lKsTWBjTCBIsSNY/4XVcFVYkfE6R+Cyv1xW3bIGS1elArC1stMOzscc/xOaawIDwzEbcfJfZv50mA5LRvnVbExbWaB+ZvBeLBWnRKMfvUMPZ+/rrnDrcNrK8srCRr6N/ZO0YeAyTgIvoteultsUoO0CmQKfXoRpqLwivxwGNXnhEdkD3+1E6fWVgeG1CC9UE1oGiiTzx1xSDC84zA8aiwZQrQQvTByFUlAjs7grDoK/w+bSohJeztod7rXI0maiYASJe4mTARKcEU7BW5RNK77wQ2JI0Y775aHjMgVSewlUBvjajejQR7ZK1KpvKB+vAn8kaI9gmcz/E6BckKEeKL/UUa7DQ8MEGZ8O+TZTYCgUOWvzenf+JZjbZEONmpAcSeQhHMdfc7zh6EQj6yErnRpHjcSK/yu+Pg41f1XoqJYQ7cLVqUilzPtCsp+Zo7UWHx4pjsC/+w/LtyPnqiV58XH3X/XxnqsDcFSP/IxVe8YvLdm6SI6N6l0xsr4xOmCnQEgczsE5Lz6WZAKWyzD07akafstR7KdinnSsEztpes4PVps7QXluK6xuSp78syc6s1AUheuP3NmIcRsm4ay8IvYT/hX98VNL2DPJzblpeqRG7ux09xV6gCJzOch2xbsJa1B9pLhUHFFo9DGAM=\",\"page_age\":\"66 days ago\"},{\"type\":\"web_search_result\",\"title\":\"Node.js (@nodejs) on X\",\"url\":\"https://x.com/nodejs\",\"encrypted_content\":\"EooKCioIFBgCIiRiMTRlNDNkZC04ZDQwLTQ3MTgtOTc3Yi0xMTI5NzZkMjY1ZTMSDPwh3JMBnBiA+eZy7hoMfyeOpGc5BtT6SRkFIjAtkbOyK58T0mAWpx3mFxOv7f9aUH1YoNPWk32qkDBHOxVY5qqmLtpLeKAZ6D8PQSQqjQl8ZXGbiGp0YyOo8shgoPMPUREXQy6p2H3Muss3NZZIF8dVqKMrT0d+7Gxd4y6k4zWdo8JRR7DEOhmJP3URpiSJ3A4bK/450A0JjFDX8Wq/PwJS+zT6Phath2auDOj2qfo8NYlY0JbOrX0Qex/MiPx6rpPCkdIzcVM8HrNhGXdID83HYIDDpGr0Zb/tGOkeq9y3o47qkLlkMv3Wj+noS6XqANQOpwwisrWekX9/+Uasa9UxUu7ZNFXWmlipSMdeZQ2xRmGOoiN3WjoufbmOmY2U0+8IZ7dz/Qw1JsAPSbE9TlUOHktiXOE8T63mi7E9QPqI2rCS2s3XCHhicnntGuhKz/jFT4ccAP5k5ouIaA8CayjG6UJs8m8JDsapbTRWy2IzPmJ0jKG55fy4c+W7a2GhuDGbPuEC+/yrIOA9KIVhVc3Ep+ljBmx8J3nD6/5H5sl8n8H446Ywdr6WT31cAdxhPHQ5X25PVfuLgNNt5LROdRUcXby+aKmyqonHciYXJopPTbX92MyrMfPWXcvewOEREZcuG046m0ksuNHZ0N5Q0mD7aM76k3oY/eZR28vafup97NY3SyB+XWmuu5AmS+EY+mhFFZBX6JS49zvt44f2Diy9Ho1fkyh7h+49ypejjx4bjMOskulsUaOno5HBG7H8a6QjaaR0xL/FBK1GOfJisXElw8ZFZjm4bkgWyieoeJ+SakHU9d5hQKxP42wd70B5aBCtxzfKkiK++FVxVjz/jOpjmbp/v2zBo8AHYhRJ2aCgmufLLhZU0lRQQ+OrDJtreyPNNFrRxNP2jWAL969iAtASnNIe42kLndlypyqoJItcUtnZ+VewENkpkDocLlo9O7VAerSHKd/l7Fl71KuBTOwkAwFod0nU4LF4ozIo2ZmhtxbhStQMP01r/w6E8nl99BpWzyTxKIkTuxrpMHe7YsiL83pM04wVMpQYGF+NxaaJYeRus1MMT5mteBP3ACbgpz5hBvFy7O2JHcV+OjfLeJp4ke/L4o9/JS0/b5zYKIdh+P5bYNTVc+ini7VgJz49culF87qek3iDt5sBe/n0Uo0q0PFYPbhBDaLQtlP5xoySvwZv8xXuDbzqH1BU2odEQQh4ajpunQDkP9xNJM7SSdty0S91VvC2XYJTLnfttEnElcKSTa5r4+ov87gdmTapaXwYhA2tfmf1RSxMfh8KgL5A3MfYPI5W+KEKatIzXqe0ENx2AjRZCMjlwaTJOnOkN710fN7YcnZOEAYgBI/a4kDot/ag2w2Eoo+/UV7V1yai9ZaL5LucGdI7VIXt+Y1c5Z8S9PUcX5zS25+ztlgEX6JuTi3x4wltEYPXtOmqGEgNYZUB8InFnKOpSaUUGPbxWj5S90kiSfFWZcySllvWkDk7wIIdgce3MwCgITVWfKDzynUOfeK78i58ZaRALnklgqubxZq2hY5FSBJVFRd1yrGx7+CfzTdlET8OPymdjdtYAg1kDjArBEau3S7hUmiPnCsWDb5zuB83fcvSIiAZDqFlywy/qYrW7CYbpD9330pzy+xzWUsw7Lk4Xz2+GAM=\",\"page_age\":\"6156 days ago\"},{\"type\":\"web_search_result\",\"title\":\"node.org\",\"url\":\"https://node.org/\",\"encrypted_content\":\"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\",\"page_age\":null},{\"type\":\"web_search_result\",\"title\":\"github.com\",\"url\":\"https://github.com/targos/nodejs.org\",\"encrypted_content\":\"EtsPCioIFBgCIiRiMTRlNDNkZC04ZDQwLTQ3MTgtOTc3Yi0xMTI5NzZkMjY1ZTMSDDfAIZT+b5rwCCtttBoMWZLnVN7cfql8oE9nIjD+o2/WGZGxmyX802L/0uUXZqexsL2F8mQ5UV/Ig8pW3+MROqSeQeavFD+YFmNLwOEq3g4qEHhMVdEawnYjGppRllwf2EtGN5T2jEGxYH9advAPya2F4qjpuFfeAjPCgobAvLS58GOw8QoTH7n9Kp9FanJy0rhjB26USK5cCTd2770BCldt7Ko24q5oJ8BIQlBo/5AzNlzOHfTpASkoWexY9GXuVLq8/JvW8sLfsfYUCrL55nIt02zvIiULqZEAVdWq5OVrknT7m35aQfFfDFGuMMbWsofX1l0kIeJ892IhDQXUpNwIFEnwhODFQjq1kdheVbmS8iLqBd2q1K7uAeoO3V6RZgSmxaxi1OMZBSYIyZDTc5zHzbjt/mj/uKuqakKOsWZ+wMwOeCjxJZXl+HjHmOQLIJPYfrmIm0eN3lweN5vHnWJc8Hlze62g+HBBG3hHOkMXj7RHszm5HUk+gHZgotwwtXhpZu8RVMWnYFVd5xXzK0KLD+fLZGIqxHblKujg38npW+ZhpHjmTYYfH85S2AsKBgjbCl5MOz/M8mqowPlNBhIx/Vh/+0gu4h3Ju4nSmE/Esisl1vmcJf1ZalcsLeTF8FeNAqwTSVQMJ79cQv6TyEdqSOyGYPFvVNn7goxsBDQD4CreCin5AlAcxE9RO44dTvshSd2A6f0TKAHdqz99cMyEJoUbXEg1fyG1vdEiCXa+OZezSOlcwj6LgTspnjl68OqrPKiR+8ps5QSchU3kAzE2CtOdDGme9lhqFhCdiPzC+DDCKzWQ86/JWf7LqyonhNR+XEpqj9HDr+QekL9F+jMo61JvGWTfVVtZYN21Jb79KYlAffn2ka8F4D0mcsSOViDMoL6ILQYJuBS+WUoyNJW04++IHfaV+2xW+T2Ty96MUJK3a1g2z4YXayZA/+wtmRr00mEULpyAzERfU0csAV9y5qEtDAG9dbcT6fvdTIyGyFn3blvdGv74UCItMT2kVDbxWf8C3xLcZni7UiuzkWMMrHKXD/bDEekYbPEH5ESLkjOCMY7fkTnnvykC5mfAZjvQptqi78lNW66VlFYkWUyw/ccs64MbJc/b6KeeTUd0MkPJb6CAQ8MEPRAOEkqoBpEwQndEqodeV7/t/iZdg9JCeFccQcKYLWc75JvXdxGeFB2dvam6pK0ExOP5YUrCdJZWDeQ+ME4+6yyTLbr1wvzcckxom7zcJ3rrlXmlHWA02dYX/k+ofjLUQGdJkJGGrr/WnE1Ovb4JEBFpbSa9o3amfbWRAAHUrvz66DGI/dsw7QSJohzTOYC7fNxVSQT7A381laOUzGEg9dW4YonHIbaZRG1z4WYBctoo+gfCibLCc22KPJCW5x6X845Vm4Q2hsYJ7+dazEeOseljwTT/PKa1YNnzNTEyuAcKbCgkbvMGwXnjK4fHBM497Nw0T44+Uo5ib6xtqvODCLzufWwBqh2CQ0Ppva3GIk77zzeYDtKgTJGRYQxU4o6LeHYaYp5e9nhsslhCwdyRwnQISuKncD1jOrNAuhpRw3IH7yvleuhymuesp7t7YeN6MAJd5AV0o6/pUGlxT/Agn9dF/IRn9JO0+XeYIbbmb3GXTGx6k/3NdcE4EOfkP2WyaU9nu8NWH4043Yimxjnut5JMajHEWGB6uG97ziaXdCvhVQ3VJ3d+U3uA1JdKSEhPIJmH2TwUliFA2M669mcvZjq78BVmex4RtmHzCQdeD2FZRkxKCrWPXG37QGFVDibhoK84zPMP/EW89UhzsT806wXZEaLXe/xu5f4S/8b4gw52l9jqzgH2MiSJDp6r11SX17lZBwEw8UG7bI71c+PXlLExiIOvBhVl91EDo+LjznrA7U4C7eo6wl0k92BNRa2aFmINm3CWhv8vqGqUb7K8ilwyiBxOPJaJ10roi1ID12d1XNq9W42VETf/ik0lqnyFQWUFDge5jW0IzPDFjntHMz6EYMnIG3ullXiiXjH0AOI2Z0FKPqEZT5E2vKqsMTy6iwjgAeP+DFW8WlhFR2W03/5rnV35ypLhmlWflh+qVz1A+fjuFdH30PrvsdqbDedqQ8S2VWNN1ufikEO0CIjHHaKHqBto/Jx0W1ukMath5vItxIWk+mjr9ydjsbVkdpxy/TwpURxuw3UvL3iQnABd9z+TV0i7CaQyYXC/NSmIZvuV4zamW5Dooy/AmAsla2ilHNAR0L8UKMLMYf+1b7EGu+Cj06mVnCfphfG5OupQrx25Xk0IpTQOZ4nNrwl5sLV/bWwmWCykfuq63e6UQxDUu6R8F4VvMRWTWiilaSkarV7gfO+GfuoY5Xz9Cc5A5ZBikKO3DOdL4L+1r8jA1HONC0+wq0p37H8eDgEeLEs6udbcWNmA33jjdCDWPTNCsaecfVAATfvipTSH6pzYTjx37lm2KPgL9MMqusFqmxY0A37Yek7FSak0nPcWU8z0O8ptSdceFnOwN1Co1iB5FjySfnaR4f6RPOivM/kRJV8eOixoINFfmFFsyGvBFtnoP2QcDCkm3IcVdW0LlM6kJFHGa0iu+IpcUH+JqjItEEOk9kmgGTJu78C/7rizeZoWDwqDYhnLKRgD\",\"page_age\":null}],\"caller\":{\"type\":\"direct\"}}}"
+    },
+    {
+      "event": "content_block_stop",
+      "data": "{\"type\":\"content_block_stop\",\"index\":1}"
+    },
+    {
+      "event": "content_block_start",
+      "data": "{\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"text_delta\",\"text\":\"https\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"text_delta\",\"text\":\"://nodejs.org\"}}"
+    },
+    {
+      "event": "content_block_stop",
+      "data": "{\"type\":\"content_block_stop\",\"index\":2}"
+    },
+    {
+      "event": "message_delta",
+      "data": "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":10876,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":66,\"server_tool_use\":{\"web_search_requests\":1,\"web_fetch_requests\":0}}}"
+    },
+    {
+      "event": "message_stop",
+      "data": "{\"type\":\"message_stop\"}"
+    }
+  ]
+}

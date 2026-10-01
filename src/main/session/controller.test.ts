@@ -93,6 +93,8 @@ describe("SessionController", () => {
     const sessionId = (created as { sessionId: string }).sessionId;
     await c.handle({ type: "send", sessionId, text: "hello there" });
     await until(() => idle(sessionId));
+    // turn idle の後に索引を保存して state を送るため、state 自体の完了を待つ。
+    await until(() => lastState().state.sessions[0]?.status === "idle");
     expect(
       events
         .filter((e) => e.type === "step")

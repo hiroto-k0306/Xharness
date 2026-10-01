@@ -18,6 +18,15 @@ const run = (
 ) => events.reduce(applyEvent, start);
 
 describe("applyEvent", () => {
+  it("keeps the first user message when new-session IPC events arrive after its reply", () => {
+    const s = run([
+      { type: "transcript", sessionId: "s1", items: [] },
+      { type: "user_message", sessionId: "s1", messageId: "u1", text: "first" },
+      { type: "text_delta", sessionId: "s1", messageId: "m1", text: "pong" },
+    ]);
+    expect(s.views.s1!.items.map((i) => i.kind)).toEqual(["user", "assistant"]);
+    expect(s.views.s1!.items[0]).toMatchObject({ text: "first" });
+  });
   it("accumulates streamed text into one assistant message per messageId", () => {
     const s = run([
       { type: "text_delta", sessionId: "s1", messageId: "m1", text: "he" },

@@ -33,7 +33,11 @@ beforeEach(async () => {
     fake: true,
     version: "0.0.1",
     host: { pickFolder: async () => folder },
-    emit: (e) => act(() => bus.listener?.(e)),
+    // Electron のイベントチャネルは invoke の返答と独立して届く。
+    // new_session の空の transcript が返答より後に届く順序も再現する。
+    emit: (e) => {
+      setTimeout(() => act(() => bus.listener?.(e)), 0);
+    },
     createTools: () => new Map([["Read", readTool]]),
   });
   await controller.init();

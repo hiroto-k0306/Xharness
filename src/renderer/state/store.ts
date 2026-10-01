@@ -48,6 +48,16 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
       return { ...s, app: e.state };
     case "transcript":
       return put(s, e.sessionId, { ...view(s, e.sessionId), items: e.items });
+    case "user_message":
+      return put(
+        s,
+        e.sessionId,
+        withItem(view(s, e.sessionId), {
+          kind: "user",
+          id: e.messageId,
+          text: e.text,
+        }),
+      );
     case "turn": {
       const v = view(s, e.sessionId);
       const next: SessionView = {
@@ -246,17 +256,6 @@ export const useStore = create<UiStore>()((set, get) => ({
       id = created.sessionId;
     }
     const sessionId = id;
-    set((s) =>
-      put(
-        s,
-        sessionId,
-        withItem(view(s, sessionId), {
-          kind: "user",
-          id: `u${Date.now()}`,
-          text: trimmed,
-        }),
-      ),
-    );
     const result = await window.harness.command({
       type: "send",
       sessionId,

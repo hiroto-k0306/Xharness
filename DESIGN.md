@@ -645,6 +645,8 @@ type UiEvent =
 
 IPC チャネルは `harness:event`(main → renderer)と `harness:command`(renderer → main。送信・中断・権限応答・モデル切替)の2本だけにする。
 
+初回送信時も、ユーザー発言は main が履歴に追記してから `user_message` イベント(`sessionId` / `messageId` / `text`)で画面へ送る。コマンドの戻り値とイベントの到着順に依存する楽観的な追記は行わず、履歴表示とストリーム出力の順序を同じイベント列で保つ。
+
 Phase 2 の実装メモ(型は `src/shared/ipc.ts`): 複数セッションの同時実行(§16.6)のため、セッションに属するイベントには `sessionId` を付ける。上の型に加えて `{ type: "state"; state }`(セッション・ワークスペース一覧など)、`{ type: "transcript"; sessionId; items }`(履歴の再表示)、`{ type: "turn"; sessionId; status; stopCause? }`、`{ type: "tool_result"; receiptId; isError }`、`{ type: "permission_resolved" }` を追加した。`permission_request` には対応するツールカードの `receiptId` を任意で持たせる。`usage` と `agent` は型だけで、Phase 4・5 まで送らない。`set_model` は `sessionId` を取りそのセッションだけに効き(モデルと effort はセッションごとに保存)、`close_session` はセッションを閉じて権限待ちを deny にする。レンダラ → main のコマンドは `parseCommand` で検証し、戻り値(`CommandResult`)だけが同じチャネルで返る。
 
 ### 16.5 Receipt(ステップ記録)

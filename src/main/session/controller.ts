@@ -416,6 +416,14 @@ export class SessionController {
       };
       await this.sessions.save(session);
     }
+    // new_session の transcript と invoke の返答は別チャネル。発言も main の
+    // イベント順に流し、遅れて届いた空の transcript が発言を消す競合を防ぐ。
+    emit({
+      type: "user_message",
+      sessionId,
+      messageId: `${sessionId}-u${rt.messages.length}`,
+      text: clean(text),
+    });
     emit({ type: "turn", sessionId, status: "running" });
     await this.emitState();
     let stopCause = "step_failed";

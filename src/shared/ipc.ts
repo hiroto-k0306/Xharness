@@ -94,9 +94,10 @@ export type TranscriptItem =
 
 /**
  * §16.4 の UiEvent。sessionId 付きのものは複数セッションの同時実行用の追加(§16.6)。
- * "state" / "transcript" / "turn" / "tool_result" / "permission_resolved" も追加分。
+ * "state" / "transcript" / "user_message" / "turn" / "tool_result" / "permission_resolved" も追加分。
  */
 export type UiEvent =
+  | { type: "user_message"; sessionId: string; messageId: string; text: string }
   | {
       type: "step";
       sessionId: string;

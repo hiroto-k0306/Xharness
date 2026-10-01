@@ -22,6 +22,7 @@ export default defineConfig({
             "src/**/*.test.ts",
             "test/**/*.test.ts",
             "spike/**/*.test.ts",
+            "scripts/**/*.test.ts",
           ],
           exclude,
         },

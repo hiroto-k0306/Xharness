@@ -49,11 +49,15 @@ import { type ReasoningEffort } from "./main/providers/provider.js";
 import { FileAccess, fileTools } from "./main/tools/files.js";
 import { shellSearchTools } from "./main/tools/shell-search.js";
 import { webTools } from "./main/tools/web.js";
+import {
+  readReceiptReplay,
+  compareReplayPermissions,
+} from "./main/session/replay.js";
 
 export async function headless(args = process.argv.slice(2)) {
   if (args.includes("--help")) {
     process.stdout.write(
-      "XHarness Phase 5\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\n/model provider:model [effort] /mode default|acceptEdits|plan /phase plan|implement|review /review /compact /exit /clear · Ctrl+C interrupts a turn\n",
+      "XHarness Phase 6\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\nnode dist/headless.js --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path] [--fake]\n/model provider:model [effort] /mode default|acceptEdits|plan /phase plan|implement|review /review /compact /exit /clear · Ctrl+C interrupts a turn\n",
     );
     return;
   }
@@ -65,6 +69,56 @@ export async function headless(args = process.argv.slice(2)) {
   const home =
     process.env.XHARNESS_HOME ??
     join(homedir(), fake ? ".xharness-fake" : ".xharness");
+  if (args.includes("--replay")) {
+    const value = (name: string) => {
+      const result = option(name, "");
+      if (!result || result.startsWith("--"))
+        throw new Error("Missing replay option value");
+      return result;
+    };
+    if (["--resume", "--model", "--effort"].some((name) => args.includes(name)))
+      throw new Error("Replay cannot resume or call a model");
+    const secrets = fake ? [] : await readLocalSecrets();
+    const replay = await readReceiptReplay(home, value("--replay"), {
+      parentId: args.includes("--replay-parent")
+        ? value("--replay-parent")
+        : undefined,
+      clean: (text) => redact(text, secrets),
+    });
+    let comparisons;
+    if (args.includes("--replay-mode")) {
+      const mode = value("--replay-mode");
+      if (
+        !permissionModes.includes(mode as (typeof permissionModes)[number]) ||
+        !args.includes("--cwd")
+      )
+        throw new Error("Replay comparison needs a permission mode and --cwd");
+      const cwd = resolve(value("--cwd"));
+      const project = await loadProjectConfig(home, cwd);
+      comparisons = await compareReplayPermissions(
+        replay,
+        {
+          ...project.permissions,
+          mode: mode as (typeof permissionModes)[number],
+        },
+        cwd,
+        new AbortController().signal,
+      );
+    }
+    process.stdout.write(
+      JSON.stringify(
+        {
+          ...replay,
+          ...(comparisons ? { permissionComparisons: comparisons } : {}),
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+    return;
+  }
+  if (args.includes("--replay-mode") || args.includes("--replay-parent"))
+    throw new Error("Replay options require --replay");
   const sessions = new SessionStore(home);
   await sessions.load();
   const resume = args.includes("--resume")

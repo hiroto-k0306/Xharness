@@ -1,3 +1,4 @@
+import { projectHookApproval } from "./main/hooks/shell-hooks.js";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
@@ -25,7 +26,11 @@ import {
   estimateTokens,
   type Checkpoint,
 } from "./main/context/compactor.js";
-import { runTurn } from "./main/core/loop.js";
+import { WorkflowRuntime } from "./main/workflow/runtime.js";
+import { loadAgentConfig } from "./main/agents/definitions.js";
+import { waveChecks } from "./main/workflow/wave-checks.js";
+import { defaultTools } from "./main/session/controller.js";
+import { childNeedsAsk } from "./main/agents/permissions.js";
 import { type Message } from "./main/core/types.js";
 import { redact } from "./main/core/redact.js";
 import { readLocalSecrets } from "./main/auth/local-secrets.js";
@@ -48,7 +53,7 @@ import { webTools } from "./main/tools/web.js";
 export async function headless(args = process.argv.slice(2)) {
   if (args.includes("--help")) {
     process.stdout.write(
-      "XHarness Phase 4\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\n/model provider:model [effort] /mode default|acceptEdits|plan /compact /exit /clear · Ctrl+C interrupts a turn\n",
+      "XHarness Phase 5\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\n/model provider:model [effort] /mode default|acceptEdits|plan /phase plan|implement|review /review /compact /exit /clear · Ctrl+C interrupts a turn\n",
     );
     return;
   }
@@ -155,6 +160,7 @@ export async function headless(args = process.argv.slice(2)) {
     terminal: !!process.stdin.isTTY,
   });
   let controller: AbortController | undefined;
+  let workflow: WorkflowRuntime | undefined;
   let closed = false;
   const interrupt = () => {
     if (controller) controller.abort();
@@ -181,7 +187,21 @@ export async function headless(args = process.argv.slice(2)) {
         break;
       }
       if (input.trim() === "/exit") break;
+      if (/^\/(?:phase|review)(?:\s|$)/.test(input.trim())) {
+        const [command, phase, extra] = input.trim().split(/\s+/);
+        const requested = command === "/review" ? "review" : (phase ?? "");
+        try {
+          if (!workflow || extra || (command === "/review" && phase))
+            throw new Error();
+          workflow.manualPhase(requested);
+        } catch {
+          process.stdout.write("No workflow or invalid phase transition\n");
+          continue;
+        }
+        if (requested !== "review") continue;
+      }
       if (input.trim() === "/clear") {
+        workflow = undefined;
         messages = [];
         persisted = 0;
         checkpoint = undefined;
@@ -249,11 +269,108 @@ export async function headless(args = process.argv.slice(2)) {
         role: "user",
         content: [{ type: "text", text: clean(input) }],
       });
-      const result = await runTurn(
+      const ask = async (
+        call: { name: string; input: unknown },
+        signal: AbortSignal,
+        directory = cwd,
+        force = false,
+      ) => {
+        signal.throwIfAborted();
+        const fullCall = { ...call, id: "headless" };
+        const decision = force
+          ? "ask"
+          : await decidePermission(
+              fullCall,
+              {
+                ...project.permissions,
+                mode: session.permissionMode ?? project.permissions.mode,
+              },
+              directory,
+              { readOnly: session.readOnly, sessionRules },
+            );
+        if (decision !== "ask") return decision === "allow";
+        const answer = await rl.question(
+          `\nAllow ${clean(call.name + " " + JSON.stringify(call.input))}? [y: once / s: session / a: always / N] `,
+          { signal },
+        );
+        signal.throwIfAborted();
+        const choice = answer.trim().toLowerCase();
+        if (choice === "s" && !force) sessionRules.push(grantFor(fullCall));
+        if (choice === "a" && !force) {
+          const grant = grantFor({
+            ...fullCall,
+            input: JSON.parse(clean(JSON.stringify(call.input))) as unknown,
+          });
+          await saveRule(home, grant);
+          project.permissions.rules.push(grant);
+        }
+        return ["y", "s", "a"].includes(choice);
+      };
+      if (
+        !workflow ||
+        (!workflow.manualReview &&
+          ["off", "complete", "attention"].includes(workflow.state.phase))
+      ) {
+        const agentConfig = await loadAgentConfig(home, cwd);
+        const approveHooks = projectHookApproval(
+          agentConfig.hooks ?? [],
+          (hooks, signal) =>
+            ask({ name: "ProjectHooks", input: { hooks } }, signal, cwd, true),
+        );
+        workflow = new WorkflowRuntime({
+          approveHooks: (_hooks, signal) => approveHooks(signal),
+          home,
+          cwd,
+          parentId: session.id,
+          config: agentConfig,
+          aliases: config.aliases,
+          router,
+          createTools: (directory) => {
+            const available = defaultTools(directory, false);
+            if (config.web.enabled)
+              for (const [name, tool] of webTools(
+                () => router.provider(model!),
+                config.web.searchMode,
+                fake,
+              ))
+                available.set(name, tool);
+            return available;
+          },
+          permission: async (call, context, signal) =>
+            call.name === "ReportDone"
+              ? true
+              : ask(
+                  call,
+                  signal,
+                  context.cwd,
+                  await childNeedsAsk(call, context),
+                ),
+          approve: (items, notes, warnings, signal) =>
+            ask(
+              { name: "SubmitPlan", input: { items, notes, warnings } },
+              signal,
+              cwd,
+              true,
+            ),
+          waveChecks: waveChecks(
+            agentConfig.waveChecks,
+            shellSearchTools(cwd).get("Bash")!,
+            (_hooks, signal) => approveHooks(signal),
+          ),
+          onStatus: (context, model, status) =>
+            process.stdout.write(`\n${context.name} · ${model} · ${status}\n`),
+          redact: clean,
+          onPhase: (state) =>
+            process.stdout.write(
+              `\nWorkflow ${state.phase} · review ${state.reviewRound}\n`,
+            ),
+        });
+      }
+      const result = await workflow.run(
         {
           provider: router.provider(model),
           sessionId: session.id,
-          async prepareContext(history, route) {
+          async prepareContext(history, route, _signal, context) {
             const prepared = prepareHistory(history, {
               checkpoint,
               limit: route.provider.models().find((m) => m.id === route.model)
@@ -261,8 +378,9 @@ export async function headless(args = process.argv.slice(2)) {
               threshold: project.context.compactThreshold,
               overhead:
                 estimateTokens({
-                  system,
-                  tools: [...tools.values()].map((t) => t.spec),
+                  system: context?.system ?? system,
+                  tools:
+                    context?.tools ?? [...tools.values()].map((t) => t.spec),
                 }) + 4096,
             });
             if (prepared.compacted && prepared.checkpoint) {
@@ -286,33 +404,7 @@ export async function headless(args = process.argv.slice(2)) {
           messages,
           tools,
           redact: clean,
-          async permission(call, signal) {
-            const decision = await decidePermission(
-              call,
-              {
-                ...project.permissions,
-                mode: session.permissionMode ?? project.permissions.mode,
-              },
-              cwd,
-              { readOnly: session.readOnly, sessionRules },
-            );
-            if (decision !== "ask") return decision === "allow";
-            const answer = await rl.question(
-              `\nAllow ${clean(call.name + " " + JSON.stringify(call.input))}? [y: once / s: session / a: always / N] `,
-              { signal },
-            );
-            const choice = answer.trim().toLowerCase();
-            if (choice === "s") sessionRules.push(grantFor(call));
-            if (choice === "a") {
-              const rule = grantFor({
-                ...call,
-                input: JSON.parse(clean(JSON.stringify(call.input))) as unknown,
-              });
-              await saveRule(home, rule);
-              project.permissions.rules.push(rule);
-            }
-            return ["y", "s", "a"].includes(choice);
-          },
+          permission: (call, signal) => ask(call, signal),
           onEvent(event) {
             if (event.type === "text_delta") {
               bufferedText += event.text;

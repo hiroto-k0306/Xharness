@@ -10,7 +10,7 @@ interface Config {
   extraResources: { from: string; to: string; filter: string[] }[];
   win: { target: string[]; icon: string };
   nsis: { artifactName: string };
-  portable: { artifactName: string };
+  portable: { artifactName: string; unpackDirName?: string | boolean };
   publish: unknown;
 }
 const config = parse(await readFile("electron-builder.yml", "utf8")) as Config;
@@ -38,6 +38,11 @@ describe("electron-builder.yml (DESIGN §17.2)", () => {
       "package.json",
     ]);
     expect(config.publish).toBeNull(); // 自動アップデートは v1 では行わない
+  });
+  it("isolates portable extraction so a second launch cannot delete the first's fixtures", () => {
+    // electron-builder 26.15.3: true は UNPACK_DIR_NAME を定義せず、
+    // portable.nsi が固有の $PLUGINSDIR/app に展開する(型コメントとは逆)。
+    expect(config.portable.unpackDirName).toBe(true);
   });
   it("ships only the fixtures --fake needs, and they exist", async () => {
     const [resource] = config.extraResources;

@@ -30,6 +30,9 @@ nsis:
   artifactName: XHarness-Setup-${version}.${ext}
 portable:
   artifactName: XHarness-${version}-portable.${ext}
+  # 26.15.3 の実装では true で $PLUGINSDIR/app(起動ごとに固有)になる。
+  # 既定のビルド共通 TEMP を使うと、二重起動の終了時に先行アプリの資源が消える。
+  unpackDirName: true
 # 自動アップデートは v1 では行わない
 publish: null
 # Grep は PATH 上の ripgrep を使う(同梱しない)ため asarUnpack は不要

@@ -1,0 +1,14 @@
+{
+  "provider": "codex",
+  "observedAt": "2026-10-01T04:11:21.198Z",
+  "requestNumber": 21,
+  "cliInvocationCount": 1,
+  "internalHttpRequestCount": "not_observed",
+  "exitCode": 0,
+  "timedOut": false,
+  "pong": true,
+  "accessTokenChanged": false,
+  "refreshTokenChanged": false,
+  "lastRefreshChanged": false,
+  "stderrPresent": true
+}

@@ -1,0 +1,16 @@
+{
+  "provider": "claude",
+  "observedAt": "2026-10-01T04:08:52.375Z",
+  "requestNumber": 10,
+  "cliInvocationCount": 1,
+  "internalHttpRequestCount": "not_observed",
+  "exitCode": 0,
+  "timedOut": false,
+  "pong": true,
+  "accessTokenChanged": false,
+  "refreshTokenChanged": false,
+  "expiryBefore": 1790842110496,
+  "expiryAfter": 1790842110496,
+  "lastRefreshChanged": false,
+  "stderrPresent": false
+}

@@ -62,6 +62,37 @@ function setup(responses: ProviderEvent[][]) {
   return { options, requests, executions: () => executions };
 }
 describe("six-step agent loop", () => {
+  it("only appends history and preserves thinking on the next model call", async () => {
+    const toolMessage = completion(true) as Extract<
+      ProviderEvent,
+      { type: "message_done" }
+    >;
+    const native = Object.freeze({
+      type: "thinking",
+      thinking: "original thought",
+      signature: "original signature",
+    });
+    toolMessage.message.content.unshift({
+      type: "reasoning",
+      provider: "claude",
+      payload: native,
+    });
+    const { options, requests } = setup([[toolMessage], [completion()]]);
+    const before = structuredClone(options.messages);
+    const result = await runTurn(options, new AbortController().signal);
+    expect(options.messages).toEqual(before);
+    expect(result.messages.slice(0, before.length)).toEqual(before);
+    expect(requests[1]!.messages[1]!.content[0]).toEqual({
+      type: "reasoning",
+      provider: "claude",
+      payload: native,
+    });
+    expect(toolMessage.message.content[0]).toEqual({
+      type: "reasoning",
+      provider: "claude",
+      payload: native,
+    });
+  });
   it("calls before/after hooks, sends tool_result, and records every round", async () => {
     const { options, requests, executions } = setup([
       [completion(true)],
@@ -70,9 +101,11 @@ describe("six-step agent loop", () => {
     const hooks: string[] = [];
     options.beforeStep = async (step, ctx) => {
       hooks.push(`${ctx.round}:before:${step}`);
+      return { kind: "continue" };
     };
     options.afterStep = async (step, ctx) => {
       hooks.push(`${ctx.round}:after:${step}`);
+      return { kind: "continue" };
     };
     const result = await runTurn(options, new AbortController().signal);
     const first: StepName[] = [
@@ -96,7 +129,9 @@ describe("six-step agent loop", () => {
       },
     ]);
     expect(result.stopCause).toBe("end_turn");
-    expect(result.receipts).toHaveLength(3);
+    expect(
+      result.receipts.filter((receipt) => receipt.provider !== "hook"),
+    ).toHaveLength(3);
     for (const receipt of result.receipts)
       expect(new Date(receipt.completedAt).toISOString()).toBe(
         receipt.completedAt,

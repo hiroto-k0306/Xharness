@@ -1,0 +1,170 @@
+# モデルカタログ 初期値 (下書き)
+# 作成日: 2026-10-01
+# 出典: Codex 公式ドキュメント (learn.chatgpt.com/docs/models, /docs/changelog)、Anthropic のモデル一覧
+#
+# 実行時は ~/.harness/models.yaml に置く。main には計画段階でこの内容 (enabled: true のもの) を渡す。
+# verified: false の項目は、Phase 0 の疎通確認で実際に呼び出せることを確かめてから true にする。
+#
+# 項目の意味:
+#   id            Adapter に渡すモデル ID
+#   alias         画面と計画で使う短い名前 (provider:alias)
+#   strengths     得意な作業 (main が割り当てを判断する材料)
+#   avoid         向かない作業
+#   efforts       指定できる effort。ハーネス共通の名前 → プロバイダ側の名前
+#   defaultEffort 指定がないときの effort
+#   quotaWeight   枠の消費の重さの目安 (1 = 軽い, 5 = 重い)。実績で補正する
+#   contextTokens コンテキスト長 (要確認のものは null)
+#   retiresAt     提供終了日。過ぎたら自動で無効化する
+#   stats         実績 (ハーネスがレシートから自動で書き込む。手で編集しない)
+
+version: 1
+updatedAt: 2026-10-01
+
+models:
+
+  # ───────── Claude (Pro / Max サブスク) ─────────
+
+  - provider: claude
+    id: claude-opus-5-5
+    alias: opus
+    displayName: Opus 5.5
+    enabled: true
+    verified: false
+    roles: [main, worker, reviewer]
+    strengths:
+      - 計画・設計判断・複数ファイルにまたがる変更
+      - 既存コードの深い理解が必要な修正
+      - マージ衝突の解消
+    avoid:
+      - 定型的で大量の書き換え (枠がもったいない)
+    efforts: { low: low, medium: medium, high: high, max: max }
+    defaultEffort: high
+    quotaWeight: 5
+    contextTokens: null
+
+  - provider: claude
+    id: claude-sonnet-5-5
+    alias: sonnet
+    displayName: Sonnet 5.5
+    enabled: true
+    verified: false
+    roles: [worker, reviewer, explorer]
+    strengths:
+      - 範囲がはっきりした中規模の実装
+      - Codex が書いたコードのレビュー
+      - コードベースの調査
+    avoid:
+      - 計画の段階で設計判断が残っている項目
+    efforts: { low: low, medium: medium, high: high, max: max }
+    defaultEffort: medium
+    quotaWeight: 3
+    contextTokens: null
+
+  - provider: claude
+    id: claude-haiku-4-5-20251001
+    alias: haiku
+    displayName: Haiku 4.5
+    enabled: true
+    verified: false
+    roles: [worker, utility]
+    strengths:
+      - 型定義・単純なテスト追加・定型的な書き換え
+      - セッションタイトル生成などの雑務
+    avoid:
+      - 設計判断を含む作業
+      - 複数ファイルの整合性が必要な変更
+    efforts: { low: low, medium: medium }
+    defaultEffort: low
+    quotaWeight: 1
+    contextTokens: null
+
+  - provider: claude
+    id: claude-fable-5-1
+    alias: fable
+    displayName: Fable 5.1
+    enabled: false          # サブスク (Pro / Max) では使えない (ユーザー確認 2026-10-01)
+    verified: false
+    roles: []
+    notes: "サブスク対象外のため無効。API キー利用に対応する場合のみ再検討"
+
+  # ───────── Codex (ChatGPT Plus / Pro サブスク) ─────────
+  # effort の名前: 公式ドキュメント上は Light / Low / Medium / High / Extra High / Max / Ultra。
+  # API に渡す値 (例: "xhigh") は Phase 0 で実際のリクエストを見て確定する。
+
+  - provider: codex
+    id: gpt-6-astra
+    alias: astra
+    displayName: GPT-6 Astra
+    enabled: true
+    verified: false
+    roles: [worker, reviewer]
+    strengths:
+      - 最も難しい作業 (コード・アプリ・調査をまたぐ end-to-end の作業)
+      - Claude と別の視点で行う重要な変更のレビュー
+    avoid:
+      - 小さな作業 (枠の消費が大きい)
+    efforts: { low: low, medium: medium, high: high, max: max, ultra: ultra }   # 要確認
+    defaultEffort: high
+    quotaWeight: 5
+    contextTokens: null
+
+  - provider: codex
+    id: gpt-6.1-sol
+    alias: sol
+    displayName: GPT-6.1 Sol
+    enabled: true
+    verified: false
+    roles: [worker, reviewer]
+    strengths:
+      - Astra に近い性能で、繰り返し・長時間の作業を安く回す
+      - 独立したユーティリティ・アルゴリズム・スクリプトの実装
+      - Claude が書いたコードの通常のレビュー (reviewer の既定)
+    avoid: []
+    efforts: { low: low, medium: medium, high: high, max: max }   # 要確認
+    defaultEffort: high
+    quotaWeight: 3
+    contextTokens: null
+    notes: "2026-09-29 に提供開始。ユーザーのプランで利用可能 (ユーザー確認 2026-10-01)"
+
+  - provider: codex
+    id: gpt-6-luna
+    alias: luna
+    displayName: GPT-6 Luna
+    enabled: true
+    verified: false
+    roles: [worker, utility]
+    strengths:
+      - 範囲の狭い大量の作業 (要約・抽出・定型的な書き換え)
+    avoid:
+      - 設計判断を含む作業
+    efforts: { high: high, max: max }   # 公式: High 〜 Max のみ。Ultra 非対応
+    defaultEffort: high
+    quotaWeight: 1
+    contextTokens: null
+
+  - provider: codex
+    id: gpt-5.5
+    alias: gpt-5.5
+    displayName: GPT-5.5
+    enabled: false
+    verified: false
+    roles: []
+    retiresAt: 2026-10-14   # ChatGPT / Codex から提供終了 (API には残る)
+    notes: "提供終了が近いため割り当て対象にしない"
+
+# 役割ごとの既定 (設定ファイルの agents / main から参照する)
+defaults:
+  main:      claude:opus      # effort high
+  explorer:  claude:sonnet
+  reviewer:
+    ofClaudeCode: codex:sol   # Claude が書いた部分のレビュー
+    ofCodexCode:  claude:sonnet
+  utility:   claude:haiku     # タイトル生成など
+
+# 以前は提供されていたが、今は Codex で選べないモデル (計画で指定されたら差し戻す)
+retired:
+  - { id: gpt-5.4,               at: 2026-08-31 }
+  - { id: gpt-5.4-mini,          at: 2026-08-31 }
+  - { id: gpt-5.3-codex,         at: 2026-05-26 }
+  - { id: gpt-5.3-codex-spark,   at: 2026-09-14 }
+  - { id: gpt-5.2,               at: 2026-05-26 }

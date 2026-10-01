@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XHarness UI Mockup</title>
+<!-- モック用。本番は resources/fonts/ に同梱する -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #141518;
+    --panel: #1b1d21;
+    --panel-head: #22252b;
+    --line: #2c3037;
+    --text: #d4d7dd;
+    --dim: #6c727d;
+    --claude: #e2804f;
+    --claude-shadow: #7a3a1d;
+    --codex: #6b8fe0;
+    --code: #62b07a;
+    --tool: #9a86d6;
+    --warn: #d9a54a;
+    --err: #e06363;
+  }
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; margin: 0; padding: 0; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  html, body { height: 100%; }
+  body {
+    background: #0c0d0f;
+    color: var(--text);
+    font: 13px/1.55 "JetBrains Mono", ui-monospace, Consolas, monospace;
+    display: flex;
+    padding: 16px;
+  }
+  .win {
+    margin: auto;   /* 画面が低いときは上を切らずにスクロールさせる */
+    width: min(1440px, 100%);
+    height: min(940px, calc(100vh - 32px));
+    min-height: 760px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    overflow: hidden;
+    position: relative;
+  }
+  .body { display: grid; grid-template-columns: 252px 1fr; min-height: 0; }
+  .content { display: grid; grid-template-rows: auto auto auto 1fr auto auto; min-height: 0; min-width: 0; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  svg.i { width: 14px; height: 14px; vertical-align: -2px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .c-claude { color: var(--claude); } .c-codex { color: var(--codex); }
+  .c-code { color: var(--code); } .c-tool { color: var(--tool); }
+  .c-warn { color: var(--warn); } .c-err { color: var(--err); }
+  .dim { color: var(--dim); } b { font-weight: 700; }
+
+  /* ── TitleBar ── */
+  .titlebar {
+    height: 36px; display: flex; align-items: center; gap: 12px;
+    padding: 0 0 0 10px; border-bottom: 1px solid var(--line); font-size: 12px;
+  }
+  .tab {
+    display: flex; align-items: center; gap: 8px; padding: 4px 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  }
+  .tab .x { color: var(--dim); margin-left: 6px; }
+  .brand { font-family: "Silkscreen", monospace; color: var(--claude); font-size: 13px; letter-spacing: 1px; width: 232px; }
+  .ws {
+    display: flex; align-items: center; gap: 10px; padding: 3px 10px;
+    border: 1px solid var(--line); border-radius: 4px; background: var(--panel);
+  }
+  .ws:hover, .ws.open { border-color: var(--claude); }
+  .ws .br { color: var(--code); }
+  .ws .caret { color: var(--dim); }
+  .titlebar .spacer { flex: 1; }
+  .iconbtn {
+    display: flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 4px;
+    border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  }
+  .iconbtn .caret { color: var(--dim); }
+  .iconbtn:hover, .iconbtn.open { border-color: var(--line); background: var(--panel); color: var(--text); }
+  .iconbtn .pct { color: var(--warn); }
+
+  /* ── Popovers ── */
+  .pop {
+    position: absolute; top: 40px; z-index: 10; display: none;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.5); font-size: 12px;
+  }
+  .pop.show { display: block; }
+  .pop h4 { font-size: 11px; font-weight: 600; padding: 10px 14px 8px; display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); }
+  .pop h4 span:last-child { font-weight: 400; color: var(--dim); }
+  .pop .sec { padding: 10px 14px; }
+  .pop .sec + .sec { border-top: 1px solid var(--line); }
+  .pop .lbl { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+  #usagePop { width: 320px; }
+  #usagePop .u .l span:last-child { color: var(--dim); }
+  #usagePop .reset { font-size: 10px; color: var(--dim); margin-top: 2px; }
+  #wsPop { width: 460px; }
+  .seg { display: flex; border-bottom: 1px solid var(--line); }
+  .seg button { flex: 1; padding: 8px; color: var(--dim); border-bottom: 2px solid transparent; }
+  .seg button.on { color: var(--text); border-bottom-color: var(--claude); }
+  .recent { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; padding: 5px 6px; border-radius: 3px; align-items: center; }
+  .recent:hover, .recent.cur { background: var(--panel-head); }
+  .recent .meta { color: var(--dim); font-size: 11px; }
+  .field {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 8px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 3px;
+  }
+  .field .ph { color: var(--dim); flex: 1; }
+  .field .v { flex: 1; }
+  .opt { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; }
+  .opt .box { color: var(--code); }
+  .opt .sub { display: block; font-size: 11px; color: var(--dim); }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn { padding: 5px 12px; border: 1px solid var(--line); border-radius: 3px; font-size: 12px; }
+  .btn.primary { border-color: var(--claude); color: var(--claude); }
+  .btn kbd { font: inherit; color: var(--dim); margin-left: 8px; font-size: 10px; }
+  [data-tab-panel] { display: none; } [data-tab-panel].on { display: block; }
+
+  /* ── Sidebar ── */
+  .side {
+    border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0;
+    background: #121316; font-size: 12px;
+  }
+  .side .newbtn {
+    margin: 12px 12px 8px; padding: 7px 10px; border: 1px solid var(--claude); border-radius: 4px;
+    color: var(--claude); display: flex; justify-content: space-between; align-items: center;
+  }
+  .side .newbtn kbd { font: inherit; font-size: 10px; color: var(--dim); }
+  .side .search { margin: 0 12px 6px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 4px; color: var(--dim); display: flex; gap: 8px; align-items: center; }
+  .side .filter { margin: 0 12px 4px; display: flex; justify-content: space-between; font-size: 11px; color: var(--dim); }
+  .side .list { flex: 1; overflow: auto; padding: 4px 6px 10px; }
+  .side .grp { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; padding: 10px 8px 4px; }
+  .wsg { margin-bottom: 4px; }
+  .wsg summary {
+    list-style: none; cursor: pointer; display: grid; grid-template-columns: 14px 1fr auto;
+    align-items: center; gap: 4px; padding: 6px 8px 2px; font-weight: 600;
+  }
+  .wsg summary::-webkit-details-marker { display: none; }
+  .wsg summary:hover .nm { color: var(--claude); }
+  .wsg .fold { color: var(--dim); font-size: 10px; transition: transform .15s; display: inline-block; transform: rotate(-90deg); }
+  .wsg[open] .fold { transform: none; }
+  .wsg .cnt { font-size: 10px; font-weight: 400; color: var(--dim); }
+  .wsg .path { font-size: 10px; padding: 0 8px 4px 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wsg .sess { margin-left: 18px; }
+  .wsg.other { border-top: 1px dashed var(--line); padding-top: 4px; margin-top: 6px; }
+  .wsg.other .nm { color: var(--dim); }
+  .sess { display: block; padding: 6px 8px; border-radius: 4px; border-left: 2px solid transparent; }
+  .sess:hover { background: var(--panel); }
+  .sess.cur { background: var(--panel); border-left-color: var(--claude); }
+  .sess .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sess .m { font-size: 10px; color: var(--dim); display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; }
+  .sess .m .dot { margin: 0; width: 6px; height: 6px; }
+  .sess .run { color: var(--code); }
+  .side .foot { border-top: 1px solid var(--line); padding: 8px 12px; display: flex; justify-content: space-between; color: var(--dim); font-size: 11px; }
+  .conn { display: flex; gap: 14px; color: var(--dim); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 5px; vertical-align: 1px; }
+  .winctl { display: flex; height: 100%; }
+  .winctl span { width: 46px; display: grid; place-items: center; color: var(--dim); }
+  .winctl span:last-child:hover { background: #c42b1c; color: #fff; }
+
+  /* ── Hero ── */
+  .hero {
+    display: grid; grid-template-columns: 1fr auto; align-items: end;
+    padding: 18px 24px 12px; gap: 24px;
+  }
+  .badge {
+    display: inline-flex; gap: 8px; align-items: center;
+    border: 1px solid var(--claude); color: var(--text);
+    padding: 2px 8px; border-radius: 3px; font-size: 11px; margin-bottom: 6px;
+  }
+  .badge + .dim { font-size: 11px; margin-left: 8px; }
+  .logo {
+    font-family: "Silkscreen", monospace; font-weight: 700;
+    font-size: 56px; line-height: 1; letter-spacing: 4px;
+    color: var(--claude);
+    text-shadow: 3px 3px 0 var(--claude-shadow), 6px 6px 0 #3a1c0f;
+    margin: 4px 0 10px;
+  }
+  .tagline { font-size: 13px; }
+  .logo { display: flex; align-items: center; gap: 14px; }
+  .mark-l { width: 58px; height: 58px; flex: none; }
+  .mark-s { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+  .brand { display: flex; align-items: center; }
+  .stats { display: flex; gap: 18px; font-size: 11px; color: var(--dim); padding-bottom: 4px; }
+  .stats b { color: var(--text); font-weight: 600; margin-left: 4px; }
+
+  /* ── StepTabs ── */
+  .steps { display: grid; grid-template-columns: auto repeat(6, 1fr); gap: 8px; padding: 0 24px 14px; align-items: center; }
+  .steps-lbl { font-size: 11px; color: var(--dim); padding-right: 4px; }
+  .steps-lbl b { color: var(--text); font-weight: 600; }
+
+  /* ── PhaseBar ── */
+  .phases { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 10px; align-items: center; padding: 0 24px 10px; }
+  .phase {
+    display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px;
+    padding: 6px 12px; border: 1px solid var(--line); border-radius: 4px; font-size: 11px; color: var(--dim);
+  }
+  .phase .pn { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; grid-row: span 2; align-self: center; }
+  .phase .pm { text-align: right; }
+  .phase .pd { text-align: right; }
+  .phase.done .pn { color: var(--code); }
+  .phase.cur { color: var(--text); background: #241d19; border-color: transparent; }
+  .phase.cur .pn { color: var(--claude); }
+  .phase.cur.running { --tool: var(--claude); }  /* 段階の光は担当モデルの色 */
+  .phases .arrow { color: var(--dim); }
+
+  /* ── Model popover ── */
+  #modelPop { width: 300px; }
+  .effort { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .effort span { text-align: center; padding: 4px 0; color: var(--dim); }
+  .effort span + span { border-left: 1px solid var(--line); }
+  .effort span.on { background: #241d19; color: var(--claude); }
+  button.chip { cursor: pointer; } button.chip:hover, button.chip.open { border-color: var(--claude); color: var(--text); }
+  .step {
+    border: 1px solid var(--line); padding: 4px 10px; font-size: 11px;
+    border-radius: 3px; color: var(--dim);
+  }
+  .step .n { color: var(--claude); margin-right: 6px; }
+  .step.done { color: var(--text); }
+  .step.active { border-color: transparent; color: var(--text); background: #221f2c; }
+
+  /* ── 実行中ステップ: 枠の周りを光が回る ── */
+  @property --spin { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  .running { position: relative; animation: glow 2.4s ease-in-out infinite; }
+  .running::after {
+    content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 2px;
+    background: conic-gradient(from var(--spin),
+      transparent 0deg, transparent 200deg,
+      color-mix(in srgb, var(--tool) 40%, transparent) 260deg,
+      var(--tool) 320deg, #ffffff 345deg, var(--tool) 360deg);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    animation: spin 1.6s linear infinite; pointer-events: none;
+  }
+  @keyframes spin { to { --spin: 360deg; } }
+  @keyframes glow {
+    0%, 100% { box-shadow: 0 0 0 1px color-mix(in srgb, var(--tool) 35%, transparent), 0 0 8px color-mix(in srgb, var(--tool) 25%, transparent); }
+    50%      { box-shadow: 0 0 0 1px color-mix(in srgb, var(--tool) 55%, transparent), 0 0 18px color-mix(in srgb, var(--tool) 45%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .running, .running::after { animation: none; }
+    .running { box-shadow: 0 0 0 1px var(--tool); }
+  }
+
+  /* ── Main ── */
+  .main {
+    display: grid; grid-template-columns: 1fr 1.05fr; min-height: 0;
+    border-top: 1px solid var(--line);
+  }
+  .pane { min-height: 0; overflow: auto; padding: 14px 20px; }
+  .pane + .pane { border-left: 1px solid var(--line); }
+  .pane-title { font-size: 11px; color: var(--dim); margin-bottom: 12px; display: flex; justify-content: space-between; }
+  .pane-title b { color: var(--text); }
+
+  /* Transcript */
+  .msg { margin-bottom: 14px; }
+  .who { font-size: 11px; margin-bottom: 3px; }
+  .bubble { padding-left: 12px; border-left: 2px solid var(--line); }
+  .msg.user .bubble { border-color: var(--dim); }
+  .msg.claude .bubble { border-color: var(--claude); }
+  .msg.codex .bubble { border-color: var(--codex); }
+  .call {
+    margin: 6px 0; padding: 6px 10px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 3px; font-size: 12px;
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  .call .k { color: var(--tool); }
+  .ok { color: var(--code); } .wait { color: var(--warn); }
+  .diff { font-size: 12px; margin: 4px 0 0; padding: 6px 10px; background: #17191c; border: 1px solid var(--line); border-radius: 3px; }
+  .diff .add { color: var(--code); } .diff .del { color: var(--err); }
+  .cursor { display: inline-block; width: 8px; height: 14px; background: var(--codex); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* LoopFlow */
+  .pane { overflow-x: hidden; }
+  .flow { display: grid; grid-template-columns: 96px minmax(200px, 280px) minmax(0, 1fr); column-gap: 18px; }
+  .note { overflow-wrap: anywhere; }
+  .lane { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .5px; padding-top: 10px; }
+  .lane.on { color: var(--tool); }
+  .cell { position: relative; padding-bottom: 22px; }
+  .cell:not(.last)::after {
+    content: ""; position: absolute; left: 50%; bottom: 3px; width: 1px; height: 17px; background: var(--line);
+  }
+  .cell:not(.last)::before {
+    content: ""; position: absolute; left: calc(50% - 4px); bottom: 1px;
+    border: 4px solid transparent; border-top-color: var(--dim); border-bottom: 0;
+  }
+  .cell.past::after { background: var(--dim); }
+  .node { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; font-size: 11px; }
+  .node .h { display: flex; justify-content: space-between; padding: 3px 8px; background: var(--panel-head); border-bottom: 1px solid var(--line); font-weight: 600; }
+  .node .h .t { font-weight: 400; font-size: 10px; color: var(--dim); }
+  .node .kv { display: flex; justify-content: space-between; padding: 1px 8px; }
+  .node .kv:first-of-type { padding-top: 4px; } .node .kv:last-child { padding-bottom: 4px; }
+  .node .kv span:first-child { color: var(--dim); }
+  .node.claude { border-color: #5a3826; } .node.claude .h { color: var(--claude); }
+  .node.codex  { border-color: #2f3e63; } .node.codex .h { color: var(--codex); }
+  .node.code   { border-color: #2c4a35; } .node.code .h { color: var(--code); }
+  .node.tool   { border-color: transparent; }
+  .node.tool .h { color: var(--tool); background: #2a2538; }
+  .node.idle { opacity: .45; }
+  .row2 { display: grid; grid-template-columns: 1fr 96px; gap: 10px; align-items: start; }
+  .node.fb { border-style: dashed; border-color: #5a4a26; }
+  .node.fb .h { color: var(--warn); }
+  .bar { height: 4px; background: var(--line); border-radius: 2px; margin: 4px 8px 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; }
+  .note { font-size: 11px; color: var(--dim); padding-top: 6px; }
+  .note .n { color: var(--claude); }
+
+  /* ── Bottom panels ── */
+  .panels { display: grid; grid-template-columns: 1.6fr 1fr; border-top: 1px solid var(--line); }
+  .panel { padding: 10px 20px 12px; font-size: 11px; }
+  .panel + .panel { border-left: 1px solid var(--line); }
+  .panel h3 { font-size: 11px; font-weight: 600; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .panel h3 .live { color: var(--claude); font-weight: 400; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 1px 0; white-space: nowrap; }
+  td:last-child { text-align: right; color: var(--dim); }
+  tr.cur td { background: #221f2c; }
+  .u { margin-bottom: 9px; }
+  .u .l { display: flex; justify-content: space-between; }
+  .u .bar { margin: 3px 0 0; height: 5px; }
+  .agent { display: grid; grid-template-columns: 14px 70px 1fr auto; gap: 6px; padding: 1px 4px; border-radius: 3px; }
+  .agent.sel { background: #221f2c; }
+  table.plan { margin: 6px 0 4px; font-size: 12px; border: 1px solid var(--line); }
+  table.plan th { text-align: left; font-weight: 400; color: var(--dim); font-size: 10px; padding: 3px 8px; border-bottom: 1px solid var(--line); }
+  table.plan td { padding: 2px 8px; text-align: left; color: var(--text); }
+  table.plan td:last-child { text-align: center; }
+  .call.worker { align-items: center; }
+
+  /* ── Permission + Prompt ── */
+  .perm {
+    margin: 0 20px; padding: 8px 12px; border: 1px solid var(--warn); border-bottom: 0;
+    border-radius: 3px 3px 0 0; background: #221d14; font-size: 12px;
+    display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  }
+  .keys span { margin-left: 12px; } .keys kbd {
+    font: inherit; border: 1px solid var(--line); background: var(--panel); padding: 0 6px; border-radius: 3px; margin-right: 4px;
+  }
+  .prompt {
+    display: flex; align-items: center; gap: 10px; padding: 10px 20px 12px;
+    border-top: 1px solid var(--warn); font-size: 13px;
+  }
+  .prompt .p { color: var(--codex); } .prompt .gt { color: var(--claude); }
+  .prompt .in { flex: 1; } .prompt .in .cursor { background: var(--text); }
+  .chip { border: 1px solid var(--line); padding: 1px 8px; border-radius: 3px; font-size: 11px; color: var(--dim); }
+  .chip b { color: var(--claude); font-weight: 400; }
+</style>
+</head>
+<body>
+<div class="win">
+
+  <!-- TitleBar -->
+  <div class="titlebar">
+    <div class="brand"><svg class="mark-s" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 13 13" shape-rendering="crispEdges"><rect x="0.3" y="0.3" width="1" height="1" fill="#5a2a14"/><rect x="1.3" y="0.3" width="1" height="1" fill="#5a2a14"/><rect x="10.3" y="0.3" width="1" height="1" fill="#1f2d52"/><rect x="11.3" y="0.3" width="1" height="1" fill="#1f2d52"/><rect x="1.3" y="1.3" width="1" height="1" fill="#5a2a14"/><rect x="2.3" y="1.3" width="1" height="1" fill="#5a2a14"/><rect x="9.3" y="1.3" width="1" height="1" fill="#1f2d52"/><rect x="10.3" y="1.3" width="1" height="1" fill="#1f2d52"/><rect x="2.3" y="2.3" width="1" height="1" fill="#5a2a14"/><rect x="3.3" y="2.3" width="1" height="1" fill="#5a2a14"/><rect x="8.3" y="2.3" width="1" height="1" fill="#1f2d52"/><rect x="9.3" y="2.3" width="1" height="1" fill="#1f2d52"/><rect x="3.3" y="3.3" width="1" height="1" fill="#5a2a14"/><rect x="4.3" y="3.3" width="1" height="1" fill="#5a2a14"/><rect x="7.3" y="3.3" width="1" height="1" fill="#1f2d52"/><rect x="8.3" y="3.3" width="1" height="1" fill="#1f2d52"/><rect x="4.3" y="4.3" width="1" height="1" fill="#5a2a14"/><rect x="5.3" y="4.3" width="1" height="1" fill="#5a2a14"/><rect x="6.3" y="4.3" width="1" height="1" fill="#1f2d52"/><rect x="7.3" y="4.3" width="1" height="1" fill="#1f2d52"/><rect x="5.3" y="5.3" width="1" height="1" fill="#3d3550"/><rect x="6.3" y="5.3" width="1" height="1" fill="#3d3550"/><rect x="4.3" y="6.3" width="1" height="1" fill="#1f2d52"/><rect x="5.3" y="6.3" width="1" height="1" fill="#1f2d52"/><rect x="6.3" y="6.3" width="1" height="1" fill="#5a2a14"/><rect x="7.3" y="6.3" width="1" height="1" fill="#5a2a14"/><rect x="3.3" y="7.3" width="1" height="1" fill="#1f2d52"/><rect x="4.3" y="7.3" width="1" height="1" fill="#1f2d52"/><rect x="7.3" y="7.3" width="1" height="1" fill="#5a2a14"/><rect x="8.3" y="7.3" width="1" height="1" fill="#5a2a14"/><rect x="2.3" y="8.3" width="1" height="1" fill="#1f2d52"/><rect x="3.3" y="8.3" width="1" height="1" fill="#1f2d52"/><rect x="8.3" y="8.3" width="1" height="1" fill="#5a2a14"/><rect x="9.3" y="8.3" width="1" height="1" fill="#5a2a14"/><rect x="1.3" y="9.3" width="1" height="1" fill="#1f2d52"/><rect x="2.3" y="9.3" width="1" height="1" fill="#1f2d52"/><rect x="9.3" y="9.3" width="1" height="1" fill="#5a2a14"/><rect x="10.3" y="9.3" width="1" height="1" fill="#5a2a14"/><rect x="0.3" y="10.3" width="1" height="1" fill="#1f2d52"/><rect x="1.3" y="10.3" width="1" height="1" fill="#1f2d52"/><rect x="10.3" y="10.3" width="1" height="1" fill="#5a2a14"/><rect x="11.3" y="10.3" width="1" height="1" fill="#5a2a14"/><rect x="0.3" y="11.3" width="1" height="1" fill="#1f2d52"/><rect x="11.3" y="11.3" width="1" height="1" fill="#5a2a14"/><rect x="0" y="0" width="1" height="1" fill="#e2804f"/><rect x="1" y="0" width="1" height="1" fill="#e2804f"/><rect x="10" y="0" width="1" height="1" fill="#6b8fe0"/><rect x="11" y="0" width="1" height="1" fill="#6b8fe0"/><rect x="1" y="1" width="1" height="1" fill="#e2804f"/><rect x="2" y="1" width="1" height="1" fill="#e2804f"/><rect x="9" y="1" width="1" height="1" fill="#6b8fe0"/><rect x="10" y="1" width="1" height="1" fill="#6b8fe0"/><rect x="2" y="2" width="1" height="1" fill="#e2804f"/><rect x="3" y="2" width="1" height="1" fill="#e2804f"/><rect x="8" y="2" width="1" height="1" fill="#6b8fe0"/><rect x="9" y="2" width="1" height="1" fill="#6b8fe0"/><rect x="3" y="3" width="1" height="1" fill="#e2804f"/><rect x="4" y="3" width="1" height="1" fill="#e2804f"/><rect x="7" y="3" width="1" height="1" fill="#6b8fe0"/><rect x="8" y="3" width="1" height="1" fill="#6b8fe0"/><rect x="4" y="4" width="1" height="1" fill="#e2804f"/><rect x="5" y="4" width="1" height="1" fill="#e2804f"/><rect x="6" y="4" width="1" height="1" fill="#6b8fe0"/><rect x="7" y="4" width="1" height="1" fill="#6b8fe0"/><rect x="5" y="5" width="1" height="1" fill="#f4ecff"/><rect x="6" y="5" width="1" height="1" fill="#f4ecff"/><rect x="4" y="6" width="1" height="1" fill="#6b8fe0"/><rect x="5" y="6" width="1" height="1" fill="#f4ecff"/><rect x="6" y="6" width="1" height="1" fill="#f4ecff"/><rect x="7" y="6" width="1" height="1" fill="#e2804f"/><rect x="3" y="7" width="1" height="1" fill="#6b8fe0"/><rect x="4" y="7" width="1" height="1" fill="#6b8fe0"/><rect x="7" y="7" width="1" height="1" fill="#e2804f"/><rect x="8" y="7" width="1" height="1" fill="#e2804f"/><rect x="2" y="8" width="1" height="1" fill="#6b8fe0"/><rect x="3" y="8" width="1" height="1" fill="#6b8fe0"/><rect x="8" y="8" width="1" height="1" fill="#e2804f"/><rect x="9" y="8" width="1" height="1" fill="#e2804f"/><rect x="1" y="9" width="1" height="1" fill="#6b8fe0"/><rect x="2" y="9" width="1" height="1" fill="#6b8fe0"/><rect x="9" y="9" width="1" height="1" fill="#e2804f"/><rect x="10" y="9" width="1" height="1" fill="#e2804f"/><rect x="0" y="10" width="1" height="1" fill="#6b8fe0"/><rect x="1" y="10" width="1" height="1" fill="#6b8fe0"/><rect x="10" y="10" width="1" height="1" fill="#e2804f"/><rect x="11" y="10" width="1" height="1" fill="#e2804f"/><rect x="0" y="11" width="1" height="1" fill="#6b8fe0"/><rect x="11" y="11" width="1" height="1" fill="#e2804f"/></svg> XHARNESS</div>
+    <button class="ws" id="wsBtn" title="ワークスペースを切り替え (Ctrl+O)">
+      <svg class="i" viewBox="0 0 16 16"><path d="M1.5 4.5v8a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1v-6.5a1 1 0 0 0-1-1H8L6.5 3h-4a1 1 0 0 0-1 1.5z"/></svg>
+      <span>~/dev/myapp</span>
+      <span class="br"><svg class="i" viewBox="0 0 16 16"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="5.5" r="1.5"/><path d="M4 5v6M12 7c0 3-8 2-8 4"/></svg> harness/a91f</span>
+      <span class="dim">worktree</span>
+      <span class="caret">▾</span>
+    </button>
+    <div class="spacer"></div>
+    <button class="iconbtn" id="usageBtn" title="使用量 (Ctrl+U)">
+      <svg class="i" viewBox="0 0 16 16"><path d="M2.5 11.5a5.5 5.5 0 1 1 11 0"/><path d="M8 11.5l3-4"/></svg>
+      <span>usage</span>
+      <span class="pct">84%</span>
+      <span class="caret">▾</span>
+    </button>
+    <div class="conn">
+      <span>claude<span class="dot" style="background:var(--claude)"></span></span>
+      <span>codex<span class="dot" style="background:var(--codex)"></span></span>
+    </div>
+    <div class="winctl"><span>─</span><span>□</span><span>✕</span></div>
+  </div>
+
+  <!-- Usage popover -->
+  <div class="pop" id="usagePop">
+    <h4><span>// usage</span><span>subscription</span></h4>
+    <div class="sec">
+      <div class="lbl">claude · max</div>
+      <div class="u"><div class="l"><span class="c-claude">5h window</span><span>38%</span></div><div class="bar"><i style="width:38%;background:var(--claude)"></i></div><div class="reset">resets in 2h 14m</div></div>
+      <div class="u"><div class="l"><span class="c-claude">weekly</span><span>21%</span></div><div class="bar"><i style="width:21%;background:var(--claude)"></i></div><div class="reset">resets Mon 09:00</div></div>
+    </div>
+    <div class="sec">
+      <div class="lbl">codex · chatgpt pro</div>
+      <div class="u"><div class="l"><span class="c-codex">5h window</span><span class="c-warn">84%</span></div><div class="bar"><i style="width:84%;background:var(--warn)"></i></div><div class="reset">resets in 41m</div></div>
+      <div class="u"><div class="l"><span class="c-codex">weekly</span><span>47%</span></div><div class="bar"><i style="width:47%;background:var(--codex)"></i></div><div class="reset">resets Thu 18:00</div></div>
+    </div>
+    <div class="sec dim" style="font-size:11px"># codex が 95% を超えたら coder を <span class="c-claude">claude:sonnet</span> へ切替</div>
+  </div>
+
+  <!-- Workspace popover -->
+  <div class="pop" id="wsPop">
+    <div class="seg">
+      <button class="on" data-tab="folder">folder</button>
+      <button data-tab="repo">repository</button>
+    </div>
+    <div data-tab-panel="folder" class="on">
+      <div class="sec">
+        <div class="lbl">recent</div>
+        <div class="recent cur"><span class="c-claude">●</span><span>~/dev/myapp</span><span class="meta">git · main</span></div>
+        <div class="recent"><span class="dim">○</span><span>~/Desktop/Harness</span><span class="meta">no git</span></div>
+        <div class="recent"><span class="dim">○</span><span>C:\work\client-site</span><span class="meta">git · develop</span></div>
+        <div class="recent"><span class="dim">○</span><span>~/.harness/repos/owner/cli-tool</span><span class="meta">cloned</span></div>
+      </div>
+      <div class="sec">
+        <div class="lbl">session</div>
+        <div class="opt"><span class="box">[x]</span><span>worktree で隔離する<span class="sub">harness/&lt;session-id&gt; ブランチを作り、元の作業ツリーを汚さない</span></span></div>
+        <div class="opt"><span class="dim">[ ]</span><span>読み取り専用で開く<span class="sub">plan モードで開始(書き込み系ツールを無効化)</span></span></div>
+      </div>
+      <div class="sec actions">
+        <button class="btn">open folder…<kbd>Ctrl+O</kbd></button>
+        <button class="btn primary">start session</button>
+      </div>
+    </div>
+    <div data-tab-panel="repo">
+      <div class="sec">
+        <div class="lbl">repository</div>
+        <div class="field"><span class="dim">url</span><span class="v">https://github.com/owner/cli-tool</span></div>
+        <div class="field"><span class="dim">branch</span><span class="v">main</span><span class="dim">▾</span></div>
+        <div class="field"><span class="dim">clone to</span><span class="v">~/.harness/repos/owner/cli-tool</span></div>
+        <div class="opt"><span class="box">[x]</span><span>shallow clone (--depth 1)</span></div>
+        <div class="opt"><span class="box">[x]</span><span>worktree で隔離する</span></div>
+        <div class="opt"><span class="dim">[ ]</span><span>新しいブランチを作成<span class="sub">harness/&lt;session-id&gt; から作業を開始</span></span></div>
+      </div>
+      <div class="sec actions">
+        <button class="btn">cancel</button>
+        <button class="btn primary">clone &amp; start</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="body">
+
+  <!-- Sidebar -->
+  <aside class="side">
+    <button class="newbtn"><span>+ new session</span><kbd>Ctrl+N</kbd></button>
+    <div class="search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5l3 3"/></svg> search sessions</div>
+    <div class="filter"><span>sort: recent ▾</span><span>5 workspaces · 13</span></div>
+    <div class="list">
+      <details class="wsg" open>
+        <summary><span class="fold">▾</span><span class="nm">myapp</span><span class="cnt"><span class="run">●</span> 4</span></summary>
+        <div class="path dim">~/dev/myapp · git</div>
+        <a class="sess cur">
+          <div class="t">ログインフォームのバリデーション追加</div>
+          <div class="m"><span class="dot" style="background:var(--claude)"></span><span class="dot" style="background:var(--codex)"></span>⎇ harness/a91f · <span class="run">● 12m</span></div>
+        </a>
+        <a class="sess">
+          <div class="t">README の構成見直し</div>
+          <div class="m"><span class="dot" style="background:var(--claude)"></span>⎇ main · 2h ago</div>
+        </a>
+        <a class="sess">
+          <div class="t">API レスポンスのキャッシュ層</div>
+          <div class="m"><span class="dot" style="background:var(--codex)"></span>⎇ feat/cache · 1d ago</div>
+        </a>
+        <a class="sess">
+          <div class="t">ビルド時間の短縮</div>
+          <div class="m"><span class="dot" style="background:var(--codex)"></span>⎇ main · 6d ago</div>
+        </a>
+      </details>
+      <details class="wsg" open>
+        <summary><span class="fold">▾</span><span class="nm">client-site</span><span class="cnt"><span class="c-warn">●</span> 2</span></summary>
+        <div class="path dim">C:\work\client-site · git</div>
+        <a class="sess">
+          <div class="t">依存パッケージの更新とテスト修正</div>
+          <div class="m"><span class="dot" style="background:var(--codex)"></span>⎇ develop · <span class="c-warn">● ask</span></div>
+        </a>
+        <a class="sess">
+          <div class="t">E2E テストの不安定さ調査</div>
+          <div class="m"><span class="dot" style="background:var(--claude)"></span>⎇ develop · 4d ago</div>
+        </a>
+      </details>
+      <details class="wsg">
+        <summary><span class="fold">▾</span><span class="nm">cli-tool</span><span class="cnt">2</span></summary>
+        <div class="path dim">~/.harness/repos/owner/cli-tool · cloned</div>
+        <a class="sess"><div class="t">CLI 引数パーサのリファクタリング</div><div class="m">⎇ harness/7c02 · 5h ago</div></a>
+        <a class="sess"><div class="t">ヘルプ出力の整形</div><div class="m">⎇ main · 3d ago</div></a>
+      </details>
+      <details class="wsg">
+        <summary><span class="fold">▾</span><span class="nm">Harness</span><span class="cnt">1</span></summary>
+        <div class="path dim">~/Desktop/Harness · no git</div>
+        <a class="sess"><div class="t">ハーネス設計: exe 化と UI</div><div class="m">1d ago</div></a>
+      </details>
+      <details class="wsg other" open>
+        <summary><span class="fold">▾</span><span class="nm">その他</span><span class="cnt">4</span></summary>
+        <div class="path dim">ワークスペース指定なし</div>
+        <a class="sess">
+          <div class="t">TypeScript の型パズルについて質問</div>
+          <div class="m"><span class="dot" style="background:var(--claude)"></span>3h ago</div>
+        </a>
+        <a class="sess">
+          <div class="t">正規表現の説明</div>
+          <div class="m"><span class="dot" style="background:var(--codex)"></span>1d ago</div>
+        </a>
+        <a class="sess"><div class="t">英語メールの添削</div><div class="m"><span class="dot" style="background:var(--claude)"></span>2d ago</div></a>
+        <a class="sess"><div class="t">Rust と Go の比較</div><div class="m"><span class="dot" style="background:var(--claude)"></span>5d ago</div></a>
+      </details>
+    </div>
+    <div class="foot"><span>⚙ settings</span><span>v0.1.0</span></div>
+  </aside>
+
+  <div class="content">
+
+  <!-- Hero -->
+  <div class="hero">
+    <div>
+      <span class="badge"><span class="c-claude">✳</span> XHarness</span><span class="dim">// claude × gpt</span>
+      <div class="logo"><svg class="mark-l" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 13 13" shape-rendering="crispEdges"><rect x="0.3" y="0.3" width="1" height="1" fill="#5a2a14"/><rect x="1.3" y="0.3" width="1" height="1" fill="#5a2a14"/><rect x="10.3" y="0.3" width="1" height="1" fill="#1f2d52"/><rect x="11.3" y="0.3" width="1" height="1" fill="#1f2d52"/><rect x="1.3" y="1.3" width="1" height="1" fill="#5a2a14"/><rect x="2.3" y="1.3" width="1" height="1" fill="#5a2a14"/><rect x="9.3" y="1.3" width="1" height="1" fill="#1f2d52"/><rect x="10.3" y="1.3" width="1" height="1" fill="#1f2d52"/><rect x="2.3" y="2.3" width="1" height="1" fill="#5a2a14"/><rect x="3.3" y="2.3" width="1" height="1" fill="#5a2a14"/><rect x="8.3" y="2.3" width="1" height="1" fill="#1f2d52"/><rect x="9.3" y="2.3" width="1" height="1" fill="#1f2d52"/><rect x="3.3" y="3.3" width="1" height="1" fill="#5a2a14"/><rect x="4.3" y="3.3" width="1" height="1" fill="#5a2a14"/><rect x="7.3" y="3.3" width="1" height="1" fill="#1f2d52"/><rect x="8.3" y="3.3" width="1" height="1" fill="#1f2d52"/><rect x="4.3" y="4.3" width="1" height="1" fill="#5a2a14"/><rect x="5.3" y="4.3" width="1" height="1" fill="#5a2a14"/><rect x="6.3" y="4.3" width="1" height="1" fill="#1f2d52"/><rect x="7.3" y="4.3" width="1" height="1" fill="#1f2d52"/><rect x="5.3" y="5.3" width="1" height="1" fill="#3d3550"/><rect x="6.3" y="5.3" width="1" height="1" fill="#3d3550"/><rect x="4.3" y="6.3" width="1" height="1" fill="#1f2d52"/><rect x="5.3" y="6.3" width="1" height="1" fill="#1f2d52"/><rect x="6.3" y="6.3" width="1" height="1" fill="#5a2a14"/><rect x="7.3" y="6.3" width="1" height="1" fill="#5a2a14"/><rect x="3.3" y="7.3" width="1" height="1" fill="#1f2d52"/><rect x="4.3" y="7.3" width="1" height="1" fill="#1f2d52"/><rect x="7.3" y="7.3" width="1" height="1" fill="#5a2a14"/><rect x="8.3" y="7.3" width="1" height="1" fill="#5a2a14"/><rect x="2.3" y="8.3" width="1" height="1" fill="#1f2d52"/><rect x="3.3" y="8.3" width="1" height="1" fill="#1f2d52"/><rect x="8.3" y="8.3" width="1" height="1" fill="#5a2a14"/><rect x="9.3" y="8.3" width="1" height="1" fill="#5a2a14"/><rect x="1.3" y="9.3" width="1" height="1" fill="#1f2d52"/><rect x="2.3" y="9.3" width="1" height="1" fill="#1f2d52"/><rect x="9.3" y="9.3" width="1" height="1" fill="#5a2a14"/><rect x="10.3" y="9.3" width="1" height="1" fill="#5a2a14"/><rect x="0.3" y="10.3" width="1" height="1" fill="#1f2d52"/><rect x="1.3" y="10.3" width="1" height="1" fill="#1f2d52"/><rect x="10.3" y="10.3" width="1" height="1" fill="#5a2a14"/><rect x="11.3" y="10.3" width="1" height="1" fill="#5a2a14"/><rect x="0.3" y="11.3" width="1" height="1" fill="#1f2d52"/><rect x="11.3" y="11.3" width="1" height="1" fill="#5a2a14"/><rect x="0" y="0" width="1" height="1" fill="#e2804f"/><rect x="1" y="0" width="1" height="1" fill="#e2804f"/><rect x="10" y="0" width="1" height="1" fill="#6b8fe0"/><rect x="11" y="0" width="1" height="1" fill="#6b8fe0"/><rect x="1" y="1" width="1" height="1" fill="#e2804f"/><rect x="2" y="1" width="1" height="1" fill="#e2804f"/><rect x="9" y="1" width="1" height="1" fill="#6b8fe0"/><rect x="10" y="1" width="1" height="1" fill="#6b8fe0"/><rect x="2" y="2" width="1" height="1" fill="#e2804f"/><rect x="3" y="2" width="1" height="1" fill="#e2804f"/><rect x="8" y="2" width="1" height="1" fill="#6b8fe0"/><rect x="9" y="2" width="1" height="1" fill="#6b8fe0"/><rect x="3" y="3" width="1" height="1" fill="#e2804f"/><rect x="4" y="3" width="1" height="1" fill="#e2804f"/><rect x="7" y="3" width="1" height="1" fill="#6b8fe0"/><rect x="8" y="3" width="1" height="1" fill="#6b8fe0"/><rect x="4" y="4" width="1" height="1" fill="#e2804f"/><rect x="5" y="4" width="1" height="1" fill="#e2804f"/><rect x="6" y="4" width="1" height="1" fill="#6b8fe0"/><rect x="7" y="4" width="1" height="1" fill="#6b8fe0"/><rect x="5" y="5" width="1" height="1" fill="#f4ecff"/><rect x="6" y="5" width="1" height="1" fill="#f4ecff"/><rect x="4" y="6" width="1" height="1" fill="#6b8fe0"/><rect x="5" y="6" width="1" height="1" fill="#f4ecff"/><rect x="6" y="6" width="1" height="1" fill="#f4ecff"/><rect x="7" y="6" width="1" height="1" fill="#e2804f"/><rect x="3" y="7" width="1" height="1" fill="#6b8fe0"/><rect x="4" y="7" width="1" height="1" fill="#6b8fe0"/><rect x="7" y="7" width="1" height="1" fill="#e2804f"/><rect x="8" y="7" width="1" height="1" fill="#e2804f"/><rect x="2" y="8" width="1" height="1" fill="#6b8fe0"/><rect x="3" y="8" width="1" height="1" fill="#6b8fe0"/><rect x="8" y="8" width="1" height="1" fill="#e2804f"/><rect x="9" y="8" width="1" height="1" fill="#e2804f"/><rect x="1" y="9" width="1" height="1" fill="#6b8fe0"/><rect x="2" y="9" width="1" height="1" fill="#6b8fe0"/><rect x="9" y="9" width="1" height="1" fill="#e2804f"/><rect x="10" y="9" width="1" height="1" fill="#e2804f"/><rect x="0" y="10" width="1" height="1" fill="#6b8fe0"/><rect x="1" y="10" width="1" height="1" fill="#6b8fe0"/><rect x="10" y="10" width="1" height="1" fill="#e2804f"/><rect x="11" y="10" width="1" height="1" fill="#e2804f"/><rect x="0" y="11" width="1" height="1" fill="#6b8fe0"/><rect x="11" y="11" width="1" height="1" fill="#e2804f"/></svg><span>HARNESS</span></div>
+      <div class="tagline"><span class="c-claude">Claude</span> plans &amp; builds, <span class="c-codex">GPT</span> reviews, <span class="c-code">code</span> decides. Every step leaves a receipt.</div>
+    </div>
+    <div class="stats">
+      <span>model<b class="c-claude">opus 5.5 · high</b></span>
+      <span>agents<b>3</b></span>
+      <span>loops<b>7</b></span>
+      <span>tokens<b>48.2k</b></span>
+      <span><span class="dot" style="background:var(--code);margin:0 4px 0 0"></span><b style="margin:0">live</b></span>
+    </div>
+  </div>
+
+  <!-- PhaseBar: タスク段階 -->
+  <div class="phases">
+    <div class="phase done">
+      <span class="pn">✓ 1 plan</span><span class="pm c-claude">main · opus 5.5</span><span class="pd">承認済み · 4 項目</span>
+    </div>
+    <span class="arrow">→</span>
+    <div class="phase cur running">
+      <span class="pn">● 2 implement</span><span class="pm c-claude">wave 1 / 2 · 2 並列</span><span class="pd">0 / 4 項目</span>
+    </div>
+    <span class="arrow">→</span>
+    <div class="phase">
+      <span class="pn">○ 3 review</span><span class="pm c-codex">reviewer · codex</span><span class="pd">round 0 / 2</span>
+    </div>
+  </div>
+
+  <!-- StepTabs -->
+  <div class="steps">
+    <div class="steps-lbl"><b>loop 5</b> · w1</div>
+    <div class="step done"><span class="n">1/6</span>context</div>
+    <div class="step done"><span class="n">2/6</span>model</div>
+    <div class="step done"><span class="n">3/6</span>tool_use</div>
+    <div class="step done"><span class="n">4/6</span>gate</div>
+    <div class="step active running"><span class="n">5/6</span>act</div>
+    <div class="step"><span class="n">6/6</span>receipt</div>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Transcript -->
+    <div class="pane">
+      <div class="pane-title"><span>// <b>transcript</b></span><span>session a91f · 12 min</span></div>
+
+      <div class="msg user">
+        <div class="who dim">you</div>
+        <div class="bubble">ログインフォームにメールとパスワードのバリデーションを追加して、テストも通して</div>
+      </div>
+
+      <div class="msg claude">
+        <div class="who c-claude">main · opus 5.5 — plan</div>
+        <div class="bubble">
+          <div class="call"><span><span class="k">Task</span> → explorer 「認証まわりの構成を調べて」</span><span class="ok">done</span></div>
+          計画と割り当てです:
+          <table class="plan">
+            <tr><th>#</th><th>項目</th><th>担当</th><th>依存</th><th>wave</th></tr>
+            <tr><td>P1</td><td>validate.ts にメール検証</td><td class="c-claude">sonnet 5.5 · med</td><td class="dim">—</td><td>1</td></tr>
+            <tr><td>P2</td><td>パスワード強度 util</td><td class="c-codex">6.1 sol · high</td><td class="dim">—</td><td>1</td></tr>
+            <tr><td>P3</td><td>LoginForm のエラー表示</td><td class="c-claude">main · opus 5.5</td><td>P1 P2</td><td>2</td></tr>
+            <tr><td>P4</td><td>単体テスト追加</td><td class="c-claude">haiku 4.5</td><td>P1 P2</td><td>2</td></tr>
+          </table>
+          <div class="dim" style="font-size:11px"># P1/P2 は触るファイルが重ならないので並列。UI は判断が多いので main が担当</div>
+          <div class="call"><span><span class="k">SubmitPlan</span> 4 項目 · 2 wave</span><span class="ok">approved</span></div>
+        </div>
+      </div>
+
+      <div class="msg claude">
+        <div class="who c-claude">main · opus 5.5 — implement · wave 1</div>
+        <div class="bubble">
+          <div class="call worker"><span><span class="dot" style="background:var(--claude);margin:0 6px 0 0"></span><span class="k">w1</span> P1 · sonnet 5.5 · ⎇ harness/a91f-w1</span><span class="c-tool">act · npm test</span></div>
+          <div class="call worker"><span><span class="dot" style="background:var(--codex);margin:0 6px 0 0"></span><span class="k">w2</span> P2 · gpt-6.1 sol · ⎇ harness/a91f-w2</span><span class="c-codex">model</span></div>
+          <div class="diff">
+            <div class="dim">w1 · src/auth/validate.ts</div>
+            <div class="add">+ export function validateEmail(v: string) {</div>
+            <div class="add">+   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);</div>
+            <div class="add">+ }</div>
+          </div>
+          wave 1 の完了を待っています。終わったら統合して wave 2 を始めます<span class="cursor" style="background:var(--claude)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LoopFlow -->
+    <div class="pane">
+      <div class="pane-title"><span>// <b>loop 5</b> · w1 <span class="dim">(P1 · sonnet 5.5)</span></span><span>step 5/6 · act</span></div>
+      <div class="flow">
+
+        <div class="lane">1 · context</div>
+        <div class="cell past"><div class="node code"><div class="h">context · build <span class="t">code</span></div><div class="kv"><span>tokens</span><span>12.6k / 200k</span></div><div class="kv"><span>compact</span><span>no</span></div></div></div>
+        <div class="note"><span class="n"># 1</span> 履歴と AGENTS.md を<br>#   組み立てて量を測る</div>
+
+        <div class="lane">2 · model</div>
+        <div class="cell past"><div class="node claude"><div class="h">claude · respond <span class="t">sonnet 5.5 · med</span></div><div class="kv"><span>stop</span><span>tool_use</span></div><div class="kv"><span>calls</span><span>1</span></div></div></div>
+        <div class="note"><span class="n"># 2</span> モデルが関わるのは<br>#   ここだけ。提案するだけ</div>
+
+        <div class="lane">3 · tool_use</div>
+        <div class="cell past"><div class="node code"><div class="h">validate · call <span class="t">code</span></div><div class="kv"><span>schema</span><span class="ok">ok</span></div><div class="kv"><span>allowed</span><span class="ok">yes</span></div></div></div>
+        <div class="note"><span class="n"># 3</span> 実行前にコードが<br>#   形式と前提を検証</div>
+
+        <div class="lane">4 · gate</div>
+        <div class="cell past"><div class="node code"><div class="h">gate · permission <span class="t">code</span></div><div class="kv"><span>rule</span><span>npm test* → allow</span></div><div class="kv"><span>decision</span><span class="ok">allow</span></div></div></div>
+        <div class="note"><span class="n"># 4</span> 決めるのはモデルではなく<br>#   ルールとあなた</div>
+
+        <div class="lane on">5 · act</div>
+        <div class="cell">
+          <div class="row2">
+            <div class="node tool running"><div class="h">tool · act <span class="t">bash</span></div><div class="kv"><span>cmd</span><span>npm test -- validate</span></div><div class="kv"><span>cwd</span><span>worktree w1</span></div></div>
+            <div class="node fb"><div class="h">fallback</div><div class="kv"><span>timeout</span><span>kill</span></div><div class="kv"><span>on 429</span><span class="c-claude">opus</span></div></div>
+          </div>
+        </div>
+        <div class="note"><span class="n"># 5</span> 直前に再確認してから実行<br>#   失敗は決めておいた経路へ</div>
+
+        <div class="lane">6 · receipt</div>
+        <div class="cell last"><div class="node idle"><div class="h">receipt · next <span class="t">code</span></div><div class="kv"><span>id</span><span>#0415</span></div><div class="kv"><span>hook</span><span>after:act → lint</span></div></div></div>
+        <div class="note"><span class="n"># 6</span> 記録して、次の周か<br>#   停止かを決める</div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom panels -->
+  <div class="panels">
+    <div class="panel">
+      <h3><span>// receipts</span><span class="live">● live</span></h3>
+      <table>
+        <tr><td class="c-claude">#0410</td><td>main</td><td class="c-claude">opus</td><td>SubmitPlan 4 項目</td><td class="ok">approved</td><td>2.1s</td></tr>
+        <tr><td class="c-claude">#0411</td><td>harness</td><td class="c-code">code</td><td>spawn w1, w2 (worktree)</td><td class="ok">ok</td><td>0.4s</td></tr>
+        <tr><td class="c-claude">#0412</td><td>w1</td><td class="c-claude">sonnet</td><td>Edit validate.ts</td><td class="ok">allow</td><td>0.9s</td></tr>
+        <tr><td class="c-claude">#0413</td><td>w2</td><td class="c-codex">codex</td><td>Write password.ts</td><td class="ok">allow</td><td>1.2s</td></tr>
+        <tr class="cur"><td class="c-claude">#0414</td><td>w1</td><td class="c-claude">sonnet</td><td>Bash npm test</td><td class="c-tool">running</td><td>4s</td></tr>
+      </table>
+    </div>
+    <div class="panel">
+      <h3><span>// agents</span><span class="dim">2 running · max 3</span></h3>
+      <div class="agent"><span class="dim">◐</span><span>main</span><span class="c-claude">opus 5.5 · high</span><span class="dim">waiting</span></div>
+      <div class="agent sel"><span class="c-claude">●</span><span>w1 · P1</span><span class="c-claude">sonnet 5.5</span><span class="c-tool">act</span></div>
+      <div class="agent"><span class="c-codex">●</span><span>w2 · P2</span><span class="c-codex">6.1 sol</span><span class="c-codex">model</span></div>
+      <div class="agent"><span class="dim">○</span><span>w3 · P4</span><span class="c-claude">haiku 4.5</span><span class="dim">wave 2</span></div>
+      <div class="agent"><span class="dim">○</span><span>reviewer</span><span class="c-codex">6.1 sol</span><span class="dim">review</span></div>
+    </div>
+  </div>
+
+  <!-- Prompt -->
+  <div class="prompt">
+    <span class="p">~/dev/myapp</span><span class="gt">❯</span>
+    <span class="in"><span class="cursor"></span></span>
+    <button class="chip" id="modelBtn" title="モデル切替 (Ctrl+M)"><span class="dot" style="background:var(--claude);margin:0 6px 0 0"></span><b>opus 5.5</b> · high ▾</button>
+    <span class="chip" title="権限モード (Shift+Tab で切替)">mode <b style="color:var(--text)">default</b> ▾</span>
+  </div>
+
+  <!-- Model popover (右下から上に開く) -->
+  <div class="pop" id="modelPop">
+    <h4><span>// main model</span><span>this session</span></h4>
+    <div class="sec">
+      <div class="lbl">claude</div>
+      <div class="recent cur"><span class="c-claude">●</span><span>Opus 5.5</span><span class="meta">default</span></div>
+      <div class="recent"><span class="dim">○</span><span>Sonnet 5.5</span><span class="meta"></span></div>
+      <div class="recent"><span class="dim">○</span><span>Haiku 4.5</span><span class="meta"></span></div>
+    </div>
+    <div class="sec">
+      <div class="lbl">codex</div>
+      <div class="recent"><span class="dim">○</span><span>GPT-6 Astra</span><span class="meta">hardest</span></div>
+      <div class="recent"><span class="dim">○</span><span>GPT-6.1 Sol</span><span class="meta">reviewer</span></div>
+      <div class="recent"><span class="dim">○</span><span>GPT-6 Luna</span><span class="meta">bulk</span></div>
+    </div>
+    <div class="sec">
+      <div class="lbl">effort</div>
+      <div class="effort"><span>low</span><span>medium</span><span class="on">high</span><span>max</span></div>
+    </div>
+    <div class="sec actions">
+      <button class="btn">既定にする</button>
+      <button class="btn primary">apply</button>
+    </div>
+  </div>
+
+  </div><!-- /content -->
+  </div><!-- /body -->
+</div>
+<script>
+  // モック用: ポップオーバーの開閉とタブ切替
+  const pairs = [["usageBtn", "usagePop"], ["wsBtn", "wsPop"], ["modelBtn", "modelPop"]];
+  const closeAll = (except) => pairs.forEach(([b, p]) => {
+    if (p === except) return;
+    document.getElementById(p).classList.remove("show");
+    document.getElementById(b).classList.remove("open");
+  });
+  pairs.forEach(([b, p]) => {
+    document.getElementById(b).addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeAll(p);
+      const pop = document.getElementById(p);
+      const r = e.currentTarget.getBoundingClientRect();
+      const w = document.querySelector(".win").getBoundingClientRect();
+      if (p === "modelPop") {   // 右下のボタンから上に開く
+        pop.style.top = "auto"; pop.style.bottom = (w.bottom - r.top + 6) + "px";
+        pop.style.right = (w.right - r.right) + "px";
+      } else {
+        pop.style.top = (r.bottom - w.top + 6) + "px";
+        if (p === "usagePop") { pop.style.right = (w.right - r.right) + "px"; pop.style.left = "auto"; }
+        else { pop.style.left = (r.left - w.left) + "px"; }
+      }
+      pop.classList.toggle("show");
+      document.getElementById(b).classList.toggle("open");
+    });
+    document.getElementById(p).addEventListener("click", (e) => e.stopPropagation());
+  });
+  document.addEventListener("click", () => closeAll());
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAll();
+    const keys = { u: "usageBtn", o: "wsBtn", m: "modelBtn" };
+    if (e.ctrlKey && keys[e.key]) {
+      e.preventDefault();
+      document.getElementById(keys[e.key]).click();
+    }
+  });
+  document.querySelectorAll("[data-tab]").forEach((t) => t.addEventListener("click", () => {
+    document.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("on", x === t));
+    document.querySelectorAll("[data-tab-panel]").forEach((x) => x.classList.toggle("on", x.dataset.tabPanel === t.dataset.tab));
+  }));
+</script>
+</body>
+</html>

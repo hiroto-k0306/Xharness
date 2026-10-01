@@ -1,0 +1,272 @@
+import { type ContentBlock } from "./types.js";
+import { type ProviderEvent } from "../providers/provider.js";
+import { trimOutput } from "../tools/registry.js";
+import {
+  type LoopContext,
+  type LoopOptions,
+  type PendingCall,
+  type Receipt,
+  type Step,
+  type StepName,
+  type StepOutcome,
+  toolCalls,
+} from "./loop-types.js";
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  if (value && typeof value === "object")
+    return (
+      "{" +
+      Object.entries(value)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, v]) => JSON.stringify(k) + ":" + canonical(v))
+        .join(",") +
+      "}"
+    );
+  return JSON.stringify(value) ?? "null";
+}
+function countError(ctx: LoopContext, item: PendingCall) {
+  if (item.counted) return;
+  item.counted = true;
+  ctx.consecutiveErrors = item.result?.isError ? ctx.consecutiveErrors + 1 : 0;
+  if (ctx.consecutiveErrors >= 5) ctx.stopCause ??= "consecutive_errors";
+}
+export function appendResults(ctx: LoopContext, options: LoopOptions) {
+  if (!ctx.pending.length || ctx.resultsAppended) return;
+  const clean = options.redact ?? ((text: string) => text);
+  const results: ContentBlock[] = ctx.pending.map((item, index) => {
+    item.result ??= {
+      content:
+        ctx.stopCause === "aborted"
+          ? "Interrupted by user"
+          : (item.error ?? "Tool step failed"),
+      isError: true,
+    };
+    countError(ctx, item);
+    const injected =
+      index === 0 && ctx.injections.length
+        ? "\n" + ctx.injections.join("\n")
+        : "";
+    return {
+      type: "tool_result",
+      toolUseId: item.call.id,
+      content: trimOutput(clean(item.result.content + injected)),
+      isError: item.result.isError,
+    };
+  });
+  ctx.messages.push({ role: "user", content: results });
+  ctx.injections = [];
+  ctx.resultsAppended = true;
+}
+export function nextAfterReceipt(
+  ctx: LoopContext,
+  options: LoopOptions,
+): StepOutcome {
+  if (ctx.stopCause) return { kind: "stop", reason: ctx.stopCause };
+  if (
+    ctx.completion?.stopReason === "max_tokens" &&
+    !ctx.pending.length &&
+    ctx.continuations < 2
+  ) {
+    if (ctx.round >= (options.maxRounds ?? 100))
+      return { kind: "stop", reason: "round_limit" };
+    ctx.continuations++;
+    ctx.messages.push({
+      role: "user",
+      content: [{ type: "text", text: "Continue." }],
+    });
+    return { kind: "next", to: "context" };
+  }
+  if (!ctx.pending.length || ctx.completion?.stopReason !== "tool_use")
+    return {
+      kind: "stop",
+      reason: ctx.completion?.stopReason ?? "incomplete_response",
+    };
+  return ctx.round >= (options.maxRounds ?? 100)
+    ? { kind: "stop", reason: "round_limit" }
+    : { kind: "next", to: "context" };
+}
+export function createSteps(options: LoopOptions): Record<StepName, Step> {
+  return {
+    context: {
+      name: "context",
+      async run(ctx, signal) {
+        signal.throwIfAborted();
+        ctx.request = {
+          model: options.model,
+          system: options.system,
+          messages: structuredClone(ctx.messages),
+          tools: [...options.tools.values()].map((t) => t.spec),
+          maxOutputTokens: options.maxOutputTokens,
+          reasoning: options.reasoning,
+        };
+        return { kind: "next", to: "model" };
+      },
+    },
+    model: {
+      name: "model",
+      async run(ctx, signal) {
+        let failure: ProviderEvent | undefined;
+        ctx.completion = undefined;
+        if (!ctx.request) throw new Error("Missing request");
+        // Hooks may append new information before this attempt; history stays intact.
+        ctx.request = {
+          ...ctx.request,
+          messages: structuredClone(ctx.messages),
+        };
+        for await (const event of options.provider.stream(
+          ctx.request,
+          signal,
+        )) {
+          signal.throwIfAborted();
+          options.onEvent?.(event);
+          if (event.type === "message_done") ctx.completion = event;
+          if (event.type === "error" || event.type === "rate_limited")
+            failure = event;
+        }
+        if (failure || !ctx.completion) {
+          ctx.completion = undefined;
+          const delay =
+            failure?.type === "rate_limited"
+              ? failure.retryAfterSec === undefined ||
+                failure.retryAfterSec > 30
+                ? undefined
+                : failure.retryAfterSec * 1000
+              : failure?.type === "error" && failure.error.retryable
+                ? 1000 * 2 ** ctx.modelAttempts
+                : undefined;
+          if (delay !== undefined && ctx.modelAttempts < 3) {
+            ctx.modelAttempts++;
+            return { kind: "retry", afterMs: delay };
+          }
+          return {
+            kind: "stop",
+            reason:
+              failure?.type === "rate_limited"
+                ? "rate_limited"
+                : failure?.type === "error"
+                  ? failure.error.kind
+                  : "incomplete_response",
+          };
+        }
+        const message = structuredClone(ctx.completion.message);
+        const pending = toolCalls(message);
+        if (new Set(pending.map((p) => p.call.id)).size !== pending.length)
+          return { kind: "stop", reason: "protocol" };
+        ctx.messages.push(message);
+        ctx.pending = pending;
+        return { kind: "next", to: pending.length ? "tool_use" : "receipt" };
+      },
+    },
+    tool_use: {
+      name: "tool_use",
+      async run(ctx, signal) {
+        for (const item of ctx.pending) {
+          signal.throwIfAborted();
+          item.tool = options.tools.get(item.call.name);
+          const signature = item.call.name + canonical(item.call.input);
+          ctx.repeated = signature === ctx.lastCall ? ctx.repeated + 1 : 1;
+          ctx.lastCall = signature;
+          item.error =
+            ctx.repeated > 3
+              ? "Repeated identical tool call; choose another approach"
+              : !item.tool
+                ? "Unknown or unavailable tool"
+                : await item.tool.validate(item.call.input);
+        }
+        return { kind: "next", to: "gate" };
+      },
+    },
+    gate: {
+      name: "gate",
+      async run(ctx, signal) {
+        for (const item of ctx.pending) {
+          if (item.error) continue;
+          signal.throwIfAborted();
+          item.allowed = await options.permission(item.call, signal);
+          if (!item.allowed) item.error = "Permission denied by user";
+        }
+        return { kind: "next", to: "act" };
+      },
+    },
+    act: {
+      name: "act",
+      async run(ctx, signal) {
+        const execute = async (item: PendingCall) => {
+          if (ctx.stopCause) {
+            item.result = {
+              content: "Stopped after consecutive errors",
+              isError: true,
+            };
+            return;
+          }
+          if (item.error) item.result = { content: item.error, isError: true };
+          else
+            try {
+              signal.throwIfAborted();
+              if (!item.allowed || !item.tool)
+                throw new Error("Missing permission");
+              const invalid = await item.tool.validate(item.call.input);
+              item.result = invalid
+                ? { content: invalid, isError: true }
+                : await item.tool.execute(item.call.input, signal);
+            } catch {
+              item.result = {
+                content: signal.aborted
+                  ? "Interrupted by user"
+                  : "Tool execution failed",
+                isError: true,
+              };
+            }
+          countError(ctx, item);
+        };
+        let batch: PendingCall[] = [];
+        for (const item of ctx.pending) {
+          if (item.tool?.readOnly) batch.push(item);
+          else {
+            await Promise.all(batch.map(execute));
+            batch = [];
+            await execute(item);
+          }
+        }
+        await Promise.all(batch.map(execute));
+        return { kind: "next", to: "receipt" };
+      },
+    },
+    receipt: {
+      name: "receipt",
+      async run(ctx, signal) {
+        if (signal.aborted) ctx.stopCause = "aborted";
+        appendResults(ctx, options);
+        if (!ctx.recorded) {
+          const completedAt = new Date().toISOString();
+          const entries: Receipt[] = [
+            {
+              round: ctx.round,
+              provider: options.provider.id,
+              model: options.model,
+              decision: ctx.stopCause ?? ctx.completion?.stopReason ?? "failed",
+              startedAt: ctx.startedAt,
+              completedAt,
+              usage: ctx.completion?.usage,
+            },
+            ...ctx.pending.map((item) => ({
+              round: ctx.round,
+              provider: "tool",
+              model: options.model,
+              tool: item.call.name,
+              decision: item.result?.isError ? "error" : "allow",
+              startedAt: ctx.startedAt,
+              completedAt,
+            })),
+          ];
+          ctx.receipts.push(...entries);
+          ctx.recorded = true;
+          for (const receipt of entries)
+            options.onEvent?.({ type: "receipt", receipt });
+        }
+        return nextAfterReceipt(ctx, options);
+      },
+    },
+  };
+}

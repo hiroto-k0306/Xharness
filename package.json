@@ -2,16 +2,18 @@
   "name": "xharness",
   "version": "0.0.0",
   "private": true,
-  "description": "XHarness Phase 0 OAuth connectivity verification",
+  "description": "XHarness Windows coding agent",
   "type": "module",
   "engines": {
     "node": ">=22 <23"
   },
   "scripts": {
-    "test": "vitest run --exclude=spike/.out/** --exclude=.tools/**",
+    "test": "vitest run --exclude=spike/.out/** --exclude=.tools/** --exclude=dist/**",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format:check": "prettier --check .",
+    "headless": "tsx src/headless.ts",
+    "build:headless": "tsc --noEmit false --rootDir src --outDir dist --incremental false --project tsconfig.headless.json",
     "spike:claude:creds": "tsx spike/claude/c1-creds.ts",
     "spike:claude:text": "tsx spike/claude/c2-text.ts",
     "spike:claude:tool": "tsx spike/claude/c3-tool.ts",

@@ -65,5 +65,5 @@ DESIGN.md §13・§21.2〜21.4 に従い、Electron と通信に依存しない�
 ## 次の作業・未実施
 
 - worker の並列数拡張、保存した workflow 状態からの自動再開、worker worktree の片付け UI。作業物は削除せず残す。
-- 2026-10-02 の追加手元確認は [phase5-local-result.md](phase5-local-result.md) に記録。portable の再作成・別フォルダ起動、fake workflow / 子の会話 / 権限待ち終了 / プロジェクトフックを確認した。Codex Luna reviewer に1回送信し、明白な不具合の検出と子の完了を確認。Claude は資格情報確認で止まり0送信。実プロジェクトのレビュー品質・残る画面操作は未評価。
+- 2026-10-02 の追加手元確認は [phase5-local-result.md](phase5-local-result.md) に記録。portable の再作成・別フォルダ起動、fake workflow / 子の会話 / 権限待ち終了 / プロジェクトフックを確認した。Codex Luna reviewer に1回送信し、明白な不具合の検出と子の完了を確認。追加許可後、公式 Claude CLI の認証更新と Haiku 子エージェントの Read 往復も成功した。実プロジェクトのレビュー品質・残る画面操作は未評価。
 - Bash は worker の cwd で実行し、必ず権限確認する。OS のファイルシステム sandbox は追加していない。Write / Edit は canonical path を確認して作業フォルダ外を拒否し、計画の files の外は ask にする。

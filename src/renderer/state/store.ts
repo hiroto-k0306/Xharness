@@ -206,6 +206,7 @@ interface UiStore extends EventState {
   respond(decision: "allow" | "always" | "deny"): void;
   newSession(workspaceId: string | null, readOnly?: boolean): Promise<void>;
   openSession(id: string): void;
+  closeSession(id: string): void;
   pickFolder(): Promise<string | undefined>;
 }
 
@@ -288,6 +289,9 @@ export const useStore = create<UiStore>()((set, get) => ({
   },
   openSession(id) {
     void window.harness.command({ type: "open_session", sessionId: id });
+  },
+  closeSession(id) {
+    void window.harness.command({ type: "close_session", sessionId: id });
   },
   async pickFolder() {
     const r = await window.harness.command({ type: "pick_folder" });

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { isEffort, resolveModel } from "../config/config.js";
 import { redact } from "../core/redact.js";
 import { runTurn, type Receipt as LoopReceipt } from "../core/loop.js";
 import { type Message } from "../core/types.js";
@@ -12,6 +13,7 @@ import {
   STEP_NODES,
   type AppState,
   type CommandResult,
+  type Effort,
   type HarnessCommand,
   type PermissionDecision,
   type Receipt,
@@ -32,7 +34,13 @@ export interface Host {
 }
 export interface ControllerOptions {
   provider: Provider;
+  /** 新しいセッションの既定モデルと effort(--model > 設定ファイル > claude:opus / high) */
   model: string;
+  effort?: Effort;
+  /** モデル名の別名(config.yaml の aliases)。省略時は §12 の既定 */
+  aliases?: Record<string, string>;
+  /** 起動時の警告(設定ファイルの不正値など)。最初の新規セッションで1度だけ通知する */
+  warnings?: string[];
   /** ~/.xharness/(--fake のときは別の場所) */
   home: string;
   host: Host;
@@ -58,6 +66,9 @@ interface Runtime {
   tools?: ToolRegistry;
   receiptSeq: number;
   messageSeq: number;
+  /** 実行中のターン(終了待ち用) */
+  done?: Promise<void>;
+  closing?: boolean;
 }
 
 const STOP_NOTICE: Record<string, string> = {
@@ -83,18 +94,24 @@ export class SessionController {
   private readonly sessions: SessionStore;
   private readonly workspaces: WorkspaceStore;
   private current: string | null = null;
-  private model: string;
+  private readonly model: string;
+  private readonly effort: Effort;
+  private warnings: string[];
+  private stopped = false;
   private readonly clean: (text: string) => string;
 
   constructor(private readonly options: ControllerOptions) {
     this.sessions = new SessionStore(options.home);
     this.workspaces = new WorkspaceStore(options.home);
     this.model = options.model;
+    this.effort = options.effort ?? "high";
+    this.warnings = [...(options.warnings ?? [])];
     this.clean = (text) => redact(text, options.secrets ?? []);
   }
 
   async init() {
     await Promise.all([this.sessions.load(), this.workspaces.load()]);
+    this.sessions.fillDefaults({ model: this.model, effort: this.effort });
   }
 
   private runtime(id: string): Runtime {
@@ -135,6 +152,7 @@ export class SessionController {
       workspaces,
       currentSessionId: this.current,
       model: this.model,
+      effort: this.effort,
       fake: this.options.fake,
       version: this.options.version,
     };
@@ -159,6 +177,8 @@ export class SessionController {
           this.current = command.sessionId;
           await this.emitState();
           await this.emitTranscript(command.sessionId);
+          // §18.4: 再開時に cwd の存在を確認する。無ければ実行できないことを知らせる
+          await this.reportMissingCwd(this.sessions.get(command.sessionId)!);
           return { ok: true, sessionId: command.sessionId };
         }
         case "pick_folder": {
@@ -172,21 +192,19 @@ export class SessionController {
           await this.workspaces.forget(command.workspaceId);
           await this.emitState();
           return { ok: true };
-        case "set_model": {
-          const known = this.options.provider
-            .models()
-            .some((m) => m.id === command.model);
-          if (!known) return { ok: false, error: "Unknown model" };
-          this.model = command.model; // 次の周の STEP 1 から反映(§16.8)
-          await this.emitState();
-          return { ok: true };
-        }
+        case "set_model":
+          return await this.setModel(
+            command.sessionId,
+            command.model,
+            command.effort,
+          );
+        case "close_session":
+          return await this.closeSession(command.sessionId);
         case "send":
           return this.send(command.sessionId, command.text);
         case "abort": {
           const rt = this.runtimes.get(command.sessionId);
-          rt?.pending?.resolve("deny");
-          rt?.abort?.abort();
+          if (rt) this.release(rt);
           return { ok: true };
         }
         case "permission_response": {
@@ -213,6 +231,15 @@ export class SessionController {
       const ws = this.workspaces.get(workspaceId);
       if (!ws) return { ok: false, error: "Unknown workspace" };
       cwd = ws.root;
+      const missing = await missingDirectory(cwd);
+      if (missing) {
+        this.options.emit({
+          type: "error",
+          sessionId: this.current ?? undefined,
+          message: missing,
+        });
+        return { ok: false, error: "Workspace folder not found" };
+      }
       await this.workspaces.touch(workspaceId);
     } else {
       // §18.5: 指定なしのセッションはセッション専用の空フォルダで作業する
@@ -226,6 +253,8 @@ export class SessionController {
       workspaceId,
       cwd,
       readOnly,
+      model: this.model,
+      effort: this.effort,
       createdAt: now,
       updatedAt: now,
       providers: [],
@@ -235,6 +264,8 @@ export class SessionController {
     this.current = id;
     await this.emitState();
     this.options.emit({ type: "transcript", sessionId: id, items: [] });
+    for (const message of this.warnings.splice(0))
+      this.options.emit({ type: "error", sessionId: id, message });
     return { ok: true, sessionId: id };
   }
 
@@ -252,12 +283,90 @@ export class SessionController {
   private async send(sessionId: string, text: string): Promise<CommandResult> {
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, error: "Unknown session" };
+    if (this.stopped) return { ok: false, error: "Shutting down" };
     const rt = await this.load(sessionId);
     if (rt.status !== "idle")
       return { ok: false, error: "Turn already running" };
+    // 作業フォルダが無いときは、モデルを呼ばずツールも動かさずに知らせる(§18.4)
+    if (await this.reportMissingCwd(session))
+      return { ok: false, error: "Working directory not found" };
     rt.status = "running";
-    void this.runSession(session, rt, text);
+    rt.closing = false;
+    rt.done = this.runSession(session, rt, text).catch(() => undefined);
     return { ok: true, sessionId };
+  }
+
+  private async reportMissingCwd(session: StoredSession): Promise<boolean> {
+    const missing = await missingDirectory(session.cwd);
+    if (!missing) return false;
+    this.options.emit({
+      type: "error",
+      sessionId: session.id,
+      message: missing,
+    });
+    return true;
+  }
+
+  /** このセッションだけのモデル・effort を変える。進行中の周は中断せず、次の周から反映する(§16.8) */
+  private async setModel(
+    sessionId: string,
+    spec: string,
+    effort?: Effort,
+  ): Promise<CommandResult> {
+    const session = this.sessions.get(sessionId);
+    if (!session) return { ok: false, error: "Unknown session" };
+    const resolved = resolveModel(spec, this.options.aliases);
+    const known =
+      resolved &&
+      this.options.provider.models().some((m) => m.id === resolved.model);
+    if (!resolved || !known) return { ok: false, error: "Unknown model" };
+    if (effort !== undefined && !isEffort(effort))
+      return { ok: false, error: "Unknown effort" };
+    await this.sessions.save({
+      ...session,
+      model: resolved.model,
+      effort: effort ?? session.effort,
+    });
+    await this.emitState();
+    return { ok: true, sessionId };
+  }
+
+  /**
+   * セッションを閉じる。権限待ちは deny で解決し、実行中のターンは中断する。
+   * 履歴は残る(一覧からは消えない)。
+   */
+  private async closeSession(sessionId: string): Promise<CommandResult> {
+    if (!this.sessions.get(sessionId))
+      return { ok: false, error: "Unknown session" };
+    const rt = this.runtimes.get(sessionId);
+    if (rt) {
+      rt.closing = true;
+      this.release(rt);
+      if (rt.status === "idle") this.runtimes.delete(sessionId);
+    }
+    if (this.current === sessionId) this.current = null;
+    await this.emitState();
+    return { ok: true };
+  }
+
+  /** 権限待ちを deny で解決し、ターンを中断する(待ちが残ってループが止まったままにならないように) */
+  private release(rt: Runtime) {
+    rt.pending?.resolve("deny");
+    rt.abort?.abort();
+  }
+
+  /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
+  async shutdown(timeoutMs = 3000): Promise<void> {
+    this.stopped = true;
+    const running: Promise<void>[] = [];
+    for (const rt of this.runtimes.values()) {
+      this.release(rt);
+      if (rt.done) running.push(rt.done);
+    }
+    await Promise.race([
+      Promise.all(running),
+      new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),
+    ]);
   }
 
   private async system(cwd: string): Promise<string> {
@@ -301,7 +410,7 @@ export class SessionController {
     });
     if (first) {
       session = {
-        ...session,
+        ...(this.sessions.get(sessionId) ?? session),
         title:
           clean(text).replace(/\s+/g, " ").trim().slice(0, 40) || session.title,
       };
@@ -318,7 +427,16 @@ export class SessionController {
       const result = await runTurn(
         {
           provider: this.options.provider,
-          model: this.model,
+          model: session.model,
+          reasoning: { effort: session.effort },
+          // 各周の STEP 1 で、このセッションの最新のモデルを読む
+          current: () => {
+            const latest = this.sessions.get(sessionId) ?? session;
+            return {
+              model: latest.model,
+              reasoning: { effort: latest.effort },
+            };
+          },
           system: await this.system(session.cwd),
           messages: rt.messages,
           tools: rt.tools,
@@ -432,10 +550,12 @@ export class SessionController {
         clean,
       );
       rt.persisted = rt.messages.length;
+      // 実行中に set_model された内容を上書きしないよう、最新の記録に重ねて保存する
+      const latest = this.sessions.get(sessionId) ?? session;
       await this.sessions.save({
-        ...session,
+        ...latest,
         updatedAt: Date.now(),
-        providers: usedProviders(rt.messages, session.providers),
+        providers: usedProviders(rt.messages, latest.providers),
       });
     } catch {
       emit({ type: "error", sessionId, message: "履歴の保存に失敗しました" });
@@ -447,6 +567,7 @@ export class SessionController {
     if (notice && stopCause !== "aborted")
       emit({ type: "error", sessionId, message: notice });
     emit({ type: "turn", sessionId, status: "idle", stopCause });
+    if (rt.closing) this.runtimes.delete(sessionId);
     await this.emitState();
   }
 
@@ -494,6 +615,16 @@ export class SessionController {
     void this.emitState();
     return decision !== "deny";
   }
+}
+
+/** 作業フォルダが無い(またはフォルダでない)ときの通知文。問題が無ければ undefined。 */
+async function missingDirectory(path: string): Promise<string | undefined> {
+  try {
+    if ((await stat(path)).isDirectory()) return undefined;
+  } catch {
+    /* 見つからない */
+  }
+  return `作業フォルダが見つかりません: ${path}(フォルダを戻すか、新しいセッションを作成してください)`;
 }
 
 function safeInput(input: unknown, clean: (s: string) => string): unknown {

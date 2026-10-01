@@ -73,13 +73,14 @@ pnpm dev:fake
 ## 5. 実 API での起動確認(使用量を使う。最小限にする)
 
 ```powershell
-.\XHarness-0.0.0-portable.exe                       # 既定は claude-haiku-4-5
-.\XHarness-0.0.0-portable.exe --model claude-opus-5-5   # 任意
+.\XHarness-0.0.0-portable.exe --model haiku        # 確認はこれで(Haiku は枠の消費が軽い)
+.\XHarness-0.0.0-portable.exe                       # 既定は claude:opus / high(設定ファイルで変更可)
 ```
 
 - 手順: ワークスペースを開く(Ctrl+O)→ 新規セッション → `Reply only pong.` と送る → `pong` と `end_turn` を確認
 - 続けて「`a.txt` を Read して」のような指示で、権限確認(`y`)→ ツール結果 → 返答を確認する
-- 注意: 送るのは短い文だけにする。Opus は枠の消費が重いので、通常は Haiku で確認する
+- 既定モデルは `--model` > `%USERPROFILE%\.xharness\config.yaml` の `main.model` / `main.effort` > `claude:opus` / `high` の順で決まる。**既定が Opus なので、確認では `--model haiku` を付ける**
+- 注意: 送るのは短い文だけにする
 - 認証エラーが出たときは、画面の案内どおり公式 CLI(`claude`)で更新・再ログインしてから再試行する(XHarness は自前で更新しない)
 - **確認してほしい点**: 画面・ログ・`%USERPROFILE%\.xharness\sessions\*.jsonl` にトークンが出ていないこと
 
@@ -103,6 +104,7 @@ Sidebar(§16.6):
 - [ ] グループにパスと種別(`git` / `no git`)、セッション行にブランチ(`⎇ main`)が出る
 - [ ] 検索で絞り込める。`sort:` で recent / name を切り替えられる
 - [ ] Ctrl+B でサイドバーが隠れ、もう一度で戻る
+- [ ] Ctrl+W で今のセッションを閉じる(一覧には残り、クリックで再開できる)。権限待ちの最中に閉じると、拒否として扱われてターンが終わる
 - [ ] 実行中のセッションは `● running` が明滅し、ask 待ちは `● ask` が黄色になる(別セッションに切り替えて確認)
 - [ ] アプリを再起動すると、前のセッションが一覧に残り、クリックで履歴が再表示される
 
@@ -133,6 +135,8 @@ WorkspacePicker(§18.2 folder タブ):
 - [ ] タスクバー・エクスプローラー・タイトルバーのアイコンが XHarness のマーク(16/24px は影なし)になっている
 - [ ] nsis インストーラ: インストール先を変更でき、スタートメニューに登録され、アンインストールできる
 - [ ] portable: 別フォルダに置いて起動でき、`%USERPROFILE%\.xharness\` に保存される(exe の隣には保存されない)
+- [ ] 権限待ちのままウィンドウを閉じても、アプリが固まらず終了する(次回起動でそのセッションの履歴が読め、ツール呼び出しに拒否の結果が付いている)
+- [ ] セッションのフォルダを(アプリを閉じて)リネームしてから開き直し、送信すると「作業フォルダが見つかりません」と出て、モデルが呼ばれない
 - [ ] 二重起動すると、2つ目は起動せず終了する(単一インスタンス)
 
 セキュリティ(DevTools で確認。`Ctrl+Shift+I`):

@@ -52,6 +52,36 @@ describe("IPC contract", () => {
     ])
       expect(parseCommand(bad)).toBeUndefined();
   });
+  it("validates set_model and close_session", () => {
+    expect(
+      parseCommand({
+        type: "set_model",
+        sessionId: "s",
+        model: "opus",
+        effort: "low",
+      }),
+    ).toEqual({
+      type: "set_model",
+      sessionId: "s",
+      model: "opus",
+      effort: "low",
+    });
+    expect(
+      parseCommand({ type: "set_model", sessionId: "s", model: "opus" }),
+    ).toMatchObject({
+      type: "set_model",
+    });
+    for (const bad of [
+      { type: "set_model", model: "opus" }, // sessionId が無い: 全体へは効かせない
+      { type: "set_model", sessionId: "s", model: "opus", effort: "turbo" },
+      { type: "close_session" },
+    ])
+      expect(parseCommand(bad)).toBeUndefined();
+    expect(parseCommand({ type: "close_session", sessionId: "s" })).toEqual({
+      type: "close_session",
+      sessionId: "s",
+    });
+  });
   it("drops extra fields so nothing unvalidated reaches main", () => {
     const parsed = parseCommand({
       type: "open_session",

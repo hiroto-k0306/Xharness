@@ -1,7 +1,8 @@
-import { app, BrowserWindow, shell } from "electron";
+import { app, BrowserWindow, dialog, shell } from "electron";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseStartupArgs, resolveStartup } from "./config/config.js";
 import { readLocalSecrets } from "./auth/local-secrets.js";
 import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
@@ -10,14 +11,9 @@ import { createHost, registerIpc, sendEvent } from "./ipc.js";
 import { isExternalHttps, secureWebPreferences } from "./security.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const args = process.argv.slice(1);
-const fake = args.includes("--fake");
-const modelArg = args.indexOf("--model");
-const model = fake
-  ? "fake"
-  : modelArg >= 0
-    ? (args[modelArg + 1] ?? "claude-haiku-4-5")
-    : "claude-haiku-4-5";
+const startup = parseStartupArgs(process.argv.slice(1));
+const fake = startup.fake;
+let quitting = false;
 
 let window: BrowserWindow | null = null;
 let controller: SessionController | undefined;
@@ -60,11 +56,38 @@ async function start() {
   const fixtures = app.isPackaged
     ? join(process.resourcesPath, "fixtures")
     : join(app.getAppPath(), "test/fixtures/claude");
+  // 既定モデル: --model > <home>/config.yaml の main.model / main.effort > claude:opus / high。
+  // --fake は設定ファイルを読まず、通信もしない。
+  let main: Awaited<ReturnType<typeof resolveStartup>>;
+  try {
+    main = fake
+      ? {
+          choice: { provider: "claude", model: "fake", effort: "high" },
+          aliases: {},
+          warnings: [],
+        }
+      : await resolveStartup({
+          home,
+          cliModel: startup.model,
+          cliEffort: startup.effort,
+          supported: ["claude"],
+        });
+  } catch (error) {
+    dialog.showErrorBox(
+      "XHarness",
+      error instanceof Error ? error.message : "起動オプションが不正です",
+    );
+    app.exit(1);
+    return;
+  }
   controller = new SessionController({
     provider: fake
       ? new FakeProvider({ fixturesDir: fixtures })
       : new ClaudeAdapter(),
-    model,
+    model: main.choice.model,
+    effort: main.choice.effort,
+    aliases: main.aliases,
+    warnings: main.warnings,
     home,
     fake,
     version: app.getVersion(),
@@ -89,6 +112,13 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   void app.whenReady().then(start);
   app.on("window-all-closed", () => app.quit());
+  // 終了前に、権限待ちを deny で解決して実行中のターンを中断し、履歴を保存してから抜ける
+  app.on("before-quit", (event) => {
+    if (quitting || !controller) return;
+    quitting = true;
+    event.preventDefault();
+    void controller.shutdown().finally(() => app.quit());
+  });
   app.on("activate", () => {
     if (!BrowserWindow.getAllWindows().length) createWindow();
   });

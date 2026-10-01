@@ -49,7 +49,17 @@ beforeEach(async () => {
     },
   };
   window.harness = api;
-  useStore.setState({ app: null, views: {} });
+  useStore.setState({
+    app: null,
+    views: {},
+    prefs: {
+      sidebarOpen: true,
+      collapsed: {},
+      sort: "recent",
+      search: "",
+      pickerOpen: false,
+    },
+  });
 });
 
 describe("App wired to the real SessionController", () => {
@@ -137,5 +147,18 @@ describe("App wired to the real SessionController", () => {
     expect(JSON.parse(localStorage.getItem("xharness.prefs")!)).toMatchObject({
       sidebarOpen: false,
     });
+  });
+  it("Ctrl+W closes the current session but keeps it in the list", async () => {
+    render(<App />);
+    await screen.findByText("+ new session");
+    await userEvent.type(screen.getByLabelText("prompt"), "first{Enter}");
+    await screen.findByText("pong");
+    await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
+    await userEvent.keyboard("{Control>}w{/Control}");
+    await waitFor(() => expect(screen.queryByText("pong")).toBeNull());
+    expect(screen.getByRole("button", { name: /first/ })).not.toHaveAttribute(
+      "aria-current",
+      "true",
+    );
   });
 });

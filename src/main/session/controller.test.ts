@@ -336,12 +336,6 @@ describe("SessionController", () => {
     expect(
       await c.handle({ type: "send", sessionId: "nope", text: "x" }),
     ).toMatchObject({ ok: false });
-    expect(await c.handle({ type: "set_model", model: "gpt-x" })).toMatchObject(
-      { ok: false },
-    );
-    expect(await c.handle({ type: "set_model", model: "fake" })).toMatchObject({
-      ok: true,
-    });
     const c2 = make(undefined, { pickFolder: async () => undefined });
     await c2.init();
     expect(await c2.handle({ type: "pick_folder" })).toMatchObject({
@@ -399,5 +393,388 @@ describe("SessionController", () => {
     await c.handle({ type: "send", sessionId, text: "hi" });
     await until(() => idle(sessionId));
     expect(seen[0]).toContain("RULE-123");
+  });
+});
+
+// ───────── レビュー指摘の修正(モデルのセッション別保持・cwd 確認・権限待ちの解放) ─────────
+type Seen = { model: string; effort?: string };
+class MultiModel extends FakeProvider {
+  models() {
+    return [
+      "fake",
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+      "claude-haiku-4-5",
+      "claude-haiku-4-5-20251001",
+    ].map((id) => ({ id, contextTokens: null }));
+  }
+}
+function build(
+  opts: { model?: string; effort?: "low" | "high"; warnings?: string[] } = {},
+) {
+  const seen: Seen[] = [];
+  const controller = new SessionController({
+    provider: new MultiModel({
+      onRequest: (r) =>
+        seen.push({ model: r.model, effort: r.reasoning?.effort }),
+    }),
+    model: opts.model ?? "claude-opus-5-5",
+    effort: opts.effort,
+    warnings: opts.warnings,
+    home,
+    fake: true,
+    version: "1",
+    host: { pickFolder: async () => workspace },
+    emit: (e) => events.push(e),
+    createTools: () => new Map([["Read", readTool]]),
+    sleep: async () => undefined,
+  });
+  return { controller, seen };
+}
+const newId = async (c: SessionController, workspaceId: string | null = null) =>
+  (
+    (await c.handle({ type: "new_session", workspaceId })) as {
+      sessionId: string;
+    }
+  ).sessionId;
+const sessionOf = (id: string) =>
+  lastState().state.sessions.find((s) => s.id === id)!;
+
+describe("model and effort are kept per session", () => {
+  it("new sessions start from the controller default", async () => {
+    const { controller } = build({ model: "claude-sonnet-5-5", effort: "low" });
+    await controller.init();
+    const id = await newId(controller);
+    expect(sessionOf(id)).toMatchObject({
+      model: "claude-sonnet-5-5",
+      effort: "low",
+    });
+    expect(lastState().state).toMatchObject({
+      model: "claude-sonnet-5-5",
+      effort: "low",
+    });
+  });
+  it("set_model changes only that session and persists across a restart", async () => {
+    const { controller, seen } = build();
+    await controller.init();
+    const a = await newId(controller);
+    const b = await newId(controller);
+    expect(
+      await controller.handle({
+        type: "set_model",
+        sessionId: a,
+        model: "sonnet",
+        effort: "low",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(sessionOf(a)).toMatchObject({
+      model: "claude-sonnet-5-5",
+      effort: "low",
+    });
+    expect(sessionOf(b)).toMatchObject({
+      model: "claude-opus-5-5",
+      effort: "high",
+    });
+    for (const id of [a, b]) {
+      await controller.handle({ type: "send", sessionId: id, text: "hello" });
+      await until(() => idle(id));
+    }
+    expect(seen).toEqual([
+      { model: "claude-sonnet-5-5", effort: "low" },
+      { model: "claude-opus-5-5", effort: "high" },
+    ]);
+    const { controller: again } = build();
+    await again.init();
+    await again.handle({ type: "ready" });
+    expect(sessionOf(a)).toMatchObject({
+      model: "claude-sonnet-5-5",
+      effort: "low",
+    });
+  });
+  it("applies the change from the next round, not to the call in flight", async () => {
+    const { controller, seen } = build();
+    await controller.init();
+    const id = await newId(controller);
+    await controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "read a.txt",
+    });
+    await until(() => events.some((e) => e.type === "permission_request"));
+    // 1周目(ツール呼び出しの権限待ち)の最中に切り替える
+    await controller.handle({
+      type: "set_model",
+      sessionId: id,
+      model: "haiku",
+    });
+    expect(seen).toHaveLength(1);
+    const req = events.find((e) => e.type === "permission_request") as Extract<
+      UiEvent,
+      { type: "permission_request" }
+    >;
+    await controller.handle({
+      type: "permission_response",
+      sessionId: id,
+      requestId: req.requestId,
+      decision: "allow",
+    });
+    await until(() => idle(id));
+    expect(seen.map((s) => s.model)).toEqual([
+      "claude-opus-5-5",
+      "claude-haiku-4-5-20251001",
+    ]);
+    // 実行中の set_model が、終了時の保存で巻き戻されない
+    expect(sessionOf(id).model).toBe("claude-haiku-4-5-20251001");
+  });
+  it("rejects unknown sessions, unknown models and bad efforts", async () => {
+    const { controller } = build();
+    await controller.init();
+    const id = await newId(controller);
+    expect(
+      await controller.handle({
+        type: "set_model",
+        sessionId: "nope",
+        model: "opus",
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await controller.handle({
+        type: "set_model",
+        sessionId: id,
+        model: "gpt-x",
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await controller.handle({
+        type: "set_model",
+        sessionId: id,
+        model: "codex:sol",
+      }),
+    ).toMatchObject({ ok: false });
+    expect(
+      await controller.handle({
+        type: "set_model",
+        sessionId: id,
+        model: "opus",
+        effort: "turbo" as never,
+      }),
+    ).toMatchObject({ ok: false });
+    expect(sessionOf(id).model).toBe("claude-opus-5-5");
+  });
+  it("fills in the default for sessions saved before models were stored", async () => {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(join(home, "sessions"), { recursive: true });
+    await writeFile(
+      join(home, "sessions", "index.json"),
+      JSON.stringify([
+        {
+          id: "old",
+          title: "old",
+          workspaceId: null,
+          cwd: workspace,
+          readOnly: false,
+          createdAt: 1,
+          updatedAt: 1,
+          providers: [],
+        },
+      ]),
+    );
+    const { controller } = build({ model: "claude-sonnet-5-5" });
+    await controller.init();
+    await controller.handle({ type: "ready" });
+    expect(sessionOf("old")).toMatchObject({
+      model: "claude-sonnet-5-5",
+      effort: "high",
+    });
+  });
+  it("reports startup warnings once, in the first new session", async () => {
+    const { controller } = build({
+      warnings: ["config.yaml の main.effort が不正です"],
+    });
+    await controller.init();
+    await newId(controller);
+    await newId(controller);
+    expect(events.filter((e) => e.type === "error")).toHaveLength(1);
+  });
+});
+
+describe("working directory is checked when a session starts or resumes (§18.4)", () => {
+  async function sessionInRemovableWorkspace() {
+    const { rm } = await import("node:fs/promises");
+    const gone = await mkdtemp(join(tmpdir(), "xh-gone-"));
+    const { controller, seen } = build();
+    await controller.init();
+    const picked = (await controller.handle({ type: "pick_folder" })) as {
+      workspaceId: string;
+    };
+    // pick_folder は共通の workspace を返すので、消せる別フォルダを登録し直す
+    const c2 = new SessionController({
+      provider: new MultiModel({
+        onRequest: (r) => seen.push({ model: r.model }),
+      }),
+      model: "claude-opus-5-5",
+      home,
+      fake: true,
+      version: "1",
+      host: { pickFolder: async () => gone },
+      emit: (e) => events.push(e),
+      createTools: () => new Map([["Read", readTool]]),
+    });
+    await c2.init();
+    const ws = (await c2.handle({ type: "pick_folder" })) as {
+      workspaceId: string;
+    };
+    const id = await newId(c2, ws.workspaceId);
+    void picked;
+    return {
+      c2,
+      id,
+      seen,
+      gone,
+      remove: () => rm(gone, { recursive: true, force: true }),
+    };
+  }
+  it("does not call the model or run tools when the folder is gone, and says so", async () => {
+    const { c2, id, seen, gone, remove } = await sessionInRemovableWorkspace();
+    await remove();
+    events.length = 0;
+    const result = await c2.handle({
+      type: "send",
+      sessionId: id,
+      text: "read a.txt",
+    });
+    expect(result).toMatchObject({ ok: false });
+    expect(seen).toHaveLength(0);
+    const err = events.find((e) => e.type === "error") as Extract<
+      UiEvent,
+      { type: "error" }
+    >;
+    expect(err.sessionId).toBe(id);
+    expect(err.message).toContain("作業フォルダが見つかりません");
+    expect(err.message).toContain(gone);
+    expect(events.some((e) => e.type === "turn")).toBe(false);
+    await c2.handle({ type: "ready" });
+    expect(sessionOf(id).status).toBe("idle");
+  });
+  it("warns when a session is reopened after its folder was removed, but still shows the history", async () => {
+    const { c2, id, remove } = await sessionInRemovableWorkspace();
+    await c2.handle({ type: "send", sessionId: id, text: "hello" });
+    await until(() => idle(id));
+    await remove();
+    events.length = 0;
+    await c2.handle({ type: "open_session", sessionId: id });
+    expect(events.find((e) => e.type === "transcript")).toBeTruthy();
+    expect(JSON.stringify(events.filter((e) => e.type === "error"))).toContain(
+      "作業フォルダが見つかりません",
+    );
+  });
+  it("refuses to start a session in a workspace whose folder is gone", async () => {
+    const { c2, id, remove } = await sessionInRemovableWorkspace();
+    const wsId = lastState().state.sessions.find(
+      (s) => s.id === id,
+    )!.workspaceId!;
+    await remove();
+    const before = lastState().state.sessions.length;
+    events.length = 0;
+    expect(
+      await c2.handle({ type: "new_session", workspaceId: wsId }),
+    ).toMatchObject({ ok: false });
+    expect(JSON.stringify(events)).toContain("作業フォルダが見つかりません");
+    await c2.handle({ type: "ready" });
+    expect(lastState().state.sessions.length).toBe(before);
+  });
+  it("treats a path that is a file, not a folder, as missing", async () => {
+    const { c2, id, gone, remove } = await sessionInRemovableWorkspace();
+    await remove();
+    await writeFile(gone, "not a folder");
+    events.length = 0;
+    expect(
+      await c2.handle({ type: "send", sessionId: id, text: "hi" }),
+    ).toMatchObject({ ok: false });
+    await (await import("node:fs/promises")).rm(gone, { force: true });
+  });
+});
+
+describe("pending permissions are denied when a session closes or the app quits", () => {
+  const permissionRequest = () =>
+    events.find((e) => e.type === "permission_request") as
+      Extract<UiEvent, { type: "permission_request" }> | undefined;
+  async function waiting() {
+    const { controller } = build();
+    await controller.init();
+    const id = await newId(controller);
+    await controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "read a.txt",
+    });
+    await until(() => !!permissionRequest());
+    return { controller, id };
+  }
+  it("close_session resolves the pending request as deny and ends the turn", async () => {
+    const { controller, id } = await waiting();
+    await controller.handle({ type: "close_session", sessionId: id });
+    await until(() => idle(id));
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "permission_resolved",
+        decision: "deny",
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "tool_result", isError: true }),
+    );
+    expect(lastState().state.currentSessionId).toBeNull();
+    // 履歴は残り、一覧から消えない。閉じたあとも再開できる
+    expect(sessionOf(id)).toBeTruthy();
+    await controller.handle({ type: "open_session", sessionId: id });
+    expect(lastState().state.currentSessionId).toBe(id);
+  });
+  it("shutdown denies every waiting session, finishes the turns, and saves history", async () => {
+    const { controller, id } = await waiting();
+    const other = await newId(controller);
+    await controller.handle({
+      type: "send",
+      sessionId: other,
+      text: "read b.txt",
+    });
+    await until(
+      () => events.filter((e) => e.type === "permission_request").length === 2,
+    );
+    await controller.shutdown();
+    expect(
+      events.filter(
+        (e) => e.type === "permission_resolved" && e.decision === "deny",
+      ),
+    ).toHaveLength(2);
+    expect(idle(id)).toBe(true);
+    expect(idle(other)).toBe(true);
+    const stored = await readFile(
+      join(home, "sessions", `${id}.jsonl`),
+      "utf8",
+    );
+    // tool_use には対応する tool_result が必ず付いて保存される(次の呼び出しでエラーにならない)
+    expect(stored).toContain("tool_result");
+  });
+  it("shutdown refuses new work afterwards and is safe with nothing running", async () => {
+    const { controller } = build();
+    await controller.init();
+    const id = await newId(controller);
+    await controller.shutdown();
+    expect(
+      await controller.handle({ type: "send", sessionId: id, text: "hi" }),
+    ).toMatchObject({ ok: false });
+    await controller.shutdown();
+  });
+  it("closing an idle session just forgets the runtime", async () => {
+    const { controller } = build();
+    await controller.init();
+    const id = await newId(controller);
+    expect(
+      await controller.handle({ type: "close_session", sessionId: id }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await controller.handle({ type: "close_session", sessionId: "nope" }),
+    ).toMatchObject({ ok: false });
   });
 });

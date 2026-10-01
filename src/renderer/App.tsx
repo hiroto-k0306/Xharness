@@ -10,6 +10,13 @@ import { providerOf } from "./state/steps.js";
 import { useStore } from "./state/store.js";
 import styles from "./App.module.css";
 
+/** effort は Haiku には送らないので表示もしない(§7.1) */
+function modelLabel(model: string, effort: string): string {
+  return model === "fake" || /^claude-haiku/.test(model)
+    ? model
+    : `${model} · ${effort}`;
+}
+
 export function App() {
   const s = useStore();
   const { app, views, prefs } = s;
@@ -28,6 +35,9 @@ export function App() {
       if (mod && key === "n") {
         e.preventDefault();
         void s.newSession(session?.workspaceId ?? null, session?.readOnly);
+      } else if (mod && key === "w" && current) {
+        e.preventDefault();
+        s.closeSession(current);
       } else if (mod && key === "b") {
         e.preventDefault();
         s.setPrefs({ sidebarOpen: !prefs.sidebarOpen });
@@ -42,7 +52,8 @@ export function App() {
   });
 
   if (!app) return <div className={styles.boot}># starting…</div>;
-  const model = app.model;
+  const model = session?.model ?? app.model;
+  const effort = session?.effort ?? app.effort;
   return (
     <div className={styles.win}>
       <TitleBar
@@ -102,7 +113,7 @@ export function App() {
             cwdLabel={workspace?.name ?? (session ? "scratch" : "~")}
             running={!!view?.running}
             blocked={waiting}
-            modelLabel={model}
+            modelLabel={modelLabel(model, effort)}
             modelColor={
               providerOf(model) === "codex" ? "var(--codex)" : "var(--claude)"
             }

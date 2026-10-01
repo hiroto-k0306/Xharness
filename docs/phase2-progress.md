@@ -31,3 +31,10 @@
 - フォントは `resources/fonts/` ではなく `@fontsource/*` の woff2 をバンドルへ取り込む(同梱・オフライン動作は同じ)。
 - `+ new session` は、今のセッションと同じワークスペースで新規セッションを作る。別のワークスペース・「ワークスペースなし」は WorkspacePicker(Ctrl+O)で選ぶ。
 - `--fake` のデータは `~/.xharness-fake/` に保存し、`~/.xharness/` を汚さない。
+
+## レビュー指摘への対応
+
+- **既定モデル**: `src/main/config/config.ts`。`--model`(`--effort`)> `<home>/config.yaml` の `main.model` / `main.effort`(`provider:alias`・別名・モデル ID)> `claude:opus` / `high`。不正な値は警告つきで既定へ戻し、`--model` / `--effort` が解決できないときは起動時にエラーダイアログで止める。Codex は Phase 3 までは既定に戻す。`--fake` は設定ファイルを読まない。プロジェクトの `.xharness/config.yaml` とのマージは Phase 4。以前の開発用既定(Haiku)は変わるので、確認時は `--model haiku` を付ける。
+- **セッションごとのモデル**: モデルと effort を `index.json` の各セッションに保存し、`set_model`(`sessionId` 必須)はそのセッションだけに効く。Agent Loop に `current()` を足し、各周の STEP 1 で最新のモデルを読むため、実行中の呼び出しは中断せず次の周から反映される。実行中の `set_model` がターン終了時の保存で巻き戻らないようにした。旧い索引はメモリ上で既定値を補う。
+- **cwd の確認**(§18.4): 送信・再開・新規作成の各時点で、作業フォルダが存在するフォルダかを確認する。無いときはモデルもツールも動かさず、画面に通知する(再開時は履歴は表示し、通知だけ出す)。
+- **権限待ちの解放**: `close_session`(Ctrl+W)とアプリ終了(`before-quit` → `SessionController.shutdown()`)で、待ちを deny で解決してターンを中断し、履歴の保存まで待つ(最大3秒)。tool_use には必ず tool_result が付いて保存される。

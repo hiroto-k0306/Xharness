@@ -123,6 +123,14 @@ export class SessionStore {
   async load() {
     this.sessions = await readJson(this.index, []);
   }
+  /** 旧い索引にはモデルが無い。メモリ上だけ既定値で補う(次の保存で書かれる)。 */
+  fillDefaults(defaults: { model: string; effort: StoredSession["effort"] }) {
+    for (const s of this.sessions) {
+      const m = s as Partial<StoredSession>;
+      m.model ??= defaults.model;
+      m.effort ??= defaults.effort;
+    }
+  }
   list(): StoredSession[] {
     return [...this.sessions];
   }

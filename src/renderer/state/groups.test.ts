@@ -22,6 +22,8 @@ const se = (
   workspaceId,
   cwd: "/",
   readOnly: false,
+  model: "fake",
+  effort: "high",
   createdAt: 0,
   updatedAt: 0,
   status: "idle",

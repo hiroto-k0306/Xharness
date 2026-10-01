@@ -31,6 +31,15 @@ export interface Receipt {
   summary: string;
 }
 
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+export const EFFORT_VALUES: readonly Effort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
 export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
@@ -40,6 +49,9 @@ export interface SessionSummary {
   workspaceId: string | null;
   cwd: string;
   readOnly: boolean;
+  /** セッションごとのモデルと effort(§16.8)。set_model はこのセッションだけに効く */
+  model: string;
+  effort: Effort;
   createdAt: number;
   updatedAt: number;
   status: SessionStatus;
@@ -60,7 +72,9 @@ export interface AppState {
   sessions: SessionSummary[];
   workspaces: WorkspaceSummary[];
   currentSessionId: string | null;
+  /** 新しいセッションの既定(--model > 設定ファイル > claude:opus / high) */
   model: string;
+  effort: Effort;
   /** --fake で起動した(通信しない) */
   fake: boolean;
   version: string;
@@ -156,7 +170,8 @@ export type HarnessCommand =
       requestId: string;
       decision: PermissionDecision;
     }
-  | { type: "set_model"; model: string }
+  | { type: "set_model"; sessionId: string; model: string; effort?: Effort }
+  | { type: "close_session"; sessionId: string }
   | { type: "new_session"; workspaceId: string | null; readOnly?: boolean }
   | { type: "open_session"; sessionId: string }
   | { type: "pick_folder" }
@@ -206,8 +221,19 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
           }
         : undefined;
     case "set_model":
-      return str(c.model, 100)
-        ? { type: "set_model", model: c.model }
+      return str(c.sessionId) &&
+        str(c.model, 100) &&
+        (c.effort === undefined || EFFORT_VALUES.includes(c.effort as Effort))
+        ? {
+            type: "set_model",
+            sessionId: c.sessionId,
+            model: c.model,
+            effort: c.effort as Effort | undefined,
+          }
+        : undefined;
+    case "close_session":
+      return str(c.sessionId)
+        ? { type: "close_session", sessionId: c.sessionId }
         : undefined;
     case "new_session":
       return c.workspaceId === null || str(c.workspaceId)

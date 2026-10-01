@@ -7,6 +7,7 @@ const app = (over: Partial<AppState> = {}): AppState => ({
   workspaces: [],
   currentSessionId: "s1",
   model: "fake",
+  effort: "high",
   fake: true,
   version: "0",
   ...over,

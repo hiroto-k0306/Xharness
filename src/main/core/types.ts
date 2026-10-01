@@ -24,7 +24,18 @@ export interface Usage {
 export interface Message {
   role: Role;
   content: ContentBlock[];
-  meta?: { provider?: ProviderId; model?: string; usage?: Usage };
+  meta?: {
+    provider?: ProviderId;
+    model?: string;
+    usage?: Usage;
+    sources?: WebSource[];
+    webSearch?: { calls: number };
+  };
+}
+
+export interface WebSource {
+  title: string;
+  url: string;
 }
 
 export interface ToolSpec {

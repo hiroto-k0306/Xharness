@@ -7,6 +7,8 @@ import {
   type StepNumber,
   type TranscriptItem,
   type UiEvent,
+  type Receipt,
+  type PermissionDecision,
 } from "../../shared/ipc.js";
 
 export interface PendingPermission {
@@ -16,12 +18,24 @@ export interface PendingPermission {
   summary: string;
 }
 export interface SessionView {
+  stepCount?: number;
+  receipts?: Receipt[];
   items: TranscriptItem[];
   running: boolean;
-  step?: { step: StepNumber; node: StepNode; round: number };
+  step?: {
+    step: StepNumber;
+    node: StepNode;
+    round: number;
+    index?: number;
+    total?: number;
+  };
   pending?: PendingPermission;
 }
 export interface EventState {
+  repositoryProgress?: string;
+  usage?: Partial<
+    Record<"claude" | "codex", Extract<UiEvent, { type: "usage" }>>
+  >;
   app: AppState | null;
   views: Record<string, SessionView>;
 }
@@ -45,6 +59,20 @@ export const notice = (
 /** main から届くイベントを反映するだけの純関数(レンダラは状態を持たない: §16.4) */
 export function applyEvent(s: EventState, e: UiEvent): EventState {
   switch (e.type) {
+    case "repository_progress":
+      return { ...s, repositoryProgress: e.message };
+    case "receipt_history":
+      return put(s, e.sessionId, {
+        ...view(s, e.sessionId),
+        receipts: e.receipts,
+      });
+    case "receipt":
+      return put(s, e.receipt.sessionId, {
+        ...view(s, e.receipt.sessionId),
+        receipts: [...(view(s, e.receipt.sessionId).receipts ?? []), e.receipt],
+      });
+    case "usage":
+      return { ...s, usage: { ...s.usage, [e.provider]: e } };
     case "state":
       return { ...s, app: e.state };
     case "transcript":
@@ -75,9 +103,19 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
           : next,
       );
     }
+    case "tool_progress": {
+      const v = view(s, e.sessionId);
+      return put(s, e.sessionId, {
+        ...v,
+        step: v.step
+          ? { ...v.step, index: e.index, total: e.total }
+          : undefined,
+      });
+    }
     case "step":
       return put(s, e.sessionId, {
         ...view(s, e.sessionId),
+        stepCount: e.round,
         step: { step: e.step, node: e.node, round: e.round },
       });
     case "text_delta": {
@@ -146,21 +184,29 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
             : v.items,
       });
     }
+    case "notice":
     case "error": {
       const id = e.sessionId ?? s.app?.currentSessionId;
       return id
-        ? put(s, id, withItem(view(s, id), notice("err", e.message)))
+        ? put(
+            s,
+            id,
+            withItem(
+              view(s, id),
+              notice(e.type === "notice" ? e.tone : "err", e.message),
+            ),
+          )
         : s;
     }
     // Phase 2 では表示しない(Receipts / UsagePopover / AgentsPanel は Phase 4-5)
-    case "receipt":
-    case "usage":
     case "agent":
       return s;
   }
 }
 
 export interface Prefs {
+  sidebarWidth?: number;
+  heroOpen: boolean;
   sidebarOpen: boolean;
   collapsed: Record<string, boolean>;
   sort: "recent" | "name";
@@ -170,6 +216,7 @@ export interface Prefs {
 const PREFS_KEY = "xharness.prefs";
 function loadPrefs(): Prefs {
   const base: Prefs = {
+    heroOpen: true,
     sidebarOpen: true,
     collapsed: {},
     sort: "recent",
@@ -182,7 +229,12 @@ function loadPrefs(): Prefs {
     ) as Partial<Prefs>;
     return {
       ...base,
+      heroOpen: saved.heroOpen ?? true,
       sidebarOpen: saved.sidebarOpen ?? base.sidebarOpen,
+      sidebarWidth:
+        typeof saved.sidebarWidth === "number"
+          ? Math.max(200, Math.min(400, saved.sidebarWidth))
+          : 252,
       collapsed: saved.collapsed ?? base.collapsed,
       sort: saved.sort === "name" ? "name" : "recent",
     };
@@ -197,6 +249,8 @@ function savePrefs(p: Prefs) {
       PREFS_KEY,
       JSON.stringify({
         sidebarOpen: p.sidebarOpen,
+        sidebarWidth: p.sidebarWidth,
+        heroOpen: p.heroOpen,
         collapsed: p.collapsed,
         sort: p.sort,
       }),
@@ -215,8 +269,14 @@ interface UiStore extends EventState {
   /** 受け付けられたら true。断られたら false(入力欄は文を戻す) */
   send(text: string): Promise<boolean>;
   abort(): void;
-  respond(decision: "allow" | "always" | "deny"): void;
-  newSession(workspaceId: string | null, readOnly?: boolean): Promise<void>;
+  respond(decision: PermissionDecision): void;
+  newSession(
+    workspaceId: string | null,
+    readOnly?: boolean,
+    isolated?: boolean,
+    baseBranch?: string,
+    newBranch?: string,
+  ): Promise<void>;
   openSession(id: string): void;
   closeSession(id: string): void;
   pickFolder(): Promise<string | undefined>;
@@ -286,11 +346,14 @@ export const useStore = create<UiStore>()((set, get) => ({
         decision,
       });
   },
-  async newSession(workspaceId, readOnly) {
+  async newSession(workspaceId, readOnly, isolated, baseBranch, newBranch) {
     const result = await window.harness.command({
       type: "new_session",
       workspaceId,
       readOnly,
+      isolated,
+      baseBranch,
+      newBranch,
     });
     if (!result.ok && !REPORTED_ERRORS.includes(result.error))
       get().apply({ type: "error", message: result.error });

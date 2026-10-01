@@ -1,7 +1,9 @@
 import { Logo } from "./Logo.js";
+import { type ReactNode } from "react";
 import styles from "./TitleBar.module.css";
 
 export interface TitleBarProps {
+  usage?: ReactNode;
   workspaceName?: string;
   branch?: string;
   pickerOpen: boolean;
@@ -33,6 +35,7 @@ export function TitleBar(props: TitleBarProps) {
         <span className={styles.caret}>▾</span>
       </button>
       <div className={styles.spacer} />
+      {props.usage}
       {props.fake && (
         <span className={styles.fake} title="--fake: 通信しません">
           FAKE

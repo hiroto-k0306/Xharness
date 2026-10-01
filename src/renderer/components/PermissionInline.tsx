@@ -3,6 +3,7 @@ import { type PermissionDecision } from "../../shared/ipc.js";
 import styles from "./PermissionInline.module.css";
 
 export interface PermissionInlineProps {
+  persistent?: boolean;
   tool: string;
   summary: string;
   onRespond(decision: PermissionDecision): void;
@@ -13,6 +14,7 @@ export function PermissionInline({
   tool,
   summary,
   onRespond,
+  persistent,
 }: PermissionInlineProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -48,8 +50,9 @@ export function PermissionInline({
           <kbd>y</kbd>allow
         </button>
         <button type="button" onClick={() => onRespond("always")}>
-          <kbd>a</kbd>session
+          <kbd>a</kbd>{persistent ? "always" : "session"}
         </button>
+        {persistent && <button type="button" onClick={() => onRespond("session")}>session</button>}
         <button type="button" onClick={() => onRespond("deny")}>
           <kbd>n</kbd>deny
         </button>

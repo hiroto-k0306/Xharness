@@ -1,0 +1,174 @@
+{
+  "status": 200,
+  "requestHeaders": {
+    "anthropic-beta": "oauth-2025-04-20",
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json"
+  },
+  "responseHeaders": {
+    "all": {
+      "anthropic-ratelimit-unified-5h-reset": "1790830800",
+      "anthropic-ratelimit-unified-5h-status": "allowed",
+      "anthropic-ratelimit-unified-5h-utilization": "0.3",
+      "anthropic-ratelimit-unified-7d-reset": "1791115200",
+      "anthropic-ratelimit-unified-7d-status": "allowed_warning",
+      "anthropic-ratelimit-unified-7d-surpassed-threshold": "0.75",
+      "anthropic-ratelimit-unified-7d-utilization": "0.82",
+      "anthropic-ratelimit-unified-fallback-percentage": "0.5",
+      "anthropic-ratelimit-unified-overage-disabled-reason": "org_level_disabled",
+      "anthropic-ratelimit-unified-overage-status": "rejected",
+      "anthropic-ratelimit-unified-representative-claim": "seven_day",
+      "anthropic-ratelimit-unified-reset": "1791115200",
+      "anthropic-ratelimit-unified-status": "allowed_warning",
+      "anthropic-ratelimit-unified-upgrade-paths": "upgrade_plan",
+      "cache-control": "no-cache",
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "a4385ee7fe25264d-NRT",
+      "connection": "keep-alive",
+      "content-encoding": "gzip",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+      "content-type": "text/event-stream; charset=utf-8",
+      "date": "Thu, 01 Oct 2026 03:27:18 GMT",
+      "request-id": "req_011Cfaogye7QRa2eYEEijJzH",
+      "server": "cloudflare",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "traceresponse": "00-c7fcba2300cbed8b7068833d71069bb6-75058e008d6cf5d3-01",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-robots-tag": "none"
+    },
+    "usage": {
+      "anthropic-ratelimit-unified-5h-reset": "1790830800",
+      "anthropic-ratelimit-unified-5h-status": "allowed",
+      "anthropic-ratelimit-unified-5h-utilization": "0.3",
+      "anthropic-ratelimit-unified-7d-reset": "1791115200",
+      "anthropic-ratelimit-unified-7d-status": "allowed_warning",
+      "anthropic-ratelimit-unified-7d-surpassed-threshold": "0.75",
+      "anthropic-ratelimit-unified-7d-utilization": "0.82",
+      "anthropic-ratelimit-unified-fallback-percentage": "0.5",
+      "anthropic-ratelimit-unified-overage-disabled-reason": "org_level_disabled",
+      "anthropic-ratelimit-unified-overage-status": "rejected",
+      "anthropic-ratelimit-unified-representative-claim": "seven_day",
+      "anthropic-ratelimit-unified-reset": "1791115200",
+      "anthropic-ratelimit-unified-status": "allowed_warning",
+      "anthropic-ratelimit-unified-upgrade-paths": "upgrade_plan"
+    }
+  },
+  "events": [
+    [
+      {
+        "event": "message_start",
+        "data": "{\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011Cfao2Q8vgfvKDUJX41JLu\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":569,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":22,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}}"
+      },
+      {
+        "event": "content_block_start",
+        "data": "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_011R6vow3RQV49NFdwEhpmjF\",\"name\":\"get_time\",\"input\":{},\"caller\":{\"type\":\"direct\"}}}"
+      },
+      {
+        "event": "ping",
+        "data": "{\"type\":\"ping\"}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"timez\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"one\\\": \\\"\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"Tokyo\\\"}\"}}"
+      },
+      {
+        "event": "content_block_stop",
+        "data": "{\"type\":\"content_block_stop\",\"index\":0}"
+      },
+      {
+        "event": "message_delta",
+        "data": "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":569,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":54}}"
+      },
+      {
+        "event": "message_stop",
+        "data": "{\"type\":\"message_stop\"}"
+      }
+    ],
+    [
+      {
+        "event": "message_start",
+        "data": "{\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_011Cfaogzee6ubFTyC12ymop\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":677,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":4,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"},\"diagnostics\":null}}"
+      },
+      {
+        "event": "content_block_start",
+        "data": "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"
+      },
+      {
+        "event": "ping",
+        "data": "{\"type\":\"ping\"}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The current time in\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" Tokyo is **12\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\":27:16\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"**\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" (\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"12\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\":27 PM\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\")\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" on October 1\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\", 2026\"}}"
+      },
+      {
+        "event": "content_block_delta",
+        "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\".\"}}"
+      },
+      {
+        "event": "content_block_stop",
+        "data": "{\"type\":\"content_block_stop\",\"index\":0}"
+      },
+      {
+        "event": "message_delta",
+        "data": "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":677,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":32}}"
+      },
+      {
+        "event": "message_stop",
+        "data": "{\"type\":\"message_stop\"}"
+      }
+    ]
+  ],
+  "body": {
+    "firstStatus": 200
+  }
+}

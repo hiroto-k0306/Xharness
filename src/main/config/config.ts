@@ -152,9 +152,11 @@ export async function resolveStartup(opts: {
   return { choice, aliases: cfg.aliases, warnings };
 }
 
-/** `--fake` / `--model <spec>` / `--effort <level>`(`--model=spec` も可)を取り出す。 */
+/** `--fake` / `--devtools` / `--model <spec>` / `--effort <level>`(`--model=spec` も可)を取り出す。 */
 export function parseStartupArgs(argv: readonly string[]): {
   fake: boolean;
+  /** パッケージ版でも Ctrl+Shift+I で DevTools を開けるようにする(診断用) */
+  devtools: boolean;
   model?: string;
   effort?: string;
 } {
@@ -168,6 +170,7 @@ export function parseStartupArgs(argv: readonly string[]): {
   };
   return {
     fake: argv.includes("--fake"),
+    devtools: argv.includes("--devtools"),
     model: value("--model"),
     effort: value("--effort"),
   };

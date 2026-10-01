@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
+  devToolsAllowed,
   isDevToolsShortcut,
   isExternalHttps,
   secureWebPreferences,
@@ -24,6 +25,11 @@ describe("renderer security settings (DESIGN §14)", () => {
       { key: "n" },
     ])
       expect(isDevToolsShortcut({ ...input, ...changed })).toBe(false);
+  });
+  it("allows DevTools in development, and in the packaged app only with --devtools", () => {
+    expect(devToolsAllowed(false, false)).toBe(true);
+    expect(devToolsAllowed(true, false)).toBe(false);
+    expect(devToolsAllowed(true, true)).toBe(true);
   });
   it("isolates the renderer: contextIsolation, no node, sandbox", () => {
     expect(secureWebPreferences("/p/preload.cjs")).toMatchObject({

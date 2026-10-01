@@ -9,6 +9,7 @@ import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
 import { createHost, registerIpc, sendEvent } from "./ipc.js";
 import {
+  devToolsAllowed,
   isDevToolsShortcut,
   isExternalHttps,
   secureWebPreferences,
@@ -41,7 +42,10 @@ function createWindow() {
   window.on("closed", () => (window = null));
   const wc = window.webContents;
   wc.on("before-input-event", (event, input) => {
-    if (isDevToolsShortcut(input)) {
+    if (
+      isDevToolsShortcut(input) &&
+      devToolsAllowed(app.isPackaged, startup.devtools)
+    ) {
       event.preventDefault();
       wc.toggleDevTools();
     }
@@ -120,6 +124,13 @@ app.on("web-contents-created", (_e, contents) => {
 });
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
+  // 2つ目の起動は終了し、既にあるウィンドウを前面に出す(黙って消えたように見せない)
+  app.on("second-instance", () => {
+    if (!window) return;
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+  });
   void app.whenReady().then(start);
   app.on("window-all-closed", () => app.quit());
   // 終了前に、権限待ちを deny で解決して実行中のターンを中断し、履歴を保存してから抜ける

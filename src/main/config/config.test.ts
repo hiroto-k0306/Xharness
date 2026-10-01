@@ -114,7 +114,11 @@ describe("startup precedence", () => {
     ).rejects.toThrow();
   });
   it("parses --fake / --model / --effort in both spellings", () => {
-    expect(parseStartupArgs(["--fake"])).toEqual({ fake: true });
+    expect(parseStartupArgs(["--fake"])).toEqual({
+      fake: true,
+      devtools: false,
+    });
+    expect(parseStartupArgs(["--devtools"]).devtools).toBe(true);
     expect(parseStartupArgs(["--model", "opus", "--effort=low"])).toMatchObject(
       {
         fake: false,

@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline/promises";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { runTurn } from "./main/core/loop.js";
@@ -14,7 +14,7 @@ import { shellSearchTools } from "./main/tools/shell-search.js";
 export async function headless(args = process.argv.slice(2)) {
   if (args.includes("--help")) {
     process.stdout.write(
-      "XHarness Phase 1\nnode dist/headless.js [--model claude-haiku-4-5] [--cwd path] [--fake]\n/exit /clear · Ctrl+C interrupts a turn · Every tool requires y approval\n",
+      "XHarness Phase 1\nnode dist/headless.js [--model claude-haiku-4-5] [--cwd path] [--fake [--fixtures dir]]\n/exit /clear · Ctrl+C interrupts a turn · Every tool requires y approval\n",
     );
     return;
   }
@@ -96,7 +96,19 @@ export async function headless(args = process.argv.slice(2)) {
       });
       const result = await runTurn(
         {
-          provider: fake ? new FakeProvider() : new ClaudeAdapter(),
+          provider: fake
+            ? new FakeProvider({
+                // 実行場所に依らず、スクリプト(src/ または dist/)から見た fixtures を使う
+                fixturesDir: resolve(
+                  option(
+                    "--fixtures",
+                    fileURLToPath(
+                      new URL("../test/fixtures/claude", import.meta.url),
+                    ),
+                  ),
+                ),
+              })
+            : new ClaudeAdapter(),
           model,
           system,
           messages,

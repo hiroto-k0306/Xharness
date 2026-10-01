@@ -39,3 +39,11 @@ export function isDevToolsShortcut(input: {
     input.key.toLowerCase() === "i"
   );
 }
+
+/**
+ * DevTools を開いてよいか。開発起動では常に可、パッケージ版は `--devtools` を付けたときだけ。
+ * (画面側は sandbox のままなので権限は上がらないが、普段の配布物では開けないようにする)
+ */
+export function devToolsAllowed(packaged: boolean, flag: boolean): boolean {
+  return !packaged || flag;
+}

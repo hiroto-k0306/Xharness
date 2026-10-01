@@ -108,6 +108,10 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
           ctx.messages,
           ctx.route,
           signal,
+          {
+            system: options.system,
+            tools: [...options.tools.values()].map((t) => t.spec),
+          },
         );
         if (prepared?.stop) return { kind: "stop", reason: prepared.stop };
         ctx.contextView = prepared?.messages;

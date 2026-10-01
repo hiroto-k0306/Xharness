@@ -83,6 +83,7 @@ async function runHook(
         request: ctx.request,
         completion: ctx.completion,
         stopCause: ctx.stopCause,
+        calls: ctx.pending.map((p) => p.call),
       }),
       signal,
     );

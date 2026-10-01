@@ -1,0 +1,9 @@
+node_modules/
+dist/
+out/
+.env*
+spike/.out/
+*.credentials.json
+auth.json
+.tools/
+coverage/

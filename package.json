@@ -1,0 +1,40 @@
+{
+  "name": "xharness",
+  "version": "0.0.0",
+  "private": true,
+  "description": "XHarness Phase 0 OAuth connectivity verification",
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "test": "vitest run --exclude=spike/.out/** --exclude=.tools/**",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "spike:claude:creds": "tsx spike/claude/c1-creds.ts",
+    "spike:claude:text": "tsx spike/claude/c2-text.ts",
+    "spike:claude:tool": "tsx spike/claude/c3-tool.ts",
+    "spike:claude:usage": "tsx spike/claude/c4-usage.ts",
+    "spike:claude:abort": "tsx spike/claude/r2-abort.ts",
+    "spike:codex:creds": "tsx spike/codex/x1-creds.ts",
+    "spike:codex:text": "tsx spike/codex/x2-text.ts",
+    "spike:codex:tool": "tsx spike/codex/x3-tool.ts",
+    "spike:codex:effort": "tsx spike/codex/x4-effort.ts",
+    "spike:codex:models": "tsx spike/codex/x5-models.ts",
+    "spike:codex:usage": "tsx spike/codex/x6-usage.ts",
+    "spike:codex:abort": "tsx spike/codex/r2-abort.ts",
+    "spike:codex:encrypted-replay": "tsx spike/codex/x3-encrypted-replay.ts",
+    "spike:cli:refresh": "tsx spike/cli-refresh.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "eslint": "^10.11.0",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.0",
+    "vitest": "^5.0.3"
+  },
+  "packageManager": "pnpm@10.34.6"
+}

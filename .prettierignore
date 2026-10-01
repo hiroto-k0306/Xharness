@@ -1,0 +1,11 @@
+node_modules/
+.tools/
+spike/.out/
+pnpm-lock.yaml
+brand/
+mockup/
+catalog/
+DESIGN.md
+AGENTS.md
+docs/phase0-runbook.md
+docs/phase0-findings.md

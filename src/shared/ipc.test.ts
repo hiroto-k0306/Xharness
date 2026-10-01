@@ -1,0 +1,63 @@
+import { describe, expect, it } from "vitest";
+import { COMMAND_CHANNEL, EVENT_CHANNEL, parseCommand } from "./ipc.js";
+
+describe("IPC contract", () => {
+  it("uses exactly the two channels from DESIGN §16.4", () => {
+    expect([EVENT_CHANNEL, COMMAND_CHANNEL]).toEqual([
+      "harness:event",
+      "harness:command",
+    ]);
+  });
+  it("accepts well-formed commands", () => {
+    expect(parseCommand({ type: "ready" })).toEqual({ type: "ready" });
+    expect(parseCommand({ type: "send", sessionId: "s1", text: "hi" })).toEqual(
+      {
+        type: "send",
+        sessionId: "s1",
+        text: "hi",
+      },
+    );
+    expect(
+      parseCommand({
+        type: "permission_response",
+        sessionId: "s1",
+        requestId: "r1",
+        decision: "always",
+      }),
+    ).toMatchObject({ decision: "always" });
+    expect(parseCommand({ type: "new_session", workspaceId: null })).toEqual({
+      type: "new_session",
+      workspaceId: null,
+      readOnly: false,
+    });
+  });
+  it("rejects malformed or unknown input from the renderer", () => {
+    for (const bad of [
+      undefined,
+      null,
+      "ready",
+      {},
+      { type: "exec", command: "calc" },
+      { type: "send", sessionId: "s", text: "" },
+      { type: "send", sessionId: "s", text: "x".repeat(200_001) },
+      { type: "send", sessionId: 1, text: "x" },
+      {
+        type: "permission_response",
+        sessionId: "s",
+        requestId: "r",
+        decision: "maybe",
+      },
+      { type: "new_session", workspaceId: 5 },
+      { type: "set_model", model: "" },
+    ])
+      expect(parseCommand(bad)).toBeUndefined();
+  });
+  it("drops extra fields so nothing unvalidated reaches main", () => {
+    const parsed = parseCommand({
+      type: "open_session",
+      sessionId: "s1",
+      path: "C:\\secret",
+    });
+    expect(parsed).toEqual({ type: "open_session", sessionId: "s1" });
+  });
+});

@@ -47,7 +47,7 @@ models:
     alias: sonnet
     displayName: Sonnet 5.5
     enabled: true
-    verified: false
+    verified: true  # Phase 1 Adapter: HTTP 200 / end_turn。effort の範囲は未確認
     roles: [worker, reviewer, explorer]
     strengths:
       - 範囲がはっきりした中規模の実装
@@ -150,8 +150,65 @@ models:
     enabled: false
     verified: false
     roles: []
+    contextTokens: 272000  # X5 の設定値
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh }
     retiresAt: 2026-10-14   # ChatGPT / Codex から提供終了 (API には残る)
     notes: "提供終了が近いため割り当て対象にしない"
+
+  # X5 の実カタログで発見。疎通は未確認のため有効化しない。
+  - provider: codex
+    id: gpt-6-sol
+    alias: sol-previous
+    enabled: false
+    verified: false
+    roles: []
+    contextTokens: 272000
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
+
+  - provider: codex
+    id: gpt-reserve
+    alias: reserve
+    enabled: false
+    verified: false
+    roles: []
+    contextTokens: 272000
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
+
+  - provider: codex
+    id: gpt-5.6-sol
+    alias: sol-5.6
+    enabled: false
+    verified: false
+    roles: []
+    contextTokens: 272000
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
+
+  - provider: codex
+    id: gpt-5.6-terra
+    alias: terra
+    enabled: false
+    verified: false
+    roles: []
+    contextTokens: 272000
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
+
+  - provider: codex
+    id: gpt-5.6-luna
+    alias: luna-5.6
+    enabled: false
+    verified: false
+    roles: []
+    contextTokens: 272000
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
+
+  - provider: codex
+    id: codex-auto-review
+    alias: auto-review
+    enabled: false
+    verified: false
+    roles: []
+    contextTokens: 272000
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
 
 # 役割ごとの既定 (設定ファイルの agents / main から参照する)
 defaults:

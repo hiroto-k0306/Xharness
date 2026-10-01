@@ -10,7 +10,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - UI の見本: [mockup/index.html](mockup/index.html)(ブラウザで開くだけで見られる)
 - モデル一覧: [catalog/models.yaml](catalog/models.yaml)
 - ロゴ・アイコン: [brand/](brand/)
-- 状態: **Phase 0 のゲート完了（2026-10-01）、Phase 1 未着手**。確認結果・未実測事項は [docs/phase0-findings.md](docs/phase0-findings.md)、完了条件は [docs/phase0-runbook.md](docs/phase0-runbook.md)
+- 状態: **Phase 0 のゲート完了（2026-10-01）、Phase 1 の headless 最小実装を検証済み**。Phase 1 の実装・確認範囲は [docs/phase1-progress.md](docs/phase1-progress.md)。Phase 0 の確認結果・未実測事項は [docs/phase0-findings.md](docs/phase0-findings.md)
 
 ## 作業の進め方
 

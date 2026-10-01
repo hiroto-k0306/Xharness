@@ -261,7 +261,7 @@ type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "other";
 | エンドポイント | `POST https://api.anthropic.com/v1/messages` (stream: true)。C2 の Haiku で確認済み |
 | 認証ヘッダ | `Authorization: Bearer <accessToken>` で Haiku の C2 成功。`x-api-key` は使っていない |
 | 追加ヘッダ | C2 の成功時は `content-type: application/json`、`anthropic-version: 2023-06-01`、`anthropic-beta: oauth-2025-04-20`。省略試験は未実施で、必要最小集合は未確定 |
-| system 制約 | Haiku の C2 / C3 は system なしで成功。C2 は識別文を第1ブロック、自前プロンプトを第2ブロックに置いた場合も受理。Opus は C2 手順2の識別文のみで HTTP 200 / pong。識別文が必須か、自前指示を追加できるかは Opus では未確認 |
+| system 制約 | 第1ブロックに `You are Claude Code, Anthropic's official CLI for Claude.` を常に置き、自前指示は第2ブロック以降に置く（Phase 1 指示）。Adapter から Haiku / Opus 5.5 / Sonnet 5.5 の識別文 + 自前指示で HTTP 200 / end_turn を確認 |
 | 資格情報 | `~/.claude/.credentials.json` の `claudeAiOauth.{accessToken, refreshToken, expiresAt}`(Windows/Linux。macOSはキーチェーン) |
 | プロンプトキャッシュ | system と tools 末尾、直近メッセージに `cache_control` を付与(枠節約に効く) |
 
@@ -269,6 +269,7 @@ type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "other";
 
 C2 の実測: Haiku は `pong` / `end_turn`。Opus 5.5 は識別文ありで HTTP 200 / `pong` / `end_turn`、system なしは成功後の再確認も含め3回 HTTP 429。成功した識別文ありの構成を採用するが、429の原因は未確定。
 使用量ヘッダとして `anthropic-ratelimit-unified-{5h,7d}-utilization` と `-reset` を確認。
+Phase 1: SSE は Content-Type で判定せず、CRLF を含む行区切りで読む。429 の待ち時間は代表枠の `anthropic-ratelimit-unified-*-reset`（Unix 秒）から算出する。reset 自体が欠ける実レスポンスでは待ち時間を未定義にし、推測して自動再送しない。
 C5 の CLI 起動は Haiku で成功し、起動後の読み直しも HTTP 200。期限前のためトークンは変化せず、実更新・期限切れエラーは未実測。自前 refresh は行わず、公式 CLI に更新を委ねる。
 根拠と試験条件: [docs/phase0-findings.md](docs/phase0-findings.md)。Phase 0 のゲートは完了。
 

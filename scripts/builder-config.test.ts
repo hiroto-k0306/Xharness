@@ -36,6 +36,7 @@ describe("electron-builder.yml (DESIGN §17.2)", () => {
     expect(config.files.filter((f) => !f.startsWith("!"))).toEqual([
       "out/**",
       "package.json",
+      "catalog/models.yaml",
     ]);
     expect(config.publish).toBeNull(); // 自動アップデートは v1 では行わない
   });
@@ -45,15 +46,20 @@ describe("electron-builder.yml (DESIGN §17.2)", () => {
     expect(config.portable.unpackDirName).toBe(true);
   });
   it("ships only the fixtures --fake needs, and they exist", async () => {
-    const [resource] = config.extraResources;
-    expect(resource).toMatchObject({
+    expect(config.extraResources[0]).toMatchObject({
       from: "test/fixtures/claude",
       to: "fixtures",
     });
-    for (const name of resource!.filter)
-      await expect(
-        access(`${resource!.from}/${name}`),
-      ).resolves.toBeUndefined();
-    expect(resource!.filter.join()).not.toMatch(/credential|auth/i);
+    expect(config.extraResources[1]).toMatchObject({
+      from: "test/fixtures/codex",
+      to: "fixtures-codex",
+    });
+    for (const resource of config.extraResources) {
+      for (const name of resource.filter)
+        await expect(
+          access(`${resource.from}/${name}`),
+        ).resolves.toBeUndefined();
+      expect(resource.filter.join()).not.toMatch(/credential|auth/i);
+    }
   });
 });

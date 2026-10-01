@@ -1,4 +1,8 @@
-import { type ContentBlock, type Usage } from "../../core/types.js";
+import {
+  type ContentBlock,
+  type Usage,
+  type WebSource,
+} from "../../core/types.js";
 import { type ProviderEvent, type StopReason } from "../provider.js";
 import { readSse } from "./sse.js";
 import { claudeRateLimit } from "./rate-limit.js";
@@ -40,7 +44,13 @@ export async function* decodeClaudeStream(
   response: Response,
 ): AsyncGenerator<ProviderEvent> {
   const blocks: ContentBlock[] = [];
-  let active: { index: number; block: ContentBlock; json: string } | undefined;
+  type HostedBlock = { type: "hosted_search"; payload: ObjectValue };
+  let active:
+    | { index: number; block: ContentBlock | HostedBlock; json: string }
+    | undefined;
+  let nextIndex = 0;
+  const sources: WebSource[] = [];
+  let searchCalls = 0;
   let started = false;
   let model = "";
   let counts: Usage = { inputTokens: 0, outputTokens: 0 };
@@ -57,11 +67,15 @@ export async function* decodeClaudeStream(
         break;
       }
       case "content_block_start": {
-        if (!started || active || stopReason || data.index !== blocks.length)
+        if (!started || active || stopReason || data.index !== nextIndex)
           throw new Error("Invalid block sequence");
         const native = object(data.content_block);
-        let block: ContentBlock;
+        let block: ContentBlock | HostedBlock;
         switch (native.type) {
+          case "server_tool_use":
+          case "web_search_tool_result":
+            block = { type: "hosted_search", payload: { ...native } };
+            break;
           case "text":
             block = { type: "text", text: string(native.text) };
             break;
@@ -84,7 +98,7 @@ export async function* decodeClaudeStream(
           default:
             throw new Error("Unsupported Claude block");
         }
-        active = { index: blocks.length, block, json: "" };
+        active = { index: nextIndex, block, json: "" };
         break;
       }
       case "content_block_delta": {
@@ -98,7 +112,7 @@ export async function* decodeClaudeStream(
           yield { type: "text_delta", text };
         } else if (
           delta.type === "input_json_delta" &&
-          block.type === "tool_use"
+          (block.type === "tool_use" || block.type === "hosted_search")
         ) {
           active.json += string(delta.partial_json);
         } else if (
@@ -115,6 +129,19 @@ export async function* decodeClaudeStream(
         ) {
           const native = object(block.payload);
           native.signature = string(native.signature) + string(delta.signature);
+        } else if (delta.type === "citations_delta" && block.type === "text") {
+          const citation = object(delta.citation);
+          if (
+            typeof citation.url === "string" &&
+            /^https?:\/\//.test(citation.url)
+          )
+            sources.push({
+              url: citation.url,
+              title:
+                typeof citation.title === "string"
+                  ? citation.title
+                  : citation.url,
+            });
         } else throw new Error("Unsupported Claude delta");
         break;
       }
@@ -131,7 +158,30 @@ export async function* decodeClaudeStream(
             input: block.input,
           };
         }
-        blocks.push(block);
+        if (block.type === "hosted_search") {
+          const native = block.payload;
+          if (native.type === "web_search_tool_result") {
+            if (!Array.isArray(native.content))
+              throw new Error("Hosted search failed");
+            searchCalls++;
+            for (const value of native.content) {
+              const result = object(value);
+              if (
+                result.type === "web_search_result" &&
+                typeof result.url === "string" &&
+                /^https?:\/\//.test(result.url)
+              )
+                sources.push({
+                  url: result.url,
+                  title:
+                    typeof result.title === "string"
+                      ? result.title
+                      : result.url,
+                });
+            }
+          }
+        } else blocks.push(block);
+        nextIndex++;
         active = undefined;
         break;
       }
@@ -155,7 +205,13 @@ export async function* decodeClaudeStream(
           message: {
             role: "assistant",
             content: blocks,
-            meta: { provider: "claude", model, usage: counts },
+            meta: {
+              provider: "claude",
+              model,
+              usage: counts,
+              ...(sources.length ? { sources } : {}),
+              ...(searchCalls ? { webSearch: { calls: searchCalls } } : {}),
+            },
           },
           stopReason,
           usage: counts,

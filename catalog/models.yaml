@@ -40,7 +40,7 @@ models:
     efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
     defaultEffort: high
     quotaWeight: 5
-    contextTokens: null
+    contextTokens: 1000000  # Phase 4: ユーザー確認と公式モデル一覧。上限入力の通信試験は未実施
 
   - provider: claude
     id: claude-sonnet-5-5
@@ -58,7 +58,7 @@ models:
     efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
     defaultEffort: high
     quotaWeight: 3
-    contextTokens: null
+    contextTokens: 1000000  # Phase 4: ユーザー確認と公式モデル一覧。上限入力の通信試験は未実施
 
   - provider: claude
     id: claude-haiku-4-5-20251001
@@ -74,7 +74,7 @@ models:
       - 設計判断を含む作業
       - 複数ファイルの整合性が必要な変更
     quotaWeight: 1
-    contextTokens: null
+    contextTokens: 200000   # Phase 4: 公式モデル一覧の Haiku 4.5
 
   - provider: claude
     id: claude-fable-5-1

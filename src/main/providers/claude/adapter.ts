@@ -7,6 +7,7 @@ import {
 import { toClaudeRequest } from "./convert.js";
 import { claudeRateLimit } from "./rate-limit.js";
 import { decodeClaudeStream } from "./stream.js";
+import { claudeUsage } from "./usage.js";
 
 export interface ClaudeAdapterOptions {
   fetcher?: typeof fetch;
@@ -23,7 +24,7 @@ export class ClaudeAdapter implements Provider {
       "claude-haiku-4-5-20251001",
       "claude-opus-5-5",
       "claude-sonnet-5-5",
-    ].map((id) => ({ id, contextTokens: null }));
+    ].map((id) => ({ id, contextTokens: id.startsWith("claude-haiku") ? 200000 : 1000000 }));
   }
   async *stream(
     request: ProviderRequest,
@@ -55,6 +56,8 @@ export class ClaudeAdapter implements Provider {
           body,
         },
       );
+      const quota = claudeUsage(response.headers);
+      if (quota.windows.some((w) => w.usedPercent !== undefined)) yield { type: "usage", provider: "claude", ...quota };
       if (!response.ok) {
         await response.body?.cancel();
         if (response.status === 429) {

@@ -1,9 +1,15 @@
 import { type ContentBlock } from "../../core/types.js";
 import { type ProviderRequest } from "../provider.js";
+import { createHash } from "node:crypto";
 
 export const claudeIdentity =
   "You are Claude Code, Anthropic's official CLI for Claude.";
 type NativeBlock = Record<string, unknown>;
+function callId(id: string) {
+  return id.startsWith("call_")
+    ? "toolu_" + createHash("sha256").update(id).digest("hex").slice(0, 24)
+    : id;
+}
 function cacheLast(blocks: NativeBlock[]) {
   const block = blocks.findLast(
     (b) => !["thinking", "redacted_thinking"].includes(String(b.type)),
@@ -31,7 +37,7 @@ function convertBlocks(blocks: ContentBlock[]): NativeBlock[] {
         return [
           {
             type: "tool_use",
-            id: block.id,
+            id: callId(block.id),
             name: block.name,
             input: block.input,
           },
@@ -40,7 +46,7 @@ function convertBlocks(blocks: ContentBlock[]): NativeBlock[] {
         return [
           {
             type: "tool_result",
-            tool_use_id: block.toolUseId,
+            tool_use_id: callId(block.toolUseId),
             content:
               typeof block.content === "string"
                 ? block.content
@@ -87,12 +93,14 @@ export function toClaudeRequest(request: ProviderRequest) {
     ...(request.system ? [{ type: "text", text: request.system }] : []),
   ];
   cacheLast(system);
-  const messages = request.messages.map((message) => {
-    const content = convertBlocks(message.content);
-    if (!content.length)
-      throw new Error("Empty Claude message after provider conversion");
-    return { role: message.role, content };
-  });
+  const messages = request.messages
+    .map((message) => {
+      const content = convertBlocks(message.content);
+      return { role: message.role, content };
+    })
+    .filter((message) => message.content.length);
+  if (!messages.length)
+    throw new Error("Empty Claude history after provider conversion");
   cacheLast(messages.at(-1)!.content);
   const tools = request.tools.map((tool) => ({
     name: tool.name,
@@ -100,6 +108,9 @@ export function toClaudeRequest(request: ProviderRequest) {
     input_schema: tool.inputSchema,
   }));
   cacheLast(tools);
+  const hosted = request.webSearch
+    ? [{ type: "web_search_20250305", name: "web_search", max_uses: 1 }]
+    : [];
   return {
     model: request.model,
     max_tokens: maxTokens,
@@ -108,6 +119,8 @@ export function toClaudeRequest(request: ProviderRequest) {
     messages,
     // Omit thinking entirely: Opus/Sonnet retain their native adaptive behavior.
     ...(supportsEffort ? { output_config: { effort } } : {}),
-    ...(tools.length ? { tools, tool_choice: { type: "auto" } } : {}),
+    ...(tools.length || hosted.length
+      ? { tools: [...tools, ...hosted], tool_choice: { type: "auto" } }
+      : {}),
   };
 }

@@ -55,6 +55,15 @@ export class SerialScheduler {
     return [...this.statuses].map(([id, status]) => ({ id, status }));
   }
 
+  resolveFailure(id: string): void {
+    if (
+      this.statuses.get(id) !== "failed" ||
+      [...this.statuses.values()].some((s) => s === "running")
+    )
+      throw new Error("項目の失敗を解決できません");
+    this.statuses.set(id, "integrated");
+  }
+
   private finish(id: string, status: "integrated" | "failed"): void {
     if (this.statuses.get(id) !== "running")
       throw new Error("項目は実行状態ではありません");

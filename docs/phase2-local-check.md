@@ -137,11 +137,11 @@ WorkspacePicker(§18.2 folder タブ):
 - [ ] portable: 別フォルダに置いて起動でき、`%USERPROFILE%\.xharness\` に保存される(exe の隣には保存されない)
 - [ ] 権限待ちのままウィンドウを閉じても、アプリが固まらず終了する(次回起動でそのセッションの履歴が読め、ツール呼び出しに拒否の結果が付いている)
 - [ ] セッションのフォルダを(アプリを閉じて)リネームしてから開き直し、送信すると「作業フォルダが見つかりません」と出て、モデルが呼ばれない
-- [ ] 二重起動すると、2つ目は起動せず終了する(単一インスタンス)
+- [ ] 二重起動すると、2つ目は起動せず終了し、既にあるウィンドウが前面に出る(最小化していれば元に戻る)
 
-セキュリティ(DevTools で確認。`Ctrl+Shift+I`):
+セキュリティ(DevTools で確認。`Ctrl+Shift+I`。パッケージ版は `--devtools` を付けて起動したときだけ開く):
 
-- [ ] (パッケージ版で DevTools が開かない場合は `pnpm dev:fake` で確認する)
+- [ ] `--devtools` なしのパッケージ版では `Ctrl+Shift+I` で DevTools が開かない
 - [ ] Console で `Object.keys(window.harness)` が `["command","onEvent"]` だけ
 - [ ] `typeof require` / `typeof process` / `typeof module` がすべて `"undefined"`
 - [ ] リンク(https)をクリックしても、アプリ内で開かず既定ブラウザが開く(現状リンク表示はないため、問題が見つかったときだけ)

@@ -31,6 +31,21 @@
 .sec {
   padding: 10px 14px;
 }
+.sec > label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.sec input:not([type="checkbox"]) {
+  width: 100%;
+  min-width: 0;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  padding: 5px;
+  font: inherit;
+}
 .sec + .sec {
   border-top: 1px solid var(--line);
 }

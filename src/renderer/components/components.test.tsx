@@ -459,12 +459,12 @@ describe("WorkspacePicker (folder tab)", () => {
     onForget: vi.fn(),
     onClose: vi.fn(),
   });
-  it("lists recent workspaces with kind and branch; repository tab is disabled", () => {
+  it("lists recent workspaces with kind and branch; repository tab is available", () => {
     render(<WorkspacePicker {...props()} />);
     expect(screen.getByText("git · main")).toBeInTheDocument();
     expect(screen.getByText("no git")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "repository" })).toBeDisabled();
-    expect(screen.getByLabelText(/worktree/)).toBeDisabled();
+    expect(screen.getByRole("tab", { name: "repository" })).toBeEnabled();
+    expect(screen.getByLabelText(/worktree/)).toBeEnabled();
   });
   it("starts a session in the selected workspace, optionally read-only", async () => {
     const p = props();

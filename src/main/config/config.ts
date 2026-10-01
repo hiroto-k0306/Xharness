@@ -62,6 +62,8 @@ export function isEffort(value: unknown): value is ReasoningEffort {
 }
 
 export interface MainConfig {
+  web: { enabled: boolean; searchMode: "live" | "cached" };
+  fallback?: Partial<Record<ProviderId, string>>;
   /** 解決済み。設定が無い・不正なら claude:opus / high */
   choice: ModelChoice;
   aliases: Record<string, string>;
@@ -69,13 +71,14 @@ export interface MainConfig {
 }
 
 /**
- * `<home>/config.yaml` の main.model / main.effort を読む(§12)。
+ * グローバルと任意のプロジェクト設定をキーごとにマージして読む(§12)。
  * ファイルが無ければ既定値。不正な値は警告を付けて既定値に戻す。
- * (プロジェクトごとの `.xharness/config.yaml` とのマージは Phase 4)
+ * プロジェクトの main / aliases / fallback / web の指定キーを優先する。
  */
 export async function loadMainConfig(
   home: string,
   read: (path: string) => Promise<string> = (p) => readFile(p, "utf8"),
+  cwd?: string,
 ): Promise<MainConfig> {
   const warnings: string[] = [];
   let doc: unknown;
@@ -85,10 +88,32 @@ export async function loadMainConfig(
     if ((error as NodeJS.ErrnoException)?.code !== "ENOENT")
       warnings.push("config.yaml を読めなかったため既定値を使います");
   }
-  const root = (doc && typeof doc === "object" ? doc : {}) as Record<
+  let root = (doc && typeof doc === "object" ? doc : {}) as Record<
     string,
     unknown
   >;
+  if (cwd) {
+    try {
+      const project: unknown = parse(
+        await read(join(cwd, ".xharness", "config.yaml")),
+      );
+      if (project && typeof project === "object" && !Array.isArray(project)) {
+        const local = project as Record<string, unknown>;
+        const merged = { ...root, ...local };
+        for (const key of ["main", "aliases", "fallback", "web"])
+          merged[key] = {
+            ...((root[key] as object) ?? {}),
+            ...((local[key] as object) ?? {}),
+          };
+        root = merged;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT")
+        warnings.push(
+          "プロジェクト設定を読めなかったためグローバル設定を使います",
+        );
+    }
+  }
   const aliases = { ...DEFAULT_ALIASES };
   if (root.aliases && typeof root.aliases === "object")
     for (const [k, v] of Object.entries(root.aliases))
@@ -114,7 +139,28 @@ export async function loadMainConfig(
     else
       warnings.push("config.yaml の main.effort が不正なため high を使います");
   }
-  return { choice: { ...resolved, effort }, aliases, warnings };
+  const fallback: Partial<Record<ProviderId, string>> = {
+    claude: "codex:sol",
+    codex: "claude:sonnet",
+  };
+  if (root.fallback && typeof root.fallback === "object") {
+    for (const provider of ["claude", "codex"] as const) {
+      const spec = (root.fallback as Record<string, unknown>)[provider];
+      if (spec === null || spec === false) delete fallback[provider];
+      else if (typeof spec === "string" && resolveModel(spec, aliases))
+        fallback[provider] = spec;
+      else if (spec !== undefined)
+        warnings.push(`config.yaml の fallback.${provider} が不正です`);
+    }
+  }
+  const web = { enabled: true, searchMode: "live" as "live" | "cached" };
+  if (root.web && typeof root.web === "object") {
+    const values = root.web as Record<string, unknown>;
+    if (typeof values.enabled === "boolean") web.enabled = values.enabled;
+    if (values.searchMode === "live" || values.searchMode === "cached")
+      web.searchMode = values.searchMode;
+  }
+  return { choice: { ...resolved, effort }, aliases, warnings, fallback, web };
 }
 
 /**
@@ -149,7 +195,13 @@ export async function resolveStartup(opts: {
       throw new Error(`--effort は ${EFFORTS.join(" / ")} のいずれか`);
     choice = { ...choice, effort: opts.cliEffort };
   }
-  return { choice, aliases: cfg.aliases, warnings };
+  return {
+    choice,
+    aliases: cfg.aliases,
+    warnings,
+    fallback: cfg.fallback,
+    web: cfg.web,
+  };
 }
 
 /** `--fake` / `--devtools` / `--model <spec>` / `--effort <level>`(`--model=spec` も可)を取り出す。 */
@@ -159,6 +211,7 @@ export function parseStartupArgs(argv: readonly string[]): {
   devtools: boolean;
   model?: string;
   effort?: string;
+  resume?: string;
 } {
   const value = (name: string): string | undefined => {
     for (let i = 0; i < argv.length; i++) {
@@ -173,5 +226,6 @@ export function parseStartupArgs(argv: readonly string[]): {
     devtools: argv.includes("--devtools"),
     model: value("--model"),
     effort: value("--effort"),
+    resume: value("--resume"),
   };
 }

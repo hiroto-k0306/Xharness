@@ -16,6 +16,41 @@ async function homeWith(yaml?: string) {
 }
 
 describe("main model from config (DESIGN §12)", () => {
+  it("merges project model, aliases, web and fallback without dropping global fields", async () => {
+    const home = await homeWith(
+      "main: {model: claude:opus, effort: max}\nweb: {enabled: true, searchMode: live}\n",
+    );
+    const project = await mkdtemp(join(tmpdir(), "xh-project-"));
+    const cfg = await loadMainConfig(
+      home,
+      async (path) =>
+        path.includes(".xharness")
+          ? "aliases: {local: gpt-6-luna}\nmain: {model: local}\nweb: {searchMode: cached}\nfallback: {codex: false}\n"
+          : "main: {model: claude:opus, effort: max}\nweb: {enabled: true, searchMode: live}\n",
+      project,
+    );
+    expect(cfg.choice).toEqual({
+      provider: "codex",
+      model: "gpt-6-luna",
+      effort: "max",
+    });
+    expect(cfg.web).toEqual({ enabled: true, searchMode: "cached" });
+    expect(cfg.fallback).toEqual({ claude: "codex:sol" });
+    expect(cfg.aliases.opus).toBe("claude-opus-5-5");
+  });
+  it("reads web modes and permits disabling provider fallback", async () => {
+    const cfg = await loadMainConfig(
+      await homeWith(
+        "web:\n  enabled: false\n  searchMode: cached\nfallback:\n  claude: false\n  codex: claude:opus\n",
+      ),
+    );
+    expect(cfg.web).toEqual({ enabled: false, searchMode: "cached" });
+    expect(cfg.fallback).toEqual({ codex: "claude:opus" });
+    expect((await loadMainConfig(await homeWith())).web).toEqual({
+      enabled: true,
+      searchMode: "live",
+    });
+  });
   it("defaults to claude:opus / high when there is no config file", async () => {
     const cfg = await loadMainConfig(await homeWith());
     expect(cfg.choice).toEqual({

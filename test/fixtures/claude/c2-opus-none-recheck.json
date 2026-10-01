@@ -1,0 +1,43 @@
+{
+  "status": 429,
+  "requestHeaders": {
+    "anthropic-beta": "oauth-2025-04-20",
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json"
+  },
+  "requestBody": {
+    "model": "claude-opus-5-5",
+    "max_tokens": 64,
+    "stream": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Reply with the single word: pong"
+      }
+    ]
+  },
+  "responseHeaders": {
+    "all": {
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "a438cebf59bd3ea4-NRT",
+      "connection": "keep-alive",
+      "content-encoding": "br",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+      "content-type": "application/json",
+      "date": "Thu, 01 Oct 2026 04:43:39 GMT",
+      "request-id": "req_011CfauWfLD8g6g3FZxEnvsL",
+      "server": "cloudflare",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "traceresponse": "00-181d6428cbcf41fb7e7af471a6329a67-531609525ff1e3d9-01",
+      "transfer-encoding": "chunked",
+      "vary": "Accept-Encoding",
+      "x-robots-tag": "none",
+      "x-should-retry": "true"
+    },
+    "usage": {
+      "x-should-retry": "true"
+    }
+  },
+  "events": [],
+  "body": "{\"type\":\"error\",\"error\":{\"type\":\"rate_limit_error\",\"message\":\"Error\"},\"request_id\":\"req_011CfauWfLD8g6g3FZxEnvsL\"}"
+}

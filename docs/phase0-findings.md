@@ -27,7 +27,7 @@
 | system の識別文が必要か | Haiku は system なしで C2 と C3 が成功 | 確認: テキスト応答と get_time 往復。ほかのモデルへの一般化は未確認 |
 | 識別文の後ろに自前の system を足せるか | Haiku で識別文 + `Answer in Japanese.` の2ブロックを受理し、`pong` を返した。日本語指示に従うかは未確認 | 確認: `c2-haiku-custom.json`。最初のマスク処理で数値を過剰に伏せており、ヘッダ・使用数の定量検証には使用不可 |
 | Haiku 4.5 で成功 | ☑ HTTP 200、`pong`、`end_turn` | 確認: system なし2回（2回目はマスク不具合修正後の再取得）、custom 1回 |
-| Opus 5.5 で成功 | ☐ 時間を置いた再確認も HTTP 429、計2回で停止 | 確認: `test/fixtures/claude/c2-opus-none.json` とローカルの初回記録。この結果だけではモデルへのアクセス可否・制限原因を確定できない。verified: false を維持 |
+| Opus 5.5 で成功 | ☑ C2 手順2: 識別文のみの system で HTTP 200 / pong / end_turn。元の手順1の再確認は429 | 確認: `c2-opus-identity.json` / `c2-opus-none-recheck.json`。system なしは計3回429。識別文ありの成功後に元の条件を再確認した。識別文の必須性や429の原因は断定しない |
 | SSE イベントの順番 | `message_start` → `content_block_start` → `ping` → `content_block_delta`（1〜2回）→ `content_block_stop` → `message_delta` → `message_stop` | 確認: Haiku の実 SSE |
 | tool_use / tool_result の往復 | ☑ Haiku、system なし、get_time → tool_result → 最終テキスト、HTTP 200 / 200 | 確認: `test/fixtures/claude/tool-roundtrip.json`。input_json_delta は空の1件を含む4件。引数は `Tokyo`、時刻処理では `Asia/Tokyo` に変換 |
 | プロンプトキャッシュが効くか | 未試験（C3 の任意項目） | 必須のツール往復を優先した |
@@ -135,13 +135,13 @@ Light という UI 名に対応する値は、今回の対象モデル一覧に�
 
 - [x] 両プロバイダとも OAuth で直接呼べる。手順書の6つの Phase 0 完了条件を満たし、Phase 1 に着手できる（本作業では未着手）
 
-完了判定は「期限切れへの対処方法の確定」を含む。実更新・期限切れエラーの観測完了とは別。未試験事項は上の表に明記し、Opus の成功や全ヘッダの必要性を断定していない。
+完了判定は「期限切れへの対処方法の確定」を含む。実更新・期限切れエラーの観測完了とは別。未試験事項は上の表に明記し、全ヘッダの必要性を断定していない。Opus の疎通成功は追加の手順2試験で確認。
 
 設計書から変更が必要な点:
 - Claude の C2 / C3 / C5 結果と、Codex の X2〜X7 結果を §7 に反映した。
 - Codex の `session-id` / `thread-id` と、experimental beta なしの成功を §7.2 に反映した。必須ヘッダの最小集合は未確定。
 
-予算の予約数: Claude 11 / 20、Codex 22 / 25（2026-10-01）。直接試験は Claude 10件・Codex 19件。ほかに Claude CLI 1起動、Codex CLI 3起動（2回は推論前の設定エラー）を予約した。CLI 内部の HTTP 回数は観測しておらず、予約数を実 HTTP 回数とは扱わない。
+予算の予約数: Claude 13 / 20、Codex 22 / 25（2026-10-01）。直接試験は Claude 12件・Codex 19件。ほかに Claude CLI 1起動、Codex CLI 3起動（2回は推論前の設定エラー）を予約した。CLI 内部の HTTP 回数は観測しておらず、予約数を実 HTTP 回数とは扱わない。
 最初の Haiku 2件と Opus 1件はトークン数を過剰にマスクした。元の数値を推測で復元していない。
 修正後の `c2-haiku-none.json` を変換テストと C4 の使用量確認に使用する。
 

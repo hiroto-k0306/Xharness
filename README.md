@@ -9,7 +9,7 @@ Claude / Codex の OAuth 接続を検証する Windows 向けコーディング�
 
 Haiku のテキスト・ツール往復、Codex のテキスト・関数往復・暗号化推論返送、通常 effort、モデル一覧、使用量ヘッダ、ストリーム中断を確認済み。
 期限切れは自前 refresh をせず公式 CLI に委ねる方針で確定。両 CLI 起動とその後の直接疎通も成功した。
-トークンの実更新・期限切れエラーは未実測。Opus は2回とも429で、verified: false を維持。Ultra は承認により保留。
+トークンの実更新・期限切れエラーは未実測。Opus は C2 手順2（識別文あり）で成功し、verified: true。Ultra は承認により保留。
 
 - 手順: [docs/phase0-runbook.md](docs/phase0-runbook.md)
 - 設計: [DESIGN.md](DESIGN.md)

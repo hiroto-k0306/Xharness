@@ -261,13 +261,13 @@ type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "other";
 | エンドポイント | `POST https://api.anthropic.com/v1/messages` (stream: true)。C2 の Haiku で確認済み |
 | 認証ヘッダ | `Authorization: Bearer <accessToken>` で Haiku の C2 成功。`x-api-key` は使っていない |
 | 追加ヘッダ | C2 の成功時は `content-type: application/json`、`anthropic-version: 2023-06-01`、`anthropic-beta: oauth-2025-04-20`。省略試験は未実施で、必要最小集合は未確定 |
-| system 制約 | Haiku の C2 / C3 は system なしで成功。C2 は識別文を第1ブロック、自前プロンプトを第2ブロックに置いた場合も受理。ほかのモデルは未確認 |
+| system 制約 | Haiku の C2 / C3 は system なしで成功。C2 は識別文を第1ブロック、自前プロンプトを第2ブロックに置いた場合も受理。Opus は C2 手順2の識別文のみで HTTP 200 / pong。識別文が必須か、自前指示を追加できるかは Opus では未確認 |
 | 資格情報 | `~/.claude/.credentials.json` の `claudeAiOauth.{accessToken, refreshToken, expiresAt}`(Windows/Linux。macOSはキーチェーン) |
 | プロンプトキャッシュ | system と tools 末尾、直近メッセージに `cache_control` を付与(枠節約に効く) |
 
 ストリーム処理: `content_block_start` / `content_block_delta`(`text_delta`, `input_json_delta`, `thinking_delta`)/ `content_block_stop` / `message_delta`(stop_reason, usage)を組み立てる。
 
-C2 の実測: Haiku は `pong` / `end_turn`、Opus 5.5 は2回の試行とも HTTP 429。Opus の疎通成功は未確認で、追加試行を停止した。
+C2 の実測: Haiku は `pong` / `end_turn`。Opus 5.5 は識別文ありで HTTP 200 / `pong` / `end_turn`、system なしは成功後の再確認も含め3回 HTTP 429。成功した識別文ありの構成を採用するが、429の原因は未確定。
 使用量ヘッダとして `anthropic-ratelimit-unified-{5h,7d}-utilization` と `-reset` を確認。
 C5 の CLI 起動は Haiku で成功し、起動後の読み直しも HTTP 200。期限前のためトークンは変化せず、実更新・期限切れエラーは未実測。自前 refresh は行わず、公式 CLI に更新を委ねる。
 根拠と試験条件: [docs/phase0-findings.md](docs/phase0-findings.md)。Phase 0 のゲートは完了。
@@ -447,7 +447,7 @@ agents: { ... }              # §10
 - [x] 両方: Claude の自然な429を記録。Codex は自然な429がなくソースを根拠にした（未実測を明記）
 - [x] 実レスポンス(SSE)を `test/fixtures/` に保存
 
-完了条件は手順書の6項目に照合した。未実測・任意項目は調査記録に残し、実更新や Opus の疎通成功と混同しない。Phase 1 は未着手。
+完了条件は手順書の6項目に照合した。未実測・任意項目は調査記録に残し、実更新の成功と混同しない。Opus の疎通は追加の手順2で確認済み。Phase 1 は未着手。
 
 **成果物**: `spike/claude.ts`、`spike/codex.ts`、本書 §7 の表を確定値に更新
 

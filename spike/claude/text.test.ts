@@ -25,6 +25,59 @@ async function fixture(name: string) {
 }
 
 describe("Claude text probe", () => {
+  it("replays actual Opus SSE with the C2 step 2 identity system", async () => {
+    const recorded = await fixture("c2-opus-identity");
+    expect(recorded.status).toBe(200);
+    const root = await mkdtemp(join(tmpdir(), "xharness-opus-identity-"));
+    try {
+      const result = await probeText(
+        "fake-private-access",
+        "claude-opus-5-5",
+        "identity",
+        {
+          root,
+          fetcher: async (_url, init) => {
+            const body = JSON.parse(String(init?.body)) as {
+              system: unknown[];
+              max_tokens: number;
+              model: string;
+            };
+            expect(body.system).toEqual([
+              {
+                type: "text",
+                text: "You are Claude Code, Anthropic's official CLI for Claude.",
+              },
+            ]);
+            expect(body.max_tokens).toBe(64);
+            expect(body.model).toBe("claude-opus-5-5");
+            return new Response(
+              recorded.events
+                .map(
+                  (event) => `event: ${event.event}\ndata: ${event.data}\n\n`,
+                )
+                .join(""),
+              { headers: { "content-type": "text/event-stream" } },
+            );
+          },
+        },
+      );
+      expect(result.success).toBe(true);
+      expect(summarizeText(recorded.events)).toMatchObject({
+        text: "pong",
+        stopReason: "end_turn",
+        complete: true,
+      });
+      const saved = await readFile(
+        join(root, "test/fixtures/claude/c2-opus-identity.json"),
+        "utf8",
+      );
+      expect(saved).not.toContain("fake-private-access");
+      expect(saved).not.toContain("authorization");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("assembles real Haiku deltas and rejects incomplete or error streams", async () => {
     const recorded = await fixture("c2-haiku-none");
     expect(recorded.requestBody).toMatchObject({
@@ -57,36 +110,39 @@ describe("Claude text probe", () => {
     ).toBe(false);
   });
 
-  it("records the real 429 response without retrying or retaining echoed credentials", async () => {
-    const recorded = await fixture("c2-opus-none");
-    const root = await mkdtemp(join(tmpdir(), "xharness-probe-"));
-    let requests = 0;
-    try {
-      const result = await probeText(
-        "fake-private-access",
-        "claude-opus-5-5",
-        "none",
-        {
-          root,
-          fetcher: async () => {
-            requests++;
-            return new Response(recorded.body, { status: recorded.status });
+  it.each(["c2-opus-none", "c2-opus-none-recheck"])(
+    "records the real %s 429 response without retrying or retaining echoed credentials",
+    async (name) => {
+      const recorded = await fixture(name);
+      const root = await mkdtemp(join(tmpdir(), "xharness-probe-"));
+      let requests = 0;
+      try {
+        const result = await probeText(
+          "fake-private-access",
+          "claude-opus-5-5",
+          "none",
+          {
+            root,
+            fetcher: async () => {
+              requests++;
+              return new Response(recorded.body, { status: recorded.status });
+            },
           },
-        },
-      );
-      expect(requests).toBe(1);
-      expect(result.success).toBe(false);
-      const saved = await readFile(
-        join(root, "test/fixtures/claude/c2-opus-none.json"),
-        "utf8",
-      );
-      expect(saved).toContain("rate_limit_error");
-      expect(saved).not.toContain("fake-private-access");
-      expect(saved).not.toContain("authorization");
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
+        );
+        expect(requests).toBe(1);
+        expect(result.success).toBe(false);
+        const saved = await readFile(
+          join(root, "test/fixtures/claude/c2-opus-none.json"),
+          "utf8",
+        );
+        expect(saved).toContain("rate_limit_error");
+        expect(saved).not.toContain("fake-private-access");
+        expect(saved).not.toContain("authorization");
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("does not persist or return a secret echoed by a transport exception", async () => {
     const root = await mkdtemp(join(tmpdir(), "xharness-probe-"));

@@ -29,7 +29,7 @@ models:
     alias: opus
     displayName: Opus 5.5
     enabled: true
-    verified: false
+    verified: true  # C2 手順2（識別文あり）で HTTP 200 / pong。effort の範囲は未確認
     roles: [main, worker, reviewer]
     strengths:
       - 計画・設計判断・複数ファイルにまたがる変更

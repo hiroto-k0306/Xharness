@@ -72,8 +72,16 @@ export function toClaudeRequest(request: ProviderRequest) {
     !request.messages.length
   )
     throw new Error("Invalid Claude request");
-  // Effort support was not tested for Claude in Phase 0; do not silently ignore it.
-  if (request.reasoning) throw new Error("Claude effort is not yet verified");
+  const supportsEffort = /^claude-(opus|sonnet)-5-5(?:-|$)/.test(request.model);
+  const effort = request.reasoning?.effort ?? "high";
+  if (!["low", "medium", "high", "xhigh", "max"].includes(effort))
+    throw new Error("Invalid effort");
+  if (
+    request.reasoning &&
+    !supportsEffort &&
+    !/^claude-haiku-4-5(?:-|$)/.test(request.model)
+  )
+    throw new Error("Unsupported model effort");
   const system: NativeBlock[] = [
     { type: "text", text: claudeIdentity },
     ...(request.system ? [{ type: "text", text: request.system }] : []),
@@ -98,6 +106,8 @@ export function toClaudeRequest(request: ProviderRequest) {
     stream: true,
     system,
     messages,
-    ...(tools.length ? { tools } : {}),
+    // Omit thinking entirely: Opus/Sonnet retain their native adaptive behavior.
+    ...(supportsEffort ? { output_config: { effort } } : {}),
+    ...(tools.length ? { tools, tool_choice: { type: "auto" } } : {}),
   };
 }

@@ -10,13 +10,15 @@ export interface ModelInfo {
   contextTokens: number | null;
 }
 
+export type ReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface ProviderRequest {
   model: string;
   system: string;
   messages: Message[];
   tools: ToolSpec[];
   maxOutputTokens?: number;
-  reasoning?: { effort: "low" | "medium" | "high" };
+  reasoning?: { effort: ReasoningEffort };
 }
 
 export interface ProviderError {

@@ -29,7 +29,7 @@ models:
     alias: opus
     displayName: Opus 5.5
     enabled: true
-    verified: true  # C2 手順2（識別文あり）で HTTP 200 / pong。effort の範囲は未確認
+    verified: true  # Phase 1: effort high / tool_choice auto で HTTP 200。その他の effort は公式仕様に基づく
     roles: [main, worker, reviewer]
     strengths:
       - 計画・設計判断・複数ファイルにまたがる変更
@@ -37,7 +37,7 @@ models:
       - マージ衝突の解消
     avoid:
       - 定型的で大量の書き換え (枠がもったいない)
-    efforts: { low: low, medium: medium, high: high, max: max }
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
     defaultEffort: high
     quotaWeight: 5
     contextTokens: null
@@ -47,7 +47,7 @@ models:
     alias: sonnet
     displayName: Sonnet 5.5
     enabled: true
-    verified: true  # Phase 1 Adapter: HTTP 200 / end_turn。effort の範囲は未確認
+    verified: true  # Phase 1: effort high / tool_choice auto で HTTP 200。その他の effort は公式仕様に基づく
     roles: [worker, reviewer, explorer]
     strengths:
       - 範囲がはっきりした中規模の実装
@@ -55,8 +55,8 @@ models:
       - コードベースの調査
     avoid:
       - 計画の段階で設計判断が残っている項目
-    efforts: { low: low, medium: medium, high: high, max: max }
-    defaultEffort: medium
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
+    defaultEffort: high
     quotaWeight: 3
     contextTokens: null
 
@@ -65,7 +65,7 @@ models:
     alias: haiku
     displayName: Haiku 4.5
     enabled: true
-    verified: true  # C2 / C3 の OAuth 疎通を確認。effort の範囲は未確認
+    verified: true  # C2 / C3 の OAuth 疎通を確認。effort は送らない
     roles: [worker, utility]
     strengths:
       - 型定義・単純なテスト追加・定型的な書き換え
@@ -73,8 +73,6 @@ models:
     avoid:
       - 設計判断を含む作業
       - 複数ファイルの整合性が必要な変更
-    efforts: { low: low, medium: medium }
-    defaultEffort: low
     quotaWeight: 1
     contextTokens: null
 

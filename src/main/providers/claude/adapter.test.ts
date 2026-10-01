@@ -58,6 +58,17 @@ function done(events: ProviderEvent[]) {
 }
 
 describe("Claude conversion using Phase 0 recordings", () => {
+  it.each(["opus", "sonnet"])(
+    "replays the real %s high-effort probe",
+    async (model) => {
+      const recorded = await fixture(`phase1-${model}-effort-high`);
+      const events = await collect(response(recorded.events));
+      expect(done(events).stopReason).toBe("end_turn");
+      expect(done(events).message.content).toEqual([
+        { type: "text", text: "pong" },
+      ]);
+    },
+  );
   it.each(["haiku", "opus", "sonnet"])(
     "replays the completed Phase 1 %s adapter probe",
     async (model) => {
@@ -323,10 +334,78 @@ describe("Claude conversion using Phase 0 recordings", () => {
       { type: "text", text: "answer", cache_control: { type: "ephemeral" } },
     ]);
   });
-  it("rejects unverified effort instead of silently ignoring it", () => {
-    expect(() =>
+  it("omits effort for Haiku even if a common request supplied it", () => {
+    expect(
       toClaudeRequest({ ...request, reasoning: { effort: "high" } }),
-    ).toThrow();
+    ).not.toHaveProperty("output_config");
+  });
+  it.each(["claude-opus-5-5", "claude-sonnet-5-5"])(
+    "defaults %s to high without disabling thinking",
+    (model) => {
+      const converted = toClaudeRequest({
+        ...request,
+        model,
+        tools: [
+          {
+            name: "Read",
+            description: "Read",
+            inputSchema: { type: "object" },
+          },
+        ],
+      });
+      expect(converted.output_config).toEqual({ effort: "high" });
+      expect(converted).not.toHaveProperty("thinking");
+      expect(converted.tool_choice).toEqual({ type: "auto" });
+      for (const effort of ["low", "medium", "high", "xhigh", "max"] as const)
+        expect(
+          toClaudeRequest({ ...request, model, reasoning: { effort } })
+            .output_config,
+        ).toEqual({ effort });
+    },
+  );
+  it("returns an unchanged thinking/signature block across appended tool results", () => {
+    const thinking = Object.freeze({
+      type: "thinking",
+      thinking: "original thought",
+      signature: "original signature",
+      extension: { opaque: "unchanged" },
+    });
+    const history: ProviderRequest["messages"] = [
+      { role: "user", content: [{ type: "text", text: "start" }] },
+      {
+        role: "assistant",
+        content: [
+          { type: "reasoning", provider: "claude", payload: thinking },
+          {
+            type: "tool_use",
+            id: "tool_1",
+            name: "Read",
+            input: { path: "a.txt" },
+          },
+        ],
+      },
+    ];
+    const before = structuredClone(history);
+    const first = toClaudeRequest({
+      ...request,
+      model: "claude-opus-5-5",
+      messages: history,
+    });
+    history.push({
+      role: "user",
+      content: [
+        { type: "tool_result", toolUseId: "tool_1", content: "read result" },
+      ],
+    });
+    const second = toClaudeRequest({
+      ...request,
+      model: "claude-opus-5-5",
+      messages: history,
+    });
+    expect(history.slice(0, before.length)).toEqual(before);
+    expect(first.messages[1]!.content[0]).toEqual(thinking);
+    expect(second.messages[1]!.content[0]).toEqual(thinking);
+    expect(second.messages[1]!.content[0]).not.toHaveProperty("cache_control");
   });
 });
 

@@ -10,7 +10,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - UI の見本: [mockup/index.html](mockup/index.html)(ブラウザで開くだけで見られる)
 - モデル一覧: [catalog/models.yaml](catalog/models.yaml)
 - ロゴ・アイコン: [brand/](brand/)
-- 状態: **Phase 0 のゲート完了（2026-10-01）、Phase 1 の headless 最小実装を検証済み**。Phase 1 の実装・確認範囲は [docs/phase1-progress.md](docs/phase1-progress.md)。Phase 0 の確認結果・未実測事項は [docs/phase0-findings.md](docs/phase0-findings.md)
+- 状態: **Phase 0 のゲート完了（2026-10-01）、Phase 1 の headless 最小実装を検証済み、Phase 2 はクラウドで実装・検証済み(exe のビルドと起動確認は手元で未実施)**。Phase 2 の範囲は [docs/phase2-progress.md](docs/phase2-progress.md)、手元確認は [docs/phase2-local-check.md](docs/phase2-local-check.md)。Phase 1 の実装・確認範囲は [docs/phase1-progress.md](docs/phase1-progress.md)。Phase 0 の確認結果・未実測事項は [docs/phase0-findings.md](docs/phase0-findings.md)
 
 ## 作業の進め方
 
@@ -52,6 +52,9 @@ pnpm test          # Vitest
 pnpm lint          # ESLint
 pnpm typecheck     # tsc --noEmit
 pnpm spike:<name>  # Phase 0 の疎通確認スクリプト(docs/phase0-runbook.md)
+pnpm dev:fake      # Electron を --fake(通信なし)で起動
+pnpm build         # electron-vite でビルド
+pnpm package       # exe を作る(手元の Windows で実行)
 ```
 
 ## クラウド環境(Linux)で作業する場合

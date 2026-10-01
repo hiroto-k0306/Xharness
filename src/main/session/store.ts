@@ -4,10 +4,11 @@ import {
   mkdir,
   readFile,
   rename,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { type Message } from "../core/types.js";
 import {
   type ProviderName,
@@ -18,18 +19,74 @@ import {
 /** DESIGN.md §18.4。~/.xharness/ 以下の索引と履歴。electron を使わない。 */
 export type StoredSession = Omit<SessionSummary, "status" | "branch">;
 
-async function readJson<T>(path: string, fallback: T): Promise<T> {
-  try {
-    return JSON.parse(await readFile(path, "utf8")) as T;
-  } catch {
+let tempSeq = 0;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 1つの JSON ファイル(索引)を安全に読み書きする。
+ * - 書き込みは直列化し、一時ファイル名は書き込みごとに一意(同時保存で互いを壊さない)
+ * - 一時ファイル → rename で置き換える。Windows で rename が一時的に拒否されたら少し待って再試行
+ * - 壊れたファイルは上書きせず `.corrupt-<時刻>.bak` へ退避してから空で始め、警告を残す
+ */
+export class JsonFile<T> {
+  private chain: Promise<void> = Promise.resolve();
+  /** 読み込み時に見つかった問題(画面に一度だけ通知する) */
+  readonly warnings: string[] = [];
+  constructor(
+    private readonly path: string,
+    private readonly valid: (value: unknown) => value is T,
+  ) {}
+  async read(fallback: T): Promise<T> {
+    let raw: string;
+    try {
+      raw = await readFile(this.path, "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return fallback;
+      throw error;
+    }
+    try {
+      const value: unknown = JSON.parse(raw);
+      if (this.valid(value)) return value;
+    } catch {
+      /* 下で退避する */
+    }
+    const backup = `${this.path}.corrupt-${Date.now()}.bak`;
+    await rename(this.path, backup);
+    this.warnings.push(
+      `${basename(this.path)} が壊れていたため ${basename(backup)} へ退避し、空の一覧から始めました`,
+    );
     return fallback;
   }
+  /** 呼び出した時点の内容を、前の書き込みの後に書く */
+  write(value: T): Promise<void> {
+    const text = JSON.stringify(value, null, 2);
+    const run = this.chain.then(async () => {
+      await mkdir(dirname(this.path), { recursive: true });
+      const temp = `${this.path}.${process.pid}.${++tempSeq}.tmp`;
+      await writeFile(temp, text, "utf8");
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await rename(temp, this.path);
+          return;
+        } catch (error) {
+          const code = (error as NodeJS.ErrnoException).code;
+          if (
+            attempt >= 4 ||
+            !["EPERM", "EBUSY", "EACCES"].includes(code ?? "")
+          ) {
+            await rm(temp, { force: true });
+            throw error;
+          }
+          await sleep(25 * 2 ** attempt);
+        }
+      }
+    });
+    // 失敗しても後続の書き込みは続ける(失敗は呼び出し元へ返す)
+    this.chain = run.catch(() => undefined);
+    return run;
+  }
 }
-async function writeJson(path: string, value: unknown) {
-  const temp = `${path}.${process.pid}.tmp`;
-  await writeFile(temp, JSON.stringify(value, null, 2), "utf8");
-  await rename(temp, path);
-}
+const isArray = <T>(value: unknown): value is T[] => Array.isArray(value);
 
 export function workspaceId(root: string): string {
   const normal = process.platform === "win32" ? root.toLowerCase() : root;
@@ -51,19 +108,36 @@ export async function gitInfo(
   }
 }
 
+type WorkspaceItem = {
+  id: string;
+  root: string;
+  name: string;
+  lastOpenedAt: number;
+};
+/** git の状態は短時間キャッシュする(状態を送るたびに全ワークスペースを読まない) */
+const GIT_CACHE_MS = 2000;
+
 export class WorkspaceStore {
-  private items: {
-    id: string;
-    root: string;
-    name: string;
-    lastOpenedAt: number;
-  }[] = [];
-  constructor(private readonly home: string) {}
-  private get file() {
-    return join(this.home, "workspaces.json");
+  private items: WorkspaceItem[] = [];
+  private readonly file: JsonFile<WorkspaceItem[]>;
+  private readonly git = new Map<
+    string,
+    { at: number; info: Awaited<ReturnType<typeof gitInfo>> }
+  >();
+  constructor(
+    home: string,
+    private readonly now: () => number = Date.now,
+  ) {
+    this.file = new JsonFile(
+      join(home, "workspaces.json"),
+      isArray<WorkspaceItem>,
+    );
+  }
+  get warnings() {
+    return this.file.warnings;
   }
   async load() {
-    this.items = await readJson(this.file, []);
+    this.items = await this.file.read([]);
   }
   async add(root: string, now = Date.now()) {
     const abs = resolve(root);
@@ -77,21 +151,20 @@ export class WorkspaceStore {
         name: basename(abs) || abs,
         lastOpenedAt: now,
       });
-    await mkdir(this.home, { recursive: true });
-    await writeJson(this.file, this.items);
+    this.git.delete(abs);
+    await this.file.write(this.items);
     return id;
   }
   async touch(id: string, now = Date.now()) {
     const item = this.items.find((w) => w.id === id);
     if (!item) return;
     item.lastOpenedAt = now;
-    await writeJson(this.file, this.items);
+    await this.file.write(this.items);
   }
   /** 一覧から外すだけ。フォルダとセッションは消さない(§16.6)。 */
   async forget(id: string) {
     this.items = this.items.filter((w) => w.id !== id);
-    await mkdir(this.home, { recursive: true });
-    await writeJson(this.file, this.items);
+    await this.file.write(this.items);
   }
   get(id: string) {
     return this.items.find((w) => w.id === id);
@@ -99,7 +172,12 @@ export class WorkspaceStore {
   async summaries(): Promise<WorkspaceSummary[]> {
     const out: WorkspaceSummary[] = [];
     for (const w of this.items) {
-      const g = await gitInfo(w.root);
+      let cached = this.git.get(w.root);
+      if (!cached || this.now() - cached.at > GIT_CACHE_MS) {
+        cached = { at: this.now(), info: await gitInfo(w.root) };
+        this.git.set(w.root, cached);
+      }
+      const g = cached.info;
       out.push({
         ...w,
         kind: g.git ? "git" : "no git",
@@ -112,16 +190,22 @@ export class WorkspaceStore {
 
 export class SessionStore {
   private sessions: StoredSession[] = [];
-  constructor(private readonly home: string) {}
-  private get index() {
-    return join(this.home, "sessions", "index.json");
+  private readonly index: JsonFile<StoredSession[]>;
+  constructor(private readonly home: string) {
+    this.index = new JsonFile(
+      join(home, "sessions", "index.json"),
+      isArray<StoredSession>,
+    );
+  }
+  get warnings() {
+    return this.index.warnings;
   }
   private history(id: string) {
     if (!/^[\w-]+$/.test(id)) throw new Error("Invalid session id");
     return join(this.home, "sessions", `${id}.jsonl`);
   }
   async load() {
-    this.sessions = await readJson(this.index, []);
+    this.sessions = await this.index.read([]);
   }
   /** 旧い索引にはモデルが無い。メモリ上だけ既定値で補う(次の保存で書かれる)。 */
   fillDefaults(defaults: { model: string; effort: StoredSession["effort"] }) {
@@ -141,8 +225,7 @@ export class SessionStore {
     const i = this.sessions.findIndex((s) => s.id === session.id);
     if (i >= 0) this.sessions[i] = session;
     else this.sessions.push(session);
-    await mkdir(join(this.home, "sessions"), { recursive: true });
-    await writeJson(this.index, this.sessions);
+    await this.index.write(this.sessions);
   }
   /** 履歴は追記のみ(§12)。redact は呼び出し側が渡す。 */
   async append(

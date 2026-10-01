@@ -1,0 +1,188 @@
+{
+  "status": 200,
+  "requestHeaders": {
+    "accept": "text/event-stream",
+    "content-type": "application/json",
+    "originator": "codex_cli_rs",
+    "session-id": "53f44345-5921-43e0-85a6-d9ddc6327374",
+    "thread-id": "53f44345-5921-43e0-85a6-d9ddc6327374",
+    "user-agent": "codex_cli_rs/0.159.2",
+    "x-client-request-id": "53f44345-5921-43e0-85a6-d9ddc6327374"
+  },
+  "requestBody": {
+    "model": "gpt-6-luna",
+    "instructions": "You are a helpful assistant.",
+    "reasoning": {
+      "effort": "high"
+    },
+    "store": false,
+    "stream": true,
+    "include": ["reasoning.encrypted_content"],
+    "parallel_tool_calls": false,
+    "tools": [
+      {
+        "type": "function",
+        "name": "get_time",
+        "description": "Get the current time in a timezone",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "timezone": {
+              "type": "string"
+            }
+          },
+          "required": ["timezone"],
+          "additionalProperties": false
+        },
+        "strict": true
+      }
+    ],
+    "tool_choice": "auto",
+    "input": [
+      {
+        "type": "message",
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "What time is it in Tokyo? Use the tool."
+          }
+        ]
+      },
+      {
+        "id": "fc_092a660d3fd979a0016abdd4ad18c087d09161344390760aab",
+        "type": "function_call",
+        "status": "completed",
+        "arguments": "{\"timezone\":\"Asia/Tokyo\"}",
+        "call_id": "call_2Hn6nBW2rRvu7yDknLRhBugP",
+        "name": "get_time"
+      },
+      {
+        "type": "function_call_output",
+        "call_id": "call_2Hn6nBW2rRvu7yDknLRhBugP",
+        "output": "{\"timezone\":\"Asia/Tokyo\",\"utc\":\"2026-10-01T03:34:04.722Z\",\"localTime\":\"2026-10-01 12:34:04\"}"
+      }
+    ]
+  },
+  "responseHeaders": {
+    "all": {
+      "cf-cache-status": "DYNAMIC",
+      "cf-ray": "a43868dc092a9801-NRT",
+      "connection": "keep-alive",
+      "cross-origin-opener-policy": "same-origin-allow-popups",
+      "date": "Thu, 01 Oct 2026 03:34:06 GMT",
+      "nel": "{\"report_to\":\"cf-nel\",\"success_fraction\":0.01,\"max_age\":604800}",
+      "referrer-policy": "strict-origin-when-cross-origin",
+      "report-to": "{\"group\":\"cf-nel\",\"max_age\":604800,\"endpoints\":[{\"url\":\"https://a.nel.cloudflare.com/report/v4?s=bWqJ8gA9U8buu%2BnoKlGvnFLalEDe%2FCZz%2BGMHa8v1jGL2xTsDRoP%2BFPEOh2WBC%2BcQTVqeb7xD60UkK1lPAHlp2SASVRxdJlGnw1UtiplzmklQXJOwNMhfmytcJ4C0vngDzU%2BoO9JZfuO5\"}]}",
+      "server": "cloudflare",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "transfer-encoding": "chunked",
+      "x-codex-active-limit": "premium",
+      "x-codex-credits-balance": "0",
+      "x-codex-credits-has-credits": "False",
+      "x-codex-credits-unlimited": "False",
+      "x-codex-plan-type": "plus",
+      "x-codex-primary-over-secondary-limit-percent": "0",
+      "x-codex-primary-reset-after-seconds": "14781",
+      "x-codex-primary-reset-at": "1790840426",
+      "x-codex-primary-used-percent": "28",
+      "x-codex-primary-window-minutes": "300",
+      "x-codex-secondary-reset-after-seconds": "558735",
+      "x-codex-secondary-reset-at": "1791384380",
+      "x-codex-secondary-used-percent": "9",
+      "x-codex-secondary-window-minutes": "10080",
+      "x-codex-turn-state": "gAAAAABqvdStG_bROQr1SrCu4lmEdRPknqVLt1fWXXqOkcy8ib6fkHDxOOc2-x2KKGSN3fhBv6eRlyR-CtUl2QEpeml16kSEqyJLV9y3zTQ4L8sasbGIvejxR7W6U9DRk_0ir0O9Mbcy3seewPtSe8jbDjUUWJUjtqrmzy2y7gvSSpZ0zaDraZwl_BAwZikcwe8K8ClbbIrP3Weul5j0AWthD4o8OC7xe0liDAbUlOkp1HYIJLnh94Cf5f4FKDeBsC9dhQ3R8uUOi2QiClkhssYtRaDMDUVsYid0ag6bfxovukRheBpzmfOct9wVQ9acna2aG3n-InffYAn6nUxv1Qayz1EKK4v_RpXWrUFylx-FAmmtkdPqQbOFRhHirKp4nYNRytWli2Bj5hG8SUdnugRWWPnZnzVCqUWGLZGqjQxae6F4GoIDpPnYEyj6RdT7AVQUJgeE8s332zepRcvSGnpPVXCgl4iTmTffKShRdya5JoilYWAfHEppIH3-1Lk4XhNPSFvVVrRXbr9YLhDf8IG6zIgApi4_D34N2NejCpqnd2ozSx2WvVJnKbDWRJftJj-p1wLu2oG0y_6XF_iiuoHUiVq6J6w5YbxOSd7WRhIcxj56GvGMvlQkdD_Z4ibcDl8-FT-D_2-SK_xv3ED7VEcBDTmvo9C8LQPNXu4ZuUM2NCnmYzG_i9WNx3bhZRw4EvFn-cI-7MTiq1f6wrw32yMvRUZqfStc-HEXjHi50uKqMnHdc7tfvSJc9_8cF-kk0fJTv4Qn3feF",
+      "x-content-type-options": "nosniff",
+      "x-models-etag": "W/\"ada21bfaf772f4416b3d671c0d832743\"",
+      "x-oai-request-id": "91fae523-93bf-48cf-98d4-eb6a03d7494e",
+      "x-openai-proxy-wasm": "v0.1"
+    },
+    "usage": {
+      "x-codex-active-limit": "premium",
+      "x-codex-credits-unlimited": "False",
+      "x-codex-primary-over-secondary-limit-percent": "0",
+      "x-codex-primary-reset-after-seconds": "14781",
+      "x-codex-primary-reset-at": "1790840426",
+      "x-codex-primary-used-percent": "28",
+      "x-codex-primary-window-minutes": "300",
+      "x-codex-secondary-reset-after-seconds": "558735",
+      "x-codex-secondary-reset-at": "1791384380",
+      "x-codex-secondary-used-percent": "9",
+      "x-codex-secondary-window-minutes": "10080"
+    }
+  },
+  "events": [
+    {
+      "event": "response.created",
+      "data": "{\"type\":\"response.created\",\"response\":{\"id\":\"resp_092a660d3fd979a0016abdd4adcf6887d0b0c7486d48d4c998\",\"object\":\"response\",\"created_at\":1790825645,\"status\":\"in_progress\",\"access_programs\":{\"cyber\":\"daybreak_blue\"},\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":\"You are a helpful assistant.\",\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":false,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":\"53f44345-5921-43e0-85a6-d9ddc6327374\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"high\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":\"user-O…\",\"service_tier\":\"auto\",\"store\":false,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Get the current time in a timezone\",\"name\":\"get_time\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"timezone\":{\"type\":\"string\"}},\"required\":[\"timezone\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}"
+    },
+    {
+      "event": "response.in_progress",
+      "data": "{\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_092a660d3fd979a0016abdd4adcf6887d0b0c7486d48d4c998\",\"object\":\"response\",\"created_at\":1790825645,\"status\":\"in_progress\",\"access_programs\":{\"cyber\":\"daybreak_blue\"},\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":\"You are a helpful assistant.\",\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":false,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":\"53f44345-5921-43e0-85a6-d9ddc6327374\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"high\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":\"user-O…\",\"service_tier\":\"auto\",\"store\":false,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Get the current time in a timezone\",\"name\":\"get_time\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"timezone\":{\"type\":\"string\"}},\"required\":[\"timezone\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}"
+    },
+    {
+      "event": "response.output_item.added",
+      "data": "{\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"phase\":\"final_answer\",\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}"
+    },
+    {
+      "event": "response.content_part.added",
+      "data": "{\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"It\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"3jVhC7BqEfjJib\",\"output_index\":0,\"sequence_number\":4}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"’s\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"7j8WqJGtAV94h0\",\"output_index\":0,\"sequence_number\":5}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"QXW7zXMdrGWOR83\",\"output_index\":0,\"sequence_number\":6}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"12\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"UAqqjYLNIiVqCG\",\"output_index\":0,\"sequence_number\":7}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\":\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"g02VI3bcH7A2ekZ\",\"output_index\":0,\"sequence_number\":8}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"34\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"R5dqi2fNQ1OXxg\",\"output_index\":0,\"sequence_number\":9}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" PM\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"Gi0leS28QVkTK\",\"output_index\":0,\"sequence_number\":10}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"H6A1GcMuEACUl\",\"output_index\":0,\"sequence_number\":11}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Tokyo\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"y00PvudnoK\",\"output_index\":0,\"sequence_number\":12}"
+    },
+    {
+      "event": "response.output_text.delta",
+      "data": "{\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"obfuscation\":\"Im9LtS7n2wPvm7P\",\"output_index\":0,\"sequence_number\":13}"
+    },
+    {
+      "event": "response.output_text.done",
+      "data": "{\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":14,\"text\":\"It’s 12:34 PM in Tokyo.\"}"
+    },
+    {
+      "event": "response.content_part.done",
+      "data": "{\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It’s 12:34 PM in Tokyo.\"},\"sequence_number\":15}"
+    },
+    {
+      "event": "response.output_item.done",
+      "data": "{\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"It’s 12:34 PM in Tokyo.\"}],\"phase\":\"final_answer\",\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":16}"
+    },
+    {
+      "event": "response.completed",
+      "data": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_092a660d3fd979a0016abdd4adcf6887d0b0c7486d48d4c998\",\"object\":\"response\",\"created_at\":1790825645,\"status\":\"completed\",\"access_programs\":{\"cyber\":\"daybreak_blue\"},\"background\":false,\"completed_at\":1790825646,\"error\":null,\"frequency_penalty\":0,\"incomplete_details\":null,\"instructions\":\"You are a helpful assistant.\",\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-6-luna\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":false,\"presence_penalty\":0,\"previous_response_id\":null,\"prompt_cache_key\":\"53f44345-5921-43e0-85a6-d9ddc6327374\",\"prompt_cache_retention\":\"24h\",\"reasoning\":{\"context\":\"all_turns\",\"effort\":\"high\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":\"user-O…\",\"service_tier\":\"default\",\"store\":false,\"temperature\":1,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Get the current time in a timezone\",\"name\":\"get_time\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"timezone\":{\"type\":\"string\"}},\"required\":[\"timezone\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":0.98,\"truncation\":\"disabled\",\"usage\":{\"attribution\":{\"items\":{\"msg_092a660d3fd979a0016abdd4add7b487d0802c3285cc5e1f8b\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"content\":[{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":15,\"output_tokens\":0}],\"input_tokens\":15,\"output_tokens\":0},\"fc_092a660d3fd979a0016abdd4ad18c087d09161344390760aab\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":23,\"output_tokens\":0},\"fc_092a660d3fd979a0016abdd4add79887d09c81134c256afe27\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"content\":[{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":51,\"output_tokens\":0}],\"input_tokens\":51,\"output_tokens\":0},\"msg_092a660d3fd979a0016abdd4ae784087d0a18c796e67bd594b\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"content\":[{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":2,\"output_tokens\":14}],\"input_tokens\":2,\"output_tokens\":14}},\"request_fields\":{\"tools\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":116,\"output_tokens\":0},\"instructions\":{\"cache_write_tokens\":0,\"cached_tokens\":0,\"input_tokens\":10,\"output_tokens\":0}}},\"input_tokens\":217,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":14,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":231},\"user\":null,\"metadata\":{}},\"sequence_number\":17}"
+    }
+  ]
+}

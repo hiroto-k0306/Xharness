@@ -4,6 +4,8 @@ import { type SessionView } from "../state/store.js";
 import { STEPS, stepColor } from "../state/steps.js";
 import { Logo } from "./Logo.js";
 import styles from "./Activity.module.css";
+import { buildReceiptReplay, type ReceiptReplay } from "../../shared/replay.js";
+import { ReceiptReplayDialog } from "./ReceiptReplay.js";
 type Usage = Partial<
   Record<"claude" | "codex", Extract<UiEvent, { type: "usage" }>>
 >;
@@ -76,6 +78,8 @@ export function LoopFlow({
 }
 export function Receipts({ receipts = [] }: { receipts?: Receipt[] }) {
   const [selected, setSelected] = useState<Receipt>();
+  const [replay, setReplay] = useState<ReceiptReplay>();
+  const [replayError, setReplayError] = useState("");
   useEffect(() => {
     const close = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSelected(undefined);
@@ -85,7 +89,25 @@ export function Receipts({ receipts = [] }: { receipts?: Receipt[] }) {
   }, []);
   return (
     <section className={styles.receipts} aria-label="receipts">
-      <div className={styles.heading}>receipts · {receipts.length}</div>
+      <div className={styles.heading}>
+        receipts · {receipts.length}
+        <button
+          className={styles.replayButton}
+          disabled={!receipts.length}
+          onClick={() => {
+            try {
+              setReplay(buildReceiptReplay(receipts));
+              setSelected(undefined);
+              setReplayError("");
+            } catch {
+              setReplayError("記録が大きすぎるため再生できません");
+            }
+          }}
+        >
+          再生
+        </button>
+        {replayError && <span role="status">{replayError}</span>}
+      </div>
       <div className={styles.rows}>
         {receipts.slice(-100).map((r) => (
           <button
@@ -106,6 +128,12 @@ export function Receipts({ receipts = [] }: { receipts?: Receipt[] }) {
           </button>
         ))}
       </div>
+      {replay && (
+        <ReceiptReplayDialog
+          replay={replay}
+          onClose={() => setReplay(undefined)}
+        />
+      )}
       {selected && (
         <div
           role="dialog"

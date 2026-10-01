@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { URL } from "node:url";
 import { parse } from "yaml";
 import { isEffort } from "./config.js";
 import { type ProviderId } from "../core/types.js";
@@ -15,9 +16,11 @@ export interface CatalogModel {
 
 /** Source / packaged main both resolve the repository-shipped catalog, never cwd. */
 export function loadModelCatalog(): CatalogModel[] {
+  // Keep Node filesystem URLs out of Vite's renderer asset URL rewriting.
+  const FileURL = URL;
   for (const path of [
-    new URL("../../../catalog/models.yaml", import.meta.url),
-    new URL("../../catalog/models.yaml", import.meta.url),
+    new FileURL("../../../catalog/models.yaml", import.meta.url),
+    new FileURL("../../catalog/models.yaml", import.meta.url),
   ]) {
     try {
       const doc = parse(readFileSync(path, "utf8")) as {

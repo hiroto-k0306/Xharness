@@ -1,11 +1,12 @@
 import { createInterface } from "node:readline/promises";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { readFile } from "node:fs/promises";
 import { runTurn } from "./main/core/loop.js";
 import { type Message } from "./main/core/types.js";
 import { redact } from "./main/core/redact.js";
 import { readLocalSecrets } from "./main/auth/local-secrets.js";
+import { FakeProvider } from "./main/providers/fake/fake-provider.js";
 import { ClaudeAdapter } from "./main/providers/claude/adapter.js";
 import { FileAccess, fileTools } from "./main/tools/files.js";
 import { shellSearchTools } from "./main/tools/shell-search.js";
@@ -13,7 +14,7 @@ import { shellSearchTools } from "./main/tools/shell-search.js";
 export async function headless(args = process.argv.slice(2)) {
   if (args.includes("--help")) {
     process.stdout.write(
-      "XHarness Phase 1\nnode dist/headless.js [--model claude-haiku-4-5] [--cwd path]\n/exit /clear · Ctrl+C interrupts a turn · Every tool requires y approval\n",
+      "XHarness Phase 1\nnode dist/headless.js [--model claude-haiku-4-5] [--cwd path] [--fake [--fixtures dir]]\n/exit /clear · Ctrl+C interrupts a turn · Every tool requires y approval\n",
     );
     return;
   }
@@ -22,8 +23,10 @@ export async function headless(args = process.argv.slice(2)) {
     return index < 0 ? fallback : (args[index + 1] ?? fallback);
   };
   const cwd = resolve(option("--cwd", process.cwd()));
-  const model = option("--model", "claude-haiku-4-5");
+  const fake = args.includes("--fake");
+  const model = fake ? "fake" : option("--model", "claude-haiku-4-5");
   if (
+    !fake &&
     ![
       "claude-haiku-4-5",
       "claude-haiku-4-5-20251001",
@@ -34,7 +37,8 @@ export async function headless(args = process.argv.slice(2)) {
     throw new Error("Unsupported Phase 1 model");
   const access = new FileAccess(cwd);
   const tools = new Map([...fileTools(access), ...shellSearchTools(cwd)]);
-  const secrets = await readLocalSecrets();
+  // --fake は通信も資格情報の読み取りも行わない。
+  const secrets = fake ? [] : await readLocalSecrets();
   const clean = (text: string) => redact(text, secrets);
   let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7. Tool dates use ISO 8601. Respect project instructions.`;
   for (const name of ["AGENTS.md", "CLAUDE.md"]) {
@@ -92,7 +96,19 @@ export async function headless(args = process.argv.slice(2)) {
       });
       const result = await runTurn(
         {
-          provider: new ClaudeAdapter(),
+          provider: fake
+            ? new FakeProvider({
+                // 実行場所に依らず、スクリプト(src/ または dist/)から見た fixtures を使う
+                fixturesDir: resolve(
+                  option(
+                    "--fixtures",
+                    fileURLToPath(
+                      new URL("../test/fixtures/claude", import.meta.url),
+                    ),
+                  ),
+                ),
+              })
+            : new ClaudeAdapter(),
           model,
           system,
           messages,

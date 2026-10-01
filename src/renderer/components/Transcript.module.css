@@ -1,0 +1,97 @@
+.pane {
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 24px;
+  border-top: 1px solid var(--line);
+}
+.msg {
+  margin-bottom: 14px;
+}
+.who {
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+.bubble {
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.user .bubble {
+  border-color: var(--dim);
+}
+.assistant .bubble {
+  border-color: var(--claude);
+}
+.call {
+  margin: 6px 0;
+  padding: 6px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 12px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.k {
+  color: var(--tool);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.ok {
+  flex-shrink: 0;
+  color: var(--code);
+}
+.wait {
+  flex-shrink: 0;
+  color: var(--warn);
+}
+.err {
+  flex-shrink: 0;
+  color: var(--err);
+}
+.notice {
+  font-size: 12px;
+  margin: 6px 0;
+}
+.dim {
+  color: var(--dim);
+}
+.warn {
+  color: var(--warn);
+}
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 14px;
+  background: var(--claude);
+  vertical-align: -2px;
+  animation: blink 1s steps(1) infinite;
+}
+.empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  padding-bottom: 40px;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: "Silkscreen", monospace;
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: 4px;
+  color: var(--claude);
+  text-shadow:
+    3px 3px 0 var(--claude-shadow),
+    6px 6px 0 #3a1c0f;
+}
+.hint {
+  color: var(--dim);
+  font-size: 11px;
+}

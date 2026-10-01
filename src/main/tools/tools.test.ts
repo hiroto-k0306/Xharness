@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, join, sep } from "node:path";
+import { spawnSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FileAccess, fileTools } from "./files.js";
 import { shellSearchTools } from "./shell-search.js";
@@ -96,6 +97,9 @@ describe("file tools", () => {
     ).toBeTruthy();
   });
 });
+// PowerShell 7 が無い環境(Linux のクラウドなど)では PowerShell 依存の試験を飛ばす。
+const hasPowerShell =
+  spawnSync("pwsh", ["-NoProfile", "-Command", "1"]).status === 0;
 describe("PowerShell and ripgrep tools", () => {
   it("finds files/content and treats no matches as success", async () => {
     await writeFile(join(directory, "a.txt"), "needle\n");
@@ -116,28 +120,42 @@ describe("PowerShell and ripgrep tools", () => {
       (await tools.get("Grep")!.execute({ pattern: "[" }, signal())).isError,
     ).toBe(true);
   });
-  it("executes PowerShell and bounds timeout values", async () => {
-    const tool = shellSearchTools(directory).get("Bash")!;
-    const output = await tool.execute(
-      { command: "Write-Output 'hello'" },
-      signal(),
-    );
-    expect(output.isError).toBe(false);
-    const parsed = JSON.parse(output.content) as {
-      output: string;
-      completedAt: string;
-    };
-    expect(parsed.output.trim()).toBe("hello");
-    expect(new Date(parsed.completedAt).toISOString()).toBe(parsed.completedAt);
-    expect(await tool.validate({ command: "x", timeoutSec: 601 })).toBeTruthy();
-  });
-  it("terminates a timed-out process", async () => {
-    const output = await shellSearchTools(directory)
-      .get("Bash")!
-      .execute({ command: "Start-Sleep -Seconds 10", timeoutSec: 1 }, signal());
-    expect(output.isError).toBe(true);
-    expect(output.content).toContain("timed out");
-  }, 10000);
+  it.skipIf(!hasPowerShell)(
+    "executes PowerShell and bounds timeout values",
+    async () => {
+      const tool = shellSearchTools(directory).get("Bash")!;
+      const output = await tool.execute(
+        { command: "Write-Output 'hello'" },
+        signal(),
+      );
+      expect(output.isError).toBe(false);
+      const parsed = JSON.parse(output.content) as {
+        output: string;
+        completedAt: string;
+      };
+      expect(parsed.output.trim()).toBe("hello");
+      expect(new Date(parsed.completedAt).toISOString()).toBe(
+        parsed.completedAt,
+      );
+      expect(
+        await tool.validate({ command: "x", timeoutSec: 601 }),
+      ).toBeTruthy();
+    },
+  );
+  it.skipIf(!hasPowerShell)(
+    "terminates a timed-out process",
+    async () => {
+      const output = await shellSearchTools(directory)
+        .get("Bash")!
+        .execute(
+          { command: "Start-Sleep -Seconds 10", timeoutSec: 1 },
+          signal(),
+        );
+      expect(output.isError).toBe(true);
+      expect(output.content).toContain("timed out");
+    },
+    10000,
+  );
 });
 it("keeps both ends of long output and masks known credentials", () => {
   const text = "start" + "x".repeat(40000) + "end";

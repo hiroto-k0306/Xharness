@@ -1,0 +1,32 @@
+.perm {
+  margin: 0 20px;
+  padding: 8px 12px;
+  border: 1px solid var(--warn);
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  background: #221d14;
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  flex: none;
+}
+.keys kbd {
+  font: inherit;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  padding: 0 6px;
+  border-radius: 3px;
+  margin-right: 4px;
+}

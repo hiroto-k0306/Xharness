@@ -459,6 +459,7 @@ agents: { ... }              # §10
 - `headless.ts` で readline の REPL から動かす。権限は全部 ask で可
 
 ### Phase 2: Electron シェルと exe 化
+- 状態: 画面・IPC・FakeProvider・アイコン生成・electron-builder 設定はクラウドで実装・検証済み。**exe のビルドと起動確認は手元で未実施**([docs/phase2-progress.md](docs/phase2-progress.md)、[docs/phase2-local-check.md](docs/phase2-local-check.md))
 - フレームレスウィンドウ、TitleBar、Transcript、PromptLine、PermissionDialog、テーマ(§16.2)
 - Sidebar(セッション一覧・新規・再開)と WorkspacePicker の folder タブ(§16.6, §18)
 - IPC イベント(§16.4)で core とつなぐ
@@ -644,6 +645,10 @@ type UiEvent =
 
 IPC チャネルは `harness:event`(main → renderer)と `harness:command`(renderer → main。送信・中断・権限応答・モデル切替)の2本だけにする。
 
+初回送信時も、ユーザー発言は main が履歴に追記してから `user_message` イベント(`sessionId` / `messageId` / `text`)で画面へ送る。コマンドの戻り値とイベントの到着順に依存する楽観的な追記は行わず、履歴表示とストリーム出力の順序を同じイベント列で保つ。
+
+Phase 2 の実装メモ(型は `src/shared/ipc.ts`): 複数セッションの同時実行(§16.6)のため、セッションに属するイベントには `sessionId` を付ける。上の型に加えて `{ type: "state"; state }`(セッション・ワークスペース一覧など)、`{ type: "transcript"; sessionId; items }`(履歴の再表示)、`{ type: "turn"; sessionId; status; stopCause? }`、`{ type: "tool_result"; receiptId; isError }`、`{ type: "permission_resolved" }` を追加した。`permission_request` には対応するツールカードの `receiptId` を任意で持たせる。`usage` と `agent` は型だけで、Phase 4・5 まで送らない。`set_model` は `sessionId` を取りそのセッションだけに効き(モデルと effort はセッションごとに保存)、`close_session` はセッションを閉じて権限待ちを deny にする。レンダラ → main のコマンドは `parseCommand` で検証し、戻り値(`CommandResult`)だけが同じチャネルで返る。
+
 ### 16.5 Receipt(ステップ記録)
 
 ```ts
@@ -736,6 +741,7 @@ interface Receipt {
   - `portable`: 単体 exe 版(`XHarness-x.y.z-portable.exe`、インストール不要)
 - ウィンドウ: `frame: false` + `titleBarOverlay`(Windows 標準の最小化・最大化・閉じるボタンを残しつつ、タブバーは自前で描画)
 - 背景色: `backgroundColor: "#141518"` を指定して、起動時の白いちらつきを防ぐ
+- `--fake`: Electron にも headless にも付けられ、FakeProvider(`test/fixtures` の SSE を再生)で動く。通信せず資格情報も読まない。exe には `--fake` 用の fixtures だけを `extraResources` で同梱する
 - データの置き場所: 設定・セッション・レシートは `~/.xharness/` に置く(portable 版でも同じ場所)。資格情報は公式 CLI のファイルを読むだけで、アプリ側にはコピーしない
 
 ```yaml

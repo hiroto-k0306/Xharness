@@ -91,6 +91,11 @@ export interface LoopOptions {
       | { type: "step"; step: StepName; round: number }
       | { type: "receipt"; receipt: Receipt },
   ): void;
+  /**
+   * 各周の STEP 1 で呼ばれ、その周のモデルと effort を返す。
+   * 実行中にモデルを切り替えても、進行中の呼び出しは中断せず次の周から反映する(§16.8)。
+   */
+  current?(): { model: string; reasoning?: { effort: ReasoningEffort } };
   maxRounds?: number;
   maxOutputTokens?: number;
   reasoning?: { effort: ReasoningEffort };

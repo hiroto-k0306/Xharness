@@ -1,19 +1,44 @@
-AGENTS.md を読んでから作業してください。
-phase2 ブランチを取得し、docs/phase2-local-check.md に沿って手元(Windows)で確認してください。
+DESIGN.md §13 の Phase 3 に着手してください。ブランチは phase3 を main から作成します。
 
-1. pnpm install と pnpm test を実行する。クラウドでスキップされた PowerShell 依存の2件を含め、全件通ることを確認する。
-2. レビュー指摘の修正を動かして確認する:
-   - 既定モデルが設定どおり(Opus 5.5 · high)で、--model 指定時はそれが優先されること
-   - モデルの切り替えが、そのセッションだけに効くこと
-   - 存在しないフォルダのワークスペースでは実行されず、通知が出ること
-   - 権限待ちのままセッションを閉じる/アプリを終了しても、待ちが残らないこと
-3. portable 版の exe をビルドし、別フォルダにコピーして起動する。
-4. --fake で、手順書の目視チェックリストをすべて確認する。改行や複数行のコードの表示、光る枠、権限確認の y/a/n も含む。
-5. 実 API で最小限の確認をする:
-   - Haiku でテキストの往復と、Read ツールの往復を1回ずつ
-   - 既定の Opus 5.5 で1回だけ
-6. 結果を docs/phase2-local-check.md の記入欄(なければ docs/phase2-local-result.md)にまとめる。
-   - 問題があれば、再現手順と画面の状態を書く
-   - 直せる不具合は phase2 ブランチで修正し、テストを追加する
+【0. 設計の取り込み】
+docs/design-websearch.md の内容を DESIGN.md に「§22 Web 検索と WebFetch」として取り込み、
+§9(権限)と §12(設定)に関連の追記をする。取り込み後、design-websearch.md は削除してよい。
 
-main へのマージはしないでください。確認結果を報告して、私の判断を待ってください。
+【1. CodexAdapter(§7.2)】
+- docs/phase0-findings.md と docs/phase0-codex-source.md の確認結果に従う
+- ヘッダ: Bearer、chatgpt-account-id、originator、User-Agent、session-id、thread-id、
+  x-client-request-id、Accept: text/event-stream。OpenAI-Beta は付けない
+- ボディ: store: false、stream: true、include: ["reasoning.encrypted_content"]、tool_choice: auto
+- SSE は Content-Type に頼らずに読む。使用量は x-codex-primary-* / secondary-* から読み、UiEvent の usage として出す
+- effort はカタログの値だけ送る(Ultra は送らない)
+
+【2. 変換とテスト】
+内部形式 ⇄ Responses API の変換(§5)と、test/fixtures/codex を使った単体テスト
+(function_call の往復、暗号化された reasoning の返送)。
+
+【3. 会話の途中でのモデル切り替え(§16.8)】
+プロバイダをまたぐときは reasoning / thinking ブロックを除外し、同じプロバイダ内では変更せずに返す。
+
+【4. Router のフォールバック(§11)】
+429 で待ち時間が短ければ待って再試行し、長ければ fallback 先へ切り替えて STEP 1 から続ける。
+Claude の 429 は anthropic-ratelimit-unified-*-reset から待ち時間を計算する。
+
+【5. FakeProvider】
+Codex の fixtures の再生を追加する。
+
+【6. Web 検索の疎通確認(§22.7)】
+- Codex の web_search の live / cached の指定方法を Codex CLI のソースで確認してから送る
+- Claude(Haiku、使えなければ Sonnet 5.5)と Codex(Luna)で、検索を1回ずつ実行する
+- 使えるかどうか、受け付けられたツールの版、使用量ヘッダの前後差を docs/phase3-progress.md に記録する
+- 両方とも使えない場合は【7】に進まず報告する
+
+【7. WebSearch / WebFetch の実装(§22)】
+疎通確認で使えると分かったプロバイダについて実装する。
+WebFetch の拒否条件(localhost・プライベート IP・別ホストへのリダイレクト)と、
+外部コンテンツの注記は必ずテストする。
+
+使用量の予算: 実 API への送信は Codex 12回・Claude 7回まで(Web 検索の確認を含む)。
+開発中のテストは fixtures と FakeProvider で行う。
+
+1〜2 が終わった時点で一度報告し、そのあと 3 以降に進んでください。
+最後に、テスト件数、実通信の回数、設計との差、未実施のことを docs/phase3-progress.md にまとめてください。

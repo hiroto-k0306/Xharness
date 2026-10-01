@@ -22,3 +22,20 @@ export function isExternalHttps(url: string): boolean {
     return false;
   }
 }
+
+/** フレームレスのウィンドウでも手順書の診断ショートカットを使えるようにする。 */
+export function isDevToolsShortcut(input: {
+  type: string;
+  key: string;
+  control: boolean;
+  shift: boolean;
+  alt: boolean;
+}): boolean {
+  return (
+    input.type === "keyDown" &&
+    input.control &&
+    input.shift &&
+    !input.alt &&
+    input.key.toLowerCase() === "i"
+  );
+}

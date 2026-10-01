@@ -1,8 +1,30 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { isExternalHttps, secureWebPreferences } from "./security.js";
+import {
+  isDevToolsShortcut,
+  isExternalHttps,
+  secureWebPreferences,
+} from "./security.js";
 
 describe("renderer security settings (DESIGN §14)", () => {
+  it("opens diagnostics only for Ctrl+Shift+I key-down, never plain typing", () => {
+    const input = {
+      type: "keyDown",
+      key: "I",
+      control: true,
+      shift: true,
+      alt: false,
+    };
+    expect(isDevToolsShortcut(input)).toBe(true);
+    for (const changed of [
+      { type: "keyUp" },
+      { control: false },
+      { shift: false },
+      { alt: true },
+      { key: "n" },
+    ])
+      expect(isDevToolsShortcut({ ...input, ...changed })).toBe(false);
+  });
   it("isolates the renderer: contextIsolation, no node, sandbox", () => {
     expect(secureWebPreferences("/p/preload.cjs")).toMatchObject({
       contextIsolation: true,

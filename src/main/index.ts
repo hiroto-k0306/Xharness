@@ -8,7 +8,11 @@ import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
 import { createHost, registerIpc, sendEvent } from "./ipc.js";
-import { isExternalHttps, secureWebPreferences } from "./security.js";
+import {
+  isDevToolsShortcut,
+  isExternalHttps,
+  secureWebPreferences,
+} from "./security.js";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
 const startup = parseStartupArgs(process.argv.slice(1));
@@ -36,6 +40,12 @@ function createWindow() {
   window.once("ready-to-show", () => window?.show());
   window.on("closed", () => (window = null));
   const wc = window.webContents;
+  wc.on("before-input-event", (event, input) => {
+    if (isDevToolsShortcut(input)) {
+      event.preventDefault();
+      wc.toggleDevTools();
+    }
+  });
   // 外部リンクは既定ブラウザへ。アプリ内のナビゲーション・新規ウィンドウは許可しない
   wc.setWindowOpenHandler(({ url }) => {
     if (isExternalHttps(url)) void shell.openExternal(url);

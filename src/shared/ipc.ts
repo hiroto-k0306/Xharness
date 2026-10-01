@@ -18,14 +18,15 @@ export type StepNode = (typeof STEP_NODES)[number];
 
 /** DESIGN.md §16.5 */
 export interface Receipt {
+  agentId?: string;
   input?: unknown;
   output?: string;
   id: string;
   sessionId: string;
   ts: number;
-  provider: ProviderName | "harness";
+  provider: ProviderName | "harness" | "hook";
   model?: string;
-  kind: "model_call" | "tool" | "permission" | "fallback" | "compact";
+  kind: "model_call" | "tool" | "permission" | "fallback" | "compact" | "hook";
   tool?: string;
   decision?: "allow" | "deny" | "ask→allow" | "ask→deny";
   durationMs: number;
@@ -73,6 +74,13 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  models?: {
+    id: string;
+    provider: ProviderName;
+    label: string;
+    efforts: Effort[];
+    defaultEffort?: Effort;
+  }[];
   gitAvailable?: boolean;
   phase4?: boolean;
   fallback?: Partial<Record<ProviderName, string>>;
@@ -97,13 +105,45 @@ export type TranscriptItem =
       summary: string;
       status: "pending" | "ok" | "error" | "denied";
     }
-  | { kind: "notice"; id: string; tone: "dim" | "warn" | "err"; text: string };
+  | {
+      kind: "notice";
+      id: string;
+      tone: "dim" | "warn" | "err";
+      text: string;
+      phase?: string;
+    };
 
 /**
  * §16.4 の UiEvent。sessionId 付きのものは複数セッションの同時実行用の追加(§16.6)。
  * "state" / "transcript" / "user_message" / "turn" / "tool_result" / "permission_resolved" も追加分。
  */
 export type UiEvent =
+  | {
+      type: "workflow";
+      sessionId: string;
+      phase: string;
+      reviewRound: number;
+      items: {
+        id: string;
+        status: string;
+        title?: string;
+        model?: string;
+        agent?: string;
+      }[];
+      findings: {
+        severity: "must" | "should" | "nit";
+        file: string;
+        line?: number;
+        message: string;
+      }[];
+    }
+  | {
+      type: "agent_step";
+      sessionId: string;
+      agentId: string;
+      step: StepNode;
+      round: number;
+    }
   | { type: "tool_progress"; sessionId: string; index: number; total: number }
   | { type: "notice"; sessionId: string; message: string; tone: "dim" | "warn" }
   | { type: "repository_progress"; message: string }
@@ -133,6 +173,8 @@ export type UiEvent =
     }
   | {
       type: "permission_request";
+      agentId?: string;
+      plan?: unknown[];
       sessionId: string;
       requestId: string;
       /** どのツールカードの確認か(tool_call の receiptId) */
@@ -161,10 +203,19 @@ export type UiEvent =
     }
   | {
       type: "agent";
+      branch?: string;
+      sessionId?: string;
       agentId: string;
       name: string;
       model: string;
       status: "running" | "done" | "error";
+    }
+  | { type: "agent_text"; sessionId: string; agentId: string; text: string }
+  | {
+      type: "agent_transcript";
+      sessionId: string;
+      agentId: string;
+      items: TranscriptItem[];
     }
   | {
       type: "turn";
@@ -179,6 +230,12 @@ export type UiEvent =
 export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
+  | {
+      type: "plan_response";
+      sessionId: string;
+      requestId: string;
+      items: unknown[];
+    }
   | {
       type: "set_mode";
       sessionId: string;
@@ -195,6 +252,7 @@ export type HarnessCommand =
       decision: PermissionDecision;
     }
   | { type: "set_model"; sessionId: string; model: string; effort?: Effort }
+  | { type: "set_default_model"; model: string; effort?: Effort }
   | { type: "close_session"; sessionId: string }
   | {
       type: "new_session";
@@ -239,6 +297,13 @@ export interface HarnessApi {
 }
 
 const MAX_TEXT = 200_000;
+function jsonFits(value: unknown): boolean {
+  try {
+    return JSON.stringify(value).length <= MAX_TEXT;
+  } catch {
+    return false;
+  }
+}
 const str = (v: unknown, max = 512): v is string =>
   typeof v === "string" && v.length > 0 && v.length <= max;
 
@@ -247,6 +312,19 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "plan_response":
+      return str(c.sessionId) &&
+        str(c.requestId) &&
+        Array.isArray(c.items) &&
+        c.items.length <= 100 &&
+        jsonFits(c.items)
+        ? {
+            type: "plan_response",
+            sessionId: c.sessionId,
+            requestId: c.requestId,
+            items: c.items,
+          }
+        : undefined;
     case "ready":
     case "abort_repository":
     case "pick_folder":
@@ -271,6 +349,15 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
             sessionId: c.sessionId,
             requestId: c.requestId,
             decision: c.decision,
+          }
+        : undefined;
+    case "set_default_model":
+      return str(c.model, 100) &&
+        (c.effort === undefined || EFFORT_VALUES.includes(c.effort as Effort))
+        ? {
+            type: "set_default_model",
+            model: c.model,
+            effort: c.effort as Effort | undefined,
           }
         : undefined;
     case "set_model":

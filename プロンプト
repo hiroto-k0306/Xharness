@@ -1,0 +1,14 @@
+DESIGN.md §13 の Phase 1 に着手してください。
+対象: 内部形式(§5)、ClaudeAdapter(§7.1)、Agent Loop(§8, §19 の6 STEP と beforeStep/afterStep の入り口)、
+Read/Write/Edit/Bash/Grep/Glob、headless.ts の REPL。
+
+Phase 0 の結果から、次を必ず反映してください:
+1. ClaudeAdapter は system の1ブロック目に識別文を常に付け、自前の system は2ブロック目以降に置く
+2. SSE の読み取りは Content-Type に頼らない(CRLF にも対応する)
+3. Claude の 429 には Retry-After がないので、anthropic-ratelimit-unified-*-reset から待ち時間を計算する
+4. ツールが返す日時は ISO 8601 形式にする
+5. 開発中の通信テストは claude-haiku-4-5 を使う。Adapter 完成時に Opus 5.5 と Sonnet 5.5 へ1回ずつ送って動作確認する
+6. catalog/models.yaml を Phase 0 の結果で更新する(contextTokens: 272000、Luna の effort は low〜max、
+   新しく見つかったモデルは enabled: false で登録)
+
+小さく区切って進め、ClaudeAdapter の変換テストが通った時点で一度報告してください。

@@ -117,7 +117,7 @@ export function App() {
             modelColor={
               providerOf(model) === "codex" ? "var(--codex)" : "var(--claude)"
             }
-            onSubmit={(text) => void s.send(text)}
+            onSubmit={(text) => s.send(text)}
           />
         </main>
       </div>

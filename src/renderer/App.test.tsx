@@ -165,4 +165,21 @@ describe("App wired to the real SessionController", () => {
       "true",
     );
   });
+  it("keeps the message in the input and shows one notice when the session folder is gone", async () => {
+    const { rm } = await import("node:fs/promises");
+    render(<App />);
+    await screen.findByText("+ new session");
+    await userEvent.type(screen.getByLabelText("prompt"), "first{Enter}");
+    await screen.findByText("pong");
+    await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
+    const cwd = useStore.getState().app!.sessions[0]!.cwd;
+    await rm(cwd, { recursive: true, force: true });
+    await userEvent.type(screen.getByLabelText("prompt"), "second{Enter}");
+    await waitFor(() =>
+      expect(screen.getByLabelText("prompt")).toHaveValue("second"),
+    );
+    const notices = screen.getAllByText(/作業フォルダが見つかりません/);
+    expect(notices).toHaveLength(1);
+    expect(screen.queryByText(/Working directory not found/)).toBeNull();
+  });
 });

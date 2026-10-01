@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { summarizeInput } from "../../shared/summary.js";
 import {
+  REPORTED_ERRORS,
   type AppState,
   type StepNode,
   type StepNumber,
@@ -211,7 +212,8 @@ interface UiStore extends EventState {
   setPrefs(patch: Partial<Prefs>): void;
   toggleGroup(id: string): void;
   start(): () => void;
-  send(text: string): Promise<void>;
+  /** 受け付けられたら true。断られたら false(入力欄は文を戻す) */
+  send(text: string): Promise<boolean>;
   abort(): void;
   respond(decision: "allow" | "always" | "deny"): void;
   newSession(workspaceId: string | null, readOnly?: boolean): Promise<void>;
@@ -245,14 +247,18 @@ export const useStore = create<UiStore>()((set, get) => ({
   },
   async send(text) {
     const trimmed = text.trim();
-    if (!trimmed) return;
+    if (!trimmed) return false;
     let id = get().app?.currentSessionId ?? null;
     if (!id) {
       const created = await window.harness.command({
         type: "new_session",
         workspaceId: null,
       });
-      if (!created.ok || !created.sessionId) return;
+      if (!created.ok || !created.sessionId) {
+        if (!created.ok && !REPORTED_ERRORS.includes(created.error))
+          get().apply({ type: "error", message: created.error });
+        return false;
+      }
       id = created.sessionId;
     }
     const sessionId = id;
@@ -261,8 +267,9 @@ export const useStore = create<UiStore>()((set, get) => ({
       sessionId,
       text: trimmed,
     });
-    if (!result.ok)
+    if (!result.ok && !REPORTED_ERRORS.includes(result.error))
       get().apply({ type: "error", sessionId, message: result.error });
+    return result.ok;
   },
   abort() {
     const id = get().app?.currentSessionId;
@@ -280,11 +287,13 @@ export const useStore = create<UiStore>()((set, get) => ({
       });
   },
   async newSession(workspaceId, readOnly) {
-    await window.harness.command({
+    const result = await window.harness.command({
       type: "new_session",
       workspaceId,
       readOnly,
     });
+    if (!result.ok && !REPORTED_ERRORS.includes(result.error))
+      get().apply({ type: "error", message: result.error });
   },
   openSession(id) {
     void window.harness.command({ type: "open_session", sessionId: id });

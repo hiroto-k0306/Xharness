@@ -8,7 +8,8 @@ export interface PromptLineProps {
   blocked: boolean;
   modelLabel: string;
   modelColor: string;
-  onSubmit(text: string): void;
+  /** false を返したら(送信を断られたら)、入力欄が空のままなら文を戻す */
+  onSubmit(text: string): void | boolean | Promise<boolean | void>;
 }
 
 /** `name ❯ ` 形式の入力欄。Enter 送信 / Shift+Enter 改行(実行中の Esc 中断は App が受ける) */
@@ -44,8 +45,11 @@ export function PromptLine(p: PromptLineProps) {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             if (!text.trim()) return;
-            p.onSubmit(text);
+            const sent = text;
             setText("");
+            void Promise.resolve(p.onSubmit(sent)).then((ok) => {
+              if (ok === false) setText((now) => (now === "" ? sent : now));
+            });
           }
         }}
       />

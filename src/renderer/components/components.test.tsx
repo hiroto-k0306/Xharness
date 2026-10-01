@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { PermissionInline } from "./PermissionInline.js";
@@ -194,6 +200,32 @@ describe("PromptLine", () => {
     expect(box).toHaveValue("line1\nline2");
     await userEvent.type(box, "{Enter}");
     expect(onSubmit).toHaveBeenCalledWith("line1\nline2");
+    expect(box).toHaveValue("");
+  });
+  it("puts the text back when the send is refused", async () => {
+    render(<PromptLine {...base} onSubmit={async () => false} />);
+    const box = screen.getByLabelText("prompt");
+    await userEvent.type(box, "keep me{Enter}");
+    await waitFor(() => expect(box).toHaveValue("keep me"));
+  });
+  it("does not overwrite what the user typed meanwhile, and clears on success", async () => {
+    let refuse!: (ok: boolean) => void;
+    const { rerender } = render(
+      <PromptLine
+        {...base}
+        onSubmit={() => new Promise<boolean>((r) => (refuse = r))}
+      />,
+    );
+    const box = screen.getByLabelText("prompt");
+    await userEvent.type(box, "first{Enter}");
+    await userEvent.type(box, "second");
+    refuse(false);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(box).toHaveValue("second");
+    rerender(<PromptLine {...base} onSubmit={async () => true} />);
+    await userEvent.clear(box);
+    await userEvent.type(box, "ok{Enter}");
+    await new Promise((r) => setTimeout(r, 0));
     expect(box).toHaveValue("");
   });
   it("does not send the Enter that confirms Japanese IME composition", () => {

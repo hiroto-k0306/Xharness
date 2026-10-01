@@ -178,6 +178,12 @@ export type HarnessCommand =
   | { type: "pick_folder" }
   | { type: "forget_workspace"; workspaceId: string };
 
+/** main が理由をすでに画面へ通知している失敗(画面側で重ねて表示しない) */
+export const REPORTED_ERRORS: readonly string[] = [
+  "Working directory not found",
+  "Workspace folder not found",
+];
+
 export type CommandResult =
   | { ok: true; workspaceId?: string; sessionId?: string }
   | { ok: false; error: string };

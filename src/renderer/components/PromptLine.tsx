@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import styles from "./PromptLine.module.css";
 
 export interface PromptLineProps {
+  onModel?(): void;
   mode?: "default" | "acceptEdits" | "plan";
   readOnly?: boolean;
   onMode?(mode: "default" | "acceptEdits" | "plan"): void;
@@ -56,10 +57,16 @@ export function PromptLine(p: PromptLineProps) {
           }
         }}
       />
-      <span className={styles.chip} title="モデルの切替は Phase 5(ModelPicker)">
+      <button
+        type="button"
+        className={styles.chip}
+        title="モデル切替 (Ctrl+M)"
+        onClick={p.onModel}
+        aria-label="モデル切替"
+      >
         <i className={styles.dot} style={{ background: p.modelColor }} />
         {p.modelLabel}
-      </span>
+      </button>
       {p.mode ? (
         <select
           className={styles.chip}

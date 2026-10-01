@@ -25,7 +25,12 @@ export function itemsFromMessages(messages: Message[]): TranscriptItem[] {
         items.push(item);
       } else if (block.type === "tool_result") {
         const item = tools.get(block.toolUseId);
-        if (item) item.status = block.isError ? "error" : "ok";
+        if (item)
+          item.status = block.isError
+            ? block.content === "Permission denied by user"
+              ? "denied"
+              : "error"
+            : "ok";
       }
     }
   });

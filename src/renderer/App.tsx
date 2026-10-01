@@ -1,3 +1,8 @@
+import { STEP_NODES } from "../shared/ipc.js";
+import { AgentsPanel } from "./components/AgentsPanel.js";
+import { PhaseBar } from "./components/PhaseBar.js";
+import { ModelPicker } from "./components/ModelPicker.js";
+import { PlanApproval } from "./components/PlanApproval.js";
 import { useEffect, useState } from "react";
 import {
   Hero,
@@ -24,6 +29,10 @@ function modelLabel(model: string, effort: string): string {
 }
 
 export function App() {
+  const [modelOpen, setModelOpen] = useState(false);
+  const [selectedAgents, setSelectedAgents] = useState<Record<string, string>>(
+    {},
+  );
   const [pane, setPane] = useState("transcript");
   const [usageOpen, setUsageOpen] = useState(false);
   const s = useStore();
@@ -35,11 +44,40 @@ export function App() {
   const session = app?.sessions.find((x) => x.id === current);
   const workspace = app?.workspaces.find((w) => w.id === session?.workspaceId);
   const waiting = !!view?.pending;
+  const selected = current ? (selectedAgents[current] ?? "auto") : "auto";
+  const agentId =
+    selected === "auto" ? (view?.activeAgent ?? "main") : selected;
+  const agent = view?.agents?.[agentId];
+  const agentStep = view?.agentSteps?.[agentId];
+  const activeView = agent
+    ? {
+        ...view!,
+        running: agent.status === "running",
+        step: agentStep
+          ? {
+              step: (STEP_NODES.indexOf(agentStep.step) + 1) as
+                1 | 2 | 3 | 4 | 5 | 6,
+              node: agentStep.step,
+              round: agentStep.round,
+            }
+          : undefined,
+        items:
+          agent.items ??
+          (agent.text
+            ? [{ kind: "assistant" as const, id: agentId, text: agent.text }]
+            : []),
+      }
+    : view;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
       const key = e.key.toLowerCase();
+      if (mod && key === "m") {
+        e.preventDefault();
+        setModelOpen((v) => !v);
+        return;
+      }
       if (mod && key === "u") {
         e.preventDefault();
         setUsageOpen((v) => !v);
@@ -218,7 +256,27 @@ export function App() {
               onToggle={() => s.setPrefs({ heroOpen: !prefs.heroOpen })}
             />
           )}
-          <StepTabs active={view?.step} waiting={waiting} model={model} />
+          <PhaseBar
+            view={view}
+            model={model}
+            onPhase={(phase) => void s.send(`/phase ${phase}`)}
+            onJump={(phase) => {
+              setPane("transcript");
+              if (current)
+                setSelectedAgents((v) => ({ ...v, [current]: "main" }));
+              requestAnimationFrame(() =>
+                document
+                  .querySelectorAll('[data-phase="' + phase + '"]')
+                  .item(0)
+                  ?.scrollIntoView?.({ block: "start" }),
+              );
+            }}
+          />
+          <StepTabs
+            active={activeView?.step}
+            waiting={waiting}
+            model={agent?.model ?? model}
+          />
           {app.phase4 && (
             <div
               className={styles.paneTabs}
@@ -241,24 +299,107 @@ export function App() {
               </button>
             </div>
           )}
-          <div className={styles.middle} data-pane={pane}>
-            <Transcript
-              items={view?.items ?? []}
-              running={!!view?.running}
+          <div className={styles.agentArea}>
+            <div className={styles.middle} data-pane={pane}>
+              <Transcript
+                items={activeView?.items ?? []}
+                running={!!view?.running}
+                model={model}
+              />
+              {app.phase4 && (
+                <LoopFlow view={activeView} model={agent?.model ?? model} />
+              )}
+            </div>
+            <AgentsPanel
+              view={view}
+              selected={selected}
               model={model}
+              onSelect={(id) => {
+                if (current)
+                  setSelectedAgents((v) => ({ ...v, [current]: id }));
+              }}
             />
-            {app.phase4 && <LoopFlow view={view} model={model} />}
           </div>
           {app.phase4 && <Receipts receipts={view?.receipts} />}
-          {view?.pending && (
-            <PermissionInline
-              persistent={app.phase4}
-              tool={view.pending.tool}
-              summary={view.pending.summary}
-              onRespond={s.respond}
+          {view?.pending?.plan && current ? (
+            <PlanApproval
+              key={view.pending.requestId}
+              plan={view.pending.plan}
+              models={app.models ?? []}
+              onApprove={async (items) => {
+                const result = await window.harness.command({
+                  type: "plan_response",
+                  sessionId: current,
+                  requestId: view.pending!.requestId,
+                  items,
+                });
+                if (!result.ok)
+                  s.apply({
+                    type: "error",
+                    sessionId: current,
+                    message: result.error,
+                  });
+              }}
+              onDeny={() => s.respond("deny")}
+              onRevise={() => {
+                s.respond("deny");
+                s.apply({
+                  type: "notice",
+                  sessionId: current,
+                  tone: "dim",
+                  message: "計画への修正指示を入力してください",
+                });
+              }}
+            />
+          ) : (
+            view?.pending && (
+              <PermissionInline
+                persistent={app.phase4}
+                tool={view.pending.tool}
+                summary={view.pending.summary}
+                onRespond={s.respond}
+              />
+            )
+          )}
+          {modelOpen && current && (
+            <ModelPicker
+              models={app.models ?? []}
+              model={model}
+              effort={effort}
+              onDefault={async (model, effort) => {
+                const result = await window.harness.command({
+                  type: "set_default_model",
+                  model,
+                  effort,
+                });
+                if (result.ok) setModelOpen(false);
+                else
+                  s.apply({
+                    type: "error",
+                    sessionId: current,
+                    message: result.error,
+                  });
+              }}
+              onClose={() => setModelOpen(false)}
+              onApply={async (model, effort) => {
+                const result = await window.harness.command({
+                  type: "set_model",
+                  sessionId: current,
+                  model,
+                  effort,
+                });
+                if (result.ok) setModelOpen(false);
+                else
+                  s.apply({
+                    type: "error",
+                    sessionId: current,
+                    message: result.error,
+                  });
+              }}
             />
           )}
           <PromptLine
+            onModel={() => setModelOpen((v) => !v)}
             mode={
               app.phase4 ? (session?.permissionMode ?? "default") : undefined
             }

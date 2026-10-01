@@ -71,6 +71,7 @@ export function Transcript({ items, running, model }: TranscriptProps) {
             <div
               key={item.id}
               className={`${styles.notice} ${styles[item.tone]}`}
+              data-phase={item.phase}
             >
               # {item.text}
             </div>

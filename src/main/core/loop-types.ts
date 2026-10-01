@@ -77,7 +77,7 @@ export type HookContext = Immutable<
   Pick<
     LoopContext,
     "round" | "messages" | "request" | "completion" | "stopCause"
-  >
+  > & { calls: ToolCall[] }
 >;
 export type StepHook = (
   step: StepName,
@@ -89,6 +89,7 @@ export interface LoopOptions {
     messages: Message[],
     route: Route,
     signal: AbortSignal,
+    context?: { system: string; tools: import("./types.js").ToolSpec[] },
   ): Promise<{ messages: Message[]; stop?: string }>;
   provider: Provider;
   router?: Router;

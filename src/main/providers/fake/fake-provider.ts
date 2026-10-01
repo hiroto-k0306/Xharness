@@ -11,9 +11,15 @@ import { decodeCodexStream } from "../codex/stream.js";
 import { type ProviderId } from "../../core/types.js";
 import { claudeUsage } from "../claude/usage.js";
 import { codexUsage } from "../codex/usage.js";
+import { phase5Demo } from "./phase5-demo.js";
 
 /** FakeProvider が1回の stream() で再現する応答。 */
 export type FakeStep =
+  | {
+      type: "message";
+      message: import("../../core/types.js").Message;
+      stopReason: "end_turn" | "tool_use";
+    }
   | {
       /** test/fixtures/claude/<name>.json の SSE を実際の Claude デコーダ経由で再生する */
       type: "fixture";
@@ -68,6 +74,8 @@ export function routeFake(
   request: ProviderRequest,
   provider: ProviderId = "claude",
 ): FakeStep {
+  const demo = phase5Demo(request);
+  if (demo) return demo;
   if (request.webSearch)
     return {
       type: "fixture",
@@ -150,7 +158,10 @@ export class FakeProvider implements Provider {
           "claude-haiku-4-5-20251001",
           "claude-opus-5-5",
           "claude-sonnet-5-5",
-        ].map((id) => ({ id, contextTokens: id.includes("haiku") ? 200000 : 1000000 }));
+        ].map((id) => ({
+          id,
+          contextTokens: id.includes("haiku") ? 200000 : 1000000,
+        }));
   }
   private async load(name: string): Promise<FixtureFile> {
     if (!/^[\w.-]+$/.test(name)) throw new Error("Invalid fixture name");
@@ -168,6 +179,33 @@ export class FakeProvider implements Provider {
     const step = this.script.shift() ?? routeFake(request, this.id);
     try {
       signal.throwIfAborted();
+      if (step.type === "message") {
+        const message = structuredClone(step.message);
+        message.meta = {
+          ...message.meta,
+          provider: this.id,
+          model: request.model,
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+        for (const block of step.message.content) {
+          if (block.type === "text")
+            yield { type: "text_delta", text: block.text };
+          if (block.type === "tool_use")
+            yield {
+              type: "tool_use",
+              id: block.id,
+              name: block.name,
+              input: block.input,
+            };
+        }
+        yield {
+          type: "message_done",
+          message,
+          stopReason: step.stopReason,
+          usage: { inputTokens: 1, outputTokens: 1 },
+        };
+        return;
+      }
       if (step.type === "rate_limited") {
         yield {
           type: "rate_limited",
@@ -188,8 +226,14 @@ export class FakeProvider implements Provider {
         return;
       }
       const file = await this.load(step.name);
-      if (this.options.quota) yield { type: "usage", provider: this.id,
-        ...(this.id === "claude" ? claudeUsage : codexUsage)(new Headers(file.responseHeaders?.all)) };
+      if (this.options.quota)
+        yield {
+          type: "usage",
+          provider: this.id,
+          ...(this.id === "claude" ? claudeUsage : codexUsage)(
+            new Headers(file.responseHeaders?.all),
+          ),
+        };
       const events =
         step.cutAfterEvents === undefined
           ? file.events

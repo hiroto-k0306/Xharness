@@ -1,0 +1,77 @@
+.phases {
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  flex-wrap: wrap;
+}
+.phases button,
+.agents button {
+  background: var(--panel);
+  color: var(--dim);
+  border: 1px solid var(--line);
+  padding: 8px;
+  text-align: left;
+}
+.phases button[data-active="true"] {
+  color: var(--claude);
+  border-color: var(--claude);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--claude) 35%, transparent);
+}
+.agents {
+  width: 230px;
+  overflow: auto;
+  flex-shrink: 0;
+  border-left: 1px solid var(--line);
+  padding: 8px;
+}
+.agents button {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+.agents button[aria-pressed="true"] {
+  color: var(--code);
+  border-color: var(--code);
+}
+.phases small,
+.agents small {
+  display: block;
+  color: var(--dim);
+  margin-top: 4px;
+}
+.picker {
+  position: absolute;
+  bottom: 58px;
+  right: 16px;
+  z-index: 40;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 16px;
+  box-shadow: 0 6px 28px #0008;
+}
+.picker label {
+  display: block;
+  margin-bottom: 8px;
+}
+.picker select {
+  margin-left: 12px;
+}
+.plan {
+  padding: 12px;
+  border-top: 1px solid var(--warn);
+  max-height: 40vh;
+  overflow: auto;
+}
+.plan article {
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
+}
+.plan select {
+  margin: 4px;
+}
+@media (max-width: 900px) {
+  .agents {
+    width: 160px;
+  }
+}

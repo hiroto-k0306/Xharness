@@ -65,7 +65,7 @@ models:
     alias: haiku
     displayName: Haiku 4.5
     enabled: true
-    verified: false
+    verified: true  # C2 / C3 の OAuth 疎通を確認。effort の範囲は未確認
     roles: [worker, utility]
     strengths:
       - 型定義・単純なテスト追加・定型的な書き換え
@@ -96,34 +96,35 @@ models:
     alias: astra
     displayName: GPT-6 Astra
     enabled: true
-    verified: false
+    verified: true  # X2 / X4: low・high・max の OAuth 疎通を確認
     roles: [worker, reviewer]
     strengths:
       - 最も難しい作業 (コード・アプリ・調査をまたぐ end-to-end の作業)
       - Claude と別の視点で行う重要な変更のレビュー
     avoid:
       - 小さな作業 (枠の消費が大きい)
-    efforts: { low: low, medium: medium, high: high, max: max, ultra: ultra }   # 要確認
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }   # medium/xhigh は X5 掲載のみ
     defaultEffort: high
     quotaWeight: 5
-    contextTokens: null
+    contextTokens: 272000  # X5 の設定値。入力上限までの試験は未実施
+    notes: "Ultra は自動委譲の設計まで保留（ユーザー承認 2026-10-01）。調査した CLI は通常推論の effort を xhigh に変換するが、単純な API effort として有効化しない"
 
   - provider: codex
     id: gpt-6.1-sol
     alias: sol
     displayName: GPT-6.1 Sol
     enabled: true
-    verified: false
+    verified: true  # X2 / X4: low・medium・high・xhigh・max の OAuth 疎通を確認
     roles: [worker, reviewer]
     strengths:
       - Astra に近い性能で、繰り返し・長時間の作業を安く回す
       - 独立したユーティリティ・アルゴリズム・スクリプトの実装
       - Claude が書いたコードの通常のレビュー (reviewer の既定)
     avoid: []
-    efforts: { low: low, medium: medium, high: high, max: max }   # 要確認
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }   # X2 / X4 で確認
     defaultEffort: high
     quotaWeight: 3
-    contextTokens: null
+    contextTokens: 272000  # X5 の設定値。入力上限までの試験は未実施
     notes: "2026-09-29 に提供開始。ユーザーのプランで利用可能 (ユーザー確認 2026-10-01)"
 
   - provider: codex
@@ -131,16 +132,16 @@ models:
     alias: luna
     displayName: GPT-6 Luna
     enabled: true
-    verified: false
+    verified: true  # X2 / X4: low・high・max の OAuth 疎通を確認
     roles: [worker, utility]
     strengths:
       - 範囲の狭い大量の作業 (要約・抽出・定型的な書き換え)
     avoid:
       - 設計判断を含む作業
-    efforts: { high: high, max: max }   # 公式: High 〜 Max のみ。Ultra 非対応
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }   # low/high/max は実測。medium/xhigh は X5 掲載のみ
     defaultEffort: high
     quotaWeight: 1
-    contextTokens: null
+    contextTokens: 272000  # X5 の設定値。入力上限までの試験は未実施
 
   - provider: codex
     id: gpt-5.5

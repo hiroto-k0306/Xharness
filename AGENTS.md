@@ -10,7 +10,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - UI の見本: [mockup/index.html](mockup/index.html)(ブラウザで開くだけで見られる)
 - モデル一覧: [catalog/models.yaml](catalog/models.yaml)
 - ロゴ・アイコン: [brand/](brand/)
-- 今の作業: **Phase 0(疎通確認)** → 手順は [docs/phase0-runbook.md](docs/phase0-runbook.md)
+- 状態: **Phase 0 のゲート完了（2026-10-01）、Phase 1 未着手**。確認結果・未実測事項は [docs/phase0-findings.md](docs/phase0-findings.md)、完了条件は [docs/phase0-runbook.md](docs/phase0-runbook.md)
 
 ## 作業の進め方
 
@@ -40,6 +40,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - **アクセストークン・リフレッシュトークン・アカウント ID を、ログ・標準出力・ファイル・コミット・エラーメッセージに出さない**。出す必要があるときは先頭 6 文字 + `…` にマスクする
 - `test/fixtures/` に保存するときは、リクエストヘッダの `Authorization` と `chatgpt-account-id` を必ず取り除く。保存前にマスク処理を通す
 - `~/.claude/.credentials.json` と `~/.codex/auth.json` は**読むだけ**。Phase 0 では書き換えない
+  - 例外（ユーザー承認 2026-10-01）: C5 / X7 の更新試験に限り、公式 CLI 自身による更新を許可する。XHarness のスクリプトは読み取りと変化の比較のみ行い、自前 refresh・資格情報編集・秘密値の保存は行わない
 - トークンをレンダラプロセス(画面側)に渡さない
 - 使用量を無駄にしない: Phase 0 の試験リクエストは最小限にし、短いプロンプトと軽いモデルを使う(手順書の指定どおり)
 

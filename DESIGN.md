@@ -258,29 +258,42 @@ type StopReason = "end_turn" | "tool_use" | "max_tokens" | "refusal" | "other";
 
 | 項目 | 想定値(要検証) |
 |---|---|
-| エンドポイント | `POST https://api.anthropic.com/v1/messages` (stream: true) |
-| 認証ヘッダ | `Authorization: Bearer <accessToken>`(`x-api-key` ではない) |
-| 追加ヘッダ | `anthropic-version: 2023-06-01`、`anthropic-beta: oauth-2025-04-20` (OAuth用beta) |
-| system 制約 | 先頭ブロックに Claude Code の識別文を要求される可能性あり → 第1ブロックを識別文、第2ブロック以降に自前プロンプト |
+| エンドポイント | `POST https://api.anthropic.com/v1/messages` (stream: true)。C2 の Haiku で確認済み |
+| 認証ヘッダ | `Authorization: Bearer <accessToken>` で Haiku の C2 成功。`x-api-key` は使っていない |
+| 追加ヘッダ | C2 の成功時は `content-type: application/json`、`anthropic-version: 2023-06-01`、`anthropic-beta: oauth-2025-04-20`。省略試験は未実施で、必要最小集合は未確定 |
+| system 制約 | Haiku の C2 / C3 は system なしで成功。C2 は識別文を第1ブロック、自前プロンプトを第2ブロックに置いた場合も受理。ほかのモデルは未確認 |
 | 資格情報 | `~/.claude/.credentials.json` の `claudeAiOauth.{accessToken, refreshToken, expiresAt}`(Windows/Linux。macOSはキーチェーン) |
 | プロンプトキャッシュ | system と tools 末尾、直近メッセージに `cache_control` を付与(枠節約に効く) |
 
 ストリーム処理: `content_block_start` / `content_block_delta`(`text_delta`, `input_json_delta`, `thinking_delta`)/ `content_block_stop` / `message_delta`(stop_reason, usage)を組み立てる。
 
+C2 の実測: Haiku は `pong` / `end_turn`、Opus 5.5 は2回の試行とも HTTP 429。Opus の疎通成功は未確認で、追加試行を停止した。
+使用量ヘッダとして `anthropic-ratelimit-unified-{5h,7d}-utilization` と `-reset` を確認。
+C5 の CLI 起動は Haiku で成功し、起動後の読み直しも HTTP 200。期限前のためトークンは変化せず、実更新・期限切れエラーは未実測。自前 refresh は行わず、公式 CLI に更新を委ねる。
+根拠と試験条件: [docs/phase0-findings.md](docs/phase0-findings.md)。Phase 0 のゲートは完了。
+
 ### 7.2 CodexAdapter
 
 | 項目 | 想定値(要検証) |
 |---|---|
-| エンドポイント | `POST https://chatgpt.com/backend-api/codex/responses` (Responses API 形式、stream 必須) |
-| 認証ヘッダ | `Authorization: Bearer <access_token>` |
-| 追加ヘッダ | `chatgpt-account-id: <account_id>`、`OpenAI-Beta: responses=experimental`、`originator` など |
-| ボディ制約 | `store: false` が必須の可能性。`instructions` に Codex 既定プロンプトを要求される可能性あり |
+| エンドポイント | `POST https://chatgpt.com/backend-api/codex/responses`。X2 の3モデルで stream: true の成功を確認 |
+| 認証ヘッダ | `Authorization: Bearer <access_token>` で X2 成功 |
+| 追加ヘッダ | X2 成功時は chatgpt-account-id、originator、User-Agent、session-id、thread-id、x-client-request-id、Content-Type / Accept。OpenAI-Beta は付けていない。必要最小集合は未確定 |
+| ボディ制約 | X2 は store: false、instructions: `You are a helpful assistant.` で成功。store の true / 省略は未試験 |
 | 資格情報 | `~/.codex/auth.json` の `tokens.{access_token, refresh_token, id_token, account_id}` |
-| 利用可能モデル | サブスクで使える Codex 系モデルのみ。一覧は実機で確認 |
+| 利用可能モデル | X5: `GET /models?client_version=0.159.2` が HTTP 200、10モデルの設定と ETag を返した。一覧への掲載と推論呼び出し成功は別に確認する |
 
 変換: 内部 `tool_use` → `function_call` item、`tool_result` → `function_call_output` item。`store:false` の場合、推論は `include: ["reasoning.encrypted_content"]` で受け取り、次ターンで返送する。
 
 ストリーム処理: `response.output_text.delta` / `response.output_item.done`(function_call 確定)/ `response.completed`(usage)を組み立てる。
+
+X2 は Luna / Sol / Astra とも effort high で `pong` を返した。レスポンスに Content-Type がない場合もあり、SSE フレームを認識する。
+X6 で x-codex-primary / secondary の used-percent、window-minutes、reset-at を取得。実測の window-minutes は300 / 10080。
+X3 は Luna の function_call をそのまま履歴に戻し、同じ call_id の function_call_output を返して両方 HTTP 200。関数往復には reasoning item がなく、保存済み X4 の reasoning / encrypted_content と message を次ターンに返す別試験で HTTP 200 / pong を確認した。
+X5 の設定では Luna / Sol / Astra の context_window は272000。上限までの入力試験はしていない。
+X4 は Sol の low / medium / xhigh / max、Astra / Luna の low / max が HTTP 200 / pong。high は X2 で確認済み。
+調査した CLI ソースは Ultra を通常リクエスト用 effort に変換し、X5 の Sol / Astra 設定では xhigh に解決する。ユーザー承認2026-10-01: Phase 1 は low / medium / high / xhigh / max とし、Ultra は自動委譲を含む設計まで保留。
+X7 は CLI 起動とその後の直接疎通が成功。期限前でトークンは変化せず、実更新・期限切れエラーは未実測。認証エラー時は再試行を止め、公式 CLI に更新を委ねて資格情報を読み直す。根拠: [docs/phase0-findings.md](docs/phase0-findings.md)。
 
 ---
 
@@ -302,6 +315,7 @@ loop:
 ```
 
 - **中断**: Ctrl+C で AbortSignal を発火。実行中の tool_use には `isError: true, "ユーザーにより中断"` を返して履歴の整合性を保つ(tool_use に対応する tool_result が欠けると次の呼び出しでエラーになるため)
+- Phase 0 R2: Node.js 22 の fetch は両プロバイダで SSE 読み取り中の abort に `AbortError`。中断指示後にも受信済みイベントが届く場合がある。途中の item / 引数を確定・実行せず、完了イベントの有無と中断状態を確認する。実際の Ctrl+C キー操作と tool 実行中の中断は未検証。
 - **上限**: 1ターンあたりの最大ステップ数(既定 100)
 
 ---
@@ -423,15 +437,17 @@ agents: { ... }              # §10
 
 > 実装担当は Codex(GPT-6.1 Sol)を想定。作業ルールは [AGENTS.md](AGENTS.md)、Phase 0 の詳しい手順は [docs/phase0-runbook.md](docs/phase0-runbook.md)、結果の記入先は [docs/phase0-findings.md](docs/phase0-findings.md)。
 
-### Phase 0: 疎通検証(最優先・ここで設計が変わりうる)
-- [ ] `claude login` 済み環境で資格情報ファイルの場所と構造を確認
-- [ ] Claude: OAuthトークンで Messages API へ最小リクエスト(テキストのみ → tool 1個)。必要ヘッダと system 制約を確定
-- [ ] Claude: トークンリフレッシュのエンドポイントと client_id を確認
-- [ ] `codex login` 済み環境で `auth.json` の構造を確認
-- [ ] Codex: Responses API へ最小リクエスト。必須ヘッダ・`instructions` 制約・利用可能モデルを確定
-- [ ] Codex: トークンリフレッシュを確認
-- [ ] 両方: レート制限時のステータスコード・ヘッダ・ボディを記録
-- [ ] 実レスポンス(SSE)を `test/fixtures/` に保存
+### Phase 0: 疎通検証（ゲート完了: 2026-10-01）
+- [x] `claude login` 済み環境で資格情報ファイルの場所と構造を確認
+- [x] Claude: OAuthトークンで Messages API のテキスト・tool 往復が成功。動作したヘッダと system 構成を記録（ヘッダ省略による最小集合は未試験）
+- [x] Claude: 期限切れ時は公式 CLI に更新を委ねる方針を確定。CLI 起動・読み直し後の直接疎通を確認（実更新は未実測。自前 refresh の endpoint / client_id は調査対象にしない）
+- [x] `codex login` 済み環境で `auth.json` の構造を確認
+- [x] Codex: Responses API のテキスト・関数往復・推論 item 返送が成功。動作したヘッダ・instructions・モデルを記録
+- [x] Codex: 公開ソースの refresh 方法を調査し、公式 CLI に更新を委ねる方針を確定。CLI 起動・読み直し後の直接疎通を確認（実更新は未実測）
+- [x] 両方: Claude の自然な429を記録。Codex は自然な429がなくソースを根拠にした（未実測を明記）
+- [x] 実レスポンス(SSE)を `test/fixtures/` に保存
+
+完了条件は手順書の6項目に照合した。未実測・任意項目は調査記録に残し、実更新や Opus の疎通成功と混同しない。Phase 1 は未着手。
 
 **成果物**: `spike/claude.ts`、`spike/codex.ts`、本書 §7 の表を確定値に更新
 
@@ -470,7 +486,7 @@ agents: { ... }              # §10
 | リスク | 影響 | 対策 |
 |---|---|---|
 | 非公開エンドポイントの仕様変更 | 動作停止 | Adapter に隔離。fixtures による変換テストで差分を早期検知 |
-| **トークンリフレッシュの競合** | 公式CLI側がログアウト状態になる | リフレッシュトークンがローテーションされる場合、ハーネスと公式CLIが別々に更新すると片方が無効になる。v1 は**期限切れ時に公式CLIを1回起動して更新させ、ファイルを読み直す**方式を推奨。自前で更新する場合は同じファイルへ原子的に書き戻す |
+| **トークンリフレッシュの競合** | 公式CLI側がログアウト状態になる | v1 は**自前 refresh を行わず、期限切れ・認証エラーで止め、公式CLIで更新後にファイルを読み直す**。更新が失敗する場合は再ログインを案内。方針確定2026-10-01。CLI 起動は確認済み、実更新は未実測 |
 | 識別文やプロンプトの制約 | 自由なシステムプロンプトが使えない | 制約部分を Adapter が自動付与し、自前プロンプトは後続ブロックに置く |
 | 枠の早期枯渇(サブエージェント多用時) | 作業停止 | プロンプトキャッシュの活用、サブエージェント並列数の上限、Router のフォールバック |
 | Bash による破壊的操作 | データ損失 | Permission Gate、作業ディレクトリ外の書き込みは ask、`rm -rf` などの危険パターンは常に ask |
@@ -536,10 +552,10 @@ agents: { ... }              # §10
 | D4 | バックアップ | `~/.xharness/` を丸ごとコピーすれば移行できる構成にする(パスは相対で保存) |
 
 ### E. Phase 0 で確定させるもの(調べれば決まる)
-- [ ] Claude / Codex の OAuth 直叩きの必須ヘッダ・制約(§7)
-- [ ] Codex の effort の値と各モデルのコンテキスト長(§21.9)
-- [ ] 使用量(5時間枠・週間枠)の取得方法(§16.7)
-- [ ] モデル一覧を自動で取得する手段があるか(§21.9)
+- [x] Claude / Codex の OAuth 直叩きで成功する構成を記録(§7)。ヘッダ省略による必要最小集合は未試験
+- [x] Codex の通常 effort と X5 掲載モデルの context_window を記録(§21.9)。上限までの入力は未試験
+- [x] 使用量(5時間枠・週間枠)のヘッダ取得を確認(§16.7)
+- [x] Codex のモデル一覧取得を確認(§21.9)。Claude は手動カタログを継続し、未確認の自動取得を実装しない
 
 ---
 
@@ -664,7 +680,7 @@ interface Receipt {
 
 - 普段は**タイトルバー(ウィンドウ最上部のバー)の右側、接続状態ドットと最小化ボタンの左**に、ボタンを1つだけ表示する(`◔ usage 84% ▾`)。% は、全プロバイダの中で最も使用率が高い枠の値
 - クリックまたは `Ctrl+U` でポップオーバーを開く。外側のクリックか `Esc` で閉じる
-- 中身: プロバイダごとに 5時間ウィンドウと週間上限のバー、リセットまでの時間、フォールバックの設定内容(取得できる値は Phase 0 で確定)
+- 中身: プロバイダごとに 5時間ウィンドウと週間上限のバー、リセットまでの時間、フォールバックの設定内容。Claude は anthropic-ratelimit-unified-{5h,7d}-utilization / reset、Codex は x-codex-primary/secondary-used-percent / window-minutes / reset-at を使用（Phase 0 実測）。Claude の utilization は割合、Codex の used-percent は百分率として表示。ヘッダ欠損時は取得不可とし、0% と見なさない
 - 色: 80% 以上は `--warn`、95% 以上は `--err`。アイコン横の % も同じ色にする
 - 自動で開くことはしない。95% を超えたときだけ、トースト通知を一度出す
 
@@ -1203,7 +1219,7 @@ main のシステムプロンプトに次の指針を入れ、項目ごとに判
 |---|---|---|
 | 提供終了日 | 起動時 | `retiresAt` を過ぎたモデルを自動で `enabled: false` にし、通知する。設定や計画でそのモデルを指定していたら、代わりのモデルを提案する |
 | 疎通確認 | 新しいモデルを追加したとき | 最小リクエストを1回送り、成功したら `verified: true` にする。失敗したら有効化しない |
-| 一覧の取得 | 起動時(1日1回) | 各プロバイダから使えるモデルの一覧を取れるなら取得し、カタログとの差分(新しいモデル・消えたモデル)を通知する。**取得する手段があるかは Phase 0 で確認する**(公式ドキュメントには、CLI の `/model` 以外の一覧取得方法の記載がない) |
+| 一覧の取得 | 起動時(1日1回) | 各プロバイダからモデル一覧を取得し、カタログとの差分(新しいモデル・消えたモデル)を通知する。Codex は Phase 0 X5 で `GET /models?client_version=<version>` と ETag を確認。Claude の取得手段は未確認 |
 | 手動更新 | 随時 | 設定画面から編集、または `/models refresh` で公式ドキュメントを確認して更新案を出す |
 
 #### 実績による補正

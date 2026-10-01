@@ -40,12 +40,15 @@
   min-width: 0;
 }
 .ok {
+  flex-shrink: 0;
   color: var(--code);
 }
 .wait {
+  flex-shrink: 0;
   color: var(--warn);
 }
 .err {
+  flex-shrink: 0;
   color: var(--err);
 }
 .notice {

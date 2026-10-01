@@ -49,3 +49,20 @@
   border-radius: 50%;
   margin-right: 6px;
 }
+@media (max-width: 900px) {
+  .prompt {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    padding: 10px 12px;
+  }
+  .cwd {
+    max-width: 100px;
+  }
+  .chip {
+    grid-column: 1 / -1;
+    justify-self: end;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

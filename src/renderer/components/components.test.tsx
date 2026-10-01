@@ -264,8 +264,14 @@ describe("PermissionInline", () => {
     expect(screen.getByRole("alertdialog")).toHaveTextContent(
       'Write {"path":"a"}',
     );
+    await userEvent.click(screen.getByRole("button", { name: /allow/ }));
+    await userEvent.click(screen.getByRole("button", { name: /session/ }));
     await userEvent.click(screen.getByRole("button", { name: /deny/ }));
-    expect(onRespond).toHaveBeenCalledWith("deny");
+    expect(onRespond.mock.calls.map((c) => c[0])).toEqual([
+      "allow",
+      "always",
+      "deny",
+    ]);
   });
   it("stops listening after unmount", async () => {
     const onRespond = vi.fn();

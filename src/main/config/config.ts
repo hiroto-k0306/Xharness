@@ -1,0 +1,174 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { parse } from "yaml";
+import { type ProviderId } from "../core/types.js";
+import { type ReasoningEffort } from "../providers/provider.js";
+
+/** DESIGN.md §12 の aliases の既定値。設定ファイルの aliases で上書きできる。 */
+export const DEFAULT_ALIASES: Record<string, string> = {
+  opus: "claude-opus-5-5",
+  sonnet: "claude-sonnet-5-5",
+  haiku: "claude-haiku-4-5-20251001",
+  astra: "gpt-6-astra",
+  sol: "gpt-6.1-sol",
+  luna: "gpt-6-luna",
+};
+export const EFFORTS: readonly ReasoningEffort[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+export const DEFAULT_MAIN = { model: "claude:opus", effort: "high" } as const;
+
+export interface ModelChoice {
+  provider: ProviderId;
+  model: string;
+  effort: ReasoningEffort;
+}
+
+export function providerOfModel(model: string): ProviderId {
+  return /^(gpt|o\d|codex)/i.test(model) ? "codex" : "claude";
+}
+
+/**
+ * `provider:alias` / `alias` / モデル ID を、実際のモデル ID へ解決する。
+ * 解決できなければ undefined。
+ */
+export function resolveModel(
+  spec: string,
+  aliases: Record<string, string> = DEFAULT_ALIASES,
+): { provider: ProviderId; model: string } | undefined {
+  const text = spec.trim();
+  if (!text) return undefined;
+  const colon = text.indexOf(":");
+  const named = colon > 0 ? text.slice(0, colon) : undefined;
+  if (named !== undefined && named !== "claude" && named !== "codex")
+    return undefined;
+  const name = colon > 0 ? text.slice(colon + 1) : text;
+  if (!name) return undefined;
+  const model = aliases[name] ?? name;
+  const provider = named ?? providerOfModel(model);
+  // `claude:gpt-6` のような食い違いは受け付けない
+  if (providerOfModel(model) !== provider) return undefined;
+  return { provider, model };
+}
+
+export function isEffort(value: unknown): value is ReasoningEffort {
+  return (
+    typeof value === "string" && (EFFORTS as readonly string[]).includes(value)
+  );
+}
+
+export interface MainConfig {
+  /** 解決済み。設定が無い・不正なら claude:opus / high */
+  choice: ModelChoice;
+  aliases: Record<string, string>;
+  warnings: string[];
+}
+
+/**
+ * `<home>/config.yaml` の main.model / main.effort を読む(§12)。
+ * ファイルが無ければ既定値。不正な値は警告を付けて既定値に戻す。
+ * (プロジェクトごとの `.xharness/config.yaml` とのマージは Phase 4)
+ */
+export async function loadMainConfig(
+  home: string,
+  read: (path: string) => Promise<string> = (p) => readFile(p, "utf8"),
+): Promise<MainConfig> {
+  const warnings: string[] = [];
+  let doc: unknown;
+  try {
+    doc = parse(await read(join(home, "config.yaml")));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT")
+      warnings.push("config.yaml を読めなかったため既定値を使います");
+  }
+  const root = (doc && typeof doc === "object" ? doc : {}) as Record<
+    string,
+    unknown
+  >;
+  const aliases = { ...DEFAULT_ALIASES };
+  if (root.aliases && typeof root.aliases === "object")
+    for (const [k, v] of Object.entries(root.aliases))
+      if (typeof v === "string") aliases[k] = v;
+  const main = (
+    root.main && typeof root.main === "object" ? root.main : {}
+  ) as Record<string, unknown>;
+  let resolved = resolveModel(DEFAULT_MAIN.model, aliases)!;
+  if (main.model !== undefined) {
+    const r =
+      typeof main.model === "string"
+        ? resolveModel(main.model, aliases)
+        : undefined;
+    if (r) resolved = r;
+    else
+      warnings.push(
+        "config.yaml の main.model を解決できないため claude:opus を使います",
+      );
+  }
+  let effort: ReasoningEffort = DEFAULT_MAIN.effort;
+  if (main.effort !== undefined) {
+    if (isEffort(main.effort)) effort = main.effort;
+    else
+      warnings.push("config.yaml の main.effort が不正なため high を使います");
+  }
+  return { choice: { ...resolved, effort }, aliases, warnings };
+}
+
+/**
+ * 起動時の既定モデルを決める。優先順位: --model(--effort) > 設定ファイル > claude:opus / high。
+ * このビルドが扱えないプロバイダ(Codex は Phase 3)は既定値へ戻して警告する。
+ */
+export async function resolveStartup(opts: {
+  home: string;
+  cliModel?: string;
+  cliEffort?: string;
+  supported: readonly ProviderId[];
+  read?: (path: string) => Promise<string>;
+}): Promise<MainConfig> {
+  const cfg = await loadMainConfig(opts.home, opts.read);
+  const warnings = [...cfg.warnings];
+  let choice = cfg.choice;
+  if (!opts.supported.includes(choice.provider)) {
+    warnings.push(
+      `${choice.provider} はまだ使えないため claude:opus を使います`,
+    );
+    choice = { ...choice, ...resolveModel(DEFAULT_MAIN.model)! };
+  }
+  if (opts.cliModel !== undefined) {
+    const r = resolveModel(opts.cliModel, cfg.aliases);
+    if (!r) throw new Error(`--model を解決できません: ${opts.cliModel}`);
+    if (!opts.supported.includes(r.provider))
+      throw new Error(`${r.provider} はまだ使えません(Phase 3)`);
+    choice = { ...choice, ...r };
+  }
+  if (opts.cliEffort !== undefined) {
+    if (!isEffort(opts.cliEffort))
+      throw new Error(`--effort は ${EFFORTS.join(" / ")} のいずれか`);
+    choice = { ...choice, effort: opts.cliEffort };
+  }
+  return { choice, aliases: cfg.aliases, warnings };
+}
+
+/** `--fake` / `--model <spec>` / `--effort <level>`(`--model=spec` も可)を取り出す。 */
+export function parseStartupArgs(argv: readonly string[]): {
+  fake: boolean;
+  model?: string;
+  effort?: string;
+} {
+  const value = (name: string): string | undefined => {
+    for (let i = 0; i < argv.length; i++) {
+      const arg = argv[i]!;
+      if (arg === name) return argv[i + 1];
+      if (arg.startsWith(`${name}=`)) return arg.slice(name.length + 1);
+    }
+    return undefined;
+  };
+  return {
+    fake: argv.includes("--fake"),
+    model: value("--model"),
+    effort: value("--effort"),
+  };
+}

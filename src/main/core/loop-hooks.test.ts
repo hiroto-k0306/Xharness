@@ -401,3 +401,30 @@ describe("independent STEP outcomes", () => {
       expect(transition("model", outcome)).toBe(expected);
   });
 });
+
+describe("per-round model selection", () => {
+  it("applies a model/effort change from the next round, not mid-call", async () => {
+    const { options, requests } = setup();
+    let current: { model: string; reasoning: { effort: "high" | "low" } } = {
+      model: "first",
+      reasoning: { effort: "high" },
+    };
+    options.current = () => current;
+    // 1周目の act の後(=2周目の STEP 1 より前)に切り替える
+    options.afterStep = async (step, ctx) => {
+      if (step === "act" && ctx.round === 1)
+        current = { model: "second", reasoning: { effort: "low" } };
+      return proceed;
+    };
+    const result = await runTurn(options, signal());
+    expect(requests.map((r) => [r.model, r.reasoning?.effort])).toEqual([
+      ["first", "high"],
+      ["second", "low"],
+    ]);
+    expect(
+      result.receipts
+        .filter((r) => r.provider === "claude")
+        .map((r) => r.model),
+    ).toEqual(["first", "second"]);
+  });
+});

@@ -92,13 +92,14 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
       name: "context",
       async run(ctx, signal) {
         signal.throwIfAborted();
+        const now = options.current?.();
         ctx.request = {
-          model: options.model,
+          model: now?.model ?? options.model,
           system: options.system,
           messages: structuredClone(ctx.messages),
           tools: [...options.tools.values()].map((t) => t.spec),
           maxOutputTokens: options.maxOutputTokens,
-          reasoning: options.reasoning,
+          reasoning: now ? now.reasoning : options.reasoning,
         };
         return { kind: "next", to: "model" };
       },
@@ -244,7 +245,7 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
             {
               round: ctx.round,
               provider: options.provider.id,
-              model: options.model,
+              model: ctx.request?.model ?? options.model,
               decision: ctx.stopCause ?? ctx.completion?.stopReason ?? "failed",
               startedAt: ctx.startedAt,
               completedAt,
@@ -253,7 +254,7 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
             ...ctx.pending.map((item) => ({
               round: ctx.round,
               provider: "tool",
-              model: options.model,
+              model: ctx.request?.model ?? options.model,
               tool: item.call.name,
               decision: item.result?.isError ? "error" : "allow",
               startedAt: ctx.startedAt,

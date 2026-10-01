@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FakeProvider,
   type FakeStep,
@@ -9,6 +9,7 @@ import {
 import { type Tool } from "../tools/registry.js";
 import { type UiEvent } from "../../shared/ipc.js";
 import { defaultTools, SessionController, type Host } from "./controller.js";
+import { SessionStore } from "./store.js";
 
 let home: string;
 let workspace: string;
@@ -778,5 +779,129 @@ describe("pending permissions are denied when a session closes or the app quits"
     expect(
       await controller.handle({ type: "close_session", sessionId: "nope" }),
     ).toMatchObject({ ok: false });
+  });
+});
+
+describe("send is safe against concurrent requests", () => {
+  it("accepts only one of two simultaneous sends to the same session", async () => {
+    const { controller, seen } = build();
+    await controller.init();
+    const id = await newId(controller);
+    const results = await Promise.all([
+      controller.handle({ type: "send", sessionId: id, text: "one" }),
+      controller.handle({ type: "send", sessionId: id, text: "two" }),
+    ]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(results.find((r) => !r.ok)).toMatchObject({
+      error: "Turn already running",
+    });
+    await until(() => idle(id));
+    expect(seen).toHaveLength(1);
+  });
+  it("does not let a late history load overwrite a turn that already started", async () => {
+    const { controller } = build();
+    await controller.init();
+    const id = await newId(controller);
+    await controller.handle({ type: "send", sessionId: id, text: "first" });
+    await until(() => idle(id));
+    // 別の controller(=再起動後)で、未読み込みのセッションへ同時に送る
+    events.length = 0;
+    const { controller: again, seen } = build();
+    await again.init();
+    await Promise.all([
+      again.handle({ type: "send", sessionId: id, text: "second" }),
+      again.handle({ type: "send", sessionId: id, text: "third" }),
+    ]);
+    await until(() => idle(id));
+    const stored = (
+      await readFile(join(home, "sessions", `${id}.jsonl`), "utf8")
+    )
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as { role: string });
+    expect(stored.map((m) => m.role)).toEqual([
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+    ]);
+    expect(seen).toHaveLength(1);
+  });
+  it("reads a session's history once even when open and send race", async () => {
+    const first = build();
+    await first.controller.init();
+    const id = await newId(first.controller);
+    await first.controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "first",
+    });
+    await until(() => idle(id));
+    // 再起動後: open_session の読み込みだけを遅らせ、その間に send が走る
+    const original = SessionStore.prototype.messages;
+    let calls = 0;
+    const spy = vi
+      .spyOn(SessionStore.prototype, "messages")
+      .mockImplementation(async function (this: SessionStore, sid: string) {
+        const result = await original.call(this, sid);
+        if (calls++ === 0) await new Promise((r) => setTimeout(r, 200));
+        return result;
+      });
+    try {
+      events.length = 0;
+      const lengths: number[] = [];
+      const again = new SessionController({
+        provider: new MultiModel({
+          onRequest: (r) => lengths.push(r.messages.length),
+        }),
+        model: "claude-opus-5-5",
+        home,
+        fake: true,
+        version: "1",
+        host: { pickFolder: async () => workspace },
+        emit: (e) => events.push(e),
+        createTools: () => new Map(),
+      });
+      await again.init();
+      const opening = again.handle({ type: "open_session", sessionId: id });
+      await again.handle({ type: "send", sessionId: id, text: "second" });
+      await opening;
+      await until(() => idle(id));
+      events.length = 0;
+      await again.handle({ type: "send", sessionId: id, text: "third" });
+      await until(() => idle(id));
+      // 2回目の要求は、過去4件 + 新しい発言 = 5件を含む(遅れた読み込みで履歴が巻き戻らない)
+      expect(lengths).toEqual([3, 5]);
+      expect(calls).toBe(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+  it("releases the reservation when the folder is missing, so a later send works", async () => {
+    const { rm, mkdir: mk } = await import("node:fs/promises");
+    const { controller } = build();
+    await controller.init();
+    const id = await newId(controller);
+    const cwd = lastState().state.sessions.find((s) => s.id === id)!.cwd;
+    await rm(cwd, { recursive: true, force: true });
+    expect(
+      await controller.handle({ type: "send", sessionId: id, text: "x" }),
+    ).toMatchObject({ ok: false });
+    await mk(cwd, { recursive: true });
+    expect(
+      await controller.handle({ type: "send", sessionId: id, text: "y" }),
+    ).toMatchObject({ ok: true });
+    await until(() => idle(id));
+  });
+  it("tells the user when a corrupt index was moved aside", async () => {
+    const { mkdir: mk } = await import("node:fs/promises");
+    await mk(join(home, "sessions"), { recursive: true });
+    await writeFile(join(home, "sessions", "index.json"), "{broken");
+    const { controller } = build();
+    await controller.init();
+    await newId(controller);
+    expect(JSON.stringify(events.filter((e) => e.type === "error"))).toContain(
+      "退避",
+    );
   });
 });

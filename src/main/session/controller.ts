@@ -69,6 +69,7 @@ interface Runtime {
   /** 実行中のターン(終了待ち用) */
   done?: Promise<void>;
   closing?: boolean;
+  loading?: Promise<void>;
 }
 
 const STOP_NOTICE: Record<string, string> = {
@@ -112,6 +113,8 @@ export class SessionController {
   async init() {
     await Promise.all([this.sessions.load(), this.workspaces.load()]);
     this.sessions.fillDefaults({ model: this.model, effort: this.effort });
+    // 壊れた索引を退避したことなどは、最初の新規セッションで知らせる
+    this.warnings.push(...this.sessions.warnings, ...this.workspaces.warnings);
   }
 
   private runtime(id: string): Runtime {
@@ -132,11 +135,15 @@ export class SessionController {
   }
   private async load(id: string): Promise<Runtime> {
     const rt = this.runtime(id);
-    if (!rt.loaded) {
-      rt.messages = await this.sessions.messages(id);
-      rt.persisted = rt.messages.length;
-      rt.loaded = true;
-    }
+    // 同時に呼ばれても履歴の読み込みは1回だけ(後から届いた読み込みで追記済みの履歴を上書きしない)
+    if (!rt.loaded)
+      rt.loading ??= this.sessions.messages(id).then((messages) => {
+        if (rt.loaded) return;
+        rt.messages = messages;
+        rt.persisted = messages.length;
+        rt.loaded = true;
+      });
+    if (!rt.loaded) await rt.loading;
     return rt;
   }
 
@@ -179,6 +186,7 @@ export class SessionController {
           await this.emitTranscript(command.sessionId);
           // §18.4: 再開時に cwd の存在を確認する。無ければ実行できないことを知らせる
           await this.reportMissingCwd(this.sessions.get(command.sessionId)!);
+          this.flushWarnings(command.sessionId);
           return { ok: true, sessionId: command.sessionId };
         }
         case "pick_folder": {
@@ -264,8 +272,7 @@ export class SessionController {
     this.current = id;
     await this.emitState();
     this.options.emit({ type: "transcript", sessionId: id, items: [] });
-    for (const message of this.warnings.splice(0))
-      this.options.emit({ type: "error", sessionId: id, message });
+    this.flushWarnings(id);
     return { ok: true, sessionId: id };
   }
 
@@ -287,13 +294,22 @@ export class SessionController {
     const rt = await this.load(sessionId);
     if (rt.status !== "idle")
       return { ok: false, error: "Turn already running" };
-    // 作業フォルダが無いときは、モデルを呼ばずツールも動かさずに知らせる(§18.4)
-    if (await this.reportMissingCwd(session))
-      return { ok: false, error: "Working directory not found" };
+    // 確認より前に同期的に予約する(次の await の間に届いた二重送信を弾く)
     rt.status = "running";
+    // 作業フォルダが無いときは、モデルを呼ばずツールも動かさずに知らせる(§18.4)
+    if (await this.reportMissingCwd(session)) {
+      rt.status = "idle";
+      return { ok: false, error: "Working directory not found" };
+    }
     rt.closing = false;
     rt.done = this.runSession(session, rt, text).catch(() => undefined);
     return { ok: true, sessionId };
+  }
+
+  /** 起動時の警告を、最初に開いた(作った)セッションへ一度だけ出す */
+  private flushWarnings(sessionId: string) {
+    for (const message of this.warnings.splice(0))
+      this.options.emit({ type: "error", sessionId, message });
   }
 
   private async reportMissingCwd(session: StoredSession): Promise<boolean> {

@@ -120,8 +120,43 @@ export function webSettings(
   return web;
 }
 
+/** DESIGN.md §25 の MCP 設定(全体の on/off と上限。サーバーの定義はプロジェクトの .mcp.json) */
+export interface McpSettings {
+  enabled: boolean;
+  startupTimeoutSec: number;
+  toolTimeoutSec: number;
+}
+export const DEFAULT_MCP: McpSettings = {
+  enabled: true,
+  startupTimeoutSec: 30,
+  toolTimeoutSec: 120,
+};
+export function mcpSettings(
+  value: unknown,
+  warnings: string[] = [],
+): McpSettings {
+  const mcp = { ...DEFAULT_MCP };
+  if (!value || typeof value !== "object") return mcp;
+  const v = value as Record<string, unknown>;
+  const bad = (key: string) =>
+    warnings.push(`config.yaml の mcp.${key} が不正です`);
+  if (typeof v.enabled === "boolean") mcp.enabled = v.enabled;
+  else if (v.enabled !== undefined) bad("enabled");
+  for (const [key, max] of [
+    ["startupTimeoutSec", 600],
+    ["toolTimeoutSec", 3600],
+  ] as const) {
+    const n = v[key];
+    if (typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= max)
+      mcp[key] = n;
+    else if (n !== undefined) bad(key);
+  }
+  return mcp;
+}
+
 export interface MainConfig {
   web: WebSettings;
+  mcp: McpSettings;
   fallback?: Partial<Record<ProviderId, string>>;
   /** 解決済み。設定が無い・不正なら claude:opus / high */
   choice: ModelChoice;
@@ -213,7 +248,15 @@ export async function loadMainConfig(
     }
   }
   const web = webSettings(root.web, warnings);
-  return { choice: { ...resolved, effort }, aliases, warnings, fallback, web };
+  const mcp = mcpSettings(root.mcp, warnings);
+  return {
+    choice: { ...resolved, effort },
+    aliases,
+    warnings,
+    fallback,
+    web,
+    mcp,
+  };
 }
 
 /**
@@ -254,6 +297,7 @@ export async function resolveStartup(opts: {
     warnings,
     fallback: cfg.fallback,
     web: cfg.web,
+    mcp: cfg.mcp,
   };
 }
 

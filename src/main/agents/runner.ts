@@ -10,6 +10,7 @@ import { type ToolCall, type ToolRegistry } from "../tools/registry.js";
 import { SessionStore, usedProviders, gitInfo } from "../session/store.js";
 import { ReceiptStore } from "../session/receipts.js";
 import { type AgentDefinition } from "./definitions.js";
+import { MCP_TOOL_NAMES } from "../tools/mcp.js";
 import { loadProjectConfig, projectMemory } from "../config/project.js";
 import { type Checkpoint, estimateTokens } from "../context/compactor.js";
 import { prepareProviderHistory } from "../context/provider-compactor.js";
@@ -111,7 +112,9 @@ export class ChildRunner {
     const available = this.options.createTools(cwd);
     const tools: ToolRegistry = new Map();
     const access = new FileAccess(cwd);
-    for (const name of definition.tools) {
+    // MCP の窓口ツールは、定義に書かなくても子エージェントへ公開する(§25.1)。
+    // 読み取り専用の子でも使えるが、ルールで許可されていない呼び出しは毎回確認する
+    for (const name of new Set([...definition.tools, ...MCP_TOOL_NAMES])) {
       const tool = available.get(name);
       if (
         !tool ||

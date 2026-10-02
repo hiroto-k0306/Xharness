@@ -12,6 +12,7 @@ import { type Provider } from "../providers/provider.js";
 import { FileAccess, fileTools } from "../tools/files.js";
 import { type ToolRegistry } from "../tools/registry.js";
 import { type SearchBudget } from "../tools/web-search.js";
+import { type McpConnector, type McpManager } from "../mcp/manager.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
@@ -61,6 +62,8 @@ export interface ControllerOptions {
   fake: boolean;
   version: string;
   createTools?(cwd: string, readOnly: boolean): ToolRegistry;
+  /** 試験用: MCP の接続方法。指定すると --fake でも MCP を準備する(§25.10) */
+  mcpConnector?: McpConnector;
   sleep?(ms: number, signal: AbortSignal): Promise<void>;
 }
 
@@ -95,6 +98,9 @@ export interface Runtime {
   webSignature?: string;
   /** WebSearch の回数(子エージェントも合算。§22.5) */
   searchBudget?: SearchBudget;
+  /** MCP の接続(セッション開始時に1回だけ準備する。§25.3) */
+  mcp?: McpManager;
+  mcpPrepared?: boolean;
   receiptSeq: number;
   messageSeq: number;
   /** 実行中のターン(終了待ち用) */

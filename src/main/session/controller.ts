@@ -83,7 +83,11 @@ export class SessionController {
       clean,
       runtime: (id) => this.runtime(id),
       existingRuntime: (id) => this.runtimes.get(id),
-      dropRuntime: (id) => void this.runtimes.delete(id),
+      dropRuntime: (id) => {
+        // MCP サーバーのプロセスもセッションと一緒に止める(§25.3)
+        void this.runtimes.get(id)?.mcp?.close();
+        this.runtimes.delete(id);
+      },
       load: (id) => this.load(id),
       emitState: () => this.emitState(),
       record: async (rt, receipt: Receipt) => {
@@ -551,7 +555,7 @@ export class SessionController {
     if (rt) {
       rt.closing = true;
       this.release(rt);
-      if (rt.status === "idle") this.runtimes.delete(sessionId);
+      if (rt.status === "idle") this.ctx.dropRuntime(sessionId);
     }
     if (this.current === sessionId) this.current = null;
     await this.emitState();
@@ -575,6 +579,10 @@ export class SessionController {
     }
     await Promise.race([
       Promise.all(running),
+      new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),
+    ]);
+    await Promise.race([
+      Promise.all([...this.runtimes.values()].map((rt) => rt.mcp?.close())),
       new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),
     ]);
   }

@@ -7,6 +7,7 @@ import { projectHookApproval } from "../hooks/shell-hooks.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { type WebSettings } from "../config/config.js";
 import { webTools } from "../tools/web.js";
+import { mcpTools } from "../tools/mcp.js";
 import { WorkflowRuntime } from "../workflow/runtime.js";
 import { waveChecks } from "../workflow/wave-checks.js";
 import { itemsFromMessages } from "./transcript.js";
@@ -102,6 +103,9 @@ export function createWorkflow(
           },
         ))
           tools.set(name, tool);
+      // 子エージェントも、親と同じ MCP の接続を使う(§25.5)
+      if (rt.mcp)
+        for (const [name, tool] of mcpTools(rt.mcp)) tools.set(name, tool);
       return tools;
     },
     permission: async (call, context, signal) =>

@@ -18,6 +18,7 @@ import {
 import {
   decidePermission,
   grantFor,
+  normalizeCall,
   type Rule,
   permissionModes,
 } from "./main/core/permissions.js";
@@ -31,6 +32,15 @@ import { childNeedsAsk } from "./main/agents/permissions.js";
 import { type Message } from "./main/core/types.js";
 import { redact } from "./main/core/redact.js";
 import { WorkspaceTrust } from "./main/config/trust.js";
+import { McpApprovals } from "./main/mcp/approvals.js";
+import {
+  displayServer,
+  loadMcpConfig,
+  type McpServerConfig,
+} from "./main/mcp/config.js";
+import { McpManager } from "./main/mcp/manager.js";
+import { mcpLogger } from "./main/session/mcp-session.js";
+import { mcpTools } from "./main/tools/mcp.js";
 import { readLocalSecrets } from "./main/auth/local-secrets.js";
 import { FakeProvider } from "./main/providers/fake/fake-provider.js";
 import { ClaudeAdapter } from "./main/providers/claude/adapter.js";
@@ -250,6 +260,52 @@ export async function headless(args = process.argv.slice(2)) {
   process.stdout.write(
     `XHarness · ${model} · ${cwd} · session ${session.id}\n/exit to quit, /clear starts a new session.\n`,
   );
+  // MCP(§25): 起動時に1回だけ準備し、tools をセッション中に変えない。--fake では起動しない
+  let mcp: McpManager | undefined;
+  const mcpConfig =
+    !fake && config.mcp.enabled ? await loadMcpConfig(cwd) : undefined;
+  if (mcpConfig?.exists) {
+    for (const warning of mcpConfig.warnings)
+      process.stderr.write(clean(warning) + "\n");
+    mcp = new McpManager({
+      cwd,
+      startupTimeoutMs: config.mcp.startupTimeoutSec * 1000,
+      toolTimeoutMs: config.mcp.toolTimeoutSec * 1000,
+      redact: clean,
+      log: await mcpLogger(home, cwd),
+    });
+    if (!(await new WorkspaceTrust(home).isTrusted(cwd)))
+      process.stderr.write(
+        "This folder is not trusted; MCP servers in .mcp.json are not started (trust it from the app).\n",
+      );
+    else {
+      const approvals = await McpApprovals.open(home, cwd);
+      const approved: McpServerConfig[] = [];
+      for (const server of mcpConfig.servers) {
+        const saved = await approvals.get(server.name, server.hash);
+        if (saved === "rejected") continue;
+        if (saved !== "approved") {
+          const answer = (
+            await rl.question(
+              `Start MCP server ${clean(JSON.stringify(displayServer(server)))}? [y: this session / a: always / N] `,
+            )
+          )
+            .trim()
+            .toLowerCase();
+          if (answer === "a")
+            await approvals.set(server.name, server.hash, "approved");
+          else if (answer !== "y") continue;
+        }
+        approved.push(server);
+      }
+      await mcp.connect(approved, AbortSignal.timeout(600_000));
+      for (const state of mcp.states())
+        process.stdout.write(
+          `MCP ${state.name}: ${state.status}${state.error ? ` (${state.error})` : ""}\n`,
+        );
+    }
+    for (const [name, tool] of mcpTools(mcp)) tools.set(name, tool);
+  }
   try {
     while (!closed) {
       let input: string;
@@ -372,11 +428,15 @@ export async function headless(args = process.argv.slice(2)) {
         );
         signal.throwIfAborted();
         const choice = answer.trim().toLowerCase();
-        if (choice === "s" && !force) sessionRules.push(grantFor(fullCall));
+        // cwd への cd・McpCall は、判定と同じ形にそろえてから保存する
+        const normalized = await normalizeCall(fullCall, directory);
+        if (choice === "s" && !force) sessionRules.push(grantFor(normalized));
         if (choice === "a" && !force) {
           const grant = grantFor({
-            ...fullCall,
-            input: JSON.parse(clean(JSON.stringify(call.input))) as unknown,
+            ...normalized,
+            input: JSON.parse(
+              clean(JSON.stringify(normalized.input)),
+            ) as unknown,
           });
           await saveRule(home, grant, cwd);
           project.permissions.rules.push(grant);
@@ -416,6 +476,9 @@ export async function headless(args = process.argv.slice(2)) {
                   budget: searchBudget,
                 },
               ))
+                available.set(name, tool);
+            if (mcp)
+              for (const [name, tool] of mcpTools(mcp))
                 available.set(name, tool);
             return available;
           },
@@ -543,6 +606,7 @@ export async function headless(args = process.argv.slice(2)) {
     }
   } finally {
     controller?.abort();
+    await mcp?.close();
     rl.close();
     process.removeListener("SIGINT", interrupt);
   }

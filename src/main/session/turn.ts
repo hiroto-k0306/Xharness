@@ -25,6 +25,7 @@ import {
   type ControllerContext,
   type Runtime,
 } from "./context.js";
+import { prepareMcp } from "./mcp-session.js";
 
 /** システムプロンプト。プロジェクト設定があればメモリファイル(§12)を、無ければ AGENTS.md / CLAUDE.md を足す */
 export async function systemPrompt(
@@ -200,6 +201,8 @@ async function prepareRuntime(
       ))
         rt.tools.set(name, tool);
   }
+  // MCP はセッションの最初のターンでだけ準備する(tools を途中で変えない。§24・§25)
+  await prepareMcp(ctx, gate, session, rt, signal);
   if (options.phase4 && !rt.checkpoint)
     rt.checkpoint = await checkpointFile(options.home, session.id).read(
       undefined,

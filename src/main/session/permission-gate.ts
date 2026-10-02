@@ -111,7 +111,12 @@ export class PermissionGate {
       tool: call.name,
       summary:
         (agentName ? `${agentName} · ` : "") +
-        (["SubmitPlan", "ProjectHooks", "ProjectSettings"].includes(call.name)
+        ([
+          "SubmitPlan",
+          "ProjectHooks",
+          "ProjectSettings",
+          "McpServer",
+        ].includes(call.name)
           ? ctx.clean(JSON.stringify(call.input))
           : summarizeInput(call.name, call.input, ctx.clean, 300)),
     });

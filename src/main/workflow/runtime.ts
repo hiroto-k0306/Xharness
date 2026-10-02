@@ -18,6 +18,8 @@ import { decidePermission } from "../core/permissions.js";
 import { type ToolCall } from "../tools/registry.js";
 import { shellHooks, type ShellHook } from "../hooks/shell-hooks.js";
 import { shellSearchTools } from "../tools/shell-search.js";
+import { AgentTasks } from "../agents/tasks.js";
+import { lifecycleTools } from "../tools/lifecycle.js";
 
 export interface RuntimeOptions extends ChildOptions {
   approveHooks?(
@@ -83,6 +85,7 @@ export class WorkflowRuntime {
   readonly state: WorkflowState;
   readonly changes: Changes;
   private readonly runner: ChildRunner;
+  private readonly tasks: AgentTasks;
   private readonly worker: WorkerExecutor;
   private scheduler?: SerialScheduler;
   private items: PlanItem[] = [];
@@ -103,6 +106,21 @@ export class WorkflowRuntime {
       options.config.workflow.reviewRounds,
     );
     this.changes = new Changes(options.cwd);
+    this.tasks = new AgentTasks((id, a, signal) => {
+      const definition = this.options.config.agents[String(a.agent)]!;
+      return this.runner.run(
+        String(a.agent),
+        {
+          ...definition,
+          model: typeof a.model === "string" ? a.model : definition.model,
+        },
+        String(a.prompt),
+        this.options.cwd,
+        signal,
+        undefined,
+        id,
+      );
+    });
     this.runner = new ChildRunner({
       ...options,
       hooks: (context, onReceipt) =>
@@ -174,7 +192,10 @@ export class WorkflowRuntime {
     return {
       spec: {
         name,
-        description: name + " is managed by the harness workflow",
+        description:
+          name === "Task"
+            ? "Delegate investigation/review to a configured child agent. background=true returns a taskId immediately; use TaskList/TaskOutput/TaskStop to manage it. At most 3 run concurrently. Running children are cancelled when this parent turn ends; collect results before finishing. Workers are managed by SubmitPlan, not Task."
+            : name + " is managed by the harness workflow",
         inputSchema: {
           type: "object",
           properties,
@@ -267,6 +288,8 @@ export class WorkflowRuntime {
     // 変わると 400 になる。段階によってツールを出し入れせず、毎回同じ集合・同じ順で渡し、
     // 段階による制限は validate(STEP 3 と実行直前)で行う。
     const result = new Map(base);
+    for (const [name, tool] of lifecycleTools()) result.set(name, tool);
+    for (const [name, tool] of this.tasks.tools()) result.set(name, tool);
     const workflowTools = this.options.config.workflow.mode !== "off";
     const gated = (
       tool: Tool,
@@ -285,6 +308,7 @@ export class WorkflowRuntime {
           prompt: { type: "string" },
           agent: { type: "string" },
           model: { type: "string" },
+          background: { type: "boolean" },
         },
         ["description", "prompt", "agent"],
         (a) =>
@@ -292,10 +316,12 @@ export class WorkflowRuntime {
             (s) => typeof s === "string" && s.trim(),
           ) &&
           (a.model === undefined || typeof a.model === "string") &&
+          (a.background === undefined || typeof a.background === "boolean") &&
           Object.hasOwn(this.options.config.agents, String(a.agent))
             ? undefined
             : "Unknown agent or invalid Task",
         async (a, signal) => {
+          if (a.background === true) return this.tasks.start(a, signal);
           const definition = this.options.config.agents[String(a.agent)]!;
           return (
             await this.runner.run(
@@ -552,11 +578,18 @@ export class WorkflowRuntime {
     return result;
   }
   async run(options: LoopOptions, signal: AbortSignal) {
+    this.tasks.beginTurn();
     return withSessionTrace(
       this.options.home,
       this.options.parentId,
       this.options.redact ?? ((s) => s),
-      () => this.runTraced(options, signal),
+      async () => {
+        try {
+          return await this.runTraced(options, signal);
+        } finally {
+          await this.tasks.close();
+        }
+      },
       { onWarning: this.options.onTraceWarning },
     );
   }
@@ -681,6 +714,9 @@ export class WorkflowRuntime {
               "SkipPlan",
               "UpdatePlan",
               "RequestReview",
+              "TaskList",
+              "TaskOutput",
+              "TaskStop",
             ].includes(call.name)
           )
             return true;

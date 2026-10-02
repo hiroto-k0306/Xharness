@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { type Message } from "../core/types.js";
+import { FileCheckpointStore } from "../checkpoints/store.js";
 import {
   type ProviderName,
   type SessionSummary,
@@ -265,12 +266,27 @@ export class SessionStore {
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       try {
-        out.push(JSON.parse(line) as Message);
+        const message = JSON.parse(line) as Message;
+        const keep = message.meta?.rewind?.keep;
+        if (
+          keep !== undefined &&
+          Number.isSafeInteger(keep) &&
+          keep >= 0 &&
+          keep <= out.length
+        )
+          out.splice(keep);
+        out.push(message);
       } catch {
         /* 壊れた行は読み飛ばす */
       }
     }
     return out;
+  }
+  async delete(id: string) {
+    await new FileCheckpointStore(this.home).remove(id);
+    await rm(this.history(id), { force: true });
+    this.sessions = this.sessions.filter((session) => session.id !== id);
+    await this.index.write(this.sessions);
   }
 }
 

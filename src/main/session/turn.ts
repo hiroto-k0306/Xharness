@@ -13,6 +13,7 @@ import { prepareProviderHistory } from "../context/provider-compactor.js";
 import { Router } from "../core/router.js";
 import { webTools } from "../tools/web.js";
 import { diagnoseEnvironment } from "../tools/environment.js";
+import { FileCheckpointStore } from "../checkpoints/store.js";
 import { type Receipt } from "../../shared/ipc.js";
 import { usedProviders, type StoredSession } from "./store.js";
 import { type PermissionGate } from "./permission-gate.js";
@@ -274,6 +275,15 @@ export async function runSessionTurn(
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);
+    const files = new FileCheckpointStore(options.home);
+    await files.purge(rt.config?.checkpoints?.retentionDays ?? 30);
+    const fileCheckpoint = await files.begin(
+      sessionId,
+      session.cwd,
+      rt.messages.length - 1,
+      clean,
+      (message) => emit({ type: "notice", sessionId, tone: "warn", message }),
+    );
     if (!rt.environment) {
       rt.environment =
         session.environment ?? (await diagnoseEnvironment(session.cwd));
@@ -408,6 +418,7 @@ export async function runSessionTurn(
         messages: rt.messages,
         tools: rt.tools!,
         redact: clean,
+        checkpoint: fileCheckpoint,
         sleep: options.sleep,
         permission: async (call, signal) => {
           const started = Date.now();

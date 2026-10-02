@@ -1,4 +1,5 @@
 // main / preload / renderer が共有する契約。electron を import しない。
+import { parseRewindChoice } from "./rewind.js";
 // DESIGN.md §16.4: チャネルは harness:event(main → renderer)と harness:command(renderer → main)の2本だけ。
 
 export const EVENT_CHANNEL = "harness:event";
@@ -152,6 +153,12 @@ export type TranscriptItem =
  */
 export type UiEvent =
   | {
+      type: "rewind_request";
+      sessionId: string;
+      requestId: string;
+      preview: import("./rewind.js").RewindPreview;
+    }
+  | {
       type: "workflow";
       sessionId: string;
       phase: string;
@@ -271,6 +278,13 @@ export type UiEvent =
 export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
+  | {
+      type: "rewind_response";
+      sessionId: string;
+      requestId: string;
+      choice: import("./rewind.js").RewindChoice | null;
+    }
+  | { type: "delete_session"; sessionId: string; confirmed: boolean }
   | { type: "refresh_auth" }
   | { type: "authenticate"; provider: ProviderName }
   | { type: "export_report"; sessionId: string }
@@ -356,6 +370,28 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "rewind_response": {
+      const choice = c.choice === null ? null : parseRewindChoice(c.choice);
+      return str(c.sessionId) &&
+        str(c.requestId) &&
+        choice !== undefined &&
+        jsonFits(choice)
+        ? {
+            type: "rewind_response",
+            sessionId: c.sessionId,
+            requestId: c.requestId,
+            choice,
+          }
+        : undefined;
+    }
+    case "delete_session":
+      return str(c.sessionId) && typeof c.confirmed === "boolean"
+        ? {
+            type: "delete_session",
+            sessionId: c.sessionId,
+            confirmed: c.confirmed,
+          }
+        : undefined;
     case "authenticate":
       return c.provider === "claude" || c.provider === "codex"
         ? { type: "authenticate", provider: c.provider }

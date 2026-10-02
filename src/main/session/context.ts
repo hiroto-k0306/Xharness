@@ -81,6 +81,10 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  rewindPrompt?: {
+    requestId: string;
+    resolve(choice: import("../../shared/rewind.js").RewindChoice | null): void;
+  };
   environment?: import("../tools/environment.js").EnvironmentReport;
   hookApproval?: {
     fingerprint: string;

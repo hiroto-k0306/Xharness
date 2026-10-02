@@ -24,6 +24,8 @@ PowerShell 7がない場合、対象CLIがPATHにない場合、操作画面の�
 
 許可ボタンには黄色の背景・枠・余白を追加し、認証メッセージは別行に表示する。関連5ファイル17件、型チェック・lint成功。PowerShellとCLIの欠落は隔離PATHで確認。実ログインと実API通信は未実施。
 
+PowerShell 7のMSIXインストール後、子PowerShell内のGet-Command pwshが実体と実行エイリアスの2件を返し、Start-ProcessのFilePathに配列を渡して型エラーになることも再現した。pwshと公式CLIの起動先をSelect-Object -First 1で単一のパスに限定して修正。複数候補の回帰テストと、インストール済みPowerShell・通常のPATH・模擬CLIでの起動成功を確認した。実ログインは実行していない。
+
 ## 検証
 
 Windows、Node.js 22。実API通信なし。

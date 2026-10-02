@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, it } from "vitest";
-import { launchOfficialLogin } from "./cli-login.js";
+import { launchOfficialLogin, loginScript } from "./cli-login.js";
 
 it.skipIf(process.platform !== "win32")(
   "distinguishes a missing PowerShell from a missing official CLI without starting login",
@@ -22,6 +22,41 @@ it.skipIf(process.platform !== "win32")(
       }),
     ).toBe("cli_missing");
   },
+);
+
+it.skipIf(process.platform !== "win32")(
+  "selects one executable when PowerShell discovers multiple matches",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "xh-login-multiple-"));
+    const output = join(dir, "args.txt");
+    await writeFile(
+      join(dir, "claude.cmd"),
+      `@echo off\r\necho %*>"${output}"\r\nexit /b 0\r\n`,
+    );
+    // Get-Command can yield multiple paths (MSIX executable plus app execution alias).
+    // Force that discovery shape while keeping the actual host and CLI isolated.
+    const script = `$realPwsh = (Get-Command pwsh -CommandType Application | Select-Object -First 1).Source; function Get-Command { param($Name, $CommandType); if ($Name -eq 'pwsh') { [pscustomobject]@{Source=$realPwsh}; [pscustomobject]@{Source=$realPwsh} } else { Microsoft.PowerShell.Core\\Get-Command @PSBoundParameters } }; ${loginScript("claude")}`;
+    const env = {
+      ...process.env,
+      PATH: `${dir};${process.env.PATH}`,
+      CODEX_HOME: dir,
+      CLAUDE_CONFIG_DIR: dir,
+    };
+    execFileSync(
+      "pwsh",
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-EncodedCommand",
+        Buffer.from(script, "utf16le").toString("base64"),
+      ],
+      { env, windowsHide: true, stdio: "ignore" },
+    );
+    expect((await readFile(output, "utf8")).trim()).toBe(
+      "auth login --claudeai",
+    );
+  },
+  15000,
 );
 
 it.skipIf(process.platform !== "win32")(

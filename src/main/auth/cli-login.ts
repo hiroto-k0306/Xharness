@@ -9,11 +9,11 @@ export type LoginResult =
 export function loginScript(provider: ProviderName) {
   const command =
     provider === "claude"
-      ? "& (Get-Command claude -CommandType Application -ErrorAction Stop).Source auth login --claudeai"
-      : "& (Get-Command codex -CommandType Application -ErrorAction Stop).Source login";
+      ? "& (Get-Command claude -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source auth login --claudeai"
+      : "& (Get-Command codex -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source login";
   const inner = `$ErrorActionPreference = 'Stop'; try { ${command}; exit $LASTEXITCODE } catch { Write-Host '公式CLIが見つかりません。インストールを確認してください。'; Read-Host 'Enterで閉じる'; exit 1 }`;
   const encoded = Buffer.from(inner, "utf16le").toString("base64");
-  return `$ErrorActionPreference = 'Stop'; if (!(Get-Command ${provider} -CommandType Application -ErrorAction SilentlyContinue)) { exit 20 }; try { $p = Start-Process -FilePath (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source -WorkingDirectory $HOME -ArgumentList @('-NoLogo','-NoProfile','-EncodedCommand','${encoded}') -PassThru -Wait; if ($p.ExitCode -eq 0) { exit 0 }; exit 1 } catch { exit 21 }`;
+  return `$ErrorActionPreference = 'Stop'; if (!(Get-Command ${provider} -CommandType Application -ErrorAction SilentlyContinue)) { exit 20 }; try { $p = Start-Process -FilePath (Get-Command pwsh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source -WorkingDirectory $HOME -ArgumentList @('-NoLogo','-NoProfile','-EncodedCommand','${encoded}') -PassThru -Wait; if ($p.ExitCode -eq 0) { exit 0 }; exit 1 } catch { exit 21 }`;
 }
 
 export function launchOfficialLogin(

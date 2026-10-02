@@ -28,7 +28,10 @@ describe("Electron runtime bundles", () => {
   });
   it("keeps Electron external in main and sandboxed preload", async () => {
     const { config } = await resolveConfig({}, "build");
-    for (const target of [config!.main!, config!.preload!]) {
+    for (const [name, target] of [
+      ["main", config!.main!],
+      ["preload", config!.preload!],
+    ] as const) {
       const result = await build({
         ...target,
         configFile: false,
@@ -46,7 +49,11 @@ describe("Electron runtime bundles", () => {
         .join("\n");
       // Electron's npm entry is a downloader, unavailable inside app.asar / sandbox.
       expect(code).not.toContain("function downloadElectron");
-      expect(code).not.toContain('require("child_process")');
+      expect(code).not.toContain("function getElectronPath");
+      // The sandboxed preload cannot use Node built-ins. The main process legitimately
+      // starts child processes (Bash, MCP stdio servers via the official SDK).
+      if (name === "preload")
+        expect(code).not.toContain('require("child_process")');
       expect(code).toMatch(/(?:from |require\()"electron"/);
     }
   });

@@ -27,6 +27,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - React + Zustand + CSS Modules
 - Vitest / ESLint / Prettier
 - 実行シェル: PowerShell 7(Windows)
+- MCP クライアント: 公式 `@modelcontextprotocol/sdk`(ユーザー承認 2026-10-02。DESIGN.md §25。モデルの API 呼び出しには引き続き SDK を使わない)
 
 ## コードのルール
 

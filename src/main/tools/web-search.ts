@@ -1,5 +1,9 @@
 import { type WebSource } from "../core/types.js";
-import { type Provider, type ProviderEvent } from "../providers/provider.js";
+import {
+  type Provider,
+  type ProviderEvent,
+  type QuotaUsage,
+} from "../providers/provider.js";
 import { type Tool } from "./registry.js";
 import { externalContent } from "./web-fetch.js";
 
@@ -217,27 +221,75 @@ async function searchOnce(
   return done;
 }
 
+/** プロバイダごとの最新の枠(5時間枠・週間枠)。使用量イベントから集める */
+export type ProviderUsage = Partial<
+  Record<Provider["id"], QuotaUsage["windows"]>
+>;
+
+/** 残り時間の割合の下限(リセット直前で余裕が極端に大きく見えないように) */
+const MIN_TIME_LEFT = 0.05;
+
+/**
+ * 1つの枠の余裕(§22.2)。残りの使用量の割合を、リセットまでの残り時間の割合で割る。
+ * 1 なら「リセットまで平均的な速さで使える」、1 未満なら「このままの速さでは足りない」。
+ * リセット時刻が分からなければ、窓の全体が残っているものとして控えめに見る。
+ * リセット時刻を過ぎた枠は、もう新しい窓に入っているので余裕 1 とする。
+ */
+export function windowHeadroom(
+  window: QuotaUsage["windows"][number],
+  now: number,
+): number | undefined {
+  if (window.usedPercent === undefined) return undefined;
+  const reset = window.resetAt ? Date.parse(window.resetAt) : NaN;
+  const length = (window.windowMinutes ?? 0) * 60_000;
+  if (Number.isFinite(reset) && reset <= now) return 1;
+  const left =
+    Number.isFinite(reset) && length > 0
+      ? Math.min(1, Math.max(MIN_TIME_LEFT, (reset - now) / length))
+      : 1;
+  return Math.max(0, 100 - window.usedPercent) / 100 / left;
+}
+
+/** プロバイダの余裕。どの枠も使い切れないよう、いちばん厳しい枠で決める */
+export function providerHeadroom(
+  windows: QuotaUsage["windows"] | undefined,
+  now: number,
+): number | undefined {
+  const values = (windows ?? []).flatMap((w) => {
+    const h = windowHeadroom(w, now);
+    return h === undefined ? [] : [h];
+  });
+  return values.length ? Math.min(...values) : undefined;
+}
+
 /**
  * 検索に使うプロバイダの順番(§22.2)。
  * - claude / codex: そのプロバイダだけ
- * - auto: 5時間枠の使用率が低い方を先に。使用率が分からなければセッションのプロバイダを先に
+ * - auto: 5時間枠と週間枠の両方を、リセットまでの残り時間で割った余裕(providerHeadroom)が
+ *   大きい方を先に。両方の余裕が分からないか、差が小さい(1割未満)ならセッションのプロバイダを先に
  * codexSearchMode が disabled なら Codex は使わない。
  */
 export function searchCandidates(
   providers: Provider[],
   setting: "auto" | "claude" | "codex",
   sessionProvider: Provider["id"],
-  quota: Partial<Record<Provider["id"], number>>,
+  usage: ProviderUsage,
   codexDisabled: boolean,
+  now = Date.now(),
 ): Provider[] {
   const unique = [...new Map(providers.map((p) => [p.id, p])).values()].filter(
     (p) => !(codexDisabled && p.id === "codex"),
   );
   if (setting !== "auto") return unique.filter((p) => p.id === setting);
   return unique.sort((a, b) => {
-    const qa = quota[a.id];
-    const qb = quota[b.id];
-    if (qa !== undefined && qb !== undefined && qa !== qb) return qa - qb;
+    const ha = providerHeadroom(usage[a.id], now);
+    const hb = providerHeadroom(usage[b.id], now);
+    if (
+      ha !== undefined &&
+      hb !== undefined &&
+      Math.abs(ha - hb) >= 0.1 * Math.max(ha, hb)
+    )
+      return hb - ha;
     return (
       (a.id === sessionProvider ? 0 : 1) - (b.id === sessionProvider ? 0 : 1)
     );

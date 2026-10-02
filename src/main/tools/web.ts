@@ -7,6 +7,7 @@ import { webFetchTool, type WebFetchOptions } from "./web-fetch.js";
 import {
   searchCandidates,
   webSearchTool,
+  type ProviderUsage,
   type SearchBudget,
 } from "./web-search.js";
 import { DEFAULT_WEB, type WebSettings } from "../config/config.js";
@@ -41,8 +42,8 @@ export interface WebToolsExtra {
   settings?: Partial<WebSettings>;
   /** 検索に使えるプロバイダ(auto の選択とフォールバック用) */
   providers?: () => Provider[];
-  /** プロバイダごとの5時間枠の使用率(auto の選択用) */
-  quota?: Partial<Record<Provider["id"], number>>;
+  /** プロバイダごとの最新の枠(5時間枠・週間枠。auto の選択用) */
+  usage?: ProviderUsage;
   /** セッション全体(子エージェントを含む)の検索回数 */
   budget?: SearchBudget;
   /** テスト用: DNS・取得・時計の差し替え */
@@ -104,7 +105,7 @@ export function webTools(
           extra.providers?.() ?? [provider()],
           settings.searchProvider,
           provider().id,
-          extra.quota ?? {},
+          extra.usage ?? {},
           codexDisabled,
         ),
     }),

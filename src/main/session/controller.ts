@@ -79,6 +79,7 @@ export class SessionController {
       repository: new Repository(options.home),
       trust: new WorkspaceTrust(options.home),
       quota: {},
+      usage: {},
       worktreeBusy: new Set(),
       clean,
       runtime: (id) => this.runtime(id),

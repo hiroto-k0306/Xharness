@@ -161,33 +161,78 @@ describe("WebSearch budget (§22.5)", () => {
 describe("search provider selection (§22.2)", () => {
   const claude = searcher("claude", []);
   const codex = searcher("codex", []);
-  it("auto orders by known quota, then by the session provider", () => {
-    const ids = (ps: Provider[]) => ps.map((p) => p.id);
+  const NOW = Date.parse("2026-10-02T12:00:00Z");
+  const at = (hours: number) => new Date(NOW + hours * 3_600_000).toISOString();
+  const w5 = (used: number, resetInHours?: number) => ({
+    name: "5h",
+    windowMinutes: 300,
+    usedPercent: used,
+    ...(resetInHours === undefined ? {} : { resetAt: at(resetInHours) }),
+  });
+  const w7 = (used: number, resetInHours?: number) => ({
+    name: "7d",
+    windowMinutes: 10080,
+    usedPercent: used,
+    ...(resetInHours === undefined ? {} : { resetAt: at(resetInHours) }),
+  });
+  const ids = (ps: Provider[]) => ps.map((p) => p.id);
+  const order = (
+    usage: Parameters<typeof searchCandidates>[3],
+    session: Provider["id"] = "claude",
+  ) =>
+    ids(searchCandidates([claude, codex], "auto", session, usage, false, NOW));
+  it("auto prefers the session provider when usage is unknown or one-sided", () => {
+    expect(order({}, "codex")).toEqual(["codex", "claude"]);
+    expect(order({ claude: [w5(90)] })).toEqual(["claude", "codex"]);
+  });
+  it("auto prefers more headroom on the 5-hour window", () => {
+    expect(order({ claude: [w5(90)], codex: [w5(10)] })).toEqual([
+      "codex",
+      "claude",
+    ]);
+  });
+  it("the weekly window counts: a nearly used week loses to a fresher provider", () => {
+    // 実測(2026-10-02)の形: Claude 5h 13% / 週 86%、Codex 5h 50% / 週 72%。週のリセットはどちらも3日後
     expect(
-      ids(searchCandidates([claude, codex], "auto", "codex", {}, false)),
-    ).toEqual(["codex", "claude"]);
-    expect(
-      ids(
-        searchCandidates(
-          [claude, codex],
-          "auto",
-          "claude",
-          { claude: 90, codex: 10 },
-          false,
-        ),
+      order(
+        {
+          claude: [w5(13, 4), w7(86, 72)],
+          codex: [w5(50, 4), w7(72, 72)],
+        },
+        "claude",
       ),
     ).toEqual(["codex", "claude"]);
+  });
+  it("divides by the time left: a used window that resets soon is not a problem", () => {
+    // Claude は週の 86% を使っているが、2時間後にリセットされる。Codex は週の 60% で、リセットは6日後
     expect(
-      ids(
-        searchCandidates(
-          [claude, codex],
-          "auto",
-          "claude",
-          { claude: 90 },
-          false,
-        ),
-      ),
+      order({
+        claude: [w5(20, 3), w7(86, 2)],
+        codex: [w5(20, 3), w7(60, 144)],
+      }),
     ).toEqual(["claude", "codex"]);
+    // リセット時刻を過ぎた枠は新しい窓として扱う
+    expect(
+      order({
+        claude: [w5(100, -1)],
+        codex: [w5(50, 4)],
+      }),
+    ).toEqual(["claude", "codex"]);
+  });
+  it("an exhausted window makes the provider last, and small differences keep the session provider", () => {
+    expect(
+      order({ claude: [w5(10, 4), w7(100, 48)], codex: [w5(80, 4)] }),
+    ).toEqual(["codex", "claude"]);
+    // 余裕の差が1割未満ならセッションのプロバイダ
+    expect(
+      order({ claude: [w5(50, 2.5)], codex: [w5(48, 2.5)] }, "claude"),
+    ).toEqual(["claude", "codex"]);
+  });
+  it("without reset times, each window is treated as fully remaining (conservative)", async () => {
+    const { windowHeadroom } = await import("./web-search.js");
+    expect(windowHeadroom(w5(40), NOW)).toBeCloseTo(0.6);
+    expect(windowHeadroom(w5(40, 2.5), NOW)).toBeCloseTo(1.2);
+    expect(windowHeadroom({ name: "x" }, NOW)).toBeUndefined();
   });
   it("a fixed provider uses only that provider, and disabled Codex is never used", () => {
     expect(

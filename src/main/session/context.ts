@@ -11,7 +11,7 @@ import { type Message } from "../core/types.js";
 import { type Provider } from "../providers/provider.js";
 import { FileAccess, fileTools } from "../tools/files.js";
 import { type ToolRegistry } from "../tools/registry.js";
-import { type SearchBudget } from "../tools/web-search.js";
+import { type ProviderUsage, type SearchBudget } from "../tools/web-search.js";
 import { type McpConnector, type McpManager } from "../mcp/manager.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
@@ -136,7 +136,10 @@ export interface ControllerContext {
   readonly workspaces: WorkspaceStore;
   readonly repository: Repository;
   readonly trust: WorkspaceTrust;
+  /** 5時間枠の使用率(計画の検証用) */
   readonly quota: Partial<Record<"claude" | "codex", number>>;
+  /** 枠ごとの最新の使用率とリセット時刻(Web 検索の auto 用。§22.2) */
+  readonly usage: ProviderUsage;
   readonly worktreeBusy: Set<string>;
   clean(text: string): string;
   runtime(id: string): Runtime;

@@ -23,6 +23,17 @@ export function updateQuota(ctx: ControllerContext, event: UsageEvent) {
   if (typeof used === "number" && Number.isFinite(used))
     ctx.quota[event.provider] = used;
   else delete ctx.quota[event.provider];
+  // 枠ごとに最新の値を残す(イベントに一部の枠しか無いときも、ほかの枠を消さない)
+  const windows = new Map(
+    (ctx.usage[event.provider] ?? []).map((w) => [
+      w.windowMinutes ?? w.name,
+      w,
+    ]),
+  );
+  for (const w of event.windows ?? [])
+    if (w.usedPercent !== undefined && Number.isFinite(w.usedPercent))
+      windows.set(w.windowMinutes ?? w.name, { ...w });
+  ctx.usage[event.provider] = [...windows.values()];
 }
 
 /** 使用量イベントを §16.7 の表示用(5時間枠・週間枠)に整える */

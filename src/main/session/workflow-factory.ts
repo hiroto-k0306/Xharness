@@ -94,7 +94,7 @@ export function createWorkflow(
           {
             settings: web,
             providers: () => options.providers ?? [options.provider],
-            quota: ctx.quota,
+            usage: ctx.usage,
             // 子エージェントの検索も、親と同じセッションの上限に数える
             budget: (rt.searchBudget ??= {
               used: 0,

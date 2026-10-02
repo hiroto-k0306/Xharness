@@ -15,7 +15,7 @@ import { webTools } from "../tools/web.js";
 import { type Receipt } from "../../shared/ipc.js";
 import { usedProviders, type StoredSession } from "./store.js";
 import { type PermissionGate } from "./permission-gate.js";
-import { shapeUsage, TurnEvents } from "./turn-events.js";
+import { TurnEvents, usageEvent } from "./turn-events.js";
 import { createWorkflow, needsNewWorkflow } from "./workflow-factory.js";
 import {
   checkpointFile,
@@ -187,12 +187,13 @@ async function prepareRuntime(
         web.searchMode,
         options.fake,
         (event) => {
-          if (event.type === "usage") options.emit(shapeUsage(event));
+          // Web の要約・検索の通信でも枠を更新する(auto の選択が古い値を使わないように)
+          if (event.type === "usage") options.emit(usageEvent(ctx, event));
         },
         {
           settings: web,
           providers: () => options.providers ?? [options.provider],
-          quota: ctx.quota,
+          usage: ctx.usage,
           budget: (rt.searchBudget ??= {
             used: 0,
             limit: web.maxSearchesPerSession ?? 100,

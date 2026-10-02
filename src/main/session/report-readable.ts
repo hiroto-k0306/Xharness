@@ -163,6 +163,13 @@ export function responseView(value: unknown) {
     ? blocksView(m.content, "assistant")
     : resultView(response);
 }
+/** User messages added by the harness are instructions/results, not LLM replies. */
+export function messageView(value: unknown) {
+  const message = object(parse(value));
+  return Array.isArray(message.content)
+    ? blocksView(message.content, message.role)
+    : receiptOutputView(value);
+}
 export function receiptInputView(value: unknown) {
   if (value === undefined) return "<p>入力は未記録です。</p>";
   const input = parse(value);

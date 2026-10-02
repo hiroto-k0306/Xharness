@@ -4,12 +4,19 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStartupArgs, resolveStartup } from "./config/config.js";
 import { readLocalSecrets } from "./auth/local-secrets.js";
+import { Authentication } from "./auth/authentication.js";
+import { launchOfficialLogin } from "./auth/cli-login.js";
 import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
-import { createHost, registerIpc, sendEvent } from "./ipc.js";
+import {
+  confirmAuthentication,
+  createHost,
+  registerIpc,
+  sendEvent,
+} from "./ipc.js";
 import {
   devToolsAllowed,
   isDevToolsShortcut,
@@ -103,7 +110,25 @@ async function start() {
         }),
       ]
     : [new ClaudeAdapter(), new CodexAdapter()];
+  const secrets = fake ? [] : await readLocalSecrets();
+  const authentication = fake
+    ? undefined
+    : new Authentication({
+        confirm: (provider) => confirmAuthentication(window, provider),
+        launch: launchOfficialLogin,
+        refreshSecrets: async () => {
+          for (const secret of await readLocalSecrets())
+            if (!secrets.includes(secret)) secrets.push(secret);
+        },
+        changed: () => {
+          void controller
+            ?.state()
+            .then((state) => sendEvent(window, { type: "state", state }))
+            .catch(() => undefined);
+        },
+      });
   controller = new SessionController({
+    authentication,
     phase4: true,
     cliModel: startup.model,
     cliEffort: startup.effort as
@@ -120,7 +145,7 @@ async function start() {
     fake,
     version: app.getVersion(),
     // --fake では資格情報ファイルを読まない
-    secrets: fake ? [] : await readLocalSecrets(),
+    secrets,
     host: createHost(() => window),
     emit: (event) => sendEvent(window, event),
     // MCP の OAuth トークンは OS の暗号化(Windows では DPAPI)で保存する。使えなければ OAuth を使わない

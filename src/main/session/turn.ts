@@ -523,6 +523,12 @@ async function finishTurn(
   rt.pending = undefined;
   rt.status = "idle";
   const notice = STOP_NOTICE[stopCause];
+  if (
+    stopCause === "authentication" &&
+    !ctx.options.fake &&
+    (events.activeProvider === "claude" || events.activeProvider === "codex")
+  )
+    ctx.options.authentication?.reject(events.activeProvider);
   if (notice && stopCause !== "aborted")
     emit({ type: "error", sessionId, message: notice });
   emit({ type: "turn", sessionId, status: "idle", stopCause });

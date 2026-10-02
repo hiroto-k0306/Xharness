@@ -85,6 +85,7 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  authentication?: AuthenticationView[];
   models?: {
     id: string;
     provider: ProviderName;
@@ -268,6 +269,8 @@ export type UiEvent =
 export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
+  | { type: "refresh_auth" }
+  | { type: "authenticate"; provider: ProviderName }
   | { type: "export_report"; sessionId: string }
   | {
       type: "plan_response";
@@ -351,6 +354,12 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "authenticate":
+      return c.provider === "claude" || c.provider === "codex"
+        ? { type: "authenticate", provider: c.provider }
+        : undefined;
+    case "refresh_auth":
+      return { type: "refresh_auth" };
     case "plan_response":
       return str(c.sessionId) &&
         str(c.requestId) &&

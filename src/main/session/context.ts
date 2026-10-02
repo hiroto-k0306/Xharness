@@ -1,6 +1,7 @@
 // SessionController と、それを分割した各モジュールが共有する型と小さな関数。
 // electron を import しない。
 import { stat } from "node:fs/promises";
+import { type Authentication } from "../auth/authentication.js";
 import { join } from "node:path";
 import { type MainConfig, type WebSettings } from "../config/config.js";
 import { type ProjectConfig } from "../config/project.js";
@@ -41,6 +42,7 @@ export interface Host {
   saveReport?(filename: string): Promise<string | undefined>;
 }
 export interface ControllerOptions {
+  authentication?: Authentication;
   cliModel?: string;
   cliEffort?: Effort;
   phase4?: boolean;

@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { COMMAND_CHANNEL, EVENT_CHANNEL, parseCommand } from "./ipc.js";
 
 describe("IPC contract", () => {
+  it("accepts only known authentication providers", () => {
+    expect(
+      parseCommand({
+        type: "authenticate",
+        provider: "claude",
+        command: "unsafe",
+      }),
+    ).toEqual({ type: "authenticate", provider: "claude" });
+    expect(
+      parseCommand({ type: "authenticate", provider: "arbitrary" }),
+    ).toBeUndefined();
+    expect(parseCommand({ type: "refresh_auth" })).toEqual({
+      type: "refresh_auth",
+    });
+  });
   it("uses exactly the two channels from DESIGN §16.4", () => {
     expect([EVENT_CHANNEL, COMMAND_CHANNEL]).toEqual([
       "harness:event",

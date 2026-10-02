@@ -108,6 +108,7 @@ export class SessionController {
   }
 
   async init() {
+    if (!this.options.fake) await this.options.authentication?.refresh();
     await Promise.all([this.sessions.load(), this.workspaces.load()]);
     this.sessions.fillDefaults({ model: this.model, effort: this.effort });
     if (this.options.phase4) {
@@ -155,6 +156,9 @@ export class SessionController {
     const workspaces = await this.workspaces.summaries();
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
+      authentication: this.options.fake
+        ? undefined
+        : this.options.authentication?.snapshot(),
       models: loadModelCatalog()
         .filter((m) => m.enabled)
         .map((m) => ({
@@ -192,6 +196,22 @@ export class SessionController {
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
       switch (command.type) {
+        case "refresh_auth":
+          if (!this.options.fake) await this.options.authentication?.refresh();
+          await this.emitState();
+          return { ok: true };
+        case "authenticate":
+          if (this.stopped) return { ok: false, error: "Shutting down" };
+          if (this.options.fake || !this.options.authentication)
+            return { ok: false, error: "この起動では認証操作を利用できません" };
+          if ([...this.runtimes.values()].some((rt) => rt.status !== "idle"))
+            return {
+              ok: false,
+              error: "すべての実行が終了してから認証してください",
+            };
+          await this.options.authentication.authenticate(command.provider);
+          await this.emitState();
+          return { ok: true };
         case "restore_worktree":
           return await restoreWorktree(this.ctx, command);
         case "open_repository":
@@ -427,6 +447,8 @@ export class SessionController {
   }
 
   private async send(sessionId: string, text: string): Promise<CommandResult> {
+    if (!this.options.fake && this.options.authentication?.isBusy())
+      return { ok: false, error: "認証完了後に送信してください" };
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, error: "Unknown session" };
     if (this.stopped) return { ok: false, error: "Shutting down" };
@@ -444,7 +466,14 @@ export class SessionController {
         mode: mode as "default" | "acceptEdits" | "plan",
       });
     }
-    if (command === "/compact") return compactNow(this.ctx, sessionId);
+    if (command === "/compact")
+      return this.authenticationRequired(session)
+        ? {
+            ok: false,
+            error:
+              "認証欄で公式CLIの認証・更新を許可してから再送信してください",
+          }
+        : compactNow(this.ctx, sessionId);
     if (/^\/model(?:\s|$)/.test(command)) {
       const [, model, effort, extra] = command.split(/\s+/);
       if (!model || extra || (effort !== undefined && !isEffort(effort)))
@@ -502,6 +531,11 @@ export class SessionController {
       return { ok: false, error: "Workspace writer busy" };
     }
     // 確認より前に同期的に予約する(次の await の間に届いた二重送信を弾く)
+    if (this.authenticationRequired(session))
+      return {
+        ok: false,
+        error: "認証欄で公式CLIの認証・更新を許可してから再送信してください",
+      };
     rt.status = "running";
     // 作業フォルダが無いときは、モデルを呼ばずツールも動かさずに知らせる(§18.4)
     if (await this.reportMissingCwd(session)) {
@@ -513,6 +547,19 @@ export class SessionController {
       () => undefined,
     );
     return { ok: true, sessionId };
+  }
+
+  private authenticationRequired(session: StoredSession) {
+    if (this.options.fake || !this.options.authentication) return false;
+    const provider = resolveModel(
+      session.model,
+      this.runtimes.get(session.id)?.mainConfig?.aliases ??
+        this.options.aliases,
+    )?.provider;
+    const auth = this.options.authentication
+      .snapshot()
+      .find((v) => v.provider === provider);
+    return !!auth && auth.status !== "available";
   }
 
   /** §18.3: worktree を使わない書き込みセッションは、同じワークスペースで同時に1つまで */

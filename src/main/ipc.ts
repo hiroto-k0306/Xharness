@@ -11,6 +11,29 @@ import {
   type CommandResult,
   type UiEvent,
 } from "../shared/ipc.js";
+import { type ProviderName } from "../shared/ipc.js";
+
+export async function confirmAuthentication(
+  win: BrowserWindow | null,
+  provider: ProviderName,
+) {
+  const name = provider === "claude" ? "Claude" : "Codex";
+  const options = {
+    type: "question" as const,
+    title: `${name} の認証・更新`,
+    message: `${name} の公式CLIで認証・更新を行うことを許可しますか？`,
+    detail:
+      "公式CLIの画面とブラウザが開きます。ログイン・認可はご自身で行ってください。資格情報は公式CLIが保存し、XHarnessは読み取りのみ行います。モデルへの依頼は送信しません。",
+    buttons: ["キャンセル", "許可して認証する"],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+  };
+  const result = win
+    ? await dialog.showMessageBox(win, options)
+    : await dialog.showMessageBox(options);
+  return result.response === 1;
+}
 import { type Host, type SessionController } from "./session/controller.js";
 
 /** Electron に依存する部分はこのファイルと index.ts だけ(DESIGN.md §4)。 */

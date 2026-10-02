@@ -1,10 +1,27 @@
-stabilize のレビュー対応の続き。ブランチ claude/inspiring-heisenberg-hkgp32から作業し、手元の Windows で次の確認をしてください。コードの修正は、確認で不具合が見つかった場合だけ行ってください。
+stabilize のレビュー対応の続き。main(8578194 以降)から作業し、手元の Windows で次の確認をしてください。コードの修正は、確認で不具合が見つかった場合だけ行ってください。
 
-1.テスト: pnpm install --frozen-lockfile、pnpm test(PowerShell 依存を含めて 562 件全件、スキップ 0 を期待)、pnpm typecheck / pnpm lint / pnpm format:check / pnpm build / pnpm build:headless。
-2.preserved thinking の実送信確認(上限: Claude 4 回・Codex 0 回)。新しいアカウントで起きる 400 を古いアカウントでも再現できるように、Opus 5.5 への要求すべてに beta ヘッダ thinking-binding-controls-2026-08-01 と thinking: {type: "adaptive", block_binding: {prefix_mismatch_behavior: "error"}} を付けてください。付けるのは確認用のスクリプトかテスト用の切り替えだけにして、通常の動作には入れないこと。
-・(a) workflow の classify / plan → implement の切り替えをまたぐ 2 回の送信が、どちらも HTTP 200 で input_transformations が空であること(前の要求の thinking を含めて送ること)。
-・(b) サーバー側圧縮(compact-2026-09-04)で得た圧縮ブロックを先頭に置き、続けて 1 回送って HTTP 200 になること。
-・400 になった場合は、エラー本文のうち、どのブロックで失敗したかを示す部分だけを記録してください(秘密値は保存しない)。
-3.画面での確認: Haiku のセッションで自動圧縮が働く閾値を超えたときに、警告の通知が出て会話が続くこと。cwd への cd を含むコマンドが、一度「常に許可」すると次から聞かれないこと。fake で十分なら fake を使ってください。
-4.reviewer の再確認(上限: Claude 6 回・Codex 4 回): 前回と同じサンプル(sum.js の加算の不具合)で計画 → 実装 → レビューを通し、reviewer が npm test を自分で実行できたかを記録してください。
-5.結果を docs/stabilize-progress.md に追記してください(各確認の結果、送信回数、未確認のもの)。
+1. テスト: pnpm install --frozen-lockfile、pnpm test(PowerShell 依存を含めて 579 件全件、スキップ 0 を期待)、pnpm typecheck / pnpm lint / pnpm format:check / pnpm build / pnpm build:headless。
+
+2. preserved thinking の実送信確認(上限: Claude 4 回・Codex 0 回)。確認用スクリプトは実装済みなので、新しく書かずに次を実行してください。
+   pnpm spike:claude:thinking-binding -- --yes
+   ・このスクリプトは、Opus 5.5 への要求にだけ beta ヘッダ thinking-binding-controls-2026-08-01 と thinking.block_binding.prefix_mismatch_behavior: "error" を付けます(通常の動作には入りません)。
+   ・(a) workflow の SkipPlan による段階の切り替えをまたいで、前の thinking を含めて 2 回送ります。(b) サーバー側圧縮(compact-2026-09-04)の後に、圧縮ブロックを先頭に置いて 1 回送ります。
+   ・"error" を指定しているので、食い違いがあれば必ず 400 になります。全部 200 なら合格です。
+   ・結果は spike/.out/thinking-binding.json に出ます。report.passed と各送信のステータスを記録してください。400 の場合は、どのブロックで失敗したかを示すエラーメッセージだけを記録してください(秘密値は保存しない)。
+   ・回数の管理は spike/.out/budget-thinking-binding/ にあります。4 回を使い切ったら再実行しないこと。
+
+3. 画面での確認(fake で十分なら fake を使う):
+   ・Haiku のセッションで自動圧縮の閾値を超えたときに、警告の通知が出て会話が続くこと。
+   ・cwd への cd を含むコマンドを一度「常に許可」すると、次から聞かれないこと。
+
+4. Web 検索の設定(§22.8、上限: Claude 3 回・Codex 3 回):
+   ・config.yaml に web.searchProvider: auto を設定し、WebSearch を 1 回実行して、使われた provider と、結果に pageAge が付いているかを記録する。
+   ・allowedDomains: ["nodejs.org"] を付けて 1 回実行し、結果がそのドメインとサブドメインだけになること。
+   ・web.maxSearchesPerSession: 2 にして 3 回目がエラーにならず「上限に達した」旨が返ること(3 回目は送信されない)。
+   ・codexSearchMode: disabled のときに Codex で検索しないこと。
+   ・Codex の検索結果に日付(pageAge に当たるもの)が付くかを記録する。付く場合は、fixture をマスクしてから保存して報告する。
+   ・web の値が不正な config.yaml で起動して、警告が出て既定値で動くこと。
+
+5. reviewer の再確認(上限: Claude 6 回・Codex 4 回): 前回と同じサンプル(sum.js の加算の不具合)で、計画 → 実装 → レビューを通してください。reviewer が npm test を自分で実行できたかを記録してください。
+
+6. 結果を docs/stabilize-progress.md に追記してください(各確認の結果、送信回数、未確認のもの)。

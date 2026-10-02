@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { summarizeInput } from "../../shared/summary.js";
+import { parseTodos } from "../../shared/todos.js";
 import {
   REPORTED_ERRORS,
   type AppState,
@@ -183,6 +184,7 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
           id: e.receiptId,
           tool: e.tool,
           summary: summarizeInput(e.tool, e.input),
+          todos: e.tool === "TodoWrite" ? parseTodos(e.input) : undefined,
           status: "pending",
         }),
       );

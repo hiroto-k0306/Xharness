@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type TranscriptItem } from "../../shared/ipc.js";
 import { Logo } from "./Logo.js";
 import { McpStatus } from "./McpStatus.js";
+import { TodoList } from "./TodoList.js";
 import styles from "./Transcript.module.css";
 
 const STATUS = {
@@ -61,6 +62,8 @@ export function Transcript({
       {items.map((item) => {
         if (item.kind === "tool") {
           const st = STATUS[item.status];
+          if (item.tool === "TodoWrite" && item.status === "ok" && item.todos)
+            return <TodoList key={item.id} todos={item.todos} />;
           return (
             <div
               key={item.id}

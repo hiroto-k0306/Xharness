@@ -20,6 +20,14 @@ function string(value: unknown): string {
 function usage(value: unknown, previous: Usage): Usage {
   const native = object(value);
   const result = { ...previous };
+  if (Array.isArray(native.iterations) && native.iterations.length) {
+    const iterations = native.iterations.map((v) =>
+      usage(v, { inputTokens: 0, outputTokens: 0 }),
+    );
+    result.inputTokens = iterations.reduce((n, v) => n + v.inputTokens, 0);
+    result.outputTokens = iterations.reduce((n, v) => n + v.outputTokens, 0);
+    return result;
+  }
   for (const [source, target] of [
     ["input_tokens", "inputTokens"],
     ["output_tokens", "outputTokens"],
@@ -72,6 +80,18 @@ export async function* decodeClaudeStream(
         const native = object(data.content_block);
         let block: ContentBlock | HostedBlock;
         switch (native.type) {
+          case "compaction":
+            if (
+              typeof native.content !== "string" ||
+              typeof native.signature !== "string"
+            )
+              throw new Error("Invalid compaction block");
+            block = {
+              type: "compaction",
+              provider: "claude",
+              payload: structuredClone(native),
+            };
+            break;
           case "server_tool_use":
           case "web_search_tool_result":
             block = { type: "hosted_search", payload: { ...native } };
@@ -189,9 +209,13 @@ export async function* decodeClaudeStream(
         if (!started || active || stopReason)
           throw new Error("Invalid message delta");
         const reason = string(object(data.delta).stop_reason);
-        stopReason = ["end_turn", "tool_use", "max_tokens", "refusal"].includes(
-          reason,
-        )
+        stopReason = [
+          "end_turn",
+          "tool_use",
+          "max_tokens",
+          "refusal",
+          "compaction",
+        ].includes(reason)
           ? (reason as StopReason)
           : "other";
         counts = usage(data.usage, counts);

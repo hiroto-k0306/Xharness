@@ -22,6 +22,7 @@ export interface ProviderRequest {
   sessionId?: string;
   /** Only standalone WebSearch tool calls opt into a hosted search. */
   webSearch?: { mode: "live" | "cached" };
+  compaction?: { type: "summarize" };
 }
 
 export interface QuotaUsage {
@@ -41,7 +42,7 @@ export interface ProviderError {
 }
 
 export type StopReason =
-  "end_turn" | "tool_use" | "max_tokens" | "refusal" | "other";
+  "end_turn" | "tool_use" | "max_tokens" | "refusal" | "compaction" | "other";
 export type ProviderEvent =
   | ({ type: "usage"; provider: ProviderId } & QuotaUsage)
   | { type: "text_delta"; text: string }
@@ -57,6 +58,7 @@ export type ProviderEvent =
   | { type: "error"; error: ProviderError };
 
 export interface Provider {
+  readonly offline?: boolean;
   readonly id: ProviderId;
   models(): ModelInfo[];
   stream(

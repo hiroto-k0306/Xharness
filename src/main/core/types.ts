@@ -12,7 +12,8 @@ export type ContentBlock =
       content: string | ContentBlock[];
       isError?: boolean;
     }
-  | { type: "reasoning"; provider: ProviderId; payload: unknown };
+  | { type: "reasoning"; provider: ProviderId; payload: unknown }
+  | { type: "compaction"; provider: "claude"; payload: unknown };
 
 export interface Usage {
   inputTokens: number;

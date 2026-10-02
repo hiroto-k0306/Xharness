@@ -301,3 +301,110 @@ describe("MCP in a session (§25)", () => {
     await controller.shutdown(100);
   }, 30_000);
 });
+
+describe("MCP OAuth in a session (§25.7)", () => {
+  it("opens the browser for authorization, then the tool works; tokens never reach the UI", async () => {
+    const { startOAuthMcpServer } =
+      await import("../../../test/fixtures/mcp/http-oauth.mjs");
+    const server = (await startOAuthMcpServer()) as {
+      url: string;
+      close(): Promise<void>;
+    };
+    const home = await mkdtemp(join(tmpdir(), "xh-mcp-oauth-home-"));
+    const root = await mkdtemp(join(tmpdir(), "xh-mcp-oauth-repo-"));
+    await writeFile(join(home, "config.yaml"), "workflow:\n  mode: off\n");
+    await writeFile(
+      join(root, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: { remote: { type: "http", url: server.url } },
+      }),
+    );
+    await new WorkspaceTrust(home).trust(root);
+    const secrets = new Map<string, string>();
+    const opened: string[] = [];
+    const events: UiEvent[] = [];
+    const requests: ProviderRequest[] = [];
+    const provider: Provider = {
+      id: "claude",
+      models: () => [{ id: "fake", contextTokens: 1000000 }],
+      async *stream(request) {
+        requests.push(structuredClone(request));
+        const done = request.messages
+          .at(-1)
+          ?.content.some((b) => b.type === "tool_result");
+        yield {
+          type: "message_done",
+          stopReason: done ? "end_turn" : "tool_use",
+          usage: { inputTokens: 1, outputTokens: 1 },
+          message: {
+            role: "assistant",
+            content: done
+              ? [{ type: "text", text: "done" }]
+              : [
+                  {
+                    type: "tool_use",
+                    id: "c1",
+                    name: "McpCall",
+                    input: { server: "remote", tool: "whoami" },
+                  },
+                ],
+          },
+        };
+      },
+    };
+    const controller = new SessionController({
+      provider,
+      model: "fake",
+      phase4: true,
+      fake: true,
+      version: "test",
+      home,
+      host: { pickFolder: async () => root },
+      emit: (e) => events.push(e),
+      mcpConnector: sdkConnector,
+      mcpSecrets: {
+        get: async (k) => secrets.get(k),
+        set: async (k, v) => void secrets.set(k, v),
+        delete: async (k) => void secrets.delete(k),
+      },
+      openExternal: (url) => {
+        opened.push(url);
+        void (async () => {
+          const auth = await fetch(url, { redirect: "manual" });
+          await fetch(auth.headers.get("location")!);
+        })();
+      },
+    });
+    try {
+      const id = await start(controller);
+      await controller.handle({ type: "send", sessionId: id, text: "use mcp" });
+      await until(() => asks(events).length === 1);
+      await answer(controller, id, asks(events)[0]!, "allow");
+      await until(() => asks(events).length === 2);
+      await answer(controller, id, asks(events)[1]!, "allow");
+      await until(() => idle(events, id));
+      expect(opened).toHaveLength(1);
+      expect(JSON.stringify(events)).toContain("ブラウザで");
+      const result = requests[1]!.messages
+        .at(-1)!
+        .content.find((b) => b.type === "tool_result") as { content: string };
+      expect(JSON.parse(result.content).content).toBe("client:ok");
+      const token = JSON.parse([...secrets.values()][0]!).tokens.access_token;
+      expect(token).toBeTruthy();
+      expect(JSON.stringify(events)).not.toContain(token);
+      expect(JSON.stringify(requests)).not.toContain(token);
+    } finally {
+      await controller.shutdown(100);
+      await server.close();
+    }
+  }, 30_000);
+
+  it("only opens https or loopback http authorization URLs", async () => {
+    const { isAuthorizationUrl } = await import("./mcp-session.js");
+    expect(isAuthorizationUrl("https://auth.example.com/authorize")).toBe(true);
+    expect(isAuthorizationUrl("http://127.0.0.1:3000/authorize")).toBe(true);
+    expect(isAuthorizationUrl("http://evil.example.com/authorize")).toBe(false);
+    expect(isAuthorizationUrl("file:///C:/x")).toBe(false);
+    expect(isAuthorizationUrl("javascript:alert(1)")).toBe(false);
+  });
+});

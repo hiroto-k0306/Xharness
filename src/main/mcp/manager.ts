@@ -460,9 +460,11 @@ export class McpManager {
           : error instanceof Error
             ? error.message
             : "接続できませんでした";
+      // 認可が必要: SDK の UnauthorizedError、HTTP 401(StreamableHTTPError の code)、または同等のメッセージ
       const unauthorized =
         error instanceof UnauthorizedError ||
-        /\b401\b|unauthori[sz]ed/i.test(message);
+        (error as { code?: unknown } | undefined)?.code === 401 ||
+        /\b401\b|unauthori[sz]ed|invalid_token/i.test(message);
       this.state.set(server.name, {
         name: server.name,
         type: server.type,

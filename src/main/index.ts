@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from "electron";
+import { app, BrowserWindow, dialog, safeStorage, shell } from "electron";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,7 @@ import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
+import { fileSecretStore } from "./mcp/secret-file.js";
 import { createHost, registerIpc, sendEvent } from "./ipc.js";
 import {
   devToolsAllowed,
@@ -122,6 +123,16 @@ async function start() {
     secrets: fake ? [] : await readLocalSecrets(),
     host: createHost(() => window),
     emit: (event) => sendEvent(window, event),
+    // MCP の OAuth トークンは OS の暗号化(Windows では DPAPI)で保存する。使えなければ OAuth を使わない
+    ...(!fake && safeStorage.isEncryptionAvailable()
+      ? {
+          mcpSecrets: fileSecretStore(join(home, "secrets"), {
+            encrypt: (text) => safeStorage.encryptString(text),
+            decrypt: (data) => safeStorage.decryptString(data),
+          }),
+          openExternal: (url: string) => void shell.openExternal(url),
+        }
+      : {}),
   });
   await controller.init();
   if (startup.resume) {

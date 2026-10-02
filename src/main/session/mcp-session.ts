@@ -12,10 +12,25 @@ import {
   type McpServerConfig,
 } from "../mcp/config.js";
 import { McpManager } from "../mcp/manager.js";
+import { createMcpOAuth } from "../mcp/oauth.js";
 import { mcpTools } from "../tools/mcp.js";
 import { type ControllerContext, type Runtime } from "./context.js";
 import { type PermissionGate } from "./permission-gate.js";
 import { type StoredSession } from "./store.js";
+
+/** 認可で開いてよい URL: https、または手元(loopback)の http */
+export function isAuthorizationUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return (
+      u.protocol === "https:" ||
+      (u.protocol === "http:" &&
+        ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname))
+    );
+  } catch {
+    return false;
+  }
+}
 
 /** サーバーの stderr(マスク済み)をワークスペースごとのログへ追記する。失敗しても止めない */
 export async function mcpLogger(home: string, root: string) {
@@ -59,6 +74,23 @@ export async function prepareMcp(
     toolTimeoutMs: settings.toolTimeoutSec * 1000,
     redact: ctx.clean,
     log: await mcpLogger(options.home, root),
+    oauth:
+      options.mcpSecrets && options.openExternal
+        ? createMcpOAuth({
+            store: options.mcpSecrets,
+            scope: await workspaceKey(root),
+            openBrowser: (url) => {
+              // サーバーが示す認可の URL。https(または手元の http)だけを開く
+              if (!isAuthorizationUrl(url))
+                throw new Error("Unsafe authorization URL");
+              notice(
+                `MCP サーバーの認可のため、ブラウザで ${new URL(url).host} を開きます。認可すると接続を続けます`,
+                "dim",
+              );
+              options.openExternal!(url);
+            },
+          })
+        : undefined,
   });
   rt.mcp = manager;
   // .mcp.json があれば、接続の成否によらず窓口ツールを加える(セッション中に tools を変えないため)

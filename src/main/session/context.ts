@@ -13,6 +13,7 @@ import { FileAccess, fileTools } from "../tools/files.js";
 import { type ToolRegistry } from "../tools/registry.js";
 import { type ProviderUsage, type SearchBudget } from "../tools/web-search.js";
 import { type McpConnector, type McpManager } from "../mcp/manager.js";
+import { type SecretStore } from "../mcp/oauth.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
@@ -64,6 +65,10 @@ export interface ControllerOptions {
   createTools?(cwd: string, readOnly: boolean): ToolRegistry;
   /** 試験用: MCP の接続方法。指定すると --fake でも MCP を準備する(§25.10) */
   mcpConnector?: McpConnector;
+  /** MCP の OAuth トークンの暗号化した保存先(アプリでは safeStorage。無ければ OAuth を使わない。§25.7) */
+  mcpSecrets?: SecretStore;
+  /** 認可の URL を既定のブラウザで開く */
+  openExternal?(url: string): void;
   sleep?(ms: number, signal: AbortSignal): Promise<void>;
 }
 

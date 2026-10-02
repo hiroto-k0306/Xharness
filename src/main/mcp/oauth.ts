@@ -98,7 +98,9 @@ export function createMcpOAuth(options: {
         http = await listen(0);
       }
       const port = (http.address() as AddressInfo).port;
-      if (stored.port !== port)
+      // ポートが変わったら、前の redirect_uri で登録したクライアントは使えない(トークンは残す)。
+      // OAuth を使わないサーバーの分は保存しない
+      if (stored.port !== port && stored.client)
         await save({ ...stored, client: undefined, port });
       const redirectUrl = `http://127.0.0.1:${port}/callback`;
       const state = randomBytes(16).toString("hex");
@@ -145,7 +147,7 @@ export function createMcpOAuth(options: {
         },
         state: () => state,
         clientInformation: () => stored.client,
-        saveClientInformation: (client) => save({ ...stored, client }),
+        saveClientInformation: (client) => save({ ...stored, client, port }),
         tokens: () => stored.tokens,
         saveTokens: (tokens) => save({ ...stored, tokens }),
         redirectToAuthorization: (url) => options.openBrowser(url.href),

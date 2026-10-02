@@ -21,6 +21,7 @@ export interface PendingPermission {
   summary: string;
 }
 export interface SessionView {
+  rewind?: Extract<UiEvent, { type: "rewind_request" }>;
   agents?: Record<
     string,
     Extract<UiEvent, { type: "agent" }> & {
@@ -78,6 +79,8 @@ export const notice = (
 
 /** main から届くイベントを反映するだけの純関数(レンダラは状態を持たない: §16.4) */
 export function applyEvent(s: EventState, e: UiEvent): EventState {
+  if (e.type === "rewind_request")
+    return put(s, e.sessionId, { ...view(s, e.sessionId), rewind: e });
   switch (e.type) {
     case "workflow":
       return put(s, e.sessionId, {
@@ -131,6 +134,7 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
       const next: SessionView = {
         ...v,
         running: e.status === "running",
+        rewind: e.status === "idle" ? undefined : v.rewind,
         step: e.status === "running" ? v.step : undefined,
         pending: e.status === "running" ? v.pending : undefined,
       };

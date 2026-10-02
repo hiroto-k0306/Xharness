@@ -247,7 +247,7 @@ export type UiEvent =
       agentId: string;
       name: string;
       model: string;
-      status: "running" | "done" | "error";
+      status: "running" | "done" | "error" | "stopped" | "awaiting_user";
     }
   | { type: "agent_text"; sessionId: string; agentId: string; text: string }
   | {

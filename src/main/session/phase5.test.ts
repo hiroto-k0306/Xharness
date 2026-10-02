@@ -249,6 +249,42 @@ it.skipIf(process.platform !== "win32")(
     await s.c.shutdown();
   },
 );
+it("shows a question as a normal notice and resumes only after the user's reply", async () => {
+  const s = await setup(
+    [
+      call("AskUserQuestion", {
+        question: "案Aと案B、どちらですか？",
+        options: ["案A", "案B"],
+      }),
+      text("案Aで再開します"),
+    ],
+    "workflow: {mode: off}\n",
+  );
+  await s.c.handle({ type: "send", sessionId: s.id, text: "作業して" });
+  await until(() =>
+    s.events.some((e) => e.type === "turn" && e.status === "idle"),
+  );
+  expect(s.events.findLast((e) => e.type === "turn")).toMatchObject({
+    stopCause: "awaiting_user",
+  });
+  expect(
+    s.events.some((e) => e.type === "notice" && e.message.includes("返答待ち")),
+  ).toBe(true);
+  expect(s.events.some((e) => e.type === "error")).toBe(false);
+  expect(s.requests).toHaveLength(1);
+  await s.c.handle({ type: "send", sessionId: s.id, text: "案A" });
+  await until(
+    () =>
+      s.events.filter((e) => e.type === "turn" && e.status === "idle")
+        .length === 2,
+  );
+  expect(s.requests).toHaveLength(2);
+  expect(JSON.stringify(s.requests[1]!.messages)).toContain("案Aと案B");
+  expect(s.requests[1]!.messages.at(-1)?.content).toEqual([
+    { type: "text", text: "案A" },
+  ]);
+  await s.c.shutdown();
+});
 async function until(check: () => boolean, timeoutMs = 4000) {
   const end = Date.now() + timeoutMs;
   while (!check()) {
@@ -327,7 +363,7 @@ it.each(["close", "shutdown", "abort"])(
       s.events.filter((e) => e.type === "permission_resolved"),
     ).toHaveLength(1);
     expect(s.events.filter((e) => e.type === "agent").at(-1)).toMatchObject({
-      status: "error",
+      status: "stopped",
     });
     const childId = s.requests.find((r) =>
       r.system.startsWith("You are reviewer"),
@@ -463,7 +499,7 @@ it("queues two reviewers' permission prompts and shutdown resolves the queue", a
   expect(
     s.events.filter(
       (e) =>
-        e.type === "agent" && e.name === "reviewer" && e.status === "error",
+        e.type === "agent" && e.name === "reviewer" && e.status === "stopped",
     ),
   ).toHaveLength(2);
 });

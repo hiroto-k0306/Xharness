@@ -12,6 +12,8 @@ import { SessionStore, usedProviders, gitInfo } from "../session/store.js";
 import { ReceiptStore } from "../session/receipts.js";
 import { type AgentDefinition } from "./definitions.js";
 import { MCP_TOOL_NAMES } from "../tools/mcp.js";
+import { lifecycleTools } from "../tools/lifecycle.js";
+
 import { loadProjectConfig, projectMemory } from "../config/project.js";
 import { type Checkpoint, estimateTokens } from "../context/compactor.js";
 import { prepareProviderHistory } from "../context/provider-compactor.js";
@@ -21,6 +23,15 @@ import {
   reviewerCommandError,
   reviewerTestHint,
 } from "./reviewer-commands.js";
+
+export class AgentStoppedError extends Error {
+  constructor(
+    readonly reason: "agent_stopped" | "awaiting_user",
+    message: string,
+  ) {
+    super(message);
+  }
+}
 
 export interface ChildContext {
   branch?: string;
@@ -56,11 +67,12 @@ export interface ChildOptions {
   onStatus?(
     context: ChildContext,
     model: string,
-    status: "running" | "done" | "error",
+    status: "running" | "done" | "error" | "stopped" | "awaiting_user",
   ): void;
   redact?(text: string): string;
 }
 export class ChildRunner {
+  private childStore?: Promise<SessionStore>;
   constructor(private readonly options: ChildOptions) {
     if (!/^[\w-]+$/.test(options.parentId))
       throw new Error("Invalid parent session id");
@@ -72,6 +84,7 @@ export class ChildRunner {
     cwd: string,
     signal: AbortSignal,
     worker?: { files: string[]; reportTool: ToolRegistry },
+    id?: string,
   ) {
     signal.throwIfAborted();
     const choice = resolveModel(definition.model, this.options.aliases);
@@ -88,7 +101,7 @@ export class ChildRunner {
     )
       throw new Error("Unavailable agent model or effort");
     const context: ChildContext = {
-      id: randomUUID(),
+      id: id ?? randomUUID(),
       name,
       cwd,
       files: worker?.files,
@@ -120,9 +133,12 @@ export class ChildRunner {
     const name = context.name;
     const clean = this.options.redact ?? ((text: string) => text);
     const home = join(this.options.home, "agents", this.options.parentId);
-    const store = new SessionStore(home);
+    const store = await (this.childStore ??= (async () => {
+      const shared = new SessionStore(home);
+      await shared.load();
+      return shared;
+    })());
     const receipts = new ReceiptStore(home);
-    await store.load();
     await store.save({
       id: context.id,
       title: name,
@@ -171,6 +187,7 @@ export class ChildRunner {
       });
     }
     for (const [name, tool] of worker?.reportTool ?? []) tools.set(name, tool);
+    for (const [name, tool] of lifecycleTools()) tools.set(name, tool);
     let sequence = 0;
     const writes: Promise<void>[] = [];
     this.options.onStatus?.(context, choice.model, "running");
@@ -308,6 +325,17 @@ export class ChildRunner {
       await Promise.all(writes);
       await store.append(context.id, result.messages, clean);
       this.options.onTranscript?.(context, result.messages);
+      if (
+        result.stopCause === "agent_stopped" ||
+        result.stopCause === "awaiting_user"
+      ) {
+        const text =
+          result.messages
+            .findLast((m) => m.role === "assistant")
+            ?.content.flatMap((b) => (b.type === "text" ? [b.text] : []))
+            .join("\n") ?? "子エージェントが停止しました。";
+        throw new AgentStoppedError(result.stopCause, clean(text));
+      }
       if (!["end_turn", "reported_done"].includes(result.stopCause))
         throw new Error(`Agent stopped: ${result.stopCause}`);
       const final = result.messages
@@ -336,7 +364,17 @@ export class ChildRunner {
       };
     } catch (error) {
       await Promise.allSettled(writes);
-      this.options.onStatus?.(context, choice.model, "error");
+      this.options.onStatus?.(
+        context,
+        choice.model,
+        signal.aborted
+          ? "stopped"
+          : error instanceof AgentStoppedError
+            ? error.reason === "awaiting_user"
+              ? "awaiting_user"
+              : "stopped"
+            : "error",
+      );
       throw error;
     }
   }

@@ -39,8 +39,14 @@ export function AgentsPanel({
         >
           {a.name} · {a.model}
           <small>
-            {view?.pending?.agentId === a.agentId ? "確認待ち" : a.status} ·
-            STEP {view?.agentSteps?.[a.agentId]?.step ?? "context"}
+            {view?.pending?.agentId === a.agentId
+              ? "確認待ち"
+              : a.status === "stopped"
+                ? "停止"
+                : a.status === "awaiting_user"
+                  ? "返答待ち"
+                  : a.status}{" "}
+            · STEP {view?.agentSteps?.[a.agentId]?.step ?? "context"}
             {a.branch ? ` · ${a.branch}` : ""}
           </small>
         </button>

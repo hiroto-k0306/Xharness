@@ -27,6 +27,33 @@ const text = (text: string): FakeStep => ({
   stopReason: "end_turn",
   message: { role: "assistant", content: [{ type: "text", text }] },
 });
+it.each(["StopTask", "AskUserQuestion"])(
+  "%s preserves actual changes and mandatory review without continuing",
+  async (name) => {
+    const s = await setup(
+      [
+        call("SkipPlan", { reason: "Small fix" }),
+        call("Write", { path: "fix.txt", content: "pending review" }),
+        call(
+          name,
+          name === "StopTask"
+            ? { reason: "停止してください" }
+            : { question: "この変更で続けますか？" },
+        ),
+        text("must not send"),
+      ],
+      [],
+    );
+    expect((await s.run()).stopCause).toBe(
+      name === "StopTask" ? "agent_stopped" : "awaiting_user",
+    );
+    expect(s.requests).toHaveLength(3);
+    expect(s.runtime.state.phase).toBe("implement");
+    expect(await readFile(join(s.cwd, "fix.txt"), "utf8")).toBe(
+      "pending review",
+    );
+  },
+);
 it("finishes a proposal after a denied inspection command without requiring implementation", async () => {
   const s = await setup(
     [

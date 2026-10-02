@@ -1,6 +1,12 @@
 import { dirname, relative, resolve, isAbsolute } from "node:path";
 import { realpath } from "node:fs/promises";
 import { type ToolCall } from "../tools/registry.js";
+import {
+  analyzeCommand,
+  bashGrantPattern,
+  subcommands,
+} from "./shell-command.js";
+import { isProtectedPath, isSecretPath } from "./sensitive-paths.js";
 
 export type PermissionMode = "default" | "acceptEdits" | "plan";
 export type Decision = "allow" | "deny" | "ask";
@@ -62,11 +68,52 @@ export function ruleSubject(call: ToolCall): string {
   if (!input || typeof input !== "object") return "";
   return String(input.command ?? input.path ?? input.url ?? input.query ?? "");
 }
+/** 明らかに破壊的なコマンド。括弧や連結の中にあっても見つける */
 export function dangerous(command: string) {
-  return /(?:^|[;|&\s])(?:rm|rmdir|del|Remove-Item|Format-Volume|Clear-Disk|Invoke-Expression|iex)\b|git\s+(?:reset\s+--hard|clean|push\s+.*--force)|(?:^|\s)(?:curl|wget)\b.*\|/i.test(
+  return /(?:^|[^\w-])(?:rm|rmdir|del|erase|rd|ri|Remove-Item|Clear-Content|Format-Volume|Clear-Disk|Invoke-Expression|iex|Start-Process|saps)(?![\w-])|git\s+(?:reset\s+--hard|clean|push\s+.*--force)|(?:^|\s)(?:curl|wget|iwr|irm|Invoke-WebRequest|Invoke-RestMethod)\b.*\|/i.test(
     command,
   );
 }
+
+/** plan モード(読み取り専用)で確認なしに動かしてよい、読み取りだけのコマンド */
+const READ_ONLY_COMMAND =
+  /^(?:git (?:status|diff|log|show)(?:\s|$)|Get-(?:Content|ChildItem|Location)(?:\s|$)|rg(?:\s|$)|pwd$)/i;
+
+interface PathCheck {
+  target?: string;
+  /** 作業フォルダの外(または解決できない) */
+  outside: boolean;
+  secret: boolean;
+  /** 作業フォルダ内の保護パス(.git / .xharness / シェル設定など) */
+  protectedPath: boolean;
+}
+
+async function checkPath(subject: string, cwd: string): Promise<PathCheck> {
+  let target: string | undefined;
+  let outside = true;
+  let protectedPath = false;
+  try {
+    const root = await canonical(cwd);
+    target = await canonical(resolve(cwd, subject));
+    const rel = relative(root, target);
+    outside = rel.startsWith("..") || isAbsolute(rel);
+    // 保護パスは作業フォルダからの相対で見る(~/.xharness/worktrees の中の作業は対象外)
+    protectedPath = !outside && isProtectedPath(rel);
+  } catch {
+    /* 解決できない対象は外側として扱う */
+  }
+  return {
+    target,
+    outside,
+    protectedPath,
+    secret: isSecretPath(subject) || (!!target && isSecretPath(target)),
+  };
+}
+
+/**
+ * §9 の権限判定。Claude Code と同じく deny → ask → allow の順に評価し、
+ * ルールの細かさで順序は変えない。保護パス・秘密ファイル・単純でないコマンドは allow ルールでも確認する。
+ */
 export async function decidePermission(
   call: ToolCall,
   config: PermissionConfig,
@@ -74,84 +121,89 @@ export async function decidePermission(
   opts: { readOnly?: boolean; scratch?: boolean; sessionRules?: Rule[] } = {},
 ): Promise<Decision> {
   const subject = ruleSubject(call);
-  const matching = [...config.rules, ...(opts.sessionRules ?? [])].filter(
-    (r) =>
-      (r.tool === "*" || r.tool === call.name) &&
-      (!r.pattern || glob(r.pattern, subject)),
+  const all = [...config.rules, ...(opts.sessionRules ?? [])].filter(
+    (r) => r.tool === "*" || r.tool === call.name,
   );
-  if (matching.some((r) => r.decision === "deny")) return "deny";
+  const matches = (r: Rule, text: string) =>
+    !r.pattern || glob(r.pattern, text);
+  // 制限するルール(deny / ask)は、連結や括弧の中の部分コマンドに一致しても効く
+  const parts =
+    call.name === "Bash" ? [subject, ...subcommands(subject)] : [subject];
+  const restricted = (decision: Decision) =>
+    all.some(
+      (r) => r.decision === decision && parts.some((p) => matches(r, p)),
+    );
+  // 許可するルールは、コマンド全体に一致したときだけ効く
+  const allowed = all.some(
+    (r) => r.decision === "allow" && matches(r, subject),
+  );
+  if (restricted("deny")) return "deny";
   const mode = opts.readOnly ? "plan" : config.mode;
   const write = ["Write", "Edit"].includes(call.name);
   if (mode === "plan" && write) return "deny";
   if (call.name === "Bash") {
-    if (dangerous(subject)) return mode === "plan" ? "deny" : "ask";
+    const shape = analyzeCommand(subject);
+    const confirm = (): Decision => (mode === "plan" ? "deny" : "ask");
+    if (dangerous(subject)) return confirm();
+    // 連結・部分式・リダイレクトなど、解析しきれない形はルールでも許可しない
+    if (!shape.simple || shape.riskyOption) return confirm();
     if (
-      /[;|&>\r\n$`]/.test(subject) ||
-      /--work-tree\b|\b(?:Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|New-Item)\b/i.test(
+      /--work-tree\b|\b(?:Set-Content|Add-Content|Out-File|Copy-Item|Move-Item|New-Item|Rename-Item|Set-ItemProperty|New-ItemProperty)\b/i.test(
         subject,
       )
     )
-      return mode === "plan" ? "deny" : "ask";
-    if (
-      mode === "plan" &&
-      !/^(?:git (?:status|diff|log|show)(?:\s|$)|Get-(?:Content|ChildItem|Location)(?:\s|$)|rg(?:\s|$)|pwd$)/i.test(
-        subject,
-      )
-    )
-      return "deny";
-    if (mode === "plan" && /[;|&>\r\n]/.test(subject)) return "deny";
-    if (
-      mode === "plan" &&
-      /\$|`|--(?:ext-diff|textconv|output|exec)\b|\s-(?:c|C)\s/.test(subject)
-    )
-      return "deny";
-    if (
-      /(?:^|[\s/\\:'"])(?:\.env(?:\b|\.)|auth\.json\b|\.credentials\.json\b|id_rsa\b|id_ed25519\b)/i.test(
-        subject,
-      )
-    )
-      return "ask";
-  }
-  if (["Read", "Write", "Edit", "Grep"].includes(call.name)) {
-    let resolvedSubject = subject;
-    try {
-      resolvedSubject = await canonical(resolve(cwd, subject));
-    } catch {
-      /* Literal check remains applicable. */
+      return confirm();
+    if (shape.tokens.some((t) => isSecretPath(t))) return "ask";
+    if (restricted("ask")) return "ask";
+    if (mode === "plan") {
+      if (!READ_ONLY_COMMAND.test(subject)) return "deny";
+      // 作業フォルダの外を読む引数は、読み取りでも確認する
+      return shape.outsidePath ? "ask" : "allow";
     }
-    if (
-      /(?:^|[/\\])(?:\.env(?:\.[^/\\]*)?|auth\.json|\.credentials\.json|id_rsa|id_ed25519)$/i.test(
-        subject,
-      ) ||
-      /(?:^|[/\\])(?:\.env(?:\.[^/\\]*)?|auth\.json|\.credentials\.json|id_rsa|id_ed25519)$/i.test(
-        resolvedSubject,
-      )
-    )
-      return "ask";
+    return allowed ? "allow" : "ask";
+  }
+  if (["Read", "Write", "Edit", "Grep", "Glob"].includes(call.name)) {
+    const path = await checkPath(subject, cwd);
+    if (path.secret) return "ask";
     if (write) {
-      try {
-        const root = await canonical(cwd);
-        const target = await canonical(resolve(cwd, subject));
-        const rel = relative(root, target);
-        if (rel.startsWith("..") || isAbsolute(rel)) return "ask";
-      } catch {
-        return "ask";
-      }
+      // 作業フォルダ外への書き込み・保護パスへの書き込みは、ルールやモードによらず確認
+      if (path.outside || path.protectedPath) return "ask";
+    } else if (path.outside) {
+      // 作業フォルダ外の読み取りは、それを許可するルールがあるときだけ確認なし
+      if (restricted("ask")) return "ask";
+      return allowed ? "allow" : "ask";
     }
   }
-  if (matching.some((r) => r.decision === "ask")) return "ask";
-  if (matching.some((r) => r.decision === "allow")) return "allow";
-  if (mode === "plan" && call.name === "Bash") return "allow";
+  if (restricted("ask")) return "ask";
+  if (allowed) return "allow";
   if (write && (mode === "acceptEdits" || opts.scratch)) return "allow";
   return ["Read", "Grep", "Glob"].includes(call.name) ? "allow" : "ask";
 }
 
-/** A persisted Bash grant covers the first command token; dangerous commands still ask. */
+/**
+ * 「常に許可」で保存するルール。Bash はサブコマンドまで含めて狭く保存する
+ * (例: `git status` → `git status *`。`git *` にはしない)。
+ */
 export function grantFor(call: ToolCall): Rule {
-  const first = ruleSubject(call).trim().split(/\s+/)[0] ?? "";
-  return {
-    tool: call.name,
-    ...(call.name === "Bash" ? { pattern: `${first} *` } : {}),
-    decision: "allow",
-  };
+  const subject = ruleSubject(call);
+  if (call.name === "Bash")
+    return {
+      tool: "Bash",
+      pattern: bashGrantPattern(subject),
+      decision: "allow",
+    };
+  if (call.name === "WebFetch") {
+    // Claude Code と同じくドメイン単位で許可する
+    try {
+      const url = new URL(subject);
+      return {
+        tool: "WebFetch",
+        pattern: `${url.protocol}//${url.host}/*`,
+        decision: "allow",
+      };
+    } catch {
+      return { tool: "WebFetch", pattern: subject, decision: "allow" };
+    }
+  }
+  return { tool: call.name, decision: "allow" };
 }

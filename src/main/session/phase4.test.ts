@@ -258,7 +258,10 @@ it("persists an always grant, reopens receipts with masked details, and keeps se
     events.some((e) => e.type === "turn" && e.status === "idle"),
   );
   await controller.shutdown();
-  expect(await readFile(join(home, "config.yaml"), "utf8")).toContain("git *");
+  // 「常に許可」は先頭の語だけでなくサブコマンドまで含めて保存する(git * にはしない)
+  expect(await readFile(join(home, "config.yaml"), "utf8")).toContain(
+    "git status *",
+  );
   expect(
     await readFile(join(home, `receipts/${sessionId}.jsonl`), "utf8"),
   ).not.toContain("private-token");

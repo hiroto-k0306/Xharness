@@ -1,27 +1,25 @@
-stabilize のレビュー対応の続き。main(8578194 以降)から作業し、手元の Windows で次の確認をしてください。コードの修正は、確認で不具合が見つかった場合だけ行ってください。
+stabilize の最終確認。main(fb41424 以降)から作業し、手元の Windows で次の確認をしてください。コードの修正は、確認で不具合が見つかった場合だけ行ってください。
 
-1. テスト: pnpm install --frozen-lockfile、pnpm test(PowerShell 依存を含めて 579 件全件、スキップ 0 を期待)、pnpm typecheck / pnpm lint / pnpm format:check / pnpm build / pnpm build:headless。
+1. 改行の統一とテスト(実通信0回)
+   ・.gitattributes で LF に統一した。既存の作業コピーは CRLF のままなので、未コミットの変更が無いことを確認してから、次で取り出し直す:
+     git rm --cached -r -q . ; git reset --hard
+   ・git ls-files --eol で、brand/*.svg と resources/icon.ico 以外が i/lf w/lf になっていることを確認。
+   ・pnpm install --frozen-lockfile、pnpm test(PowerShell 依存を含めて 582 件全件、スキップ 0 を期待)、pnpm typecheck / pnpm lint / pnpm format:check / pnpm build / pnpm build:headless。
+   ・repository の git 試験(時間制限を30秒に変更済み)が、時間切れにならないかを3回続けて実行して確認する(pnpm vitest run src/main/session/repository.test.ts)。
 
-2. preserved thinking の実送信確認(上限: Claude 4 回・Codex 0 回)。確認用スクリプトは実装済みなので、新しく書かずに次を実行してください。
-   pnpm spike:claude:thinking-binding -- --yes
-   ・このスクリプトは、Opus 5.5 への要求にだけ beta ヘッダ thinking-binding-controls-2026-08-01 と thinking.block_binding.prefix_mismatch_behavior: "error" を付けます(通常の動作には入りません)。
-   ・(a) workflow の SkipPlan による段階の切り替えをまたいで、前の thinking を含めて 2 回送ります。(b) サーバー側圧縮(compact-2026-09-04)の後に、圧縮ブロックを先頭に置いて 1 回送ります。
-   ・"error" を指定しているので、食い違いがあれば必ず 400 になります。全部 200 なら合格です。
-   ・結果は spike/.out/thinking-binding.json に出ます。report.passed と各送信のステータスを記録してください。400 の場合は、どのブロックで失敗したかを示すエラーメッセージだけを記録してください(秘密値は保存しない)。
-   ・回数の管理は spike/.out/budget-thinking-binding/ にあります。4 回を使い切ったら再実行しないこと。
+2. exe の再確認(stabilize 後の初回。実通信は Claude 1回まで)
+   ・pnpm package を実行し、portable exe をリポジトリ外のフォルダにコピーして、XHARNESS_HOME を確認用の .out 配下にして起動する。
+   ・fake(--fake)で次を確認する:
+     ・workflow の計画 → 実装 → 完了が画面で進むこと
+     ・Haiku の自動圧縮ができないときに、黄色の警告が出て会話が続くこと
+     ・cd '<cwd>'; Write-Output 'x' を「常に許可」した後、同じコマンドで確認が出ないこと
+     ・web の設定が不正なときに、起動画面に警告が出ること
+   ・実通信は、Haiku に "Reply only pong." を1回だけ送り、packaged 版で応答が返り idle に戻ることを確認する。
 
-3. 画面での確認(fake で十分なら fake を使う):
-   ・Haiku のセッションで自動圧縮の閾値を超えたときに、警告の通知が出て会話が続くこと。
-   ・cwd への cd を含むコマンドを一度「常に許可」すると、次から聞かれないこと。
+3. Web 検索 auto の使用率による切り替え(上限: Claude 2回・Codex 2回。承認します)
+   ・同じセッションで Haiku と Luna に短い返答を1回ずつ送り、5時間枠の使用率を両方取得する(UsagePopover の値を記録)。
+   ・web.searchProvider: auto で WebSearch を1回実行し、使用率の低い方のプロバイダが使われることを確認する。
+   ・使用率が同じだった場合は、セッションのプロバイダが使われたことを記録する。もう一度送り直さないこと。
+   ・検索の結果、使われた provider、pageAge の有無を記録する。
 
-4. Web 検索の設定(§22.8、上限: Claude 3 回・Codex 3 回):
-   ・config.yaml に web.searchProvider: auto を設定し、WebSearch を 1 回実行して、使われた provider と、結果に pageAge が付いているかを記録する。
-   ・allowedDomains: ["nodejs.org"] を付けて 1 回実行し、結果がそのドメインとサブドメインだけになること。
-   ・web.maxSearchesPerSession: 2 にして 3 回目がエラーにならず「上限に達した」旨が返ること(3 回目は送信されない)。
-   ・codexSearchMode: disabled のときに Codex で検索しないこと。
-   ・Codex の検索結果に日付(pageAge に当たるもの)が付くかを記録する。付く場合は、fixture をマスクしてから保存して報告する。
-   ・web の値が不正な config.yaml で起動して、警告が出て既定値で動くこと。
-
-5. reviewer の再確認(上限: Claude 6 回・Codex 4 回): 前回と同じサンプル(sum.js の加算の不具合)で、計画 → 実装 → レビューを通してください。reviewer が npm test を自分で実行できたかを記録してください。
-
-6. 結果を docs/stabilize-progress.md に追記してください(各確認の結果、送信回数、未確認のもの)。
+4. 結果を docs/stabilize-progress.md に追記してください(各確認の結果、送信回数、未確認のもの)。秘密値・認証ヘッダは保存しないこと。

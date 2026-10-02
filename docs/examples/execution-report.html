@@ -92,39 +92,136 @@
           padding: 16px;
         }
       }
+      h4 {
+        margin: 12px 0 6px;
+        font-size: 14px;
+      }
+      .exchange {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .exchange > div {
+        min-width: 0;
+      }
+      .readable-block pre {
+        font:
+          14px/1.7 system-ui,
+          sans-serif;
+        margin: 0;
+      }
+      .readable-block,
+      .initial-request {
+        padding: 12px;
+        background: #192231;
+        border-radius: 6px;
+        margin: 8px 0;
+      }
+      .tool-request,
+      .tool-result {
+        border-left: 2px solid #829ac2;
+        padding-left: 12px;
+      }
+      .raw {
+        margin-top: 20px;
+      }
+      article + article::before {
+        content: "↓ 次の保存記録";
+        display: block;
+        color: #bac7d8;
+        margin-bottom: 12px;
+      }
+      @media (max-width: 760px) {
+        .exchange {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media print {
+        .readable-block,
+        .initial-request {
+          background: #eee;
+        }
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>XHarness 実行レポート</h1>
-      <p>セッション：haiku-read · 出力日時：2026-10-02T07:15:46.066Z</p>
+      <p>セッション：haiku-read · 出力日時：2026-10-02T07:44:03.019Z</p>
       <p class="steps">
         1 context：入力構築 → 2 model：LLM → 3 tool_use：検証 → 4 gate：権限 → 5
         act：実行・委託 → 6 receipt：記録
       </p>
       <p class="note">
-        保存済みデータの表示です。STEP説明は設計上の役割で、STEPごとの実測時系列ではありません。各エージェント内はレシートの保存順です。時刻・所要時間は保存値であり、通信開始時刻や通信単独の時間とは限りません。入力は
-        API
-        変換前の内部共通形式、応答は組み立て後の内部共通形式です。HTTP本文・生のSSE・再試行ごとの通信・補助LLM通信は網羅していません。圧縮やWeb要約、子の実行中にもLLM通信が発生し得ます。未記録の処理は復元しません。暗号化reasoningと署名は伏せています。
+        依頼・LLMの返答・ツール結果を簡易表示しています。本文は原文のままです。全文は各項目の詳細JSONで確認できます。
       </p>
+      <details>
+        <summary>記録の範囲と表示方法</summary>
+        <p class="note">
+          保存済みデータの表示です。STEP説明は設計上の役割で、STEPごとの実測時系列ではありません。各エージェント内はレシートの保存順です。時刻・所要時間は保存値であり、通信開始時刻や通信単独の時間とは限りません。入力は
+          API
+          変換前の内部共通形式、応答は組み立て後の内部共通形式です。HTTP本文・生のSSE・再試行ごとの通信・補助LLM通信は網羅していません。圧縮やWeb要約、子の実行中にもLLM通信が発生し得ます。未記録の処理は復元しません。暗号化reasoningと署名は伏せています。
+        </p>
+      </details>
       <nav><a href="#agent-0">親 haiku-read</a></nav>
       <section id="agent-0">
         <h2>親セッション · haiku-read</h2>
         <p>記録 3 件 · 不正な記録の除外 0 件</p>
+        <div class="initial-request">
+          <h3>最初の依頼（保存記録より）</h3>
+          <div class="readable-block">
+            <h4>依頼・追加の指示</h4>
+            <pre>
+Read a.txt with Read exactly once. Return its contents. Do not call other tools.</pre>
+          </div>
+        </div>
         <details>
-          <summary>
-            保存会話（ユーザー入力・ツール結果・応答／子の依頼）
-          </summary>
+          <summary>保存会話の全体（詳細JSON）</summary>
           <pre>[]</pre>
         </details>
         <article class="model">
-          <h3>#6 · claude-haiku-4-5-20251001</h3>
-          <p>STEP 2 · モデル呼び出しの記録</p>
-          <p class="meta">2026-10-01T23:20:53.182Z · claude · 899 ms</p>
-          <p>claude-haiku-4-5-20251001: tool_use</p>
-          <details>
-            <summary>LLM入力（内部共通形式：system・履歴・ツール定義）</summary>
-            <pre>
+          <h3>#6 · LLMへの依頼と応答</h3>
+          <p class="meta">
+            STEP 2 · モデル呼び出しの記録 · claude-haiku-4-5-20251001
+          </p>
+          <p>LLMがツールの利用を要求しました。</p>
+          <div class="exchange">
+            <div>
+              <h4>LLMに渡した内容</h4>
+              <p class="meta">初回の入力（送信履歴 1 件）</p>
+              <div class="readable-block">
+                <h4>依頼・追加の指示</h4>
+                <pre>
+Read a.txt with Read exactly once. Return its contents. Do not call other tools.</pre>
+              </div>
+              <p class="meta">
+                共通指示：213文字 · 利用可能なツール：1種類（詳細JSONに全文）
+              </p>
+              <details>
+                <summary>利用可能な操作</summary>
+                <p>Read · ファイルを読む</p>
+              </details>
+            </div>
+            <div>
+              <h4>LLMから返った内容</h4>
+              <div class="tool-request">
+                <h4>LLMが要求した操作：Read · ファイルを読む</h4>
+                <div class="readable-block">
+                  <h4>対象ファイル</h4>
+                  <pre>D:/AIwork/Xharness/.out/phase6-auth-work/a.txt</pre>
+                </div>
+              </div>
+            </div>
+          </div>
+          <details class="raw">
+            <summary>詳細JSON・記録情報を確認</summary>
+            <p>2026-10-01T23:20:53.182Z · 899 ms</p>
+            <p>claude-haiku-4-5-20251001: tool_use</p>
+            <details>
+              <summary>
+                LLM入力（内部共通形式：system・履歴・ツール定義）
+              </summary>
+              <pre>
 {
   &quot;sessionId&quot;: &quot;haiku-read&quot;,
   &quot;model&quot;: &quot;claude-haiku-4-5-20251001&quot;,
@@ -159,10 +256,10 @@
     }
   ]
 }</pre>
-          </details>
-          <details>
-            <summary>LLM応答（内部共通形式）</summary>
-            <pre>
+            </details>
+            <details>
+              <summary>LLM応答（内部共通形式）</summary>
+              <pre>
 {
   &quot;role&quot;: &quot;assistant&quot;,
   &quot;content&quot;: [
@@ -186,38 +283,113 @@
     }
   }
 }</pre>
+            </details>
           </details>
         </article>
         <article class="harness">
-          <h3>#7 · Read</h3>
-          <p>STEP 3–5 · 検証・権限・ツール実行の結果</p>
-          <p class="meta">2026-10-01T23:20:53.182Z · harness · 899 ms</p>
-          <p>Read: allow</p>
-          <details>
-            <summary>入力・委託内容</summary>
+          <h3>#7 · Read · ファイルを読む</h3>
+          <p class="meta">
+            STEP 3–5 · 検証・権限・ツール実行の結果 · claude-haiku-4-5-20251001
+          </p>
+          <p></p>
+          <p>ハーネスが「Read · ファイルを読む」を処理しました。</p>
+          <div class="readable-block">
+            <h4>対象ファイル</h4>
+            <pre>D:/AIwork/Xharness/.out/phase6-auth-work/a.txt</pre>
+          </div>
+          <div class="readable-block">
+            <h4>対象ファイル</h4>
+            <pre>d:\aiwork\xharness\.out\phase6-auth-work\a.txt</pre>
+          </div>
+          <div class="readable-block">
+            <h4>結果</h4>
             <pre>
+local read check
+</pre>
+          </div>
+          <details class="raw">
+            <summary>詳細JSON・記録情報を確認</summary>
+            <p>2026-10-01T23:20:53.182Z · 899 ms</p>
+            <p>Read: allow</p>
+            <details>
+              <summary>入力・委託内容</summary>
+              <pre>
 {
   &quot;path&quot;: &quot;D:/AIwork/Xharness/.out/phase6-auth-work/a.txt&quot;
 }</pre>
-          </details>
-          <details>
-            <summary>出力・返却結果</summary>
-            <pre>
+            </details>
+            <details>
+              <summary>出力・返却結果</summary>
+              <pre>
 {
   &quot;path&quot;: &quot;d:\\aiwork\\xharness\\.out\\phase6-auth-work\\a.txt&quot;,
   &quot;modifiedAt&quot;: &quot;2026-10-01T23:20:52.265Z&quot;,
   &quot;content&quot;: &quot;local read check\n&quot;
 }</pre>
+            </details>
           </details>
         </article>
         <article class="model">
-          <h3>#11 · claude-haiku-4-5-20251001</h3>
-          <p>STEP 2 · モデル呼び出しの記録</p>
-          <p class="meta">2026-10-01T23:20:53.771Z · claude · 589 ms</p>
-          <p>claude-haiku-4-5-20251001: end_turn</p>
-          <details>
-            <summary>LLM入力（内部共通形式：system・履歴・ツール定義）</summary>
-            <pre>
+          <h3>#11 · LLMへの依頼と応答</h3>
+          <p class="meta">
+            STEP 2 · モデル呼び出しの記録 · claude-haiku-4-5-20251001
+          </p>
+          <p>LLMが今回の応答を終了しました。</p>
+          <div class="exchange">
+            <div>
+              <h4>LLMに渡した内容</h4>
+              <p class="meta">前回から追加した情報 2 件（送信履歴全体 3 件）</p>
+              <div class="tool-request">
+                <h4>LLMが要求した操作：Read · ファイルを読む</h4>
+                <div class="readable-block">
+                  <h4>対象ファイル</h4>
+                  <pre>D:/AIwork/Xharness/.out/phase6-auth-work/a.txt</pre>
+                </div>
+              </div>
+              <div class="tool-result">
+                <h4>ハーネスから返す実行結果</h4>
+                <div class="readable-block">
+                  <h4>対象ファイル</h4>
+                  <pre>d:\aiwork\xharness\.out\phase6-auth-work\a.txt</pre>
+                </div>
+                <div class="readable-block">
+                  <h4>結果</h4>
+                  <pre>
+local read check
+</pre>
+                </div>
+              </div>
+              <p class="meta">
+                共通指示：213文字 · 利用可能なツール：1種類（詳細JSONに全文）
+              </p>
+              <details>
+                <summary>利用可能な操作</summary>
+                <p>Read · ファイルを読む</p>
+              </details>
+            </div>
+            <div>
+              <h4>LLMから返った内容</h4>
+              <div class="readable-block">
+                <h4>LLMの返答</h4>
+                <pre>
+The contents of a.txt:
+
+```
+local read check
+
+```</pre>
+              </div>
+            </div>
+          </div>
+          <details class="raw">
+            <summary>詳細JSON・記録情報を確認</summary>
+            <p>2026-10-01T23:20:53.771Z · 589 ms</p>
+            <p>claude-haiku-4-5-20251001: end_turn</p>
+            <details>
+              <summary>
+                LLM入力（内部共通形式：system・履歴・ツール定義）
+              </summary>
+              <pre>
 {
   &quot;sessionId&quot;: &quot;haiku-read&quot;,
   &quot;model&quot;: &quot;claude-haiku-4-5-20251001&quot;,
@@ -285,10 +457,10 @@
     }
   ]
 }</pre>
-          </details>
-          <details>
-            <summary>LLM応答（内部共通形式）</summary>
-            <pre>
+            </details>
+            <details>
+              <summary>LLM応答（内部共通形式）</summary>
+              <pre>
 {
   &quot;role&quot;: &quot;assistant&quot;,
   &quot;content&quot;: [
@@ -308,6 +480,7 @@
     }
   }
 }</pre>
+            </details>
           </details>
         </article>
       </section>

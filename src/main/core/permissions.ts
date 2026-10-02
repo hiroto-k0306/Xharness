@@ -63,6 +63,19 @@ async function canonical(path: string): Promise<string> {
     );
   }
 }
+/** ルールの tool が呼び出しに当たるか。`mcp__<server>` と `mcp__<server>__*` はサーバー全体(§25.5) */
+function ruleTool(rule: string, name: string): boolean {
+  if (rule === "*" || rule === name) return true;
+  if (!name.startsWith("mcp__")) return false;
+  if (!rule.startsWith("mcp__")) return false;
+  const server = rule.slice(5, rule.endsWith("__*") ? -3 : undefined);
+  // サーバー名は __ を含まない(.mcp.json の検証と同じ)。`mcp__a__b` はツール1つのルール
+  return (
+    /^[A-Za-z0-9_-]{1,64}$/.test(server) &&
+    !server.includes("__") &&
+    name.startsWith(`mcp__${server}__`)
+  );
+}
 export function ruleSubject(call: ToolCall): string {
   const input = call.input as Record<string, unknown> | null;
   if (!input || typeof input !== "object") return "";
@@ -143,11 +156,23 @@ export async function withoutCwdPrefix(
   }
 }
 
-/** Bash の呼び出しを、cwd への cd を除いた形にそろえる(判定と「常に許可」の保存に使う) */
+/**
+ * 判定と「常に許可」の保存に使う形にそろえる。
+ * - Bash: cwd への cd を除く
+ * - McpCall: 実際の名前 `mcp__<server>__<tool>` の呼び出しとして扱う(§25.5)
+ */
 export async function normalizeCall<T extends ToolCall>(
   call: T,
   cwd: string,
 ): Promise<T> {
+  if (call.name === "McpCall") {
+    const input = call.input as Record<string, unknown> | null;
+    return input &&
+      typeof input.server === "string" &&
+      typeof input.tool === "string"
+      ? { ...call, name: `mcp__${input.server}__${input.tool}` }
+      : call;
+  }
   if (call.name !== "Bash") return call;
   const input = call.input as Record<string, unknown> | null;
   if (!input || typeof input.command !== "string") return call;
@@ -165,8 +190,8 @@ export async function decidePermission(
 ): Promise<Decision> {
   call = await normalizeCall(call, cwd);
   const subject = ruleSubject(call);
-  const all = [...config.rules, ...(opts.sessionRules ?? [])].filter(
-    (r) => r.tool === "*" || r.tool === call.name,
+  const all = [...config.rules, ...(opts.sessionRules ?? [])].filter((r) =>
+    ruleTool(r.tool, call.name),
   );
   const matches = (r: Rule, text: string) => {
     if (call.name === "WebFetch" && r.pattern?.startsWith("domain:")) {
@@ -194,6 +219,12 @@ export async function decidePermission(
   );
   if (restricted("deny")) return "deny";
   const mode = opts.readOnly ? "plan" : config.mode;
+  if (call.name.startsWith("mcp__") || call.name === "McpCall") {
+    // MCP のツールは副作用が分からない。plan では使わず、acceptEdits でも自動では許可しない(§25.5)
+    if (mode === "plan") return "deny";
+    if (restricted("ask")) return "ask";
+    return allowed ? "allow" : "ask";
+  }
   const write = ["Write", "Edit"].includes(call.name);
   if (mode === "plan" && write) return "deny";
   if (call.name === "Bash") {

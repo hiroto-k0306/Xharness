@@ -141,6 +141,21 @@ async function runHook(
 }
 
 export async function runTurn(options: LoopOptions, signal: AbortSignal) {
+  try {
+    return await runTurnSteps(options, signal);
+  } finally {
+    await Promise.all(
+      [
+        ...new Set(
+          [...options.tools.values()]
+            .map((tool) => tool.endTurn)
+            .filter((end) => end !== undefined),
+        ),
+      ].map((end) => end()),
+    );
+  }
+}
+async function runTurnSteps(options: LoopOptions, signal: AbortSignal) {
   return withTraceFields(
     options.sessionId ? { agentId: options.sessionId } : {},
     () => runTracedTurn(options, signal),

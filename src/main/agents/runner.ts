@@ -14,6 +14,7 @@ import { type AgentDefinition } from "./definitions.js";
 import { MCP_TOOL_NAMES } from "../tools/mcp.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
 import { todoTools } from "../tools/todos.js";
+import { BACKGROUND_TOOLS } from "../tools/background-tools.js";
 import { diagnoseEnvironment } from "../tools/environment.js";
 
 import { loadProjectConfig, projectMemory } from "../config/project.js";
@@ -158,7 +159,11 @@ export class ChildRunner {
     const access = new FileAccess(cwd);
     // MCP の窓口ツールは、定義に書かなくても子エージェントへ公開する(§25.1)。
     // 読み取り専用の子でも使えるが、ルールで許可されていない呼び出しは毎回確認する
-    for (const name of new Set([...definition.tools, ...MCP_TOOL_NAMES])) {
+    for (const name of new Set([
+      ...definition.tools,
+      ...MCP_TOOL_NAMES,
+      ...BACKGROUND_TOOLS,
+    ])) {
       const tool = available.get(name);
       if (
         !tool ||

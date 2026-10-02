@@ -6,8 +6,13 @@ import { type ToolRegistry } from "./registry.js";
 import { cliAvailable } from "./environment.js";
 import { nodeSearch, searchExcluded } from "./node-search.js";
 import { failure, structuredFailure, ToolExecutionError } from "./errors.js";
+import { BackgroundShells } from "./background-shells.js";
+import { backgroundTools } from "./background-tools.js";
+import { powershellArguments } from "./powershell-command.js";
 
 export function shellSearchTools(cwd: string): ToolRegistry {
+  const shells = new BackgroundShells();
+  const endTurn = () => shells.endTurn();
   const result: ToolRegistry = new Map();
   for (const name of ["Bash", "Grep", "Glob"] as const) {
     const properties =
@@ -15,6 +20,7 @@ export function shellSearchTools(cwd: string): ToolRegistry {
         ? {
             command: { type: "string" },
             timeoutSec: { type: "integer", minimum: 1, maximum: 600 },
+            run_in_background: { type: "boolean" },
           }
         : { pattern: { type: "string" }, path: { type: "string" } };
     const required = [name === "Bash" ? "command" : "pattern"];
@@ -22,10 +28,15 @@ export function shellSearchTools(cwd: string): ToolRegistry {
       try {
         const args = argumentsObject(input);
         if (Object.keys(args).some((k) => !Object.keys(properties).includes(k)))
-          return "Unknown argument";
+          return "未対応の引数です。";
         if (!stringArg(args, required[0]!).trim())
-          return "Command or pattern is empty";
+          return "コマンドまたは検索パターンを指定してください。";
         if (args.path !== undefined) stringArg(args, "path");
+        if (
+          args.run_in_background !== undefined &&
+          typeof args.run_in_background !== "boolean"
+        )
+          return "run_in_backgroundは真偽値で指定してください。";
         if (
           args.timeoutSec !== undefined &&
           (typeof args.timeoutSec !== "number" ||
@@ -33,9 +44,9 @@ export function shellSearchTools(cwd: string): ToolRegistry {
             args.timeoutSec < 1 ||
             args.timeoutSec > 600)
         )
-          return "timeoutSec must be 1–600";
+          return "timeoutSecは1〜600秒で指定してください。";
       } catch {
-        return "Invalid arguments or unavailable workspace";
+        return "引数の形式が不正です。";
       }
     };
     result.set(name, {
@@ -43,7 +54,7 @@ export function shellSearchTools(cwd: string): ToolRegistry {
         name,
         description:
           name === "Bash"
-            ? "Run a command in PowerShell 7; default timeout 120 seconds, maximum 600"
+            ? "Run a command in PowerShell 7; foreground default timeout 120 seconds, maximum 600. run_in_background=true returns a shellId immediately (at most 5 running); use BashOutput/KillShell. Backgrounds end with this agent turn; timeoutSec optionally limits their lifetime."
             : name === "Grep"
               ? "Search file contents with ripgrep regular expressions"
               : "List files matching a ripgrep glob",
@@ -55,6 +66,7 @@ export function shellSearchTools(cwd: string): ToolRegistry {
         },
       },
       readOnly: name !== "Bash",
+      ...(name === "Bash" ? { endTurn } : {}),
       validate,
       async execute(input, signal) {
         const error = await validate(input);
@@ -79,19 +91,28 @@ export function shellSearchTools(cwd: string): ToolRegistry {
                 "PowerShell 7（pwsh）が見つかりません。インストールしてアプリを再起動してください。",
                 "missing_cli",
               );
-            const encoded = Buffer.from(
+            const parameters = powershellArguments(
               stringArg(args, "command"),
-              "utf16le",
-            ).toString("base64");
+              !!args.run_in_background,
+            );
+            if (args.run_in_background)
+              return {
+                content: JSON.stringify(
+                  await shells.start(
+                    "pwsh",
+                    parameters,
+                    cwd,
+                    signal,
+                    args.timeoutSec !== undefined
+                      ? Number(args.timeoutSec) * 1000
+                      : undefined,
+                  ),
+                ),
+                isError: false,
+              };
             execution = await runProcess(
               "pwsh",
-              [
-                "-NoLogo",
-                "-NoProfile",
-                "-NonInteractive",
-                "-EncodedCommand",
-                encoded,
-              ],
+              parameters,
               cwd,
               signal,
               Number(args.timeoutSec ?? 120) * 1000,
@@ -203,5 +224,7 @@ export function shellSearchTools(cwd: string): ToolRegistry {
       },
     });
   }
+  for (const [name, tool] of backgroundTools(shells))
+    result.set(name, { ...tool, endTurn });
   return result;
 }

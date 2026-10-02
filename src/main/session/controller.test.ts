@@ -400,8 +400,10 @@ describe("SessionController", () => {
     );
     expect([...ro.keys()].sort()).toEqual([
       "AskUserQuestion",
+      "BashOutput",
       "Glob",
       "Grep",
+      "KillShell",
       "Read",
       "StopTask",
       "TodoWrite",

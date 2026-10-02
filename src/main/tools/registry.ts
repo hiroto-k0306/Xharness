@@ -12,6 +12,10 @@ export interface ToolOutput {
   isError?: boolean;
 }
 export interface Tool {
+  /** Output text is bounded by the tool before JSON serialization. */
+  boundedOutput?: boolean;
+  /** Release turn-owned resources even on stop/error. */
+  endTurn?(): Promise<void>;
   /** Pure local display/history update with no external side effects. */
   autoAllow?: boolean;
   /** Local lifecycle operation: execute before any other call in the response. */
@@ -19,7 +23,11 @@ export interface Tool {
   spec: ToolSpec;
   readOnly: boolean;
   validate(input: unknown): Promise<string | undefined>;
-  execute(input: unknown, signal: AbortSignal): Promise<ToolOutput>;
+  execute(
+    input: unknown,
+    signal: AbortSignal,
+    context?: { redact?: (text: string) => string },
+  ): Promise<ToolOutput>;
 }
 export type ToolRegistry = Map<string, Tool>;
 export function trimOutput(text: string): string {

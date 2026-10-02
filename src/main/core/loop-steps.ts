@@ -68,7 +68,7 @@ export function appendResults(ctx: LoopContext, options: LoopOptions) {
     return {
       type: "tool_result",
       toolUseId: item.call.id,
-      content: trimOutput(
+      content: (item.tool?.boundedOutput ? (text: string) => text : trimOutput)(
         clean(
           (item.result.error ? JSON.stringify(item.result.error) + "\n" : "") +
             item.result.content +
@@ -337,7 +337,10 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
                     "tool",
                     item.call.name,
                     item.call.input,
-                    () => item.tool!.execute(item.call.input, signal),
+                    () =>
+                      item.tool!.execute(item.call.input, signal, {
+                        redact: options.redact,
+                      }),
                     { callId: item.call.id },
                   );
               if (item.result.stop && !item.result.isError)

@@ -1,3 +1,4 @@
+import { readTraceReplay } from "./main/session/report-trace.js";
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -61,6 +62,13 @@ it("persists and resumes the fake REPL with compact checkpoints and session mode
   const history = await readFile(join(home, "sessions", `${id}.jsonl`), "utf8");
   expect(history.trim().split("\n")).toHaveLength(6);
   expect(output).toContain("History compacted");
+  const trace = (await readTraceReplay(home, id!, (s) => s))!;
+  expect(
+    trace.records.filter((r) => r.kind === "llm" && r.phase === "start"),
+  ).toHaveLength(3);
+  expect(
+    trace.records.filter((r) => r.kind === "llm").every((r) => r.simulated),
+  ).toBe(true);
   const checkpoint = JSON.parse(
     await readFile(join(home, "context", `${id}.json`), "utf8"),
   );
@@ -71,6 +79,13 @@ it("persists and resumes the fake REPL with compact checkpoints and session mode
   ).toBe("plan");
   const resumed = await repl(home, ["fourth", "/exit"], ["--resume", id!]);
   expect(resumed).toContain(`session ${id}`);
+  const resumedTrace = (await readTraceReplay(home, id!, (s) => s))!;
+  expect(
+    resumedTrace.records.filter((r) => r.kind === "llm" && r.phase === "start"),
+  ).toHaveLength(4);
+  expect(resumedTrace.records.at(-1)!.sequence).toBeGreaterThan(
+    trace.records.at(-1)!.sequence,
+  );
   expect(
     await readFile(join(home, "sessions", `${id}.jsonl`), "utf8"),
   ).toContain(history);

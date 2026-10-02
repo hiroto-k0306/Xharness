@@ -1,3 +1,8 @@
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runReportDemo } from "../main/session/report-demo.js";
+import { readExecutionReport } from "../main/session/report.js";
 import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { renderExecutionReport } from "../main/session/report.js";
@@ -99,4 +104,34 @@ it("puts the readable exchange outside closed JSON details and keeps original in
   );
   expect([...doc.querySelectorAll("details")].every((d) => !d.open)).toBe(true);
   expect(doc.querySelectorAll("script,iframe,img")).toHaveLength(0);
+});
+
+it("renders all recorded demo steps with shared cards, only LLM call highlights and valid parent links", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-report-dom-"));
+  const { id } = await runReportDemo(home);
+  const agents = await readExecutionReport(home, id);
+  const replay = agents[0]!.trace;
+  const html = renderExecutionReport(agents);
+  document.body.innerHTML = html;
+  const cards = [...document.querySelectorAll('[id^="trace-"]')];
+  expect(cards).toHaveLength(
+    replay!.records.filter((r) => r.phase === "start").length,
+  );
+  for (const card of cards)
+    expect(
+      [
+        ...card.querySelectorAll(
+          ":scope > .receipt-process > h4, :scope > .exchange > div > h4",
+        ),
+      ].map((h) => h.textContent),
+    ).toEqual(["処理", "入力", "出力"]);
+  expect(cards.filter((c) => c.classList.contains("model"))).toHaveLength(4);
+  expect(document.querySelector("details[open]")).toBeNull();
+  const contextInput = cards[0]!.querySelector(".exchange > div")!;
+  expect(contextInput.textContent).toContain("依頼・追加の指示");
+  expect(contextInput.textContent).not.toContain("LLMの返答");
+  for (const link of document.querySelectorAll('a[href^="#trace-"]'))
+    expect(
+      document.getElementById(link.getAttribute("href")!.slice(1)),
+    ).not.toBeNull();
 });

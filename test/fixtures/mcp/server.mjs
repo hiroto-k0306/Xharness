@@ -4,7 +4,11 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  GetPromptRequestSchema,
+  ListPromptsRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
 const mode = process.env.FIXTURE_MODE ?? "";
@@ -16,8 +20,16 @@ if (mode === "slow") setInterval(() => {}, 1000);
 else {
   const server = new Server(
     { name: "fixture", version: "1.0.0" },
-    { capabilities: { tools: {} } },
+    {
+      capabilities: {
+        tools: { listChanged: true },
+        resources: { listChanged: true },
+        prompts: { listChanged: true },
+      },
+    },
   );
+  // toggle を呼ぶたびに extra ツールとリソースが増減し、list_changed を送る
+  let extra = false;
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
@@ -53,8 +65,70 @@ else {
         description: "Return a very long text",
         inputSchema: { type: "object", properties: {} },
       },
+      {
+        name: "toggle",
+        description: "Add or remove the extra tool and resource",
+        inputSchema: { type: "object", properties: {} },
+      },
+      ...(extra
+        ? [
+            {
+              name: "extra",
+              description: "Appears after toggle",
+              inputSchema: { type: "object", properties: {} },
+            },
+          ]
+        : []),
     ],
   }));
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({
+    resources: [
+      {
+        uri: "fixture://readme",
+        name: "readme",
+        description: "Fixture readme",
+        mimeType: "text/plain",
+      },
+      { uri: "fixture://logo", name: "logo", mimeType: "image/png" },
+      ...(extra ? [{ uri: "fixture://extra", name: "extra" }] : []),
+    ],
+  }));
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const uri = request.params.uri;
+    if (uri === "fixture://logo")
+      return { contents: [{ uri, mimeType: "image/png", blob: "AAAA" }] };
+    if (uri === "fixture://readme")
+      return {
+        contents: [{ uri, mimeType: "text/plain", text: "Fixture README" }],
+      };
+    throw new Error("unknown resource");
+  });
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: [
+      {
+        name: "review",
+        description: "Ask for a code review",
+        arguments: [
+          { name: "file", required: true },
+          { name: "focus", required: false },
+        ],
+      },
+    ],
+  }));
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const args = request.params.arguments ?? {};
+    return {
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Review ${args.file}${args.focus ? ` focusing on ${args.focus}` : ""}`,
+          },
+        },
+      ],
+    };
+  });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const args = request.params.arguments ?? {};
     switch (request.params.name) {
@@ -77,6 +151,13 @@ else {
         };
       case "big":
         return { content: [{ type: "text", text: "x".repeat(40000) }] };
+      case "toggle":
+        extra = !extra;
+        await server.sendToolListChanged();
+        await server.sendResourceListChanged();
+        return { content: [{ type: "text", text: extra ? "on" : "off" }] };
+      case "extra":
+        return { content: [{ type: "text", text: "extra" }] };
       default:
         throw new Error("unknown tool");
     }

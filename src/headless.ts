@@ -39,7 +39,12 @@ import {
   type McpServerConfig,
 } from "./main/mcp/config.js";
 import { McpManager } from "./main/mcp/manager.js";
-import { mcpLogger } from "./main/session/mcp-session.js";
+import {
+  MCP_PROMPT_COMMAND,
+  mcpChangeNote,
+  mcpLogger,
+  parseMcpPrompt,
+} from "./main/session/mcp-session.js";
 import { mcpTools } from "./main/tools/mcp.js";
 import { readLocalSecrets } from "./main/auth/local-secrets.js";
 import { FakeProvider } from "./main/providers/fake/fake-provider.js";
@@ -396,11 +401,39 @@ export async function headless(args = process.argv.slice(2)) {
         continue;
       }
       if (!input.trim()) continue;
+      if (MCP_PROMPT_COMMAND.test(input.trim())) {
+        // MCP のプロンプト(§25.6): 展開した内容を見せ、y で通常の発言として送る
+        const parsed = parseMcpPrompt(mcp, input);
+        let expanded = "";
+        if ("error" in parsed) process.stdout.write(parsed.error + "\n");
+        else
+          try {
+            expanded = await mcp!.prompt(
+              parsed.server,
+              parsed.name,
+              parsed.args,
+              AbortSignal.timeout(60_000),
+            );
+          } catch {
+            process.stdout.write("MCP のプロンプトを取得できませんでした\n");
+          }
+        if (!expanded.trim()) continue;
+        const ok = await rl.question(
+          `\n${clean(expanded.slice(0, 4000))}\n\nSend this MCP prompt? [y/N] `,
+        );
+        if (ok.trim().toLowerCase() !== "y") continue;
+        input = expanded;
+      }
       controller = new AbortController();
       let bufferedText = "";
+      // MCP の一覧の変化は、モデルにだけ注記で伝える(tools は変えない。§25.4)
+      const note = mcpChangeNote(mcp);
       messages.push({
         role: "user",
-        content: [{ type: "text", text: clean(input) }],
+        content: [
+          { type: "text", text: clean(input) },
+          ...(note ? [{ type: "text" as const, text: clean(note) }] : []),
+        ],
       });
       const ask = async (
         call: { name: string; input: unknown },

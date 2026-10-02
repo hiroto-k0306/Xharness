@@ -9,9 +9,11 @@ export function itemsFromMessages(messages: Message[]): TranscriptItem[] {
   messages.forEach((message, mi) => {
     for (const [bi, block] of message.content.entries()) {
       const id = `h${mi}-${bi}`;
-      if (block.type === "text" && message.role === "user")
-        items.push({ kind: "user", id, text: block.text });
-      else if (block.type === "text")
+      if (block.type === "text" && message.role === "user") {
+        // MCP の一覧の変化の注記はモデル向け。再開時の画面にも出さない(§25.4)
+        if (!block.text.startsWith("[MCP update]"))
+          items.push({ kind: "user", id, text: block.text });
+      } else if (block.type === "text")
         items.push({ kind: "assistant", id, text: block.text });
       else if (block.type === "tool_use") {
         const item: Extract<TranscriptItem, { kind: "tool" }> = {

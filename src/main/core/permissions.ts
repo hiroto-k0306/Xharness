@@ -79,6 +79,8 @@ function ruleTool(rule: string, name: string): boolean {
 export function ruleSubject(call: ToolCall): string {
   const input = call.input as Record<string, unknown> | null;
   if (!input || typeof input !== "object") return "";
+  // MCP のリソースはサーバー単位で許可する(§25.5)
+  if (call.name === "ReadMcpResource") return String(input.server ?? "");
   return String(input.command ?? input.path ?? input.url ?? input.query ?? "");
 }
 /** 明らかに破壊的なコマンド。括弧や連結の中にあっても見つける */
@@ -219,6 +221,12 @@ export async function decidePermission(
   );
   if (restricted("deny")) return "deny";
   const mode = opts.readOnly ? "plan" : config.mode;
+  // 接続中サーバーの一覧・説明だけを返すツール。承認済みのサーバーからの情報なので確認しない
+  if (call.name === "McpSearch" || call.name === "ListMcpResources")
+    return restricted("ask") ? "ask" : "allow";
+  // リソースの読み取りは plan でも使えるが、初回は確認する(「常に許可」はサーバー単位)
+  if (call.name === "ReadMcpResource")
+    return restricted("ask") ? "ask" : allowed ? "allow" : "ask";
   if (call.name.startsWith("mcp__") || call.name === "McpCall") {
     // MCP のツールは副作用が分からない。plan では使わず、acceptEdits でも自動では許可しない(§25.5)
     if (mode === "plan") return "deny";
@@ -291,5 +299,7 @@ export function grantFor(call: ToolCall): Rule {
       return { tool: "WebFetch", pattern: subject, decision: "allow" };
     }
   }
+  if (call.name === "ReadMcpResource")
+    return { tool: "ReadMcpResource", pattern: subject, decision: "allow" };
   return { tool: call.name, decision: "allow" };
 }

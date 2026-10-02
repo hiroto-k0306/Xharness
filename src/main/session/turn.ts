@@ -25,7 +25,12 @@ import {
   type ControllerContext,
   type Runtime,
 } from "./context.js";
-import { prepareMcp } from "./mcp-session.js";
+import {
+  expandMcpPrompt,
+  MCP_PROMPT_COMMAND,
+  mcpChangeNote,
+  prepareMcp,
+} from "./mcp-session.js";
 
 /** システムプロンプト。プロジェクト設定があればメモリファイル(§12)を、無ければ AGENTS.md / CLAUDE.md を足す */
 export async function systemPrompt(
@@ -65,13 +70,18 @@ async function beginTurn(
   session: StoredSession,
   rt: Runtime,
   text: string,
+  note?: string,
 ): Promise<StoredSession> {
   const { emit } = ctx.options;
   const sessionId = session.id;
   const first = rt.messages.length === 0;
+  // note(MCP の一覧の変化など)はモデルにだけ伝え、画面の発言には出さない
   rt.messages.push({
     role: "user",
-    content: [{ type: "text", text: ctx.clean(text) }],
+    content: [
+      { type: "text", text: ctx.clean(text) },
+      ...(note ? [{ type: "text" as const, text: ctx.clean(note) }] : []),
+    ],
   });
   if (first) {
     session = {
@@ -225,7 +235,39 @@ export async function runSessionTurn(
   const events = new TurnEvents(ctx, session, rt);
   const abort = new AbortController();
   rt.abort = abort;
-  session = await beginTurn(ctx, session, rt, text);
+  if (MCP_PROMPT_COMMAND.test(text.trim())) {
+    // MCP のプロンプトは、接続を準備してから展開し、確認後に通常の発言として送る(§25.6)
+    let expanded: Awaited<ReturnType<typeof expandMcpPrompt>>;
+    try {
+      await prepareRuntime(ctx, gate, session, rt, abort.signal);
+      expanded = await expandMcpPrompt(
+        ctx,
+        gate,
+        session,
+        rt,
+        text,
+        abort.signal,
+      );
+    } catch {
+      expanded = { error: "MCP のプロンプトを準備できませんでした" };
+    }
+    if ("error" in expanded) {
+      emit({
+        type: "notice",
+        sessionId,
+        tone: "warn",
+        message: expanded.error,
+      });
+      rt.abort = undefined;
+      rt.status = "idle";
+      emit({ type: "turn", sessionId, status: "idle", stopCause: "aborted" });
+      if (rt.closing) ctx.dropRuntime(sessionId);
+      await ctx.emitState();
+      return;
+    }
+    text = expanded.text;
+  }
+  session = await beginTurn(ctx, session, rt, text, mcpChangeNote(rt.mcp));
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);

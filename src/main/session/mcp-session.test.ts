@@ -29,9 +29,14 @@ function scripted(requests: ProviderRequest[]): Provider {
     models: () => [{ id: "fake", contextTokens: 1000000 }],
     async *stream(request) {
       requests.push(structuredClone(request));
-      const done = request.messages
-        .at(-1)
-        ?.content.some((b) => b.type === "tool_result");
+      const last = request.messages.at(-1)!;
+      const said = last.content
+        .flatMap((b) => (b.type === "text" ? [b.text] : []))
+        .join(" ");
+      // "use mcp" のときだけ McpCall を呼ぶ("toggle" なら一覧を変えるツール)。それ以外はすぐ終える
+      const done =
+        last.content.some((b) => b.type === "tool_result") ||
+        !/use mcp|toggle/.test(said);
       yield {
         type: "message_done",
         stopReason: done ? "end_turn" : "tool_use",
@@ -45,7 +50,9 @@ function scripted(requests: ProviderRequest[]): Provider {
                   type: "tool_use",
                   id: `call-${request.messages.length}`,
                   name: "McpCall",
-                  input: { server: "fx", tool: "echo", input: { text: "hi" } },
+                  input: said.includes("toggle")
+                    ? { server: "fx", tool: "toggle" }
+                    : { server: "fx", tool: "echo", input: { text: "hi" } },
                 },
               ],
         },
@@ -212,6 +219,85 @@ describe("MCP in a session (§25)", () => {
     expect(result.isError).toBe(true);
     expect(result.content).toContain("unavailable in this workflow phase");
     await controller.handle({ type: "abort", sessionId: id });
+    await controller.shutdown(100);
+  }, 30_000);
+
+  it("tells the model about changed MCP tools in the next user message, without changing tools", async () => {
+    const w = await setup(true);
+    const controller = w.make();
+    const id = await start(controller);
+    await controller.handle({ type: "send", sessionId: id, text: "toggle" });
+    await until(() => asks(w.events).length === 1);
+    await answer(controller, id, asks(w.events)[0]!, "allow");
+    await until(() => asks(w.events).length === 2);
+    await answer(controller, id, asks(w.events)[1]!, "allow");
+    await until(() => idle(w.events, id));
+    await new Promise((r) => setTimeout(r, 300));
+    const before = w.events.filter((e) => e.type === "turn").length;
+    await controller.handle({ type: "send", sessionId: id, text: "next" });
+    await until(
+      () =>
+        w.events.filter(
+          (e) => e.type === "turn" && e.sessionId === id && e.status === "idle",
+        ).length >= 2 &&
+        w.events.filter((e) => e.type === "turn").length > before,
+    );
+    const last = w.requests.at(-1)!;
+    const user = last.messages.at(-1)!;
+    expect(user.content).toHaveLength(2);
+    expect((user.content[1] as { text: string }).text).toContain(
+      "[MCP update]",
+    );
+    expect((user.content[1] as { text: string }).text).toContain(
+      "fx tools: added extra",
+    );
+    // tools は最初の要求から変わらない
+    expect(JSON.stringify(last.tools)).toBe(
+      JSON.stringify(w.requests[0]!.tools),
+    );
+    // 画面の発言には注記を出さない
+    const said = w.events.filter(
+      (e): e is Extract<UiEvent, { type: "user_message" }> =>
+        e.type === "user_message",
+    );
+    expect(said.at(-1)!.text).toBe("next");
+    await controller.shutdown(100);
+  }, 30_000);
+
+  it("expands an MCP prompt after showing it, and sends it as the user's message", async () => {
+    const w = await setup(true);
+    const controller = w.make();
+    const id = await start(controller);
+    await controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "/mcp__fx__review src/a.ts error handling",
+    });
+    await until(() => asks(w.events).length === 1);
+    await answer(controller, id, asks(w.events)[0]!, "allow");
+    await until(() => asks(w.events).length === 2);
+    const preview = asks(w.events)[1]!;
+    expect(preview.tool).toBe("McpPrompt");
+    expect(preview.summary).toContain(
+      "Review src/a.ts focusing on error handling",
+    );
+    // 確認の前にはモデルへ送らない
+    expect(w.requests).toHaveLength(0);
+    await answer(controller, id, preview, "allow");
+    await until(() => idle(w.events, id));
+    const first = w.requests[0]!.messages[0]!;
+    expect((first.content[0] as { text: string }).text).toBe(
+      "Review src/a.ts focusing on error handling",
+    );
+    // 必須の引数が無ければ送らずに知らせる
+    const sent = w.requests.length;
+    await controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "/mcp__fx__review",
+    });
+    await until(() => JSON.stringify(w.events).includes("必須の引数"));
+    expect(w.requests).toHaveLength(sent);
     await controller.shutdown(100);
   }, 30_000);
 });

@@ -152,7 +152,14 @@ describe("McpManager with a real stdio server", () => {
       signal(),
     );
     expect(manager.states()).toEqual([
-      { name: "fx", type: "stdio", status: "connected", tools: 5 },
+      {
+        name: "fx",
+        type: "stdio",
+        status: "connected",
+        tools: 6,
+        resources: 2,
+        prompts: 1,
+      },
     ]);
     expect(manager.tools().map((t) => t.name)).toEqual([
       "add",
@@ -160,6 +167,7 @@ describe("McpManager with a real stdio server", () => {
       "echo",
       "env",
       "fail",
+      "toggle",
     ]);
     expect(await manager.call("fx", "echo", { text: "hi" }, signal())).toEqual({
       text: "hi",
@@ -239,7 +247,7 @@ describe("McpSearch / McpCall (§25.4)", () => {
       (await tools.get("McpSearch")!.execute({}, signal())).content,
     );
     expect(all.kind).toBe("external_content");
-    expect(all.tools).toHaveLength(5);
+    expect(all.tools).toHaveLength(6);
     const found = JSON.parse(
       (await tools.get("McpSearch")!.execute({ query: "numbers" }, signal()))
         .content,
@@ -380,7 +388,9 @@ describe.skipIf(process.platform === "win32")("process cleanup", () => {
       sdkConnector(server, {
         cwd: process.cwd(),
         onStderr: () => {},
+        onListChanged: () => {},
         signal: AbortSignal.timeout(1500),
+        outer: new AbortController().signal,
       }),
     ).rejects.toThrow();
     await new Promise((r) => setTimeout(r, 4500));
@@ -393,4 +403,138 @@ describe.skipIf(process.platform === "win32")("process cleanup", () => {
     };
     expect(running()).toBe("");
   }, 20_000);
+});
+
+describe("resources, prompts and list_changed (§25 M2)", () => {
+  let manager: McpManager | undefined;
+  afterEach(async () => {
+    await manager?.close();
+    manager = undefined;
+  });
+  it("lists and reads resources and expands prompts", async () => {
+    manager = new McpManager({ cwd: process.cwd() });
+    await manager.connect([fixtureServer("fx")], signal());
+    expect(manager.resources().map((r) => r.uri)).toEqual([
+      "fixture://logo",
+      "fixture://readme",
+    ]);
+    expect(await manager.read("fx", "fixture://readme", signal())).toEqual({
+      text: "Fixture README",
+      isError: false,
+    });
+    expect((await manager.read("fx", "fixture://logo", signal())).text).toBe(
+      "[unsupported content: binary resource fixture://logo (image/png)]",
+    );
+    expect(manager.prompts()[0]).toMatchObject({
+      server: "fx",
+      name: "review",
+      arguments: [
+        { name: "file", required: true },
+        { name: "focus", required: false },
+      ],
+    });
+    expect(
+      await manager.prompt("fx", "review", { file: "a.ts" }, signal()),
+    ).toBe("Review a.ts");
+    const tools = new Map(mcpTools(manager));
+    const listed = JSON.parse(
+      (await tools.get("ListMcpResources")!.execute({}, signal())).content,
+    );
+    expect(listed.kind).toBe("external_content");
+    expect(listed.resources[1]).toMatchObject({
+      uri: "fixture://readme",
+      description: "Fixture README".replace("README", "readme"),
+    });
+    const read = tools.get("ReadMcpResource")!;
+    expect(await read.validate({ server: "nope", uri: "x" })).toBeDefined();
+    expect(
+      JSON.parse(
+        (
+          await read.execute(
+            { server: "fx", uri: "fixture://readme" },
+            signal(),
+          )
+        ).content,
+      ),
+    ).toMatchObject({ kind: "external_content", content: "Fixture README" });
+    const missing = await read
+      .execute({ server: "fx", uri: "fixture://none" }, signal())
+      .catch((e: Error) => ({ content: e.message, isError: true }));
+    expect(missing.isError).toBe(true);
+  }, 30_000);
+  it("refreshes lists on list_changed and reports what changed once", async () => {
+    const changed: string[] = [];
+    manager = new McpManager({
+      cwd: process.cwd(),
+      onChange: (c) => changed.push(c.kind),
+    });
+    await manager.connect([fixtureServer("fx")], signal());
+    expect(manager.find("fx", "extra")).toBeUndefined();
+    await manager.call("fx", "toggle", {}, signal());
+    const end = Date.now() + 5000;
+    while (changed.length < 2 && Date.now() < end)
+      await new Promise((r) => setTimeout(r, 20));
+    expect(manager.find("fx", "extra")).toBeDefined();
+    expect(manager.resources().map((r) => r.uri)).toContain("fixture://extra");
+    expect(manager.states()[0]).toMatchObject({ tools: 7, resources: 3 });
+    expect(manager.takeChanges()).toEqual([
+      { server: "fx", kind: "tools", added: ["extra"], removed: [] },
+      {
+        server: "fx",
+        kind: "resources",
+        added: ["fixture://extra"],
+        removed: [],
+      },
+    ]);
+    expect(manager.takeChanges()).toEqual([]);
+  }, 30_000);
+});
+
+describe("MCP resource permissions (§25.5)", () => {
+  const cwd = process.cwd();
+  const read = (server: string) => ({
+    id: "r",
+    name: "ReadMcpResource",
+    input: { server, uri: "x://y" },
+  });
+  it("search and listing need no approval; reading asks first and 'always' is per server", async () => {
+    for (const name of ["McpSearch", "ListMcpResources"])
+      expect(
+        await decidePermission(
+          { id: "s", name, input: {} },
+          { mode: "plan", rules: [] },
+          cwd,
+        ),
+      ).toBe("allow");
+    expect(
+      await decidePermission(read("fx"), { mode: "default", rules: [] }, cwd),
+    ).toBe("ask");
+    const grant = grantFor(await normalizeCall(read("fx"), cwd));
+    expect(grant).toEqual({
+      tool: "ReadMcpResource",
+      pattern: "fx",
+      decision: "allow",
+    });
+    // 読み取りなので plan でも使える(ルールがあれば確認なし)
+    expect(
+      await decidePermission(read("fx"), { mode: "plan", rules: [grant] }, cwd),
+    ).toBe("allow");
+    expect(
+      await decidePermission(
+        read("other"),
+        { mode: "default", rules: [grant] },
+        cwd,
+      ),
+    ).toBe("ask");
+    expect(
+      await decidePermission(
+        read("fx"),
+        {
+          mode: "default",
+          rules: [grant, { tool: "ReadMcpResource", decision: "deny" }],
+        },
+        cwd,
+      ),
+    ).toBe("deny");
+  });
 });

@@ -116,6 +116,7 @@ export class PermissionGate {
           "ProjectHooks",
           "ProjectSettings",
           "McpServer",
+          "McpPrompt",
         ].includes(call.name)
           ? ctx.clean(JSON.stringify(call.input))
           : summarizeInput(call.name, call.input, ctx.clean, 300)),

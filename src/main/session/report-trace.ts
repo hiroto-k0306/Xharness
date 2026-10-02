@@ -127,7 +127,7 @@ function callsView(value: unknown, stage?: string) {
   );
 }
 
-export function renderTraceReplay(replay: TraceReplay) {
+export function renderTraceReplay(replay: TraceReplay, rootId?: string) {
   const starts = replay.records
     .filter((r) => r.phase === "start")
     .sort((a, b) => a.sequence - b.sequence);
@@ -135,6 +135,7 @@ export function renderTraceReplay(replay: TraceReplay) {
     replay.records.filter((r) => r.phase === "end").map((r) => [r.id, r]),
   );
   const byId = new Map(starts.map((r) => [r.id, r]));
+  const displayNumbers = new Map(starts.map((r, index) => [r.id, index + 1]));
   const previous = new Map<string, unknown>();
   const cards = starts
     .map((r, index) => {
@@ -207,11 +208,36 @@ export function renderTraceReplay(replay: TraceReplay) {
       }
       const parent = r.parentSpan ? byId.get(r.parentSpan) : undefined;
       const relation = parent
-        ? `<a href="#trace-${escape(parent.id)}">委託元・呼び出し元 #${parent.sequence}</a>`
+        ? `<a href="#trace-${escape(parent.id)}">委託元・呼び出し元 #${displayNumbers.get(parent.id)}</a>`
         : "";
       const raw = `<details class="raw"><summary>詳細</summary><p>${escape(r.at)} → ${escape(end?.at ?? "終了未記録")}</p><p>記録番号：${r.sequence} · round ${r.round ?? "—"} · ${escape(r.callId ?? "")}</p><details><summary>${r.kind === "llm" ? "送信本文・内部共通形式（認証情報を除く）" : "入力の全文"}</summary><pre>${escape(JSON.stringify(r.kind === "llm" ? { ...input, body: output.body } : r.input, null, 2) ?? "未記録")}</pre></details><details><summary>${r.kind === "llm" ? "受信SSE・組み立てた応答（秘密値を除く）" : "出力の全文"}</summary><pre>${escape(JSON.stringify(end?.output, null, 2) ?? "未記録")}</pre></details></details>`;
-      return `<article id="trace-${escape(r.id)}" class="receipt-card ${isLlm ? "model" : "harness"}"><header class="receipt-heading"><h3>#${index + 1} · ${escape(title)}</h3><span class="badge">${isLlm ? (r.simulated ? "LLM模擬" : "LLM") : "ハーネス"}</span></header><div class="receipt-process"><h4>処理</h4><p>${escape(end?.status ?? "終了未記録")} · エージェント ${escape(r.agentId)} · 周回 ${r.round ?? "—"}</p>${relation}</div><div class="exchange"><div><h4>入力</h4>${inputView}</div><div><h4>出力</h4>${outputView}</div></div>${raw}</article>`;
+      return `<article id="trace-${escape(r.id)}" class="receipt-card ${isLlm ? "model" : "harness"}"><details class="receipt-collapse"><summary class="receipt-heading"><h3>#${index + 1} · ${escape(title)}</h3><span class="badge">${isLlm ? (r.simulated ? "LLM模擬" : "LLM") : "ハーネス"}</span><span class="meta">${rootId ? (r.agentId === rootId ? "親" : "子") : "エージェント"} ${escape(r.agentId.slice(0, 8))} · 周回 ${r.round ?? "—"} · ${escape(end?.status ?? "終了未記録")}</span></summary><div class="receipt-body"><div class="receipt-process"><h4>処理</h4><p>${escape(end?.status ?? "終了未記録")} · エージェント ${escape(r.agentId)} · 周回 ${r.round ?? "—"}</p>${relation}</div><div class="exchange"><div><h4>入力</h4>${inputView}</div><div><h4>出力</h4>${outputView}</div></div>${raw}</div></details></article>`;
     })
     .join("\n");
-  return `<section><h2>全体の実行経過</h2><p>${starts.length} 件 · 不正記録の除外 ${replay.skipped} 件。表示番号は開始順です。STEP番号・既存レシート番号とは別です。</p><p>親と子の処理を開始順で表示します。並列処理は時間が重なります。終了記録のない処理も表示します。対象なしは実行結果で、未実行のSTEPは作りません。</p>${starts.some((r) => r.simulated) ? '<p class="note">この記録にはFakeProviderの模擬呼び出しが含まれます。模擬呼び出しは実APIへ送信していません。</p>' : ""}${cards}</section>`;
+  const llm = starts.filter((r) => r.kind === "llm");
+  const real = llm.filter(
+    (r) => !r.simulated && object(ends.get(r.id)?.output).dispatched === true,
+  ).length;
+  const simulated = llm.filter((r) => r.simulated).length;
+  const tools = starts.filter(
+    (r) =>
+      r.kind === "tool" &&
+      r.callId &&
+      !["開始前フック", "終了後フック", "履歴圧縮"].includes(r.label),
+  ).length;
+  const denied = new Set(
+    replay.records
+      .filter(
+        (r) => r.phase === "end" && r.kind === "step" && r.label === "gate",
+      )
+      .flatMap((r) =>
+        list(object(r.output).calls)
+          .filter((c) => object(c).allowed === false)
+          .map(
+            (c) => r.agentId + ":" + r.round + ":" + object(object(c).call).id,
+          ),
+      ),
+  ).size;
+  const delegations = starts.filter((r) => r.kind === "delegation").length;
+  return `<section><h2>全体の実行経過</h2><p class="report-overview">LLM実通信の試行：${real} · 模擬：${simulated} · ツール実行：${tools} · 権限拒否：${denied} · 子への委託：${delegations}</p>${replay.omittedFiles ? `<p class="note">容量・件数上限のため古い分割ファイル ${replay.omittedFiles} 件を省略し、直近の経過を表示しています。元の記録は保存先に残っています。</p>` : ""}<p>各 # の見出しをクリックすると、その項目だけを開閉できます。</p><p>${starts.length} 件 · 不正記録の除外 ${replay.skipped} 件。表示番号は開始順です。STEP番号・既存レシート番号とは別です。</p><p>親と子の処理を開始順で表示します。並列処理は時間が重なります。終了記録のない処理も表示します。対象なしは実行結果で、未実行のSTEPは作りません。</p>${starts.some((r) => r.simulated) ? '<p class="note">この記録にはFakeProviderの模擬呼び出しが含まれます。模擬呼び出しは実APIへ送信していません。</p>' : ""}${cards}</section>`;
 }

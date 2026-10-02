@@ -72,7 +72,7 @@ it("uses the same card structure for every receipt and highlights only recorded 
   );
 });
 
-it("puts the readable exchange outside closed JSON details and keeps original input available", async () => {
+it("keeps readable input inside each collapsed card and full JSON in its own details", async () => {
   const raw = await readFile(
     "test/fixtures/replay/receipts/haiku-read.jsonl",
     "utf8",
@@ -89,7 +89,9 @@ it("puts the readable exchange outside closed JSON details and keeps original in
   const doc = new DOMParser().parseFromString(html, "text/html");
   const calls = doc.querySelectorAll("article.model");
   expect(calls).toHaveLength(2);
-  expect(calls[0]!.querySelector(".exchange")?.closest("details")).toBeNull();
+  expect(
+    calls[0]!.querySelector(".exchange")?.closest("details")?.className,
+  ).toBe("receipt-collapse");
   expect(calls[0]!.querySelector(".exchange")?.textContent).toContain(
     "ファイルを読む",
   );
@@ -121,12 +123,29 @@ it("renders all recorded demo steps with shared cards, only LLM call highlights 
     expect(
       [
         ...card.querySelectorAll(
-          ":scope > .receipt-process > h4, :scope > .exchange > div > h4",
+          ":scope > .receipt-collapse > .receipt-body > .receipt-process > h4, :scope > .receipt-collapse > .receipt-body > .exchange > div > h4",
         ),
       ].map((h) => h.textContent),
     ).toEqual(["処理", "入力", "出力"]);
   expect(cards.filter((c) => c.classList.contains("model"))).toHaveLength(4);
   expect(document.querySelector("details[open]")).toBeNull();
+  const collapses = cards.map((c) =>
+    c.querySelector<HTMLDetailsElement>(".receipt-collapse")!,
+  );
+  collapses[0]!.querySelector<HTMLElement>("summary")!.click();
+  expect(collapses[0]!.open).toBe(true);
+  expect(collapses[1]!.open).toBe(false);
+  collapses[0]!.querySelector<HTMLElement>("summary")!.click();
+  expect(collapses[0]!.open).toBe(false);
+  expect(document.querySelector(".report-overview")?.textContent).toContain(
+    "模擬：4",
+  );
+  expect(document.querySelector(".report-overview")?.textContent).toContain(
+    "ツール実行：2",
+  );
+  expect(document.querySelector(".report-overview")?.textContent).toContain(
+    "権限拒否：1",
+  );
   const contextInput = cards[0]!.querySelector(".exchange > div")!;
   expect(contextInput.textContent).toContain("依頼・追加の指示");
   expect(contextInput.textContent).not.toContain("LLMの返答");

@@ -13,6 +13,27 @@ import { readExecutionReport, renderExecutionReport } from "./report.js";
 import { readTraceReplay, renderTraceReplay } from "./report-trace.js";
 
 const temp = () => mkdtemp(join(tmpdir(), "xh-trace-"));
+it("uses visible numbers for parent links when older segments are omitted", () => {
+  const parent = {
+    id: "parent",
+    sequence: 91,
+    phase: "start" as const,
+    kind: "tool" as const,
+    agentId: "s",
+    label: "Task",
+    at: "2026-10-02",
+  };
+  const html = renderTraceReplay({
+    records: [
+      parent,
+      { ...parent, id: "child", sequence: 92, parentSpan: "parent" },
+    ],
+    skipped: 0,
+    omittedFiles: 1,
+  });
+  expect(html).toContain('href="#trace-parent">委託元・呼び出し元 #1</a>');
+  expect(html).toContain("古い分割ファイル 1 件を省略");
+});
 it("records all six steps, retries, rejected tools and exact parent-child delegation in a real offline loop", async () => {
   const home = await temp();
   const { id, result } = await runReportDemo(home);

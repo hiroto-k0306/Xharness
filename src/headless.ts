@@ -1,3 +1,4 @@
+import { withSessionTrace } from "./main/core/trace.js";
 import { projectHookApproval } from "./main/hooks/shell-hooks.js";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -376,16 +377,18 @@ export async function headless(args = process.argv.slice(2)) {
         continue;
       }
       if (input.trim() === "/compact") {
-        const prepared = await prepareProviderHistory(messages, {
-          provider: router.provider(model!),
-          model: model!,
-          system,
-          tools: [...tools.values()].map((t) => t.spec),
-          signal: AbortSignal.timeout(60000),
-          checkpoint,
-          force: true,
-          threshold: project.context.compactThreshold,
-        });
+        const prepared = await withSessionTrace(home, session.id, clean, () =>
+          prepareProviderHistory(messages, {
+            provider: router.provider(model!),
+            model: model!,
+            system,
+            tools: [...tools.values()].map((t) => t.spec),
+            signal: AbortSignal.timeout(60000),
+            checkpoint,
+            force: true,
+            threshold: project.context.compactThreshold,
+          }),
+        );
         checkpoint = prepared.checkpoint;
         if (checkpoint) await checkpointFile().write(checkpoint);
         process.stdout.write(

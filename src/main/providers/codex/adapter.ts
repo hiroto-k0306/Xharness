@@ -1,3 +1,4 @@
+import { traceStream, captureTraceResponse } from "../../core/trace.js";
 import { randomUUID } from "node:crypto";
 import {
   readCodexCredentials,
@@ -38,17 +39,29 @@ export class CodexAdapter implements Provider {
     request: ProviderRequest,
     signal: AbortSignal,
   ): AsyncGenerator<ProviderEvent> {
+    yield* traceStream(
+      "codex",
+      { internal: request },
+      this.events(request, signal),
+    );
+  }
+  private async *events(
+    request: ProviderRequest,
+    signal: AbortSignal,
+  ): AsyncGenerator<ProviderEvent> {
     let stage: "request" | "authentication" | "transport" | "protocol" =
       "request";
     try {
       signal.throwIfAborted();
       const body = JSON.stringify(toCodexRequest(request, this.catalog));
+      captureTraceResponse({ requestBody: body });
       stage = "authentication";
       const auth = await (
         this.options.getCredentials ?? readCodexCredentials
       )();
       signal.throwIfAborted();
       stage = "transport";
+      captureTraceResponse({ requestDispatched: true });
       const id = request.sessionId ?? this.threadId;
       const response = await (this.options.fetcher ?? fetch)(
         "https://chatgpt.com/backend-api/codex/responses",
@@ -70,6 +83,7 @@ export class CodexAdapter implements Provider {
           body,
         },
       );
+      captureTraceResponse({ httpStatus: response.status });
       yield {
         type: "usage",
         provider: "codex",

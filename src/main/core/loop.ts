@@ -1,3 +1,4 @@
+import { beginTrace, withTraceFields } from "./trace.js";
 import { hookSnapshot, type HookResult } from "../hooks/step-hooks.js";
 import { createSteps } from "./loop-steps.js";
 import {
@@ -73,6 +74,11 @@ async function runHook(
   const hook = timing === "before" ? options.beforeStep : options.afterStep;
   if (!hook) return { kind: "continue" };
   const startedAt = new Date().toISOString();
+  const trace = beginTrace(
+    "tool",
+    `${timing === "before" ? "開始前" : "終了後"}フック`,
+    { step, calls: ctx.pending.map((p) => p.call) },
+  );
   let result: HookResult;
   try {
     result = await hook(
@@ -126,20 +132,38 @@ async function runHook(
     completedAt: new Date().toISOString(),
   };
   ctx.receipts.push(receipt);
+  trace.end(receipt, result.kind);
   options.onEvent?.({ type: "receipt", receipt });
   return result;
 }
 
 export async function runTurn(options: LoopOptions, signal: AbortSignal) {
+  return withTraceFields(
+    options.sessionId ? { agentId: options.sessionId } : {},
+    () => runTracedTurn(options, signal),
+  );
+}
+async function runTracedTurn(options: LoopOptions, signal: AbortSignal) {
   const ctx = createLoopContext(options);
   const steps = createSteps(options);
   let current: StepName = "context";
   while (true) {
+    const messageCount = ctx.messages.length;
+    const span = withTraceFields({ step: current, round: ctx.round }, () =>
+      beginTrace("step", current, {
+        messages: current === "context" ? ctx.messages : undefined,
+        request: current === "model" ? ctx.request : undefined,
+        calls: ctx.pending.map((p) => p.call),
+      }),
+    );
     let outcome: StepOutcome;
     try {
       if (current !== "receipt") signal.throwIfAborted();
       options.onEvent?.({ type: "step", step: current, round: ctx.round });
-      const before = await runHook("before", current, ctx, options, signal);
+      const before = await withTraceFields(
+        { ...span.fields, step: current, round: ctx.round },
+        () => runHook("before", current, ctx, options, signal),
+      );
       if (
         current !== "receipt" &&
         (before.kind === "block" || before.kind === "stop")
@@ -148,7 +172,10 @@ export async function runTurn(options: LoopOptions, signal: AbortSignal) {
       else {
         try {
           if (current !== "receipt") signal.throwIfAborted();
-          outcome = await steps[current].run(ctx, signal);
+          outcome = await withTraceFields(
+            { ...span.fields, step: current, round: ctx.round },
+            () => steps[current].run(ctx, signal),
+          );
         } catch {
           ctx.stopCause ??= signal.aborted ? "aborted" : "step_failed";
           if (current === "receipt") {
@@ -161,7 +188,10 @@ export async function runTurn(options: LoopOptions, signal: AbortSignal) {
           outcome = { kind: "stop", reason: ctx.stopCause };
         }
       }
-      const after = await runHook("after", current, ctx, options, signal);
+      const after = await withTraceFields(
+        { ...span.fields, step: current, round: ctx.round },
+        () => runHook("after", current, ctx, options, signal),
+      );
       if (ctx.stopCause)
         outcome =
           current === "receipt"
@@ -189,6 +219,27 @@ export async function runTurn(options: LoopOptions, signal: AbortSignal) {
         outcome = { kind: "stop", reason: ctx.stopCause };
       } else outcome = { kind: "next", to: "receipt" };
     }
+    span.end(
+      {
+        outcome,
+        stopCause: ctx.stopCause,
+        request: current === "context" ? ctx.request : undefined,
+        completion: current === "model" ? ctx.completion : undefined,
+        calls: ctx.pending.map((p) => ({
+          call: p.call,
+          error: p.error,
+          allowed: p.allowed,
+          result: p.result,
+        })),
+        messagesAdded:
+          current === "receipt" ? ctx.messages.slice(messageCount) : undefined,
+      },
+      ctx.stopCause ??
+        (ctx.pending.length === 0 &&
+        ["tool_use", "gate", "act"].includes(current)
+          ? "対象なし"
+          : "完了"),
+    );
     if (outcome.kind === "stop" && current !== "receipt") {
       ctx.stopCause = outcome.reason;
       current = "receipt";

@@ -731,3 +731,23 @@ it("gates phase-specific tools by validation instead of removing them", async ()
     /before implementation/,
   );
 });
+it("tells the reviewer the project's test command so it can rerun tests itself", async () => {
+  const s = await setup(
+    [
+      call("SkipPlan", { reason: "One new file" }),
+      call("Write", { path: "fix.txt", content: "fix" }),
+      call("RequestReview", { summary: "Added fix" }),
+    ],
+    [text("[]")],
+  );
+  await writeFile(
+    join(s.cwd, "package.json"),
+    JSON.stringify({ scripts: { test: "node sum.test.js" } }),
+  );
+  await s.run();
+  const reviewer = s.requests.find((r) =>
+    r.system.startsWith("You are reviewer"),
+  );
+  expect(reviewer?.system).toContain("`npm test`");
+  expect(reviewer?.system).toContain("do not use cd");
+});

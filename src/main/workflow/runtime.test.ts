@@ -13,6 +13,8 @@ import { loadAgentConfig } from "../agents/definitions.js";
 import { WorkflowRuntime } from "./runtime.js";
 import { runGit } from "../session/repository.js";
 import { type PlanItem } from "./plan-validate.js";
+import { FileCheckpointStore } from "../checkpoints/store.js";
+import { type WriteCheckpoint } from "../tools/registry.js";
 
 const call = (name: string, input: unknown): FakeStep => ({
   type: "message",
@@ -302,9 +304,10 @@ async function setup(claude: FakeStep[], codex: FakeStep[], git = false) {
     providers,
     approvals: () => approvals,
     checks: () => checks,
-    run: () =>
+    run: (checkpoint?: WriteCheckpoint) =>
       runtime.run(
         {
+          checkpoint,
           provider: providers[0]!,
           router: new Router(providers),
           model: "claude-opus-5-5",
@@ -504,6 +507,42 @@ it("does not write during planning", async () => {
   await expect(readFile(join(s.cwd, "forbidden.txt"))).rejects.toThrow();
   expect(await readFile(join(s.cwd, "allowed.txt"), "utf8")).toBe("good");
 });
+it.each([false, true])(
+  "checkpoints same-folder workers and excludes worktree workers (isolated=%s)",
+  async (isolated) => {
+    const s = await setup(
+      [
+        call("SubmitPlan", { items: [item("P1")], notes: "One" }),
+        call("RequestReview", { summary: "done" }),
+        text("[]"),
+      ],
+      [
+        call("Write", { path: "P1.txt", content: "done" }),
+        call("ReportDone", {
+          summary: "done",
+          changedFiles: ["P1.txt"],
+          testsRun: ["checked"],
+        }),
+      ],
+      isolated,
+    );
+    s.config.workflow.worktrees = isolated;
+    const store = new FileCheckpointStore(s.home);
+    const hooks = await store.begin(
+      "session1",
+      s.cwd,
+      0,
+      (s) => s,
+      () => undefined,
+    );
+    expect((await s.run(hooks)).stopCause).toBe("workflow_complete");
+    expect(await readFile(join(s.cwd, "P1.txt"), "utf8")).toBe("done");
+    expect((await store.preview("session1", 1)).preview.files).toHaveLength(
+      isolated ? 0 : 1,
+    );
+  },
+);
+
 it("isolates workers in worktrees, merges and tests each item before its dependent starts", async () => {
   const s = await setup(
     [

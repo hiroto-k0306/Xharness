@@ -114,7 +114,10 @@ async function runHook(
   if (result.kind === "block") {
     if (ctx.pending.length && !ctx.resultsAppended && step !== "receipt") {
       for (const item of ctx.pending)
-        if (!item.result) item.error = clean(result.reason);
+        if (!item.result) {
+          item.error = clean(result.reason);
+          item.errorKind = "denied";
+        }
     } else ctx.stopCause = clean(result.reason);
   }
   const receipt: Receipt = {

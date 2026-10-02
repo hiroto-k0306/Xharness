@@ -5,6 +5,17 @@ export const EVENT_CHANNEL = "harness:event";
 export const COMMAND_CHANNEL = "harness:command";
 
 export type ProviderName = "claude" | "codex";
+export interface AuthenticationView {
+  provider: ProviderName;
+  status:
+    | "missing"
+    | "expired"
+    | "available"
+    | "authenticating"
+    | "rejected"
+    | "error";
+  message?: string;
+}
 export type StepNumber = 1 | 2 | 3 | 4 | 5 | 6;
 export const STEP_NODES = [
   "context",

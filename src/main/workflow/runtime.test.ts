@@ -27,6 +27,44 @@ const text = (text: string): FakeStep => ({
   stopReason: "end_turn",
   message: { role: "assistant", content: [{ type: "text", text }] },
 });
+it("rejects the real malformed SubmitPlan while advertising the full item shape for recovery", async () => {
+  const bad = JSON.parse(
+    await readFile("test/fixtures/stabilize/malformed-plan.json", "utf8"),
+  );
+  const s = await setup([call("SubmitPlan", bad), text("stopped")], []);
+  const result = await s.runtime.run(
+    {
+      provider: s.providers[0]!,
+      model: "claude-opus-5-5",
+      system: "test",
+      messages: [
+        { role: "user", content: [{ type: "text", text: "fix add" }] },
+      ],
+      tools: defaultTools(s.cwd, false),
+      permission: async () => true,
+      maxRounds: 2,
+    },
+    new AbortController().signal,
+  );
+  const schema = s.requests[0]!.tools.find((t) => t.name === "SubmitPlan")!
+    .inputSchema as {
+    properties: {
+      items: {
+        items: {
+          properties: { assignee: { type: string; required: string[] } };
+          required: string[];
+        };
+      };
+    };
+  };
+  expect(schema.properties.items.items.properties.assignee.type).toBe("object");
+  expect(schema.properties.items.items.required).toContain("instructions");
+  const errors = result.messages
+    .flatMap((m) => m.content)
+    .filter((b) => b.type === "tool_result");
+  expect(JSON.stringify(errors)).toContain("assignee");
+  expect(s.runtime.state.phase).toBe("plan");
+});
 it("manual review reruns the reviewer without a main model call", async () => {
   const s = await setup([], []);
   const first = await s.run();
@@ -47,6 +85,24 @@ it("manual review reruns the reviewer without a main model call", async () => {
   expect(s.requests.slice(count)).toHaveLength(1);
   expect(s.requests.at(-1)?.system).toMatch(/^You are reviewer/);
   expect(() => s.runtime.manualPhase("complete")).toThrow();
+});
+it("stops after three invalid real plans instead of spending the remaining request budget", async () => {
+  const bad = JSON.parse(
+    await readFile("test/fixtures/stabilize/malformed-plan.json", "utf8"),
+  );
+  const s = await setup(
+    [
+      call("SubmitPlan", bad),
+      call("SubmitPlan", bad),
+      call("SubmitPlan", bad),
+      text("must not send"),
+    ],
+    [],
+  );
+  const result = await s.run();
+  expect(result.stopCause).toBe("plan_validation_failed");
+  expect(s.requests).toHaveLength(3);
+  expect(s.runtime.state.phase).toBe("plan");
 });
 it("queues an in-flight phase change until the receipt is closed", async () => {
   const s = await setup([text("answer"), text("plan")], []);

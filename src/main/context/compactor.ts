@@ -2,6 +2,9 @@ import { type Message } from "../core/types.js";
 export interface Checkpoint {
   covered: number;
   summary: string;
+  provider?: "claude" | "codex";
+  message?: Message;
+  model?: string;
 }
 export function estimateTokens(value: unknown): number {
   return Math.ceil(Buffer.byteLength(JSON.stringify(value), "utf8") / 3);
@@ -23,6 +26,11 @@ export function contextView(
     checkpoint.covered > messages.length
   )
     return messages;
+  if (checkpoint.provider === "claude" && checkpoint.message)
+    return [
+      structuredClone(checkpoint.message),
+      ...messages.slice(checkpoint.covered),
+    ];
   return [
     {
       role: "user",

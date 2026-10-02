@@ -157,7 +157,7 @@ describe("grants are saved narrowly", () => {
       grantFor(call("WebFetch", { url: "https://docs.example.com/a/b?q=1" })),
     ).toEqual({
       tool: "WebFetch",
-      pattern: "https://docs.example.com/*",
+      pattern: "domain:docs.example.com",
       decision: "allow",
     });
   });

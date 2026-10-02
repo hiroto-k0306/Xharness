@@ -86,6 +86,7 @@ export interface Runtime {
   };
   always: Set<string>;
   tools?: ToolRegistry;
+  webSignature?: string;
   receiptSeq: number;
   messageSeq: number;
   /** 実行中のターン(終了待ち用) */
@@ -135,6 +136,8 @@ export interface ControllerContext {
 }
 
 export const STOP_NOTICE: Record<string, string> = {
+  plan_validation_failed:
+    "計画の形式エラーが3回繰り返されたため停止しました。計画内容を確認してから再開してください",
   context_overflow:
     "圧縮後もコンテキスト上限に収まりません。入力を短くするか新しいセッションを開始してください",
   rate_limited: "枠の上限に達しました。時間をおいて再試行してください",

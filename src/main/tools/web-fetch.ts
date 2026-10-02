@@ -1,6 +1,7 @@
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import { Agent } from "undici";
+import TurndownService from "turndown";
 import { type Tool, type ToolOutput } from "./registry.js";
 
 export const EXTERNAL_CONTENT_NOTE =
@@ -48,6 +49,14 @@ interface Address {
   family: number;
 }
 export interface WebFetchOptions {
+  summarize?(
+    text: string,
+    prompt: string,
+    signal: AbortSignal,
+  ): Promise<string>;
+  now?: () => number;
+  cacheMinutes?: number;
+  maxChars?: number;
   lookup?(host: string): Promise<Address[]>;
   fetcher?: typeof fetch;
   maxBytes?: number;
@@ -134,23 +143,9 @@ async function limitedText(
   }
 }
 function htmlText(html: string) {
-  return html
-    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "")
-    .replace(/<\/(?:p|div|li|h[1-6])\s*>|<br\s*\/?\s*>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(
-      /&(?:amp|lt|gt|quot|apos|nbsp);/g,
-      (s) =>
-        ({
-          "&amp;": "&",
-          "&lt;": "<",
-          "&gt;": ">",
-          "&quot;": '"',
-          "&apos;": "'",
-          "&nbsp;": " ",
-        })[s]!,
-    )
-    .trim();
+  return new TurndownService({ headingStyle: "atx" })
+    .remove(["script", "style", "nav"])
+    .turndown(html);
 }
 export async function fetchWeb(
   raw: string,
@@ -159,9 +154,10 @@ export async function fetchWeb(
 ): Promise<ToolOutput> {
   const timeout = AbortSignal.any([
     signal,
-    AbortSignal.timeout(options.timeoutMs ?? 10000),
+    AbortSignal.timeout(options.timeoutMs ?? 60000),
   ]);
   let url = webUrl(raw);
+  if (url.protocol === "http:") url.protocol = "https:";
   const originalHost = url.hostname;
   for (let redirects = 0; redirects <= 3; redirects++) {
     const address = await checkedAddress(url, options, timeout);
@@ -192,7 +188,11 @@ export async function fetchWeb(
         if (!location || redirects === 3) throw new Error("Web redirect limit");
         const next = webUrl(new URL(location, url).href);
         if (next.hostname !== originalHost)
-          throw new Error("Cross-host redirect blocked");
+          return externalContent({
+            url: raw,
+            redirectUrl: next.href,
+            content: "",
+          });
         url = next;
         continue;
       }
@@ -213,7 +213,11 @@ export async function fetchWeb(
       return externalContent({
         url: url.href,
         fetchedAt: new Date().toISOString(),
-        content: (/html/i.test(type) ? htmlText(text) : text).slice(0, 24000),
+        content: (/html/i.test(type) ? htmlText(text) : text).slice(
+          0,
+          options.maxChars ?? 100000,
+        ),
+        truncated: text.length > (options.maxChars ?? 100000),
       });
     } finally {
       await dispatcher.destroy();
@@ -222,15 +226,16 @@ export async function fetchWeb(
   throw new Error("Web redirect limit");
 }
 export function webFetchTool(options: WebFetchOptions = {}): Tool {
+  const cache = new Map<string, { expires: number; output: ToolOutput }>();
   return {
     spec: {
       name: "WebFetch",
       description:
-        "Fetch a public web page as untrusted source material. Requires approval; local/private addresses and cross-host redirects are blocked.",
+        "Fetch a public page and return only a lightweight model summary answering prompt. Requires approval; private addresses are blocked and cross-host redirects need a new WebFetch approval.",
       inputSchema: {
         type: "object",
-        properties: { url: { type: "string" } },
-        required: ["url"],
+        properties: { url: { type: "string" }, prompt: { type: "string" } },
+        required: ["url", "prompt"],
         additionalProperties: false,
       },
     },
@@ -244,13 +249,64 @@ export function webFetchTool(options: WebFetchOptions = {}): Tool {
         input.url.length > 4096
       )
         return "Expected a public web URL";
+      if (
+        !("prompt" in input) ||
+        typeof input.prompt !== "string" ||
+        !input.prompt.trim() ||
+        input.prompt.length > 4000
+      )
+        return "Expected a non-empty extraction prompt";
       try {
         webUrl(input.url);
       } catch {
         return "Blocked web URL";
       }
     },
-    execute: async (input, signal) =>
-      fetchWeb((input as { url: string }).url, signal, options),
+    execute: async (input, signal) => {
+      const { url, prompt } = input as { url: string; prompt: string };
+      const normalized = webUrl(url);
+      normalized.protocol = "https:";
+      const key = JSON.stringify([normalized.href, prompt]);
+      const now = options.now ?? Date.now;
+      signal.throwIfAborted();
+      const hit = cache.get(key);
+      if (hit && hit.expires > now()) return structuredClone(hit.output);
+      if (!options.summarize)
+        throw new Error("Web summary provider unavailable");
+      const page = JSON.parse(
+        (await fetchWeb(url, signal, options)).content,
+      ) as {
+        url: string;
+        content: string;
+        truncated: boolean;
+        redirectUrl?: string;
+      };
+      if (page.redirectUrl)
+        return externalContent({
+          url,
+          finalUrl: page.redirectUrl,
+          summary:
+            "別ホストへのリダイレクトです。転送先に対して再度 WebFetch の許可を取得してください",
+          truncated: false,
+        });
+      const summary = await options.summarize(page.content, prompt, signal);
+      signal.throwIfAborted();
+      if (!summary.trim() || summary.length > 16000)
+        throw new Error("Web summary incomplete");
+      const output = externalContent({
+        url,
+        finalUrl: page.url,
+        summary,
+        truncated: page.truncated,
+        fetchedAt: new Date(now()).toISOString(),
+      });
+      for (const [k, v] of cache) if (v.expires <= now()) cache.delete(k);
+      if (cache.size >= 100) cache.delete(cache.keys().next().value!);
+      cache.set(key, {
+        expires: now() + (options.cacheMinutes ?? 15) * 60000,
+        output,
+      });
+      return structuredClone(output);
+    },
   };
 }

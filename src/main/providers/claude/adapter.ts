@@ -52,7 +52,13 @@ export class ClaudeAdapter implements Provider {
           signal,
           headers: {
             Authorization: `Bearer ${token}`,
-            "anthropic-beta": "oauth-2025-04-20",
+            "anthropic-beta":
+              request.compaction ||
+              request.messages.some((m) =>
+                m.content.some((b) => b.type === "compaction"),
+              )
+                ? "oauth-2025-04-20,compact-2026-09-04"
+                : "oauth-2025-04-20",
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
           },

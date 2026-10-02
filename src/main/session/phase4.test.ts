@@ -18,6 +18,7 @@ it("resumes original history after manual compact, sends the compact view and re
   const home = await mkdtemp(join(tmpdir(), "xh-compact-integration-"));
   const requests: ProviderRequest[] = [];
   const provider: Provider = {
+    offline: true,
     id: "claude",
     models: () => [{ id: "fake", contextTokens: 1000000 }],
     async *stream(request) {

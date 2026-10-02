@@ -12,7 +12,8 @@ function callId(id: string) {
 }
 function cacheLast(blocks: NativeBlock[]) {
   const block = blocks.findLast(
-    (b) => !["thinking", "redacted_thinking"].includes(String(b.type)),
+    (b) =>
+      !["thinking", "redacted_thinking", "compaction"].includes(String(b.type)),
   );
   if (block) block.cache_control = { type: "ephemeral" };
 }
@@ -66,6 +67,16 @@ function convertBlocks(blocks: ContentBlock[]): NativeBlock[] {
           throw new Error("Invalid Claude reasoning block");
         return [{ ...native }];
       }
+      case "compaction": {
+        const native = block.payload as NativeBlock;
+        if (
+          native?.type !== "compaction" ||
+          typeof native.content !== "string" ||
+          typeof native.signature !== "string"
+        )
+          throw new Error("Invalid signed compaction block");
+        return [structuredClone(native)];
+      }
     }
   });
 }
@@ -117,6 +128,7 @@ export function toClaudeRequest(request: ProviderRequest) {
     stream: true,
     system,
     messages,
+    ...(request.compaction ? { compaction: request.compaction } : {}),
     // Omit thinking entirely: Opus/Sonnet retain their native adaptive behavior.
     ...(supportsEffort ? { output_config: { effort } } : {}),
     ...(tools.length || hosted.length

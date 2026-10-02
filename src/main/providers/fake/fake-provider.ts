@@ -141,6 +141,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
  * 認証情報は読まない・要求しない。DESIGN.md §6 の Provider に準拠。
  */
 export class FakeProvider implements Provider {
+  readonly offline = true;
   readonly id: ProviderId;
   private readonly script: FakeStep[];
   constructor(private readonly options: FakeProviderOptions = {}) {

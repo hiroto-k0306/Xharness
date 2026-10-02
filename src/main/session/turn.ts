@@ -8,7 +8,8 @@ import {
   projectMemory,
   type ProjectConfig,
 } from "../config/project.js";
-import { estimateTokens, prepareHistory } from "../context/compactor.js";
+import { estimateTokens } from "../context/compactor.js";
+import { prepareProviderHistory } from "../context/provider-compactor.js";
 import { Router } from "../core/router.js";
 import { webTools } from "../tools/web.js";
 import { type Receipt } from "../../shared/ipc.js";
@@ -171,21 +172,25 @@ async function prepareRuntime(
     rt.mainConfig = await loadMainConfig(options.home, undefined, root);
   }
   const web = rt.mainConfig?.web ?? options.web;
-  rt.tools.delete("WebSearch");
-  rt.tools.delete("WebFetch");
-  if (web?.enabled)
-    for (const [name, tool] of webTools(
-      () =>
-        new Router(options.providers ?? [options.provider]).provider(
-          (ctx.sessions.get(session.id) ?? session).model,
-        ),
-      web.searchMode,
-      options.fake,
-      (event) => {
-        if (event.type === "usage") options.emit(shapeUsage(event));
-      },
-    ))
-      rt.tools.set(name, tool);
+  const webSignature = JSON.stringify(web);
+  if (rt.webSignature !== webSignature) {
+    rt.webSignature = webSignature;
+    rt.tools.delete("WebSearch");
+    rt.tools.delete("WebFetch");
+    if (web?.enabled)
+      for (const [name, tool] of webTools(
+        () =>
+          new Router(options.providers ?? [options.provider]).provider(
+            (ctx.sessions.get(session.id) ?? session).model,
+          ),
+        web.searchMode,
+        options.fake,
+        (event) => {
+          if (event.type === "usage") options.emit(shapeUsage(event));
+        },
+      ))
+        rt.tools.set(name, tool);
+  }
   if (options.phase4 && !rt.checkpoint)
     rt.checkpoint = await checkpointFile(options.home, session.id).read(
       undefined,
@@ -237,7 +242,13 @@ export async function runSessionTurn(
               const limit = route.provider
                 .models()
                 .find((m) => m.id === route.model)?.contextTokens;
-              const prepared = prepareHistory(messages, {
+              const prepared = await prepareProviderHistory(messages, {
+                provider: route.provider,
+                model: route.model,
+                signal,
+                system: context?.system ?? system,
+                tools:
+                  context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
                 checkpoint: rt.checkpoint,
                 limit,
                 threshold: rt.config?.context.compactThreshold ?? 0.8,

@@ -11,7 +11,8 @@ import { SessionStore, usedProviders, gitInfo } from "../session/store.js";
 import { ReceiptStore } from "../session/receipts.js";
 import { type AgentDefinition } from "./definitions.js";
 import { loadProjectConfig, projectMemory } from "../config/project.js";
-import { prepareHistory, estimateTokens } from "../context/compactor.js";
+import { type Checkpoint, estimateTokens } from "../context/compactor.js";
+import { prepareProviderHistory } from "../context/provider-compactor.js";
 import { type StepHook } from "../core/loop-types.js";
 
 export interface ChildContext {
@@ -172,6 +173,7 @@ export class ChildRunner {
         writes.push(write);
         this.options.onEvent?.(context, { type: "receipt", receipt: r });
       });
+      let checkpoint: Checkpoint | undefined;
       const result = await runTurn(
         {
           provider: this.options.router.provider(choice.model),
@@ -184,8 +186,15 @@ export class ChildRunner {
             ? { effort: definition.effort }
             : undefined,
           system,
-          prepareContext: async (messages, route) => {
-            const prepared = prepareHistory(messages, {
+          prepareContext: async (messages, route, signal, loopContext) => {
+            const prepared = await prepareProviderHistory(messages, {
+              provider: route.provider,
+              model: route.model,
+              signal,
+              checkpoint,
+              system: loopContext?.system ?? system,
+              tools:
+                loopContext?.tools ?? [...tools.values()].map((t) => t.spec),
               limit: route.provider.models().find((m) => m.id === route.model)
                 ?.contextTokens,
               overhead:
@@ -195,6 +204,7 @@ export class ChildRunner {
                 }) + 4096,
               threshold: project.context.compactThreshold,
             });
+            checkpoint = prepared.checkpoint;
             return {
               messages: prepared.messages,
               ...(!prepared.fits ? { stop: "context_overflow" } : {}),

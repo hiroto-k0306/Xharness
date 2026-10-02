@@ -4,7 +4,9 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
 import { loadModelCatalog } from "../config/model-catalog.js";
-import { prepareHistory } from "../context/compactor.js";
+import { prepareProviderHistory } from "../context/provider-compactor.js";
+import { Router } from "../core/router.js";
+import { systemPrompt } from "./turn.js";
 import {
   type CommandResult,
   type Effort,
@@ -75,32 +77,65 @@ export async function compactNow(
   if (rt.status !== "idle") return { ok: false, error: "Turn already running" };
   const file = checkpointFile(ctx.options.home, sessionId);
   rt.checkpoint ??= await file.read(undefined);
-  const result = prepareHistory(rt.messages, {
-    checkpoint: rt.checkpoint,
-    threshold: 0.8,
-    force: true,
+  const session = ctx.sessions.get(sessionId);
+  if (!session) return { ok: false, error: "Unknown session" };
+  const provider = new Router(
+    ctx.options.providers ?? [ctx.options.provider],
+  ).provider(session.model);
+  const abort = new AbortController();
+  let finish: () => void = () => {};
+  rt.done = new Promise<void>((resolve) => {
+    finish = resolve;
   });
-  if (result.checkpoint) {
-    rt.checkpoint = result.checkpoint;
-    await file.write(result.checkpoint);
-  }
-  if (result.compacted)
-    await ctx.record(rt, {
-      id: pad(++rt.receiptSeq),
-      sessionId,
-      ts: Date.now(),
-      provider: "harness",
-      kind: "compact",
-      durationMs: 0,
-      summary: "Manual compact",
+  rt.abort = abort;
+  rt.status = "running";
+  ctx.options.emit({ type: "turn", sessionId, status: "running" });
+  try {
+    const result = await prepareProviderHistory(rt.messages, {
+      provider,
+      model: session.model,
+      signal: abort.signal,
+      system: await systemPrompt(
+        ctx,
+        session.cwd,
+        !session.workspaceId,
+        rt.config,
+      ),
+      tools: [...(rt.tools?.values() ?? [])].map((t) => t.spec),
+      checkpoint: rt.checkpoint,
+      threshold: 0.8,
+      force: true,
     });
-  ctx.options.emit({
-    type: "notice",
-    tone: "dim",
-    sessionId,
-    message: result.compacted
-      ? "古い履歴を圧縮しました（元の履歴は保存済み）"
-      : "圧縮できる古い履歴がありません",
-  });
-  return { ok: true };
+    if (result.checkpoint) {
+      rt.checkpoint = result.checkpoint;
+      await file.write(result.checkpoint);
+    }
+    if (result.compacted)
+      await ctx.record(rt, {
+        id: pad(++rt.receiptSeq),
+        sessionId,
+        ts: Date.now(),
+        provider: "harness",
+        kind: "compact",
+        durationMs: 0,
+        summary: "Manual compact",
+      });
+    ctx.options.emit({
+      type: "notice",
+      tone: "dim",
+      sessionId,
+      message: result.compacted
+        ? "古い履歴を圧縮しました（元の履歴は保存済み）"
+        : "圧縮できる古い履歴がありません",
+    });
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "圧縮に失敗しました。元の履歴を維持しています" };
+  } finally {
+    rt.status = "idle";
+    rt.abort = undefined;
+    ctx.options.emit({ type: "turn", sessionId, status: "idle" });
+    if (rt.closing) ctx.dropRuntime(sessionId);
+    finish();
+  }
 }

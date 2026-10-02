@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   decidePermission,
   grantFor,
+  normalizeCall,
   type PermissionMode,
   type Rule,
 } from "./permissions.js";
@@ -15,6 +16,29 @@ import {
 } from "../config/project.js";
 const call = (name: string, input: unknown) => ({ id: "test", name, input });
 describe("Phase 4 permission rules", () => {
+  it("reuses a saved grant for quoted arguments after a cwd cd prefix", async () => {
+    const home = await mkdtemp(join(tmpdir(), "xh-grant-home-"));
+    const cwd = await mkdtemp(join(tmpdir(), "xh-grant-cwd-"));
+    const command = `cd '${cwd}'; Write-Output 'grant-demo'`;
+    const bash = call("Bash", { command });
+    const grant = grantFor(await normalizeCall(bash, cwd));
+    await saveRule(home, grant, cwd);
+    const config = await loadProjectConfig(home, cwd);
+    expect(await decidePermission(bash, config.permissions, cwd)).toBe("allow");
+    for (const other of [
+      `cd '${home}'; Write-Output 'grant-demo'`,
+      `${command}; Write-Output other`,
+      `cd '${cwd}'; Write-Output 'other'`,
+    ]) {
+      expect(
+        await decidePermission(
+          call("Bash", { command: other }),
+          config.permissions,
+          cwd,
+        ),
+      ).toBe("ask");
+    }
+  });
   it.each([
     ["default", "Read", "allow"],
     ["default", "Write", "ask"],

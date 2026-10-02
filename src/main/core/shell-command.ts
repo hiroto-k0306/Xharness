@@ -101,7 +101,14 @@ export function bashGrantPattern(command: string): string {
   // 単純でない・危険なオプションを含む形は、ルールでは許可されない。完全一致で保存しておく
   if (!shape.simple || shape.riskyOption) return command.trim();
   if (shape.tokens.length === 1) return first;
-  if (second && /^[A-Za-z][\w.:-]*$/.test(second) && !pointsOutside(second))
+  // 引用符を外した語を保存すると、元のコマンド文字列に一致しなくなる。
+  const rawPrefix = command.trim().match(/^(\S+)\s+([A-Za-z][\w.:-]*)(?=\s|$)/);
+  if (
+    second &&
+    rawPrefix?.[1] === first &&
+    rawPrefix[2] === second &&
+    !pointsOutside(second)
+  )
     return `${first} ${second} *`;
   return command.trim();
 }

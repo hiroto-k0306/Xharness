@@ -185,6 +185,51 @@ thinking-binding の3件目は結果欠落でも予算消費として数えた�
 
 今回の追加確認の合計は **Claude 12/20回（thinking-binding 4 + 通し8）、Codex 6/8回**。上限に達しておらず、追加予算は不要。以前の3/4回や6/6回・4/4回の台帳は消さず保持している。前節の未完了のうち、thinking-binding と最終レビューを含む自動通し確認は解消。使用量に応じた Web auto 切り替えは今回の対象外で未確認のまま。ユーザーの指示により、修正と確認結果をコミット・プッシュの対象とした。
 
+## stabilize 最終 Windows 確認（2026-10-02）
+
+fb41424 を含む最新 main **303cfca** を取得して確認。開始時の作業ツリーがクリーンであることを確認し、指定どおり `git rm --cached -r -q .` / `git reset --hard` で取り出し直した。今回ソースの不具合は見つからず、コードの修正はしていない。
+
+### 改行・自動検査（実通信0回）
+
+- `git ls-files --eol`: brand/*.svg と resources/icon.ico の例外以外はすべて **i/lf w/lf**。例外外の不一致0件。
+- `pnpm install --frozen-lockfile`: 成功。
+- `pnpm test`: **66ファイル・582件成功、スキップ0**。Windows PowerShell 依存を含む。
+- `pnpm typecheck` / `pnpm lint` / `pnpm format:check` / `pnpm build` / `pnpm build:headless`: すべて成功。
+- `pnpm vitest run src/main/session/repository.test.ts` を3回連続実行: 各13件成功。全体所要時間は順に **3.77秒 / 3.95秒 / 4.43秒**。30秒の制限で時間切れなし。
+
+### portable exe
+
+`pnpm package` が成功し、portable と NSIS を生成。portable をリポジトリ外の `D:\AIwork\XHarness-portable-final-20261002\XHarness-0.0.0-portable.exe` にコピーして起動した。生成元とコピーの SHA-256 は一致（`BCAAA849C94FF6A3A1BE0B3EB3B63BE60EAB62E355363EE0BD48F906A49C211D`）。インストーラの実行はしていない。
+
+fake の home は `.out/stabilize-final-portable-fake`、実通信の home は `.out/stabilize-final-portable-live` を `XHARNESS_HOME` で指定。通常の設定・履歴・ワークスペースは変更していない。
+
+- **workflow**: `workflow-demo` の計画を画面で承認し、worker のサンプル書き込みを許可。PLAN → IMPLEMENT → REVIEW → complete / idle が画面で進み、レビュー指摘なしを確認。実通信0回。
+- **常に許可**: 同梱 fixture には任意の Bash コマンドを出すシナリオがないため、この起動だけ展開先の Read fixture を合成 Bash fixture に一時差し替えた。アプリのコード・exe は変更していない。実際の cwd への `cd '<cwd>'; Write-Output 'x'` を「常に許可」し、同じコマンドの2回目は確認0回で成功・idle。レシートは1回目 `ask→allow`、2回目 `allow`、永続ルールは `Write-Output 'x'`。終了前に fixture を元に戻した。
+- **不正な Web 設定**: `--fake` の起動は設定を読まない設計なので、実通信モードの起動で確認（起動自体のモデル送信0回）。最初のセッション画面に searchProvider / codexSearchMode / maxSearchesPerSession の3警告が表示された。
+- **packaged の実応答**: Haiku に `Reply only pong.` を1回送信し、実際の応答 **`pong.`** と idle への復帰を確認。モデル要求のレシート1件、`end_turn`。この枠は **Claude 1/1回、Codex 0回**。
+- **Haiku 自動圧縮**: FakeProvider はローカル圧縮を使うため、fake での未対応警告は再現できない。次項の使用率取得用 Haiku 送信を同じ packaged セッションで行った際、低い閾値0.001を設定し、黄色の「履歴の自動圧縮ができなかったため、圧縮せずに続けます」の警告後に **`ok.` / idle** を確認。警告のための追加送信はしていない。その後、Luna の不要な要約送信を避けるため、閾値を0.8へ戻した。
+
+### Web auto の使用率による選択
+
+同じ packaged セッション **a60989a0** で、Haiku に `Reply only ok.`、モデルを Luna に切り替えて同じ短い要求を各1回送信。両方の応答と idle を確認した。UsagePopover の実測表示:
+
+| provider | 5時間枠の使用率 | 週間枠の使用率 |
+| -------- | --------------: | -------------: |
+| Claude   |         **13%** |            86% |
+| Codex    |         **50%** |            72% |
+
+`config.yaml` の `web.searchProvider: auto` を使用。追加の main モデル要求を避けるため、上記 UsagePopover の実測値を quota として、現行の本番 WebSearch ツールを直接1回実行した（セッションの provider は **codex**）。低い **Claude** が選択され、Haiku の検索要求は **HTTP 200**。検索語は `Search the web for the official Node.js release schedule nodejs.org`。9件の結果を返し、**7件に pageAge、2件はなし**。例: Node.js Releases (`https://nodejs.org/en/about/previous-releases`) は `65 days ago`。フォールバックは発生していない。使用率は同率ではなかったため、同率時の実通信確認や送り直しはしていない。
+
+試験方法の制約: UsagePopover と両モデルの使用率取得は packaged の同じセッションで確認したが、WebSearch の実行は UI のモデルにツールを選ばせず、別の試験プロセスから実測 quota を渡して実行した。**packaged のメモリ内 quota から GUI の WebSearch 呼び出しまでの全経路は未確認**。使用率が低い別プロバイダを選ぶ本番の関数と、選択先への実検索は確認済み。
+
+| 今回の枠               |  Claude |   Codex |
+| ---------------------- | ------: | ------: |
+| packaged 応答確認      | **1/1** |       0 |
+| 使用率取得 + WebSearch | **2/2** | **1/2** |
+| 合計                   |   **3** |   **1** |
+
+秘密値・認証ヘッダ・生の応答本文は保存していない。検索記録はタイトル・URL・pageAge・選択先・ステータスのみ。資格情報は読み取りのみ。今回の変更はこの結果の追記だけで、未コミット。
+
 ## Windows 確認のレビュー対応(2026-10-02、クラウド・実送信なし)
 
 - 使える検索プロバイダが設定で0件になる場合(`searchProvider: codex` と `codexSearchMode: disabled` など)は、検索回数を使わず、設定が原因と分かるエラーを返す。

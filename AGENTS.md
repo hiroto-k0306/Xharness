@@ -59,6 +59,7 @@ pnpm spike:<name>  # Phase 0 の疎通確認スクリプト(docs/phase0-runbook.
 pnpm dev:fake      # Electron を --fake(通信なし)で起動
 pnpm build         # electron-vite でビルド
 pnpm package       # exe を作る(手元の Windows で実行)
+pnpm release       # exe を作り、配布に必要なファイルだけをリポジトリの外へ集める(手元の Windows で実行。README.md)
 ```
 
 ## クラウド環境(Linux)で作業する場合

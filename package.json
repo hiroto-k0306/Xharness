@@ -36,7 +36,9 @@
     "preview": "electron-vite preview",
     "icon": "tsx scripts/make-icon.ts",
     "package": "pnpm icon && pnpm build && electron-builder --win",
-    "package:dir": "pnpm icon && pnpm build && electron-builder --win --dir"
+    "package:dir": "pnpm icon && pnpm build && electron-builder --win --dir",
+    "release:collect": "tsx scripts/collect-release.ts",
+    "release": "pnpm package && pnpm release:collect"
   },
   "devDependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",

@@ -72,9 +72,7 @@ export function webSearchTool(
         provider: selected.id,
         mode: selected.id === "claude" ? "live" : mode,
         fetchedAt: new Date().toISOString(),
-        content: done.message.content
-          .flatMap((b) => (b.type === "text" ? [b.text] : []))
-          .join("\n"),
+        results: done.message.meta?.sources ?? [],
         sources: done.message.meta?.sources ?? [],
         searchCalls: done.message.meta?.webSearch?.calls,
       });

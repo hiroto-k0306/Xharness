@@ -46,6 +46,7 @@
     "@types/node": "^22.20.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^6.1.1",
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
@@ -76,6 +77,7 @@
     ]
   },
   "dependencies": {
+    "turndown": "^7.2.4",
     "undici": "^7.30.0"
   }
 }

@@ -124,8 +124,19 @@ export async function decidePermission(
   const all = [...config.rules, ...(opts.sessionRules ?? [])].filter(
     (r) => r.tool === "*" || r.tool === call.name,
   );
-  const matches = (r: Rule, text: string) =>
-    !r.pattern || glob(r.pattern, text);
+  const matches = (r: Rule, text: string) => {
+    if (call.name === "WebFetch" && r.pattern?.startsWith("domain:")) {
+      try {
+        return (
+          new URL(text).hostname.toLowerCase() ===
+          r.pattern.slice(7).toLowerCase()
+        );
+      } catch {
+        return false;
+      }
+    }
+    return !r.pattern || glob(r.pattern, text);
+  };
   // 制限するルール(deny / ask)は、連結や括弧の中の部分コマンドに一致しても効く
   const parts =
     call.name === "Bash" ? [subject, ...subcommands(subject)] : [subject];
@@ -198,7 +209,7 @@ export function grantFor(call: ToolCall): Rule {
       const url = new URL(subject);
       return {
         tool: "WebFetch",
-        pattern: `${url.protocol}//${url.host}/*`,
+        pattern: `domain:${url.hostname.toLowerCase()}`,
         decision: "allow",
       };
     } catch {

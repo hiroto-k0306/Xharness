@@ -1424,13 +1424,14 @@ web:
 - `type` 省略時は stdio(`command` / `args` / `env`)。`type: "http"` は `url` / `headers`。Claude Code で非推奨の `sse` は読まずに警告する
 - `${VAR}` と `${VAR:-既定値}` を `command` / `args` / `env` / `url` / `headers` で展開する。未定義で既定値も無ければ、そのサーバーを無効にして警告する。秘密値を `.mcp.json` に直接書かせないため
 - サーバー名は `^[A-Za-z0-9_-]{1,64}$`。ツール名の区切り `__` を含む名前は拒否する
-- 全体の on/off とサーバー数などの上限は `~/.xharness/config.yaml` の `mcp:`(§12 へ追記)で持つ: `enabled`(既定 true)、`startupTimeoutSec`(30)、`toolTimeoutSec`(120)、`maxOutputTokens`(25000)
+- 全体の on/off と時間の上限は `~/.xharness/config.yaml` の `mcp:`(§12 へ追記)で持つ: `enabled`(既定 true)、`startupTimeoutSec`(30、1〜600)、`toolTimeoutSec`(120、1〜3600)。不正な値は既定値のまま警告する
+- stdio のサーバーには、SDK の既定(PATH など最小限の環境変数)に `env` を足して渡す。親プロセスの環境変数をすべては渡さない
 
 ### 25.3 承認と起動
 
 - リポジトリから来る設定なので、**ワークスペースの信頼(Phase 4 の workspace trust)に加えて、サーバーごとの承認**が要る。リポジトリを開いただけではプロセスを起動・接続しない
 - 承認の画面には、サーバー名・種類・`command` と `args`(または `url`)・`env` / `headers` の**キー名だけ**を表示する(値は出さない)
-- 承認はリポジトリ外(`~/.xharness/projects/<鍵>/mcp-approvals.json`)に、展開前の定義のハッシュで保存する。定義が変わったら再承認。拒否も記録し、`/mcp` から取り消せる
+- 承認はリポジトリ外(`~/.xharness/projects/<鍵>/mcp-approvals.json`)に、展開前の定義のハッシュで保存する。定義が変わったら再承認。「常に許可」で保存し、「許可」はそのセッションだけ。拒否はそのセッションだけ(取り消す画面 `/mcp` ができるまで保存しない)
 - 接続はセッション開始時に行う。stdio のプロセスはセッション単位で1つ起動し、同じセッションの子エージェントと共有する。セッション終了・アプリ終了でプロセスツリーごと止める
 - 起動・初期化が `startupTimeoutSec` を超えた・失敗したサーバーは使えない状態にして通知し、セッションは続ける。自動再起動はしない(`/mcp` で再接続)
 - stderr は秘密値のマスク(AGENTS.md の規則)を通して、サーバーごとのログにだけ残す。画面には要約だけを出す
@@ -1446,11 +1447,12 @@ web:
 | `ListMcpResources` | サーバーのリソース一覧(URI・名前・説明) | 確認なし |
 | `ReadMcpResource` | `{server, uri}` でリソースを読む | 初回 ask、「常に許可」はサーバー単位 |
 
-- 使えるサーバーとツール名(名前と1行の説明)の一覧は、system ではなく**会話のメッセージ**で伝える。セッション最初の user メッセージに注記として付ける
+- セッション開始時に接続したサーバー名は、`McpSearch` の説明文に入れる(tools はセッション開始時に決まり、その後変えないので §24 に反しない)。ツールの一覧と Schema は `McpSearch` で取り出す
 - サーバーの `notifications/tools/list_changed`(リソース・プロンプトも同様)を受けたら、次の要求の先頭の user 側メッセージに「追加・削除されたツール」の注記を足す。tools と system は変えない
 - 削除済み・未接続のツールを `McpCall` で呼んだら、エラーの結果を返す(例外にしない)
 - 入力は、XHarness では「オブジェクトであること」と、Schema の `required` の最上位キーがあることだけを確認し、詳しい検証はサーバーに任せる
-- サーバーのツール説明・結果・リソースは**信用しない外部コンテンツ**として扱い、WebFetch と同じ注記を付ける。結果は `maxOutputTokens` を超えたら切り詰め、切り詰めたことを書く。最初は text と埋め込みテキストリソースだけを渡し、画像などは「未対応の種類」と書いて省く
+- workflow の classify / plan 段階では、`McpCall` は書き込みと同じく使えない(計画の承認前に副作用を起こさないため)。`McpSearch` は使える
+- サーバーのツール説明・結果・リソースは**信用しない外部コンテンツ**として扱い、WebFetch と同じ注記を付ける。結果は 28,000 文字を超えたら切り詰め、切り詰めたことを書く(ツール共通の上限 30,000 文字より先に)。最初は text と埋め込みテキストリソースだけを渡し、画像などは「未対応の種類」と書いて省く
 - レシートには表示用に実際の名前 `mcp__<server>__<tool>` を使い、入出力は既存のマスクを通す
 
 ### 25.5 権限
@@ -1459,7 +1461,7 @@ web:
 - 既定は ask。「常に許可」は、そのワークスペースのローカルルールに `{tool: "mcp__<server>__<tool>", decision: "allow"}` を保存する。ルールでは `mcp__<server>` と `mcp__<server>__*` をサーバー全体として扱う
 - deny / ask ルールは常に優先(Phase 4 の権限ルールと同じ)。モード `acceptEdits` でも MCP は自動許可しない(副作用が分からないため)。`plan` モードでは `McpCall` を拒否する(リソースの読み取りは可)
 - サーバーの `readOnlyHint` などの注釈は表示のヒントにだけ使い、許可の判断には使わない
-- 子エージェント: worker は親と同じ判定。explorer / reviewer は「読み取り専用」なので、allow ルールに一致しない `McpCall` / `ReadMcpResource` は毎回 ask(「常に許可」は保存できるが、その子の実行中に自動で広げない)
+- 子エージェント: 窓口ツールは定義の `tools` に書かなくても公開し、親と同じ接続を使う。判定は親と同じ(MCP は既定で ask のため、explorer / reviewer でも allow ルールに一致しない呼び出しは毎回確認になる)。確認画面には子の名前を付ける
 
 ### 25.6 プロンプト
 
@@ -1493,4 +1495,10 @@ web:
 
 - `test/fixtures/mcp/` に、Node で書いた小さな stdio の試験用サーバー(ツール・リソース・プロンプト・`list_changed` を返す)を置く。HTTP と OAuth は、テスト内で起こすローカルのサーバーで確認する。外部の MCP サーバーには接続しない(クラウドでも実行できる)
 - 実装前に確認して記録すること(AGENTS.md「推測で埋めない」): 対応する MCP 仕様の版、`initialize` の内容、Claude Code の `.mcp.json` の細かい形式と変数展開の規則、`McpCall` の Schema(入れ子の任意オブジェクト)を Codex の関数定義として受け付けるか(fixture で確認)
-- **要確認(ユーザー)**: 公式の MCP TypeScript SDK(`@modelcontextprotocol/sdk`)を使うか。AGENTS.md の「SDK を使わない」はサブスクの OAuth で API を呼ぶための規則で、MCP には当てはまらない。使えば通信・OAuth の実装と保守が大きく減る。使わない場合は JSON-RPC・Streamable HTTP・OAuth を自前で実装する
+- **決定(ユーザー確認 2026-10-02)**: 公式の MCP TypeScript SDK(`@modelcontextprotocol/sdk`、1.31.0)を使う。AGENTS.md の「SDK を使わない」はサブスクの OAuth でモデルの API を呼ぶための規則で、MCP には当てはまらない。対応する MCP 仕様の版は SDK の `LATEST_PROTOCOL_VERSION`(1.31.0 では 2025-11-25)。exe には node_modules を入れないので、SDK は main のバンドルに含める
+
+### 25.11 実装状況(2026-10-02、クラウド・実 API なし)
+
+M1 を実装した: `.mcp.json` の読み込みと変数展開(`src/main/mcp/config.ts`)、承認の保存(`approvals.ts`)、stdio と Streamable HTTP(OAuth なし。401 は「要認可」として使えない状態)の接続と `tools/list`・`tools/call`(`manager.ts`)、`McpSearch` / `McpCall`(`src/main/tools/mcp.ts`)、権限(`mcp__<server>__<tool>` への正規化、サーバー全体のルール、plan / 読み取り専用での拒否、acceptEdits で自動許可しない)、画面と headless での承認・接続・終了時の停止、子エージェントへの公開。試験用 stdio サーバーで、接続・呼び出し・stderr のマスク・失敗と時間切れ・プロセスの後片付け・セッションでの承認と「常に許可」・tools が途中で変わらないことを確認した。
+
+未実装: リソース・プロンプト・`list_changed` の注記(M2)、OAuth(M3)、`/mcp` の画面と承認の取り消し(M4)。手元(Windows)で未確認: `npx` で起動するサーバーとプロセスツリーの停止(`taskkill /T`)、パッケージ後の exe での接続。

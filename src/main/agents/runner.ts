@@ -1,3 +1,4 @@
+import { traceOperation } from "../core/trace.js";
 import { randomUUID } from "node:crypto";
 import { join, relative, isAbsolute } from "node:path";
 import { resolveModel } from "../config/config.js";
@@ -92,6 +93,30 @@ export class ChildRunner {
       files: worker?.files,
       branch: (await gitInfo(cwd)).branch,
     };
+    return traceOperation(
+      "delegation",
+      name,
+      {
+        childId: context.id,
+        prompt,
+        model: choice.model,
+        tools: definition.tools,
+      },
+      () =>
+        this.runChild(context, choice, definition, prompt, cwd, signal, worker),
+      { agentId: context.id },
+    );
+  }
+  private async runChild(
+    context: ChildContext,
+    choice: NonNullable<ReturnType<typeof resolveModel>>,
+    definition: AgentDefinition,
+    prompt: string,
+    cwd: string,
+    signal: AbortSignal,
+    worker?: { files: string[]; reportTool: ToolRegistry },
+  ) {
+    const name = context.name;
     const clean = this.options.redact ?? ((text: string) => text);
     const home = join(this.options.home, "agents", this.options.parentId);
     const store = new SessionStore(home);
@@ -217,7 +242,10 @@ export class ChildRunner {
             };
           },
           messages: [
-            { role: "user", content: [{ type: "text", text: clean(prompt) }] },
+            {
+              role: "user",
+              content: [{ type: "text", text: clean(prompt) }],
+            },
           ],
           tools,
           permission: (call, signal) =>

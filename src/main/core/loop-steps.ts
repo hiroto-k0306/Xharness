@@ -1,3 +1,4 @@
+import { traceOperation } from "./trace.js";
 import { type ContentBlock } from "./types.js";
 import { type ProviderEvent } from "../providers/provider.js";
 import { messagesForProvider } from "./messages.js";
@@ -279,7 +280,13 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
               const invalid = await item.tool.validate(item.call.input);
               item.result = invalid
                 ? { content: invalid, isError: true }
-                : await item.tool.execute(item.call.input, signal);
+                : await traceOperation(
+                    "tool",
+                    item.call.name,
+                    item.call.input,
+                    () => item.tool!.execute(item.call.input, signal),
+                    { callId: item.call.id },
+                  );
             } catch {
               item.result = {
                 content: signal.aborted

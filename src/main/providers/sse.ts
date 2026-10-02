@@ -1,3 +1,4 @@
+import { captureTraceResponse } from "../core/trace.js";
 export interface SseEvent {
   event: string;
   data: string;
@@ -36,7 +37,10 @@ export async function* readSse(response: Response): AsyncGenerator<SseEvent> {
         buffer[index] === "\r" && buffer[index + 1] === "\n" ? 2 : 1;
       const result = line(buffer.slice(0, index));
       buffer = buffer.slice(index + width);
-      if (result) yield result;
+      if (result) {
+        captureTraceResponse(result);
+        yield result;
+      }
     }
   };
   let complete = false;

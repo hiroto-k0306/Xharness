@@ -1,3 +1,4 @@
+import { withSessionTrace } from "../core/trace.js";
 // 設定に関するコマンド: 権限モード、既定モデル(config.yaml の main)、/compact。
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -91,18 +92,29 @@ export async function compactNow(
   rt.status = "running";
   ctx.options.emit({ type: "turn", sessionId, status: "running" });
   try {
-    const result = await prepareProviderHistory(rt.messages, {
-      provider,
-      model: session.model,
-      signal: abort.signal,
-      system:
-        rt.system ??
-        (await systemPrompt(ctx, session.cwd, !session.workspaceId, rt.config)),
-      tools: [...(rt.tools?.values() ?? [])].map((t) => t.spec),
-      checkpoint: rt.checkpoint,
-      threshold: 0.8,
-      force: true,
-    });
+    const result = await withSessionTrace(
+      ctx.options.home,
+      sessionId,
+      ctx.clean,
+      async () =>
+        prepareProviderHistory(rt.messages, {
+          provider,
+          model: session.model,
+          signal: abort.signal,
+          system:
+            rt.system ??
+            (await systemPrompt(
+              ctx,
+              session.cwd,
+              !session.workspaceId,
+              rt.config,
+            )),
+          tools: [...(rt.tools?.values() ?? [])].map((t) => t.spec),
+          checkpoint: rt.checkpoint,
+          threshold: 0.8,
+          force: true,
+        }),
+    );
     if (result.checkpoint) {
       rt.checkpoint = result.checkpoint;
       await file.write(result.checkpoint);

@@ -1,40 +1,19 @@
-MCP クライアント(DESIGN.md §25、M1〜M4)の手元確認。main(b3229c6 以降)から作業し、手元の Windows で次の確認をしてください。コードの修正は、確認で不具合が見つかった場合だけ行ってください。結果は新しく docs/mcp-progress.md に記録してください。
+設計にこのアプリ自体の改善機能があるか？
+・メモリエンジニアリング
+・プロンプトエンジニアリング
+・ハーネスエンジニアリング
 
-0. 前提
-   ・確認用の home は XHARNESS_HOME で .out/mcp-check 配下に分け、通常の設定・履歴・ワークスペースを変えないこと。
-   ・確認用のワークスペースは、リポジトリ外の新しいフォルダ(例: D:\AIwork\xh-mcp-ws)にし、アプリで信頼する。
-   ・秘密値・トークン・認証ヘッダを、記録・ログ・コミットに残さないこと。
+その他改善案
+・5時間制限時の自動再開機能
+・選択モデルのレビュー基準に使用トークン量を入れる（同じ品質ならよりトークン使用量が少ない方が優秀）
+・Anthoropicなどの公式スキルは使える？
+・他セッション同士での会話
+・同プロジェクト内の他セッションの履歴確認
+・コンピュータUSE機能（GPTベースがよいか）
 
-1. テスト(実通信0回)
-   ・pnpm install --frozen-lockfile、pnpm test(PowerShell 依存を含めて全件、スキップ 0 を期待)、pnpm typecheck / pnpm lint / pnpm format:check / pnpm build / pnpm build:headless。
 
-2. stdio のサーバー(npx。モデルへの送信0回)
-   ・ワークスペースに次の .mcp.json を置く:
-     {"mcpServers":{"everything":{"command":"npx","args":["-y","@modelcontextprotocol/server-everything"]}}}
-   ・pnpm package で作った portable exe を、リポジトリ外にコピーして起動する(dev ではなく、パッケージ後の exe で確認する)。
-   ・新しいセッションで /mcp を送り、次を確認する。
-     ・承認の確認が出ること
-     ・「常に許可」の後、接続中になり、ツール・リソース・プロンプトの数が出ること
-     ・モデルには送られないこと(レシートが増えない)
-   ・入力欄で /mcp__ と打ち、プロンプトの補完候補(引数の形・説明つき)が出ること。Tab で入ること。
-   ・/mcp のボタンで「再接続」「承認を取り消す」を試し、状態が変わること。取り消し後の「接続」で承認を尋ね直すこと。
-   ・プロセスの後片付け: 接続中にタスクマネージャー(または Get-CimInstance Win32_Process)で、npx・node の子プロセスを記録する。セッションを閉じた後とアプリの終了後に、それらが残っていないこと(taskkill /T によるプロセスツリーの停止)。
-   ・~/.xharness(確認用 home)の logs/mcp/ に、サーバーの stderr がマスクされて書かれていること。
-   ・不正な .mcp.json(sse 指定、未定義の ${VAR}、名前に __)で、警告が出てそのサーバーだけが無効になること。
 
-3. モデルからの利用(上限: Claude 3回・Codex 0回。ユーザー承認済みの場合のみ実施)
-   ・Haiku のセッションで、「MCP の everything サーバーの echo ツールで "hi" を返して。McpSearch で調べてから McpCall で呼んで」と1回送る。
-   ・McpSearch は確認なしで動くこと、McpCall は初回に確認が出ること、「常に許可」の後は同じツールで確認が出ないことを記録する。
-   ・送信回数と各要求の HTTP ステータスを記録する。2回目以降の要求で tools と system が変わらないことは、レシートの入力で確認する。
 
-4. OAuth(モデルへの送信0回)
-   (a) SDK 同梱の試験用サーバー: 別の PowerShell で
-       node node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/simpleStreamableHttp.js --oauth
-       を起動し、.mcp.json に {"mcpServers":{"demo":{"type":"http","url":"http://localhost:3000/mcp"}}} を書く。
-       既定のブラウザが開いて認可され、接続中になること / アプリ再起動後にブラウザが開かないこと /
-       確認用 home の secrets/mcp-oauth.json に平文のトークンが無いこと(中身は記録しない) /
-       /mcp のログアウトで要認可になることを確認する。
-   (b) ユーザーが Linear のアカウントを用意した場合のみ: https://mcp.linear.app/mcp/readonly で同じ確認をする。
-       書き込みのツールは呼ばない。用意が無ければ「未確認」と記録する。
-
-5. 結果を docs/mcp-progress.md に記録してください(各確認の結果、送信回数、未確認のもの、見つけた不具合と修正)。画面の見た目で気になる点(/mcp の表示、補完候補の位置や色)があれば、スクリーンショットの説明として書いてください(秘密値が写っていないものだけ)。
+いるか微妙
+・コンテキスト圧縮を規定回数で別セッションへ自動引継ぎ
+・ユーザーとの会話は日本語、LLMとのやり取りは英語

@@ -257,6 +257,7 @@ export type UiEvent =
 export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
+  | { type: "export_report"; sessionId: string }
   | {
       type: "plan_response";
       sessionId: string;
@@ -406,6 +407,10 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
             sessionId: c.sessionId,
             mode: c.mode as "default" | "acceptEdits" | "plan",
           }
+        : undefined;
+    case "export_report":
+      return str(c.sessionId) && /^[\w-]{1,512}$/.test(c.sessionId)
+        ? { type: "export_report", sessionId: c.sessionId }
         : undefined;
     case "close_session":
       return str(c.sessionId)

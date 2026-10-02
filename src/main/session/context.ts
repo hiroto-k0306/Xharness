@@ -38,6 +38,7 @@ import {
 
 export interface Host {
   pickFolder(): Promise<string | undefined>;
+  saveReport?(filename: string): Promise<string | undefined>;
 }
 export interface ControllerOptions {
   cliModel?: string;

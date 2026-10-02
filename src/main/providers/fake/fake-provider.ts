@@ -1,3 +1,4 @@
+import { traceStream } from "../../core/trace.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -173,6 +174,17 @@ export class FakeProvider implements Provider {
     ) as FixtureFile;
   }
   async *stream(
+    request: ProviderRequest,
+    signal: AbortSignal,
+  ): AsyncGenerator<ProviderEvent> {
+    yield* traceStream(
+      this.id,
+      { internal: request },
+      this.events(request, signal),
+      true,
+    );
+  }
+  private async *events(
     request: ProviderRequest,
     signal: AbortSignal,
   ): AsyncGenerator<ProviderEvent> {

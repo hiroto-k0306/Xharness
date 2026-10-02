@@ -1,3 +1,4 @@
+import { withSessionTrace } from "../core/trace.js";
 import { type LoopOptions, runTurn } from "../core/loop.js";
 import { planItemsSchema } from "./plan-schema.js";
 import { type Tool, type ToolRegistry } from "../tools/registry.js";
@@ -551,6 +552,14 @@ export class WorkflowRuntime {
     return result;
   }
   async run(options: LoopOptions, signal: AbortSignal) {
+    return withSessionTrace(
+      this.options.home,
+      this.options.parentId,
+      this.options.redact ?? ((s) => s),
+      () => this.runTraced(options, signal),
+    );
+  }
+  private async runTraced(options: LoopOptions, signal: AbortSignal) {
     if (!this.initialized) {
       try {
         if ((await gitInfo(this.options.cwd)).git)

@@ -1,3 +1,4 @@
+import { traceOperation } from "../core/trace.js";
 import { type Message, type ToolSpec } from "../core/types.js";
 import { type Provider } from "../providers/provider.js";
 import {
@@ -59,7 +60,12 @@ export async function prepareProviderHistory(
   if (options.skipCompaction && !options.force)
     return uncompacted("compaction already failed in this turn");
   try {
-    return await compactNow(messages, options, checkpoint, tokens);
+    return await traceOperation(
+      "tool",
+      "履歴圧縮",
+      { model: options.model },
+      () => compactNow(messages, options, checkpoint, tokens),
+    );
   } catch (error) {
     // 手動の /compact と中断は呼び出し元へ伝える。自動圧縮は、まだ収まるなら圧縮せずに続ける
     // (公式: 要約が得られなくても会話は続けられ、後で再圧縮すればよい)

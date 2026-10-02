@@ -1,3 +1,4 @@
+import { traceStream, captureTraceResponse } from "../../core/trace.js";
 import { readClaudeAccessToken } from "../../auth/claude-oauth.js";
 import {
   type Provider,
@@ -33,17 +34,29 @@ export class ClaudeAdapter implements Provider {
     request: ProviderRequest,
     signal: AbortSignal,
   ): AsyncGenerator<ProviderEvent> {
+    yield* traceStream(
+      "claude",
+      { internal: request },
+      this.events(request, signal),
+    );
+  }
+  private async *events(
+    request: ProviderRequest,
+    signal: AbortSignal,
+  ): AsyncGenerator<ProviderEvent> {
     let stage: "request" | "authentication" | "transport" | "protocol" =
       "request";
     try {
       signal.throwIfAborted();
       const body = JSON.stringify(toClaudeRequest(request));
+      captureTraceResponse({ requestBody: body });
       stage = "authentication";
       const token = await (
         this.options.getAccessToken ?? readClaudeAccessToken
       )();
       signal.throwIfAborted();
       stage = "transport";
+      captureTraceResponse({ requestDispatched: true });
       const response = await (this.options.fetcher ?? fetch)(
         "https://api.anthropic.com/v1/messages",
         {
@@ -65,6 +78,7 @@ export class ClaudeAdapter implements Provider {
           body,
         },
       );
+      captureTraceResponse({ httpStatus: response.status });
       const quota = claudeUsage(response.headers);
       if (quota.windows.some((w) => w.usedPercent !== undefined))
         yield { type: "usage", provider: "claude", ...quota };

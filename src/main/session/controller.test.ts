@@ -65,6 +65,30 @@ const idle = (id: string) =>
   events.some(
     (e) => e.type === "turn" && e.sessionId === id && e.status === "idle",
   );
+it("exports an idle session through the host save dialog and handles cancellation", async () => {
+  const output = join(home, "report.html");
+  const saveReport = vi.fn(async () => output as string | undefined);
+  const c = make(undefined, { saveReport });
+  await c.init();
+  const created = await c.handle({ type: "new_session", workspaceId: null });
+  if (!created.ok || !created.sessionId)
+    throw new Error("Session was not created");
+  await c.handle({ type: "send", sessionId: created.sessionId, text: "hello" });
+  await until(() => idle(created.sessionId!));
+  expect(
+    await c.handle({ type: "export_report", sessionId: created.sessionId }),
+  ).toEqual({ ok: true });
+  expect(saveReport).toHaveBeenCalledOnce();
+  expect(await readFile(output, "utf8")).toContain("hello");
+  saveReport.mockResolvedValueOnce(undefined);
+  expect(
+    await c.handle({ type: "export_report", sessionId: created.sessionId }),
+  ).toEqual({ ok: false, error: "cancelled" });
+  expect(
+    await c.handle({ type: "export_report", sessionId: "missing" }),
+  ).toEqual({ ok: false, error: "Unknown session" });
+  await c.shutdown();
+});
 const lastState = () =>
   [...events].reverse().find((e) => e.type === "state") as Extract<
     UiEvent,

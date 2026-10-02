@@ -76,10 +76,20 @@ export function LoopFlow({
     </aside>
   );
 }
-export function Receipts({ receipts = [] }: { receipts?: Receipt[] }) {
+export function Receipts({
+  receipts = [],
+  sessionId,
+  running = false,
+}: {
+  receipts?: Receipt[];
+  sessionId?: string;
+  running?: boolean;
+}) {
   const [selected, setSelected] = useState<Receipt>();
   const [replay, setReplay] = useState<ReceiptReplay>();
   const [replayError, setReplayError] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
   useEffect(() => {
     const close = (e: KeyboardEvent) => {
       if (e.key === "Escape") setSelected(undefined);
@@ -91,6 +101,36 @@ export function Receipts({ receipts = [] }: { receipts?: Receipt[] }) {
     <section className={styles.receipts} aria-label="receipts">
       <div className={styles.heading}>
         receipts · {receipts.length}
+        {sessionId && (
+          <button
+            className={styles.replayButton}
+            disabled={running || exporting}
+            onClick={async () => {
+              setExporting(true);
+              setExportStatus("");
+              try {
+                const result = await window.harness.command({
+                  type: "export_report",
+                  sessionId,
+                });
+                setExportStatus(
+                  result.ok
+                    ? "HTMLを保存しました"
+                    : result.error === "cancelled"
+                      ? ""
+                      : result.error,
+                );
+              } catch {
+                setExportStatus("レポートを保存できませんでした");
+              } finally {
+                setExporting(false);
+              }
+            }}
+          >
+            HTML出力
+          </button>
+        )}
+        {exportStatus && <span role="status">{exportStatus}</span>}
         <button
           className={styles.replayButton}
           disabled={!receipts.length}

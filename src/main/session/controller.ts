@@ -34,6 +34,7 @@ import {
   restoreWorktree,
 } from "./worktree-commands.js";
 import { emitMcpState, MCP_COMMAND } from "./mcp-session.js";
+import { exportExecutionReport } from "./report.js";
 
 export { defaultTools } from "./context.js";
 export type { ControllerOptions, Host } from "./context.js";
@@ -249,6 +250,34 @@ export class SessionController {
           );
         case "close_session":
           return await this.closeSession(command.sessionId);
+        case "export_report": {
+          if (!this.sessions.get(command.sessionId))
+            return { ok: false, error: "Unknown session" };
+          const rt = this.runtimes.get(command.sessionId);
+          if (rt && rt.status !== "idle")
+            return {
+              ok: false,
+              error: "実行終了後にレポートを出力してください",
+            };
+          const path = await this.options.host.saveReport?.(
+            `xharness-${command.sessionId}-${Date.now()}.html`,
+          );
+          if (!path) return { ok: false, error: "cancelled" };
+          // A turn may start while the native save dialog is open.
+          const currentRuntime = this.runtimes.get(command.sessionId);
+          if (currentRuntime && currentRuntime.status !== "idle")
+            return {
+              ok: false,
+              error: "実行終了後にレポートを出力してください",
+            };
+          await exportExecutionReport(
+            this.options.home,
+            command.sessionId,
+            path,
+            this.ctx.clean,
+          );
+          return { ok: true };
+        }
         case "send":
           return this.send(command.sessionId, command.text);
         case "abort": {

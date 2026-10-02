@@ -384,7 +384,7 @@ interface Rule { tool: string; pattern?: string; decision: Decision }
 ### 10.2 Task ツール
 
 ```ts
-Task({ description, prompt, agent: "explorer" | "reviewer" | string, model?: string })
+Task({ description, prompt, agent: "explorer" | "reviewer" | string, model?: string, background?: boolean })
 ```
 
 - 子は**新しい Session**(親の履歴は引き継がず、prompt のみ)。最終テキストだけを親へ tool_result として返す
@@ -399,6 +399,15 @@ agents:
 
 - worker はハーネスが計画に従って起動する(§21)。main が Task で worker を直接起動することはしない
 - 書き込みができるのは main と worker。worker は**それぞれ専用の worktree** で作業するので、同じファイルへの同時書き込みは起きない(統合はハーネスが行う。§21.4)
+
+### 10.3 バックグラウンドの子エージェント（2026-10-02、ユーザー承認）
+
+- `background: true` は待たずに `taskId` を返す。対象は既存の Task と同じ調査・レビュー用の子。worker の割り当て・統合は引き続き §21 が管理する。
+- main は `TaskList({})` で一覧、`TaskOutput({taskId, wait?, timeoutSec?})` で状態・最終結果、`TaskStop({taskId})` で個別停止を行う。待機は既定30秒、最大60秒。タイムアウト時は現在の状態を返す。
+- 同時実行3件、親の1ターンにつき作成32件まで。IDは当該親ターンだけで有効。子から別の子や他の親のタスクを操作できない。
+- 親の終了・中断では実行中の子を中断し、承認待ちの解放と保存が終わるまで待つ。結果が必要な子は親の終了前に TaskOutput で回収する。
+- 状態は `running / done / stopped / awaiting_user / error`。停止・質問待ちは完了扱いにせず、理由・質問を親へ返す。子の質問は親がユーザーへ取り次ぐ。返答後の子の再委託は新しい Task とする。
+- 子の索引は同じ親の ChildRunner 内で共有し、並列起動・保存で別の子の記録を消さない。
 
 ---
 
@@ -1153,6 +1162,12 @@ workflow:
 - plan/implementのend_turnに対する継続指示は、段階・計画項目の状態・reviewRound・差分を比較する。同じ状態のend_turnが3回続いたらworkflow_stalledで停止し、ユーザーの新しい入力を待つ。未レビューの作業を完了扱いにはしない。
 - 実行中・承認待ちに「停止」ボタンを表示し、既存abortと同じ経路で実行・子・承認待ちを中断する。`/stop`と、単独の「停止」「停止して」「中断」「中断して」（先頭の「一旦」は任意）・「止めて」（末尾の句点・感嘆符は任意）もLLMへ送らず直接停止する。文中の「停止」は停止コマンドと解釈しない。
 - ツールの失敗は固定メッセージでCLI不足・ファイル不存在・アクセス拒否・時間切れ・中断を区別する。例外の生メッセージや秘密値はモデル・画面・レポートへ転送しない。経緯と検証はdocs/bugs/2026-10-02-workflow-loop.mdに記録する。
+
+### 20.7 明示的な停止・質問ツール（2026-10-02、ユーザー承認）
+
+Claude・Codex共通で main / 子に `StopTask({reason})` と `AskUserQuestion({question, options?})` を公開する。前者は理由付き停止、後者は質問を表示して入力欄からの返答を待つ。どちらも現在のターンを閉じ、次のLLM通信を行わない。同じ応答内の他ツールは実行せず、対応するエラー結果でIDを閉じる。一般の応答テキストに停止という語があってもこの動作にはしない。
+
+理由・質問は会話とレシートへ記録し、未完了の実装・レビュー状態は維持する。セッションを永久に閉じる操作ではなく、ユーザーの次の入力で続けられる。options は任意の2〜5件の候補で、入力欄で番号・文章のどちらでも返答できる。
 
 ---
 

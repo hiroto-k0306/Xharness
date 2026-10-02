@@ -24,7 +24,10 @@ export class ClaudeAdapter implements Provider {
       "claude-haiku-4-5-20251001",
       "claude-opus-5-5",
       "claude-sonnet-5-5",
-    ].map((id) => ({ id, contextTokens: id.startsWith("claude-haiku") ? 200000 : 1000000 }));
+    ].map((id) => ({
+      id,
+      contextTokens: id.startsWith("claude-haiku") ? 200000 : 1000000,
+    }));
   }
   async *stream(
     request: ProviderRequest,
@@ -57,7 +60,8 @@ export class ClaudeAdapter implements Provider {
         },
       );
       const quota = claudeUsage(response.headers);
-      if (quota.windows.some((w) => w.usedPercent !== undefined)) yield { type: "usage", provider: "claude", ...quota };
+      if (quota.windows.some((w) => w.usedPercent !== undefined))
+        yield { type: "usage", provider: "claude", ...quota };
       if (!response.ok) {
         await response.body?.cancel();
         if (response.status === 429) {

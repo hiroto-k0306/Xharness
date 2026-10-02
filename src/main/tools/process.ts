@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { ToolExecutionError } from "./errors.js";
 
 export async function runProcess(
   command: string,
@@ -52,9 +53,21 @@ export async function runProcess(
       clearTimeout(timer);
       signal.removeEventListener("abort", stop);
     };
-    child.on("error", () => {
+    child.on("error", (error: NodeJS.ErrnoException) => {
       cleanup();
-      reject(new Error("Process could not start"));
+      reject(
+        new ToolExecutionError(
+          error.code === "ENOENT"
+            ? command === "rg"
+              ? "ripgrep（rg）が見つかりません。インストールしてアプリを再起動してください。"
+              : command === "pwsh"
+                ? "PowerShell 7（pwsh）が見つかりません。インストールしてアプリを再起動してください。"
+                : "実行するプログラムが見つかりません。"
+            : error.code === "EACCES" || error.code === "EPERM"
+              ? "プログラムを起動する権限がありません。"
+              : "プログラムを起動できませんでした。",
+        ),
+      );
     });
     child.on("close", (code) => {
       cleanup();
@@ -65,7 +78,11 @@ export async function runProcess(
             ? head + tail.slice(30000 - total)
             : head + "\n… output truncated …\n" + tail;
       resolve({
-        output: stopped ? "Process aborted or timed out\n" + output : output,
+        output: stopped
+          ? (signal.aborted
+              ? "ユーザーの操作で中断しました。\n"
+              : "実行時間の上限に達しました。\n") + output
+          : output,
         isError: stopped || code !== 0,
         exitCode: code,
         stopped,

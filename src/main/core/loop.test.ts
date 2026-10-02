@@ -62,6 +62,19 @@ function setup(responses: ProviderEvent[][]) {
   return { options, requests, executions: () => executions };
 }
 describe("six-step agent loop", () => {
+  it("returns a safe file-not-found reason instead of leaking exception text", async () => {
+    const { options } = setup([[completion(true)], [completion()]]);
+    options.tools.get("Read")!.execute = async () => {
+      throw Object.assign(new Error("synthetic-sensitive-content"), {
+        code: "ENOENT",
+      });
+    };
+    const result = await runTurn(options, new AbortController().signal);
+    expect(JSON.stringify(result.messages)).toContain("存在しません");
+    expect(JSON.stringify(result.messages)).not.toContain(
+      "synthetic-sensitive-content",
+    );
+  });
   it("only appends history and preserves thinking on the next model call", async () => {
     const toolMessage = completion(true) as Extract<
       ProviderEvent,

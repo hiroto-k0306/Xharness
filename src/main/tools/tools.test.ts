@@ -152,7 +152,7 @@ describe("PowerShell and ripgrep tools", () => {
           signal(),
         );
       expect(output.isError).toBe(true);
-      expect(output.content).toContain("timed out");
+      expect(output.content).toContain("実行時間の上限");
     },
     10000,
   );

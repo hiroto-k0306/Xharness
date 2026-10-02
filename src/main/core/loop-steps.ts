@@ -3,6 +3,7 @@ import { type ContentBlock } from "./types.js";
 import { type ProviderEvent } from "../providers/provider.js";
 import { messagesForProvider } from "./messages.js";
 import { trimOutput } from "../tools/registry.js";
+import { toolFailure } from "../tools/errors.js";
 import {
   type LoopContext,
   type LoopOptions,
@@ -287,11 +288,11 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
                     () => item.tool!.execute(item.call.input, signal),
                     { callId: item.call.id },
                   );
-            } catch {
+            } catch (error) {
               item.result = {
                 content: signal.aborted
                   ? "Interrupted by user"
-                  : "Tool execution failed",
+                  : toolFailure(error),
                 isError: true,
               };
             }

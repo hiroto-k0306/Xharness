@@ -237,6 +237,8 @@ export async function runSessionTurn(
         web,
         events,
       });
+    // 自動圧縮に失敗したら、このターンでは再試行しない(次のターンで再試行する)
+    let compactionFailure: string | undefined;
     const result = await rt.workflow!.run(
       {
         prepareContext: options.phase4
@@ -253,6 +255,7 @@ export async function runSessionTurn(
                 tools:
                   context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
                 checkpoint: rt.checkpoint,
+                skipCompaction: !!compactionFailure,
                 limit,
                 threshold: rt.config?.context.compactThreshold ?? 0.8,
                 overhead:
@@ -276,6 +279,19 @@ export async function runSessionTurn(
                   kind: "compact",
                   durationMs: 0,
                   summary: `Compacted ${prepared.checkpoint.covered} older messages`,
+                });
+              }
+              if (prepared.failure && !compactionFailure) {
+                compactionFailure = prepared.failure;
+                emit({
+                  type: "notice",
+                  sessionId,
+                  tone: "warn",
+                  message: clean(
+                    prepared.fits
+                      ? `履歴の自動圧縮ができなかったため、圧縮せずに続けます(${route.model}: ${prepared.failure})。次のターンで再試行します`
+                      : `履歴の自動圧縮ができず、コンテキスト上限を超えるため停止します(${route.model}: ${prepared.failure})`,
+                  ),
                 });
               }
               return {

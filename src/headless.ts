@@ -432,6 +432,7 @@ export async function headless(args = process.argv.slice(2)) {
             ),
         });
       }
+      let compactionFailure: string | undefined;
       const result = await workflow.run(
         {
           provider: router.provider(model),
@@ -444,6 +445,7 @@ export async function headless(args = process.argv.slice(2)) {
               system: context?.system ?? system,
               tools: context?.tools ?? [...tools.values()].map((t) => t.spec),
               checkpoint,
+              skipCompaction: !!compactionFailure,
               limit: route.provider.models().find((m) => m.id === route.model)
                 ?.contextTokens,
               threshold: project.context.compactThreshold,
@@ -457,6 +459,12 @@ export async function headless(args = process.argv.slice(2)) {
             if (prepared.compacted && prepared.checkpoint) {
               checkpoint = prepared.checkpoint;
               await checkpointFile().write(checkpoint);
+            }
+            if (prepared.failure && !compactionFailure) {
+              compactionFailure = prepared.failure;
+              process.stdout.write(
+                `\nAuto-compaction skipped (${route.model}): ${clean(prepared.failure)}\n`,
+              );
             }
             return {
               messages: prepared.messages,

@@ -174,6 +174,8 @@ export class ChildRunner {
         this.options.onEvent?.(context, { type: "receipt", receipt: r });
       });
       let checkpoint: Checkpoint | undefined;
+      // 自動圧縮に失敗したら、このターンでは再試行せず、収まる間は圧縮せずに続ける
+      let compactionFailed = false;
       const result = await runTurn(
         {
           provider: this.options.router.provider(choice.model),
@@ -192,6 +194,7 @@ export class ChildRunner {
               model: route.model,
               signal,
               checkpoint,
+              skipCompaction: compactionFailed,
               system: loopContext?.system ?? system,
               tools:
                 loopContext?.tools ?? [...tools.values()].map((t) => t.spec),
@@ -205,6 +208,7 @@ export class ChildRunner {
               threshold: project.context.compactThreshold,
             });
             checkpoint = prepared.checkpoint;
+            if (prepared.failure) compactionFailed = true;
             return {
               messages: prepared.messages,
               ...(!prepared.fits ? { stop: "context_overflow" } : {}),

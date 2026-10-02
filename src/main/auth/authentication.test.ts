@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { Authentication, credentialStatus } from "./authentication.js";
+import { type LoginResult } from "./cli-login.js";
 import { type AuthenticationView } from "../../shared/ipc.js";
 
 it("reports missing, malformed, expired and available credentials without exposing or changing them", async () => {
@@ -59,7 +60,7 @@ function setup(approved = true) {
       ): Promise<AuthenticationView> => ({ provider, status }),
     ),
     confirm: vi.fn(async () => approved),
-    launch: vi.fn(async () => {
+    launch: vi.fn(async (): Promise<LoginResult> => {
       status = "available";
       return true;
     }),
@@ -79,6 +80,25 @@ it("checks startup status without launching a CLI and cancellation leaves creden
   expect(auth.snapshot()).toEqual(initial);
   expect(auth.isBusy()).toBe(false);
 });
+it.each(["shell_missing", "cli_missing", "launch_failed"] as const)(
+  "reports %s as a fixed actionable error even when old credentials exist",
+  async (failure) => {
+    const { auth, options } = setup();
+    await auth.refresh();
+    await auth.authenticate("claude");
+    options.launch.mockResolvedValueOnce(failure);
+    await auth.authenticate("claude");
+    const view = auth.snapshot().find((v) => v.provider === "claude");
+    expect(view?.status).toBe("error");
+    expect(view?.message).toContain(
+      failure === "shell_missing"
+        ? "PowerShell 7（pwsh）が見つかりません"
+        : failure === "cli_missing"
+          ? "Claudeの公式CLIが見つかりません"
+          : "操作画面を開けません",
+    );
+  },
+);
 it("launches only after consent, rereads credentials and refreshes masking secrets", async () => {
   const { auth, options } = setup();
   await auth.refresh();

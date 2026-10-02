@@ -54,19 +54,24 @@ export function AuthenticationPanel({
         </button>
       </div>
       {views.map((v) => (
-        <div key={v.provider} className={styles.row}>
+        <div key={v.provider} className={styles.row} data-status={v.status}>
           <span>
             {v.provider === "claude" ? "Claude" : "Codex"} · {labels[v.status]}
           </span>
           {v.status !== "available" && (
             <button
+              className={styles.authorize}
               disabled={busy}
               onClick={() => void run("authenticate", v.provider)}
             >
               {v.provider === "claude" ? "Claude" : "Codex"}の認証・更新を許可
             </button>
           )}
-          {v.message && <span role="status">{v.message}</span>}
+          {v.message && (
+            <span className={styles.message} role="status">
+              {v.message}
+            </span>
+          )}
         </div>
       ))}
       {views.some((v) => v.status !== "available") && (

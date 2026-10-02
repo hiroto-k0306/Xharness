@@ -2,6 +2,9 @@ import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { type ProviderName } from "../../shared/ipc.js";
 
+export type LoginResult =
+  boolean | "shell_missing" | "cli_missing" | "launch_failed";
+
 /** Fixed commands only; authentication runs in its own interactive console. */
 export function loginScript(provider: ProviderName) {
   const command =
@@ -10,13 +13,13 @@ export function loginScript(provider: ProviderName) {
       : "& (Get-Command codex -CommandType Application -ErrorAction Stop).Source login";
   const inner = `$ErrorActionPreference = 'Stop'; try { ${command}; exit $LASTEXITCODE } catch { Write-Host '公式CLIが見つかりません。インストールを確認してください。'; Read-Host 'Enterで閉じる'; exit 1 }`;
   const encoded = Buffer.from(inner, "utf16le").toString("base64");
-  return `$ErrorActionPreference = 'Stop'; try { $p = Start-Process -FilePath (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source -WorkingDirectory $HOME -ArgumentList @('-NoLogo','-NoProfile','-EncodedCommand','${encoded}') -PassThru -Wait; exit $p.ExitCode } catch { exit 1 }`;
+  return `$ErrorActionPreference = 'Stop'; if (!(Get-Command ${provider} -CommandType Application -ErrorAction SilentlyContinue)) { exit 20 }; try { $p = Start-Process -FilePath (Get-Command pwsh -CommandType Application -ErrorAction Stop).Source -WorkingDirectory $HOME -ArgumentList @('-NoLogo','-NoProfile','-EncodedCommand','${encoded}') -PassThru -Wait; if ($p.ExitCode -eq 0) { exit 0 }; exit 1 } catch { exit 21 }`;
 }
 
 export function launchOfficialLogin(
   provider: ProviderName,
   env = process.env,
-): Promise<boolean> {
+): Promise<LoginResult> {
   if (process.platform !== "win32") return Promise.resolve(false);
   return new Promise((resolve) => {
     const child = spawn(
@@ -34,8 +37,18 @@ export function launchOfficialLogin(
         stdio: "ignore",
       },
     );
-    child.once("error", () => resolve(false));
-    child.once("close", (code) => resolve(code === 0));
+    child.once("error", (error: NodeJS.ErrnoException) =>
+      resolve(error.code === "ENOENT" ? "shell_missing" : "launch_failed"),
+    );
+    child.once("close", (code) =>
+      resolve(
+        code === 20
+          ? "cli_missing"
+          : code === 21
+            ? "launch_failed"
+            : code === 0,
+      ),
+    );
     child.unref();
   });
 }

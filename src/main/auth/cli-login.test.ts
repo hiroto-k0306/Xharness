@@ -6,6 +6,25 @@ import { expect, it } from "vitest";
 import { launchOfficialLogin } from "./cli-login.js";
 
 it.skipIf(process.platform !== "win32")(
+  "distinguishes a missing PowerShell from a missing official CLI without starting login",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "xh-login-missing-"));
+    expect(
+      await launchOfficialLogin("claude", { ...process.env, PATH: dir }),
+    ).toBe("shell_missing");
+    const pwsh = execFileSync("where.exe", ["pwsh"], { encoding: "utf8" })
+      .trim()
+      .split(/\r?\n/)[0]!;
+    expect(
+      await launchOfficialLogin("claude", {
+        ...process.env,
+        PATH: dirname(pwsh),
+      }),
+    ).toBe("cli_missing");
+  },
+);
+
+it.skipIf(process.platform !== "win32")(
   "launches fixed login commands through PowerShell without using real credentials or CLIs",
   async () => {
     const dir = await mkdtemp(join(tmpdir(), "xh-login-cli-"));

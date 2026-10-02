@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { type LoginResult } from "./cli-login.js";
 import {
   type AuthenticationView,
   type ProviderName,
@@ -57,7 +58,7 @@ export async function credentialStatus(
 export interface AuthenticationOptions {
   read?(provider: ProviderName): Promise<AuthenticationView>;
   confirm(provider: ProviderName): Promise<boolean>;
-  launch(provider: ProviderName): Promise<boolean>;
+  launch(provider: ProviderName): Promise<LoginResult>;
   refreshSecrets(): Promise<void>;
   changed(): void;
 }
@@ -133,13 +134,21 @@ export class Authentication {
       const view = await (this.options.read ?? credentialStatus)(provider);
       await this.options.refreshSecrets();
       this.update(
-        success && view.status === "available"
+        success === true && view.status === "available"
           ? view
           : {
               provider,
               status: "error",
               message:
-                "認証が完了しませんでした。公式CLIのインストール・ログイン結果を確認して再試行してください。",
+                success === "shell_missing"
+                  ? "PowerShell 7（pwsh）が見つかりません。インストールしてXHarnessを再起動してください。"
+                  : success === "cli_missing"
+                    ? `${provider === "claude" ? "Claude" : "Codex"}の公式CLIが見つかりません。インストールしてXHarnessを再起動してください。`
+                    : success === "launch_failed"
+                      ? "公式CLIの操作画面を開けませんでした。PowerShell 7の起動を確認してください。"
+                      : success === true
+                        ? "公式CLIは終了しましたが、有効な資格情報を確認できませんでした。ログイン結果を確認してください。"
+                        : "公式CLIのログインが完了しませんでした。CLI画面の案内を確認して再試行してください。",
             },
       );
     } catch {

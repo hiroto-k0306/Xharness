@@ -43,14 +43,12 @@ it("returns summaries only, upgrades HTTP, and caches by URL and prompt for fift
 });
 it("does not summarize or request a redirect destination and never returns raw text on a summary failure", async () => {
   const summarize = vi.fn().mockRejectedValue(new Error("failure"));
-  const fetcher = vi
-    .fn<typeof fetch>()
-    .mockResolvedValue(
-      new Response(null, {
-        status: 302,
-        headers: { location: "https://other.example/" },
-      }),
-    );
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+    new Response(null, {
+      status: 302,
+      headers: { location: "https://other.example/" },
+    }),
+  );
   const tool = webFetchTool({
     lookup: async () => [{ address: "93.184.215.14", family: 4 }],
     fetcher,
@@ -93,13 +91,11 @@ it.each(["claude", "codex"] as const)(
     // The page fetch itself is isolated by a mocked global fetch, adapter traffic uses its own injected fetcher.
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue(
-          new Response("Example Domain", {
-            headers: { "content-type": "text/plain" },
-          }),
-        ),
+      vi.fn().mockResolvedValue(
+        new Response("Example Domain", {
+          headers: { "content-type": "text/plain" },
+        }),
+      ),
     );
     try {
       const tool = new Map(webTools(() => provider, "live", false)).get(

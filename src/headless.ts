@@ -179,7 +179,7 @@ export async function headless(args = process.argv.slice(2)) {
   // --fake は通信も資格情報の読み取りも行わない。
   const secrets = fake ? [] : await readLocalSecrets();
   const clean = (text: string) => redact(text, secrets);
-  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7. Tool dates use ISO 8601. Respect project instructions.`;
+  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7 and already runs in this working directory, so do not prefix commands with cd or Set-Location. Tool dates use ISO 8601. Respect project instructions.`;
   system +=
     "\n\n" + clean(await projectMemory(home, cwd, project.context.memoryFiles));
   const workspaces = new WorkspaceStore(home);

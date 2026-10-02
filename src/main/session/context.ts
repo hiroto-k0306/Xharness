@@ -86,6 +86,8 @@ export interface Runtime {
   };
   always: Set<string>;
   tools?: ToolRegistry;
+  /** セッションで最初に組み立てた system prompt(preserved thinking のため途中で変えない) */
+  system?: string;
   webSignature?: string;
   receiptSeq: number;
   messageSeq: number;

@@ -95,12 +95,9 @@ export async function compactNow(
       provider,
       model: session.model,
       signal: abort.signal,
-      system: await systemPrompt(
-        ctx,
-        session.cwd,
-        !session.workspaceId,
-        rt.config,
-      ),
+      system:
+        rt.system ??
+        (await systemPrompt(ctx, session.cwd, !session.workspaceId, rt.config)),
       tools: [...(rt.tools?.values() ?? [])].map((t) => t.spec),
       checkpoint: rt.checkpoint,
       threshold: 0.8,

@@ -33,7 +33,7 @@ export async function systemPrompt(
   scratch = false,
   config?: ProjectConfig,
 ): Promise<string> {
-  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7. Tool dates use ISO 8601. Respect project instructions. Reply in Japanese unless asked otherwise.`;
+  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7 and already runs in this working directory, so do not prefix commands with cd or Set-Location. Tool dates use ISO 8601. Respect project instructions. Reply in Japanese unless asked otherwise.`;
   if (config)
     return (
       system +
@@ -216,12 +216,15 @@ export async function runSessionTurn(
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);
-    const system = await systemPrompt(
+    // preserved thinking: system は過去の thinking の前提として検査されるため、
+    // セッションの最初に決めたら変えない(途中で AGENTS.md が編集されても次のセッションから反映)
+    rt.system ??= await systemPrompt(
       ctx,
       session.cwd,
       !session.workspaceId,
       rt.config,
     );
+    const system = rt.system;
     const agentConfig = await loadAgentConfig(
       options.home,
       session.workspaceId ? session.cwd : undefined,

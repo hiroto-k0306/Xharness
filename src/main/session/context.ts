@@ -18,6 +18,7 @@ import { type McpOAuth, type SecretStore } from "../mcp/oauth.js";
 import { type McpApprovals } from "../mcp/approvals.js";
 import { type McpServerConfig } from "../mcp/config.js";
 import { shellSearchTools } from "../tools/shell-search.js";
+import { lifecycleTools } from "../tools/lifecycle.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
 import {
@@ -171,6 +172,9 @@ export interface ControllerContext {
 }
 
 export const STOP_NOTICE: Record<string, string> = {
+  agent_stopped:
+    "エージェントの要求で停止しました。再開する場合は新しい指示を入力してください。",
+  awaiting_user: "ユーザーの返答待ちです。入力欄から回答してください。",
   workflow_stalled:
     "作業状態が変わらないまま継続指示が繰り返されたため停止しました。依頼内容・対象フォルダ・失敗したツールを確認してから再開してください。",
   plan_validation_failed:
@@ -275,7 +279,11 @@ export function checkpointFile(home: string, id: string) {
 
 export function defaultTools(cwd: string, readOnly: boolean): ToolRegistry {
   const access = new FileAccess(cwd);
-  const all = new Map([...fileTools(access), ...shellSearchTools(cwd)]);
+  const all = new Map([
+    ...fileTools(access),
+    ...shellSearchTools(cwd),
+    ...lifecycleTools(),
+  ]);
   if (!readOnly) return all;
   // 読み取り専用で開いたセッションは plan 相当: 書き込み系ツールを渡さない(§9.1, §18.2)
   return new Map([...all].filter(([, tool]) => tool.readOnly));

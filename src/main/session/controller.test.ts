@@ -385,7 +385,13 @@ describe("SessionController", () => {
     expect(all).toEqual(
       expect.arrayContaining(["Read", "Write", "Edit", "Bash"]),
     );
-    expect([...ro.keys()].sort()).toEqual(["Glob", "Grep", "Read"]);
+    expect([...ro.keys()].sort()).toEqual([
+      "AskUserQuestion",
+      "Glob",
+      "Grep",
+      "Read",
+      "StopTask",
+    ]);
     expect([...ro.values()].every((t) => t.readOnly)).toBe(true);
   });
   it("rejects send for unknown sessions, double sends, unknown models, and a cancelled picker", async () => {

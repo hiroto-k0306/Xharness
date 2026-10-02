@@ -6,10 +6,13 @@ export interface ToolCall {
   input: unknown;
 }
 export interface ToolOutput {
+  stop?: { reason: "agent_stopped" | "awaiting_user"; message: string };
   content: string;
   isError?: boolean;
 }
 export interface Tool {
+  /** Local lifecycle operation: execute before any other call in the response. */
+  control?: boolean;
   spec: ToolSpec;
   readOnly: boolean;
   validate(input: unknown): Promise<string | undefined>;

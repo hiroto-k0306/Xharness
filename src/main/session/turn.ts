@@ -530,7 +530,9 @@ async function finishTurn(
   )
     ctx.options.authentication?.reject(events.activeProvider);
   if (notice && stopCause !== "aborted")
-    emit({ type: "error", sessionId, message: notice });
+    if (["agent_stopped", "awaiting_user"].includes(stopCause))
+      emit({ type: "notice", sessionId, tone: "dim", message: notice });
+    else emit({ type: "error", sessionId, message: notice });
   emit({ type: "turn", sessionId, status: "idle", stopCause });
   if (rt.closing) ctx.dropRuntime(sessionId);
   await ctx.emitState();

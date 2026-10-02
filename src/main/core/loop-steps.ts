@@ -247,6 +247,14 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
     gate: {
       name: "gate",
       async run(ctx, signal) {
+        const control = ctx.pending.find(
+          (item) => item.tool?.control && !item.error,
+        );
+        if (control) {
+          signal.throwIfAborted();
+          control.allowed = true;
+          return { kind: "next", to: "act" };
+        }
         for (const item of ctx.pending) {
           if (item.error) continue;
           signal.throwIfAborted();
@@ -267,7 +275,7 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
           });
           if (ctx.stopCause) {
             item.result = {
-              content: "Stopped after consecutive errors",
+              content: "作業が停止したため、このツールは実行しませんでした。",
               isError: true,
             };
             return;
@@ -288,6 +296,8 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
                     () => item.tool!.execute(item.call.input, signal),
                     { callId: item.call.id },
                   );
+              if (item.result.stop && !item.result.isError)
+                ctx.stopCause = item.result.stop.reason;
             } catch (error) {
               item.result = {
                 content: signal.aborted
@@ -299,6 +309,21 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
           countError(ctx, item);
         };
         let batch: PendingCall[] = [];
+        const control = ctx.pending.find(
+          (item) => item.tool?.control && !item.error && item.allowed,
+        );
+        if (control) {
+          await execute(control);
+          // Always close sibling tool IDs without performing their side effects.
+          for (const item of ctx.pending.filter((item) => item !== control)) {
+            item.result = {
+              content:
+                "停止・質問の要求が優先されたため、このツールは実行しませんでした。",
+              isError: true,
+            };
+          }
+          return { kind: "next", to: "receipt" };
+        }
         for (const item of ctx.pending) {
           if (item.tool?.readOnly) batch.push(item);
           else {
@@ -316,6 +341,16 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
       async run(ctx, signal) {
         if (signal.aborted) ctx.stopCause = "aborted";
         appendResults(ctx, options);
+        const notice = ctx.pending.find((item) => item.result?.stop)?.result
+          ?.stop;
+        if (notice && !ctx.recorded) {
+          const text = (options.redact ?? ((s: string) => s))(notice.message);
+          ctx.messages.push({
+            role: "assistant",
+            content: [{ type: "text", text }],
+          });
+          options.onEvent?.({ type: "text_delta", text });
+        }
         if (!ctx.recorded) {
           const completedAt = new Date().toISOString();
           const entries: Receipt[] = [

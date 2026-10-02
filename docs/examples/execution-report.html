@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"
+    />
+    <title>XHarness 実行レポート</title>
+    <style>
+      body {
+        margin: 0;
+        background: #10151f;
+        color: #e5eaf2;
+        font:
+          15px/1.7 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 1100px;
+        margin: auto;
+        padding: 32px;
+      }
+      h1,
+      h2,
+      h3 {
+        line-height: 1.4;
+      }
+      h2 {
+        margin-top: 44px;
+      }
+      a {
+        color: #99c9ff;
+      }
+      nav {
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      article {
+        border: 1px solid #354052;
+        border-left: 4px solid #7892ac;
+        border-radius: 8px;
+        margin: 16px 0;
+        padding: 18px;
+      }
+      .model {
+        border-left-color: #ab9bff;
+      }
+      details {
+        background: #192231;
+        border-radius: 5px;
+        margin: 10px 0;
+        padding: 10px;
+      }
+      summary {
+        cursor: pointer;
+      }
+      pre {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font: 13px/1.6 monospace;
+      }
+      .meta,
+      .note {
+        color: #bac7d8;
+      }
+      .steps {
+        padding: 14px;
+        background: #192231;
+      }
+      @media print {
+        body {
+          background: white;
+          color: black;
+        }
+        details,
+        .steps {
+          background: #eee;
+        }
+        article {
+          break-inside: avoid;
+        }
+        .meta,
+        .note {
+          color: #444;
+        }
+      }
+      @media (max-width: 600px) {
+        main {
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>XHarness 実行レポート</h1>
+      <p>セッション：haiku-read · 出力日時：2026-10-02T07:15:46.066Z</p>
+      <p class="steps">
+        1 context：入力構築 → 2 model：LLM → 3 tool_use：検証 → 4 gate：権限 → 5
+        act：実行・委託 → 6 receipt：記録
+      </p>
+      <p class="note">
+        保存済みデータの表示です。STEP説明は設計上の役割で、STEPごとの実測時系列ではありません。各エージェント内はレシートの保存順です。時刻・所要時間は保存値であり、通信開始時刻や通信単独の時間とは限りません。入力は
+        API
+        変換前の内部共通形式、応答は組み立て後の内部共通形式です。HTTP本文・生のSSE・再試行ごとの通信・補助LLM通信は網羅していません。圧縮やWeb要約、子の実行中にもLLM通信が発生し得ます。未記録の処理は復元しません。暗号化reasoningと署名は伏せています。
+      </p>
+      <nav><a href="#agent-0">親 haiku-read</a></nav>
+      <section id="agent-0">
+        <h2>親セッション · haiku-read</h2>
+        <p>記録 3 件 · 不正な記録の除外 0 件</p>
+        <details>
+          <summary>
+            保存会話（ユーザー入力・ツール結果・応答／子の依頼）
+          </summary>
+          <pre>[]</pre>
+        </details>
+        <article class="model">
+          <h3>#6 · claude-haiku-4-5-20251001</h3>
+          <p>STEP 2 · モデル呼び出しの記録</p>
+          <p class="meta">2026-10-01T23:20:53.182Z · claude · 899 ms</p>
+          <p>claude-haiku-4-5-20251001: tool_use</p>
+          <details>
+            <summary>LLM入力（内部共通形式：system・履歴・ツール定義）</summary>
+            <pre>
+{
+  &quot;sessionId&quot;: &quot;haiku-read&quot;,
+  &quot;model&quot;: &quot;claude-haiku-4-5-20251001&quot;,
+  &quot;system&quot;: &quot;You are explorer. Work in &lt;workspace&gt;. You have no parent conversation history. Never launch child agents. Read-only investigation/review. Do not modify files. Return only your final report.\nProject instructions:\n&quot;,
+  &quot;messages&quot;: [
+    {
+      &quot;role&quot;: &quot;user&quot;,
+      &quot;content&quot;: [
+        {
+          &quot;type&quot;: &quot;text&quot;,
+          &quot;text&quot;: &quot;Read a.txt with Read exactly once. Return its contents. Do not call other tools.&quot;
+        }
+      ]
+    }
+  ],
+  &quot;tools&quot;: [
+    {
+      &quot;name&quot;: &quot;Read&quot;,
+      &quot;description&quot;: &quot;Read a UTF-8 file before editing it&quot;,
+      &quot;inputSchema&quot;: {
+        &quot;type&quot;: &quot;object&quot;,
+        &quot;properties&quot;: {
+          &quot;path&quot;: {
+            &quot;type&quot;: &quot;string&quot;
+          }
+        },
+        &quot;required&quot;: [
+          &quot;path&quot;
+        ],
+        &quot;additionalProperties&quot;: false
+      }
+    }
+  ]
+}</pre>
+          </details>
+          <details>
+            <summary>LLM応答（内部共通形式）</summary>
+            <pre>
+{
+  &quot;role&quot;: &quot;assistant&quot;,
+  &quot;content&quot;: [
+    {
+      &quot;type&quot;: &quot;tool_use&quot;,
+      &quot;id&quot;: &quot;toolu_01FtRWy7jNfwwsZnHv9frTGN&quot;,
+      &quot;name&quot;: &quot;Read&quot;,
+      &quot;input&quot;: {
+        &quot;path&quot;: &quot;D:/AIwork/Xharness/.out/phase6-auth-work/a.txt&quot;
+      }
+    }
+  ],
+  &quot;meta&quot;: {
+    &quot;provider&quot;: &quot;claude&quot;,
+    &quot;model&quot;: &quot;claude-haiku-4-5-20251001&quot;,
+    &quot;usage&quot;: {
+      &quot;inputTokens&quot;: 659,
+      &quot;outputTokens&quot;: 73,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 0
+    }
+  }
+}</pre>
+          </details>
+        </article>
+        <article class="harness">
+          <h3>#7 · Read</h3>
+          <p>STEP 3–5 · 検証・権限・ツール実行の結果</p>
+          <p class="meta">2026-10-01T23:20:53.182Z · harness · 899 ms</p>
+          <p>Read: allow</p>
+          <details>
+            <summary>入力・委託内容</summary>
+            <pre>
+{
+  &quot;path&quot;: &quot;D:/AIwork/Xharness/.out/phase6-auth-work/a.txt&quot;
+}</pre>
+          </details>
+          <details>
+            <summary>出力・返却結果</summary>
+            <pre>
+{
+  &quot;path&quot;: &quot;d:\\aiwork\\xharness\\.out\\phase6-auth-work\\a.txt&quot;,
+  &quot;modifiedAt&quot;: &quot;2026-10-01T23:20:52.265Z&quot;,
+  &quot;content&quot;: &quot;local read check\n&quot;
+}</pre>
+          </details>
+        </article>
+        <article class="model">
+          <h3>#11 · claude-haiku-4-5-20251001</h3>
+          <p>STEP 2 · モデル呼び出しの記録</p>
+          <p class="meta">2026-10-01T23:20:53.771Z · claude · 589 ms</p>
+          <p>claude-haiku-4-5-20251001: end_turn</p>
+          <details>
+            <summary>LLM入力（内部共通形式：system・履歴・ツール定義）</summary>
+            <pre>
+{
+  &quot;sessionId&quot;: &quot;haiku-read&quot;,
+  &quot;model&quot;: &quot;claude-haiku-4-5-20251001&quot;,
+  &quot;system&quot;: &quot;You are explorer. Work in &lt;workspace&gt;. You have no parent conversation history. Never launch child agents. Read-only investigation/review. Do not modify files. Return only your final report.\nProject instructions:\n&quot;,
+  &quot;messages&quot;: [
+    {
+      &quot;role&quot;: &quot;user&quot;,
+      &quot;content&quot;: [
+        {
+          &quot;type&quot;: &quot;text&quot;,
+          &quot;text&quot;: &quot;Read a.txt with Read exactly once. Return its contents. Do not call other tools.&quot;
+        }
+      ]
+    },
+    {
+      &quot;role&quot;: &quot;assistant&quot;,
+      &quot;content&quot;: [
+        {
+          &quot;type&quot;: &quot;tool_use&quot;,
+          &quot;id&quot;: &quot;toolu_01FtRWy7jNfwwsZnHv9frTGN&quot;,
+          &quot;name&quot;: &quot;Read&quot;,
+          &quot;input&quot;: {
+            &quot;path&quot;: &quot;D:/AIwork/Xharness/.out/phase6-auth-work/a.txt&quot;
+          }
+        }
+      ],
+      &quot;meta&quot;: {
+        &quot;provider&quot;: &quot;claude&quot;,
+        &quot;model&quot;: &quot;claude-haiku-4-5-20251001&quot;,
+        &quot;usage&quot;: {
+          &quot;inputTokens&quot;: 659,
+          &quot;outputTokens&quot;: 73,
+          &quot;cacheReadTokens&quot;: 0,
+          &quot;cacheWriteTokens&quot;: 0
+        }
+      }
+    },
+    {
+      &quot;role&quot;: &quot;user&quot;,
+      &quot;content&quot;: [
+        {
+          &quot;type&quot;: &quot;tool_result&quot;,
+          &quot;toolUseId&quot;: &quot;toolu_01FtRWy7jNfwwsZnHv9frTGN&quot;,
+          &quot;content&quot;: &quot;{\&quot;path\&quot;:\&quot;d:\\\\aiwork\\\\xharness\\\\.out\\\\phase6-auth-work\\\\a.txt\&quot;,\&quot;modifiedAt\&quot;:\&quot;2026-10-01T23:20:52.265Z\&quot;,\&quot;content\&quot;:\&quot;local read check\\n\&quot;}&quot;
+        }
+      ]
+    }
+  ],
+  &quot;tools&quot;: [
+    {
+      &quot;name&quot;: &quot;Read&quot;,
+      &quot;description&quot;: &quot;Read a UTF-8 file before editing it&quot;,
+      &quot;inputSchema&quot;: {
+        &quot;type&quot;: &quot;object&quot;,
+        &quot;properties&quot;: {
+          &quot;path&quot;: {
+            &quot;type&quot;: &quot;string&quot;
+          }
+        },
+        &quot;required&quot;: [
+          &quot;path&quot;
+        ],
+        &quot;additionalProperties&quot;: false
+      }
+    }
+  ]
+}</pre>
+          </details>
+          <details>
+            <summary>LLM応答（内部共通形式）</summary>
+            <pre>
+{
+  &quot;role&quot;: &quot;assistant&quot;,
+  &quot;content&quot;: [
+    {
+      &quot;type&quot;: &quot;text&quot;,
+      &quot;text&quot;: &quot;The contents of a.txt:\n\n```\nlocal read check\n\n```&quot;
+    }
+  ],
+  &quot;meta&quot;: {
+    &quot;provider&quot;: &quot;claude&quot;,
+    &quot;model&quot;: &quot;claude-haiku-4-5-20251001&quot;,
+    &quot;usage&quot;: {
+      &quot;inputTokens&quot;: 798,
+      &quot;outputTokens&quot;: 18,
+      &quot;cacheReadTokens&quot;: 0,
+      &quot;cacheWriteTokens&quot;: 0
+    }
+  }
+}</pre>
+          </details>
+        </article>
+      </section>
+    </main>
+  </body>
+</html>

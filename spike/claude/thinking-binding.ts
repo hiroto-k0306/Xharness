@@ -17,7 +17,9 @@ import { join, resolve } from "node:path";
 import { loadAgentConfig } from "../../src/main/agents/definitions.js";
 import { prepareProviderHistory } from "../../src/main/context/provider-compactor.js";
 import { Router } from "../../src/main/core/router.js";
-import { type Message } from "../../src/main/core/types.js";
+import { type Message, type ToolSpec } from "../../src/main/core/types.js";
+import { readLocalSecrets } from "../../src/main/auth/local-secrets.js";
+import { redact } from "../../src/main/core/redact.js";
 import { ClaudeAdapter } from "../../src/main/providers/claude/adapter.js";
 import { defaultTools } from "../../src/main/session/context.js";
 import { WorkflowRuntime } from "../../src/main/workflow/runtime.js";
@@ -44,6 +46,7 @@ export function bindingFetcher(
   options: {
     fetcher?: typeof fetch;
     reserve?: () => Promise<number>;
+    record?: (entry: Sent) => Promise<void>;
   } = {},
 ): typeof fetch {
   const reserve =
@@ -85,6 +88,7 @@ export function bindingFetcher(
       }
     }
     sent.push(entry);
+    await options.record?.(entry);
     return response;
   };
 }
@@ -106,9 +110,23 @@ export async function main(
     return;
   }
   const sent: Sent[] = [];
+  const report: Record<string, unknown> = { model: MODEL, sent, passed: false };
+  const secrets = test.fetcher ? [] : await readLocalSecrets();
+  const save = async () => {
+    if (test.fetcher) return;
+    const out = resolve("spike", ".out", "thinking-binding.json");
+    await mkdir(resolve("spike", ".out"), { recursive: true });
+    await writeFile(out, redact(JSON.stringify(report, null, 2), secrets));
+  };
   let step = "a-workflow";
   const provider = new ClaudeAdapter({
-    fetcher: bindingFetcher(sent, () => step, test),
+    fetcher: bindingFetcher(sent, () => step, {
+      ...test,
+      record: async (entry) => {
+        if (entry.error) entry.error = redact(entry.error, secrets);
+        await save();
+      },
+    }),
     ...(test.getAccessToken ? { getAccessToken: test.getAccessToken } : {}),
   });
   const home = await mkdtemp(join(tmpdir(), "xh-binding-home-"));
@@ -126,7 +144,7 @@ export async function main(
     permission: async () => false,
     approve: async () => false,
   });
-  const report: Record<string, unknown> = { model: MODEL, sent };
+  let boundContext: { system: string; tools: ToolSpec[] } | undefined;
   // (a) classify で SkipPlan を呼ばせ、implement に移った次の要求で前の thinking を返す
   const result = await runtime.run(
     {
@@ -149,6 +167,10 @@ export async function main(
       tools: defaultTools(cwd, false),
       permission: async () => false,
       maxRounds: 2,
+      prepareContext: async (messages, _route, _signal, context) => {
+        boundContext = context;
+        return { messages };
+      },
     },
     new AbortController().signal,
   );
@@ -167,35 +189,40 @@ export async function main(
       .filter((b) => b.type === "reasoning").length,
   };
   // (b) 完了した会話をサーバー側で圧縮し、ブロックを先頭にして続ける
-  const tools = [...defaultTools(cwd, false).values()].map((t) => t.spec);
+  const tools = boundContext?.tools ?? [];
   if (sent.length < LIMIT && sent.every((s) => s.status === 200)) {
-    step = "b-compact";
-    const system = "You are a coding agent. Keep every reply under 10 words.";
-    const compacted = await prepareProviderHistory(result.messages, {
-      provider,
-      model: MODEL,
-      system,
-      tools,
-      threshold: 0.8,
-      force: true,
-      signal: AbortSignal.timeout(120000),
-    });
-    step = "b-continue";
-    const messages: Message[] = [
-      ...compacted.messages,
-      { role: "user", content: [{ type: "text", text: 'Reply "ok".' }] },
-    ];
-    let stopReason: string | undefined;
-    for await (const event of provider.stream(
-      { model: MODEL, system, tools, messages, maxOutputTokens: 256 },
-      AbortSignal.timeout(120000),
-    ))
-      if (event.type === "message_done") stopReason = event.stopReason;
-    report.compaction = {
-      compacted: compacted.compacted,
-      blockFirst: compacted.messages[0]?.content[0]?.type === "compaction",
-      continuationStopReason: stopReason,
-    };
+    try {
+      step = "b-compact";
+      const system = boundContext?.system ?? "";
+      const compacted = await prepareProviderHistory(result.messages, {
+        provider,
+        model: MODEL,
+        system,
+        tools,
+        threshold: 0.8,
+        force: true,
+        signal: AbortSignal.timeout(120000),
+      });
+      step = "b-continue";
+      const messages: Message[] = [
+        ...compacted.messages,
+        { role: "user", content: [{ type: "text", text: 'Reply "ok".' }] },
+      ];
+      let stopReason: string | undefined;
+      for await (const event of provider.stream(
+        { model: MODEL, system, tools, messages, maxOutputTokens: 256 },
+        AbortSignal.timeout(120000),
+      ))
+        if (event.type === "message_done") stopReason = event.stopReason;
+      report.compaction = {
+        compacted: compacted.compacted,
+        blockFirst: compacted.messages[0]?.content[0]?.type === "compaction",
+        continuationStopReason: stopReason,
+      };
+    } catch {
+      report.compaction =
+        "failed (see recorded HTTP statuses; original history retained)";
+    }
   } else
     report.compaction = "skipped (an earlier request failed or budget used)";
   report.passed =
@@ -204,11 +231,7 @@ export async function main(
     sent.every((s) => s.status === 200) &&
     (report.compaction as { continuationStopReason?: string })
       ?.continuationStopReason !== undefined;
-  if (!test.fetcher) {
-    const out = resolve("spike", ".out", "thinking-binding.json");
-    await mkdir(resolve("spike", ".out"), { recursive: true });
-    await writeFile(out, JSON.stringify(report, null, 2));
-  }
+  await save();
   console.log(JSON.stringify(report, null, 2));
   if (!report.passed) process.exitCode = 1;
   return report;

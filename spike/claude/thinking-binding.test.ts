@@ -67,6 +67,27 @@ describe("thinking-binding check fetcher", () => {
     await expect(wrapped("u", { body: "{}" })).rejects.toThrow("exhausted");
     expect(fetcher).not.toHaveBeenCalled();
   });
+  it("records the safe status immediately, before a later compaction can fail", async () => {
+    const record = vi.fn().mockResolvedValue(undefined);
+    const wrapped = bindingFetcher([], () => "b-compact", {
+      fetcher: vi.fn<typeof fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: { message: "messages.1.content.0: prefix mismatch" },
+          }),
+          { status: 400 },
+        ),
+      ),
+      reserve: async () => 1,
+      record,
+    });
+    await wrapped("u", { body: "{}" });
+    expect(record).toHaveBeenCalledWith({
+      step: "b-compact",
+      status: 400,
+      error: "messages.1.content.0: prefix mismatch",
+    });
+  });
   it("refuses to run without --yes", async () => {
     const { main } = await import("./thinking-binding.js");
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -210,6 +231,10 @@ it("dry-runs the whole check offline: phase switch, compaction, continuation in 
   expect(JSON.stringify(bodies[1]!.messages)).toContain('"signature":"sig"');
   // 圧縮要求と、ブロックを先頭にした継続
   expect(bodies[2]!.compaction).toEqual({ type: "summarize" });
+  expect(bodies[2]!.system).toEqual(bodies[1]!.system);
+  expect(bodies[2]!.tools).toEqual(bodies[1]!.tools);
+  expect(bodies[3]!.system).toEqual(bodies[2]!.system);
+  expect(bodies[3]!.tools).toEqual(bodies[2]!.tools);
   const first = (bodies[3]!.messages as { content: { type: string }[] }[])[0]!;
   expect(first.content[0]!.type).toBe("compaction");
   for (const body of bodies)

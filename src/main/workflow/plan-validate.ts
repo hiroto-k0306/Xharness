@@ -86,7 +86,9 @@ export function validatePlan(
       !nonempty(candidate.assignee.reason) ||
       !isEffort(candidate.assignee.effort)
     ) {
-      errors.push("計画項目の形式が不正です");
+      errors.push(
+        "計画項目には id/title/instructions/acceptance/files/dependsOn と、assignee: {agent: main|worker, model, effort, reason} が必要です。assignee は文字列ではなくオブジェクトです",
+      );
       continue;
     }
     items.push(candidate as unknown as PlanItem);

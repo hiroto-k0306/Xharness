@@ -1,4 +1,5 @@
 import { type LoopOptions, runTurn } from "../core/loop.js";
+import { planItemsSchema } from "./plan-schema.js";
 import { type Tool, type ToolRegistry } from "../tools/registry.js";
 import { type ChildOptions, ChildRunner } from "../agents/runner.js";
 import { type AgentConfig } from "../agents/definitions.js";
@@ -315,7 +316,7 @@ export class WorkflowRuntime {
         this.tool(
           "SubmitPlan",
           {
-            items: { type: "array", items: { type: "object" } },
+            items: planItemsSchema,
             notes: { type: "string" },
           },
           ["items", "notes"],
@@ -598,9 +599,19 @@ export class WorkflowRuntime {
       redact: options.redact,
       onReceipt: (receipt) => options.onEvent?.({ type: "receipt", receipt }),
     });
+    let invalidPlanAttempts = 0;
     return runTurn(
       {
         ...options,
+        onEvent: (event) => {
+          if (
+            event.type === "receipt" &&
+            event.receipt.tool === "SubmitPlan" &&
+            event.receipt.decision === "error"
+          )
+            invalidPlanAttempts++;
+          options.onEvent?.(event);
+        },
         router: options.router ?? this.options.router,
         current,
         onFallback: async (route) => {
@@ -667,6 +678,8 @@ export class WorkflowRuntime {
           const existing = await options.afterStep?.(step, ctx, signal);
           if (existing?.kind === "stop" || existing?.kind === "block")
             return existing;
+          if (step === "receipt" && invalidPlanAttempts >= 3)
+            return { kind: "stop", reason: "plan_validation_failed" };
           let extra = [shell, existing]
             .flatMap((r) => (r?.kind === "inject" ? [r.message] : []))
             .join("\n");

@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "id": "fix-add",
+      "title": "sum.js の add を修正して既存テストを通す",
+      "assignee": "main",
+      "model": "claude:opus",
+      "effort": "high",
+      "files": [
+        "sum.js"
+      ],
+      "verification": "node sum.test.js",
+      "review": {
+        "reviewer": "codex:gpt-6.1-sol",
+        "target": "actual diff"
+      }
+    }
+  ],
+  "notes": "sum.js のみ編集。Web/Task は使用しない。テスト実行後に RequestReview（Codex Sol が実際の diff をレビュー）。"
+}

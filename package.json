@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format:check": "prettier --check .",
+    "report:demo": "tsx scripts/report-demo.ts",
     "headless": "tsx src/headless.ts",
     "build:headless": "tsc --noEmit false --rootDir src --outDir dist --incremental false --project tsconfig.headless.json",
     "spike:claude:creds": "tsx spike/claude/c1-creds.ts",

@@ -1,0 +1,20 @@
+.panel {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.heading,
+.row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+}
+.heading {
+  justify-content: space-between;
+}
+.panel p {
+  margin: 4px 0;
+  color: var(--dim);
+}

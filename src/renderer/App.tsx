@@ -1,5 +1,6 @@
 import { STEP_NODES } from "../shared/ipc.js";
 import { AgentsPanel } from "./components/AgentsPanel.js";
+import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
 import { PhaseBar } from "./components/PhaseBar.js";
 import { ModelPicker } from "./components/ModelPicker.js";
 import { PlanApproval } from "./components/PlanApproval.js";
@@ -183,6 +184,21 @@ export function App() {
           />
         )}
         <main className={styles.content}>
+          {!app.fake && app.authentication && (
+            <AuthenticationPanel
+              views={app.authentication}
+              disabled={app.sessions.some(
+                (session) => session.status !== "idle",
+              )}
+              command={(type, provider) =>
+                window.harness.command(
+                  type === "authenticate" && provider
+                    ? { type, provider }
+                    : { type: "refresh_auth" },
+                )
+              }
+            />
+          )}
           {session?.worktree && (
             <div>
               <span>worktree · {session.worktree.branch} </span>

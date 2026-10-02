@@ -1589,7 +1589,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 
 ---
 
-## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1実装済み）
+## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3実装済み）
 
 実アプリの試用（docs/bugs/2026-10-02-workflow-loop.md）後のレビューで挙がった不足機能。優先度の高・中・低の順に実装する。各単位は AGENTS.md の作業ルール（1コミット1目的）で小さく区切り、前の優先度の単位を検証してから次へ進む。
 
@@ -1601,7 +1601,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 ### 26.1 優先度: 高
 
 **H1. TodoWrite（軽量な進捗リスト）**
-- 実装・検証結果は [docs/h1-progress.md](docs/h1-progress.md)。H3以降は未着手。
+- 実装・検証結果は [docs/h1-progress.md](docs/h1-progress.md)。
 - `TodoWrite({todos: [{content, status: "pending"|"in_progress"|"completed"}]})` を全文置換で受け取る。副作用はなく、権限は常に allow。
 - §20 のタスク段階・計画項目（SubmitPlan）とは独立。ワークフローの状態・レビュー要件・差分判定に影響しない。「提案のみ」「小さな多段作業」ではこれだけで進捗を管理できる。
 - 検証: Claude Code に合わせ、件数・文字数の上限は設けない。in_progress は同時に1件までをツール説明で指示し、複数でも拒否せず受け付ける。形式（status の値・content が空でない）の違反だけ修正可能なエラーで返す。リストは会話欄とレシートに表示し、セッション履歴に保存して再開で復元する。子エージェントは自分の分を持ち、親には混ぜない。
@@ -1614,6 +1614,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - 同じツール・同じ種別の失敗が同一ターンで3回続いたら、継続せず AskUserQuestion 相当でユーザーへ取り次ぐ（`workflow_stalled` と同様に、未完了の作業は完了扱いにしない）。
 
 **H3. Bash のバックグラウンド実行**
+- 実装・検証結果は [docs/h3-progress.md](docs/h3-progress.md)。H4以降は未着手。
 - `Bash` に `run_in_background: true` を追加する。起動すると `shellId` を返し、待たない。`BashOutput({shellId, wait?, timeoutSec?})`（前回以降の出力と状態。待機は最大60秒）と `KillShell({shellId})` を新設する。
 - 同時実行は5件まで（Claude Code に件数の上限はないが、Windows の資源を守る XHarness 独自の安全弁）。BashOutput が1回に返す出力は30,000文字（Claude Code の `BASH_MAX_OUTPUT_LENGTH` 既定値）で、超過分は先頭と末尾を残して中略し、未取得分は次の BashOutput で続きを返す。保持する出力は1件につき直近1 MB。ターンの終了・停止・セッション終了でプロセスツリーごと終了する（MCP の stdio と同じ後片付け）。次のターンへの持ち越しはしない。
 - 権限は通常の Bash と同じ gate を起動時に通す。BashOutput / KillShell は自分が起動した shellId のみ操作でき、allow。出力は秘密値のマスクを通す。
@@ -1665,4 +1666,4 @@ H2 → H1 → H3 → H4 → M3 → M1 → M2 → M4 → M5 → L1〜L3。H2 を�
 2. H2（公式資料確認済み、2026-10-02）: [Claude Code公式ツール資料](https://code.claude.com/docs/en/tools-reference#grep-tool-behavior)でGrepの`.gitignore`尊重を確認した。同資料ではGrepの250件上限を確認できず、Globは既定では`.gitignore`を尊重しないと記載されている。XHarnessでは本節の指定どおり、両検索で`.gitignore`を尊重し、Grepを250件で打ち切る独自の規定値として実装する。
 3. M3: 上限は既定で無効（Claude Code と同じ）。
 4. M4: 新規ファイルは LF、既存ファイルは改行コードと BOM を保持（Claude Code の Edit と同じ）。
-5. H3: Bash の既定タイムアウト120秒・上限600秒、出力30,000文字は Claude Code と同じ値。
+5. H3（公式資料確認済み、2026-10-02）: [公式環境変数資料](https://code.claude.com/docs/en/env-vars)で、通常のBashの既定120秒・上限600秒と、出力30,000文字を確認した。XHarnessのバックグラウンドはターン終了までを寿命とし、timeoutSecを明示した場合だけその上限でも終了する。

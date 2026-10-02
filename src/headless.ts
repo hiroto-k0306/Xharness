@@ -169,17 +169,28 @@ export async function headless(args = process.argv.slice(2)) {
   router.provider(model);
   const access = new FileAccess(cwd);
   const tools = new Map([...fileTools(access), ...shellSearchTools(cwd)]);
+  // 検索回数の上限は、子エージェントを含むセッション全体で数える(§22.6)
+  const searchBudget = {
+    used: 0,
+    limit: config?.web.maxSearchesPerSession ?? 100,
+  };
   if (config?.web.enabled !== false)
     for (const [name, tool] of webTools(
       () => router.provider(model!),
       config?.web.searchMode ?? "live",
       fake,
+      undefined,
+      {
+        settings: config?.web,
+        providers: () => providers,
+        budget: searchBudget,
+      },
     ))
       tools.set(name, tool);
   // --fake は通信も資格情報の読み取りも行わない。
   const secrets = fake ? [] : await readLocalSecrets();
   const clean = (text: string) => redact(text, secrets);
-  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7. Tool dates use ISO 8601. Respect project instructions.`;
+  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7 and already runs in this working directory, so do not prefix commands with cd or Set-Location. Tool dates use ISO 8601. Respect project instructions.`;
   system +=
     "\n\n" + clean(await projectMemory(home, cwd, project.context.memoryFiles));
   const workspaces = new WorkspaceStore(home);
@@ -398,6 +409,12 @@ export async function headless(args = process.argv.slice(2)) {
                 () => router.provider(model!),
                 config.web.searchMode,
                 fake,
+                undefined,
+                {
+                  settings: config.web,
+                  providers: () => providers,
+                  budget: searchBudget,
+                },
               ))
                 available.set(name, tool);
             return available;
@@ -432,6 +449,7 @@ export async function headless(args = process.argv.slice(2)) {
             ),
         });
       }
+      let compactionFailure: string | undefined;
       const result = await workflow.run(
         {
           provider: router.provider(model),
@@ -444,6 +462,7 @@ export async function headless(args = process.argv.slice(2)) {
               system: context?.system ?? system,
               tools: context?.tools ?? [...tools.values()].map((t) => t.spec),
               checkpoint,
+              skipCompaction: !!compactionFailure,
               limit: route.provider.models().find((m) => m.id === route.model)
                 ?.contextTokens,
               threshold: project.context.compactThreshold,
@@ -457,6 +476,12 @@ export async function headless(args = process.argv.slice(2)) {
             if (prepared.compacted && prepared.checkpoint) {
               checkpoint = prepared.checkpoint;
               await checkpointFile().write(checkpoint);
+            }
+            if (prepared.failure && !compactionFailure) {
+              compactionFailure = prepared.failure;
+              process.stdout.write(
+                `\nAuto-compaction skipped (${route.model}): ${clean(prepared.failure)}\n`,
+              );
             }
             return {
               messages: prepared.messages,

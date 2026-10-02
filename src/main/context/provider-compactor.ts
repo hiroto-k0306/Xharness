@@ -19,16 +19,25 @@ export async function prepareProviderHistory(
     threshold: number;
     overhead?: number;
     force?: boolean;
+    /** このターンですでに自動圧縮に失敗した。同じターンでは再試行しない */
+    skipCompaction?: boolean;
     signal: AbortSignal;
   },
-) {
+): Promise<{
+  messages: Message[];
+  checkpoint?: Checkpoint;
+  compacted: boolean;
+  fits: boolean;
+  /** 自動圧縮できなかった理由(圧縮せずに続ける。手動の /compact では例外になる) */
+  failure?: string;
+}> {
   if (options.provider.offline) return prepareHistory(messages, options);
-  let checkpoint =
+  const checkpoint =
     options.checkpoint?.provider === options.provider.id
       ? options.checkpoint
       : undefined;
   // Legacy client summaries are never sent to Claude with retained thinking.
-  let view = contextView(messages, checkpoint);
+  const view = contextView(messages, checkpoint);
   const tokens = (m: Message[]) => estimateTokens(m) + (options.overhead ?? 0);
   if (
     !options.force &&
@@ -40,6 +49,34 @@ export async function prepareProviderHistory(
       compacted: false,
       fits: tokens(view) <= (options.limit ?? Infinity),
     };
+  const uncompacted = (failure: string) => ({
+    messages: view,
+    checkpoint,
+    compacted: false,
+    fits: tokens(view) <= (options.limit ?? Infinity),
+    failure,
+  });
+  if (options.skipCompaction && !options.force)
+    return uncompacted("compaction already failed in this turn");
+  try {
+    return await compactNow(messages, options, checkpoint, tokens);
+  } catch (error) {
+    // 手動の /compact と中断は呼び出し元へ伝える。自動圧縮は、まだ収まるなら圧縮せずに続ける
+    // (公式: 要約が得られなくても会話は続けられ、後で再圧縮すればよい)
+    if (options.force || options.signal.aborted) throw error;
+    return uncompacted(
+      error instanceof Error ? error.message : "Context summarization failed",
+    );
+  }
+}
+
+async function compactNow(
+  messages: Message[],
+  options: Parameters<typeof prepareProviderHistory>[1],
+  checkpoint: Checkpoint | undefined,
+  tokens: (m: Message[]) => number,
+) {
+  let view = contextView(messages, checkpoint);
   options.signal.throwIfAborted();
   const starts = messages.flatMap((m, i) =>
     m.role === "user" &&
@@ -48,7 +85,8 @@ export async function prepareProviderHistory(
       ? [i]
       : [],
   );
-  // Claude summarizes whole completed turns; no retained thinking can be invalidated by changing workflow tools/system later.
+  // Claude は完了済みのターンをすべて要約する。ターン途中の自動圧縮では、そのターンだけが
+  // 圧縮ブロックの後に残る(圧縮要求と同じ system / tools で作られた thinking なので有効なまま)。
   const covered =
     options.provider.id === "claude"
       ? messages.at(-1)?.role === "user"

@@ -14,6 +14,11 @@ import { loadProjectConfig, projectMemory } from "../config/project.js";
 import { type Checkpoint, estimateTokens } from "../context/compactor.js";
 import { prepareProviderHistory } from "../context/provider-compactor.js";
 import { type StepHook } from "../core/loop-types.js";
+import {
+  reviewerCommandAllowed,
+  reviewerCommandError,
+  reviewerTestHint,
+} from "./reviewer-commands.js";
 
 export interface ChildContext {
   branch?: string;
@@ -131,13 +136,7 @@ export class ChildRunner {
           }
           if (!worker && name === "Bash") {
             const command = String((input as { command?: unknown }).command);
-            if (
-              /[;|&>\r\n$`]/.test(command) ||
-              !/^(?:(?:pnpm|npm) (?:test|run (?:test|lint|typecheck|build))|(?:npx )?vitest(?: run)?|pytest)(?:\s|$)/.test(
-                command,
-              )
-            )
-              return "Reviewer Bash is limited to test commands";
+            if (!reviewerCommandAllowed(command)) return reviewerCommandError();
           }
         },
       });
@@ -148,7 +147,7 @@ export class ChildRunner {
     this.options.onStatus?.(context, choice.model, "running");
     try {
       const project = await loadProjectConfig(this.options.home, cwd);
-      const system = `You are ${name}. Work in ${cwd}. You have no parent conversation history. Never launch child agents. ${worker ? "Stay inside your workspace. ReportDone is required." : "Read-only investigation/review. Do not modify files. Return only your final report."}\nProject instructions:\n${clean(await projectMemory(this.options.home, cwd, project.context.memoryFiles))}`;
+      const system = `You are ${name}. Work in ${cwd}. You have no parent conversation history. Never launch child agents. ${worker ? "Stay inside your workspace. ReportDone is required." : "Read-only investigation/review. Do not modify files. Return only your final report."}${!worker && tools.has("Bash") ? " " + (await reviewerTestHint(cwd)) : ""}\nProject instructions:\n${clean(await projectMemory(this.options.home, cwd, project.context.memoryFiles))}`;
       const hooks = this.options.hooks?.(context, (r) => {
         const write = receipts.append(
           context.id,
@@ -174,6 +173,8 @@ export class ChildRunner {
         this.options.onEvent?.(context, { type: "receipt", receipt: r });
       });
       let checkpoint: Checkpoint | undefined;
+      // 自動圧縮に失敗したら、このターンでは再試行せず、収まる間は圧縮せずに続ける
+      let compactionFailed = false;
       const result = await runTurn(
         {
           provider: this.options.router.provider(choice.model),
@@ -192,6 +193,7 @@ export class ChildRunner {
               model: route.model,
               signal,
               checkpoint,
+              skipCompaction: compactionFailed,
               system: loopContext?.system ?? system,
               tools:
                 loopContext?.tools ?? [...tools.values()].map((t) => t.spec),
@@ -205,6 +207,7 @@ export class ChildRunner {
               threshold: project.context.compactThreshold,
             });
             checkpoint = prepared.checkpoint;
+            if (prepared.failure) compactionFailed = true;
             return {
               messages: prepared.messages,
               ...(!prepared.fits ? { stop: "context_overflow" } : {}),

@@ -2,7 +2,11 @@
 import { randomUUID } from "node:crypto";
 import { resolveModel } from "../config/config.js";
 import { saveRule } from "../config/project.js";
-import { decidePermission, grantFor } from "../core/permissions.js";
+import {
+  decidePermission,
+  grantFor,
+  normalizeCall,
+} from "../core/permissions.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type PermissionDecision } from "../../shared/ipc.js";
 import { summarizeInput } from "../../shared/summary.js";
@@ -135,15 +139,18 @@ export class PermissionGate {
     if (forceAsk) {
       /* Approval is always per request; never persist it. */
     } else if (decision === "always" && rt.config) {
+      const normalized = await normalizeCall(fullCall, session.cwd);
       const grant = grantFor({
-        ...fullCall,
-        input: safeInput(fullCall.input, ctx.clean),
+        ...normalized,
+        input: safeInput(normalized.input, ctx.clean),
       });
       // ワークスペースのセッションなら、そのワークスペースだけに効く場所へ保存する
       await saveRule(ctx.options.home, grant, ctx.workspaceRoot(session));
       rt.config.permissions.rules.push(grant);
     } else if (decision === "session" && rt.config)
-      (rt.sessionRules ??= []).push(grantFor(fullCall));
+      (rt.sessionRules ??= []).push(
+        grantFor(await normalizeCall(fullCall, session.cwd)),
+      );
     else if (decision === "always" || decision === "session")
       rt.always.add(call.name);
     ctx.options.emit({

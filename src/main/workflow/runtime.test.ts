@@ -662,3 +662,92 @@ it("keeps nested folder work and its review inside that folder despite an ancest
     ),
   ).toBe("");
 });
+it("keeps system and tools identical on every main request across phases (preserved thinking)", async () => {
+  // Opus/Sonnet 5.5 は system と tools を過去の thinking の前提として検査し、変わると 400 になる
+  const s = await setup(
+    [
+      call("Read", { path: "seed.txt" }),
+      call("SkipPlan", { reason: "One new file" }),
+      call("Write", { path: "fix.txt", content: "fix" }),
+      call("RequestReview", { summary: "Added fix" }),
+    ],
+    [text("[]")],
+  );
+  await writeFile(join(s.cwd, "seed.txt"), "seed");
+  const result = await s.run();
+  expect(result.stopCause).toBe("workflow_complete");
+  const main = s.requests.filter(
+    (r) => !r.system.startsWith("You are reviewer"),
+  );
+  expect(main.length).toBeGreaterThanOrEqual(4);
+  const first = main[0]!;
+  for (const request of main) {
+    expect(request.system).toBe(first.system);
+    expect(request.tools).toEqual(first.tools);
+  }
+  // 段階の制限は validate で掛かる: 計画前の Write は実行されずエラーとして返る
+  const names = first.tools.map((t) => t.name);
+  for (const name of [
+    "Write",
+    "Edit",
+    "SubmitPlan",
+    "SkipPlan",
+    "UpdatePlan",
+    "RequestReview",
+  ])
+    expect(names).toContain(name);
+});
+it("gates phase-specific tools by validation instead of removing them", async () => {
+  const s = await setup([], []);
+  const tools = new Map<string, import("../tools/registry.js").Tool>();
+  // classify では書き込みと実装段階のツールは使えない
+  const registry = (
+    s.runtime as unknown as {
+      registry(
+        base: Map<string, unknown>,
+      ): Map<string, import("../tools/registry.js").Tool>;
+    }
+  ).registry(defaultTools(s.cwd, false));
+  for (const [k, v] of registry) tools.set(k, v);
+  expect(
+    await tools.get("Write")!.validate({ path: "a", content: "b" }),
+  ).toMatch(/unavailable/);
+  expect(await tools.get("RequestReview")!.validate({ summary: "x" })).toMatch(
+    /implement phase/,
+  );
+  expect(
+    await tools
+      .get("UpdatePlan")!
+      .validate({ itemIndex: 0, status: "completed" }),
+  ).toMatch(/implement phase/);
+  expect(
+    await tools.get("SkipPlan")!.validate({ reason: "small" }),
+  ).toBeUndefined();
+  s.runtime.manualPhase("implement");
+  expect(
+    await tools.get("Write")!.validate({ path: "a", content: "b" }),
+  ).toBeUndefined();
+  expect(await tools.get("SkipPlan")!.validate({ reason: "small" })).toMatch(
+    /before implementation/,
+  );
+});
+it("tells the reviewer the project's test command so it can rerun tests itself", async () => {
+  const s = await setup(
+    [
+      call("SkipPlan", { reason: "One new file" }),
+      call("Write", { path: "fix.txt", content: "fix" }),
+      call("RequestReview", { summary: "Added fix" }),
+    ],
+    [text("[]")],
+  );
+  await writeFile(
+    join(s.cwd, "package.json"),
+    JSON.stringify({ scripts: { test: "node sum.test.js" } }),
+  );
+  await s.run();
+  const reviewer = s.requests.find((r) =>
+    r.system.startsWith("You are reviewer"),
+  );
+  expect(reviewer?.system).toContain("`npm test`");
+  expect(reviewer?.system).toContain("do not use cd");
+});

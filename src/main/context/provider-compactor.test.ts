@@ -138,3 +138,68 @@ it("keeps history unchanged on a failed compaction and never client-compacts Hai
   ).rejects.toThrow("unavailable");
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
+it("auto-compaction that cannot run continues uncompacted while the history still fits", async () => {
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(new Response("", { status: 529 }));
+  const provider = new ClaudeAdapter({
+    fetcher,
+    getAccessToken: async () => "test",
+  });
+  const auto = {
+    ...options,
+    force: false,
+    provider,
+    limit: 1000,
+    threshold: 0.01,
+  };
+  // Opus: 要約に失敗しても、上限内なら元の履歴で続ける(公式: 要約なしで続行し後で再圧縮)
+  const failed = await prepareProviderHistory(history, auto);
+  expect(failed).toMatchObject({ compacted: false, fits: true });
+  expect(failed.failure).toContain("original history retained");
+  expect(failed.messages).toEqual(history);
+  // 同じターンでは再試行しない(通信しない)
+  const skipped = await prepareProviderHistory(history, {
+    ...auto,
+    skipCompaction: true,
+  });
+  expect(skipped.failure).toBeTruthy();
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  // Haiku はサーバー圧縮が無い: 通信せず、上限内なら続け、超えたら fits:false で止める
+  const haiku = await prepareProviderHistory(history, {
+    ...auto,
+    model: "claude-haiku-4-5-20251001",
+  });
+  expect(haiku).toMatchObject({ compacted: false, fits: true });
+  expect(haiku.failure).toContain("unavailable");
+  const over = await prepareProviderHistory(history, {
+    ...auto,
+    model: "claude-haiku-4-5-20251001",
+    limit: 1,
+  });
+  expect(over).toMatchObject({ compacted: false, fits: false });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it("manual compaction and aborts still report failure to the caller", async () => {
+  const provider = new ClaudeAdapter({
+    fetcher: vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response("", { status: 529 })),
+    getAccessToken: async () => "test",
+  });
+  await expect(
+    prepareProviderHistory(history, { ...options, provider }),
+  ).rejects.toThrow();
+  const controller = new AbortController();
+  controller.abort();
+  await expect(
+    prepareProviderHistory(history, {
+      ...options,
+      force: false,
+      limit: 100,
+      threshold: 0.01,
+      provider,
+      signal: controller.signal,
+    }),
+  ).rejects.toThrow();
+});

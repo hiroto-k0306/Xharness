@@ -2,7 +2,7 @@
 // electron を import しない。
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
-import { type MainConfig } from "../config/config.js";
+import { type MainConfig, type WebSettings } from "../config/config.js";
 import { type ProjectConfig } from "../config/project.js";
 import { type Checkpoint } from "../context/compactor.js";
 import { type Receipt as LoopReceipt } from "../core/loop.js";
@@ -11,6 +11,7 @@ import { type Message } from "../core/types.js";
 import { type Provider } from "../providers/provider.js";
 import { FileAccess, fileTools } from "../tools/files.js";
 import { type ToolRegistry } from "../tools/registry.js";
+import { type SearchBudget } from "../tools/web-search.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
@@ -38,7 +39,10 @@ export interface ControllerOptions {
   cliModel?: string;
   cliEffort?: Effort;
   phase4?: boolean;
-  web?: { enabled: boolean; searchMode: "live" | "cached" };
+  web?: Partial<WebSettings> & {
+    enabled: boolean;
+    searchMode: "live" | "cached";
+  };
   provider: Provider;
   providers?: Provider[];
   fallback?: Partial<Record<"claude" | "codex", string>>;
@@ -86,7 +90,11 @@ export interface Runtime {
   };
   always: Set<string>;
   tools?: ToolRegistry;
+  /** セッションで最初に組み立てた system prompt(preserved thinking のため途中で変えない) */
+  system?: string;
   webSignature?: string;
+  /** WebSearch の回数(子エージェントも合算。§22.5) */
+  searchBudget?: SearchBudget;
   receiptSeq: number;
   messageSeq: number;
   /** 実行中のターン(終了待ち用) */

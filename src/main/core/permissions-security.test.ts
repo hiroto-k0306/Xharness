@@ -320,3 +320,41 @@ describe("command analysis", () => {
     expect(analyzeCommand("").simple).toBe(false);
   });
 });
+
+describe("cd into the working directory itself is a no-op (Claude Code compatible)", () => {
+  it("evaluates the rest of the command and lets a grant cover it", async () => {
+    const cwd = await workspace();
+    const config: PermissionConfig = {
+      mode: "default",
+      rules: [grantFor(bash("node sum.test.js"))],
+    };
+    for (const command of [
+      `cd ${cwd}; node sum.test.js`,
+      `Set-Location '${cwd}'; node sum.test.js`,
+      `Set-Location -Path "${cwd}" && node sum.test.js`,
+      "cd .; node sum.test.js",
+    ])
+      expect(await decidePermission(bash(command), config, cwd)).toBe("allow");
+  });
+  it("keeps asking when cd goes elsewhere or the rest is not simple", async () => {
+    const cwd = await workspace();
+    const config: PermissionConfig = {
+      mode: "default",
+      rules: [{ tool: "Bash", decision: "allow" }],
+    };
+    for (const command of [
+      "cd ..; node sum.test.js",
+      `cd ${cwd}; node a.js; calc`,
+      `cd ${cwd}; Remove-Item x`,
+      `cd $env:TEMP; node a.js`,
+    ])
+      expect(await decidePermission(bash(command), config, cwd)).toBe("ask");
+  });
+  it("saves the grant for the command without the cd prefix", async () => {
+    const cwd = await workspace();
+    const { normalizeCall } = await import("./permissions.js");
+    expect(
+      grantFor(await normalizeCall(bash(`cd ${cwd}; npm run build`), cwd)),
+    ).toEqual({ tool: "Bash", pattern: "npm run *", decision: "allow" });
+  });
+});

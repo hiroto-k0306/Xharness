@@ -37,6 +37,8 @@ export interface Message {
 export interface WebSource {
   title: string;
   url: string;
+  /** 検索結果のページの日付(Claude の web_search_result.page_age。例: "65 days ago") */
+  pageAge?: string;
 }
 
 export interface ToolSpec {

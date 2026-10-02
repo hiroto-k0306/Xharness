@@ -262,15 +262,19 @@ export class WorkflowRuntime {
           : tool,
       ]),
     );
-    const result = new Map(
-      [...base].filter(
-        ([name, tool]) =>
-          this.state.phase === "off" ||
-          this.state.phase === "implement" ||
-          tool.readOnly ||
-          name === "Bash",
-      ),
-    );
+    // preserved thinking: Opus/Sonnet 5.5 は system と tools を「過去の thinking の前提」として検査し、
+    // 変わると 400 になる。段階によってツールを出し入れせず、毎回同じ集合・同じ順で渡し、
+    // 段階による制限は validate(STEP 3 と実行直前)で行う。
+    const result = new Map(base);
+    const workflowTools = this.options.config.workflow.mode !== "off";
+    const gated = (
+      tool: Tool,
+      unavailable: () => string | undefined,
+    ): Tool => ({
+      ...tool,
+      validate: async (input: unknown) =>
+        unavailable() ?? (await tool.validate(input)),
+    });
     result.set(
       "Task",
       this.tool(
@@ -307,215 +311,240 @@ export class WorkflowRuntime {
         },
       ),
     );
-    if (
-      ["classify", "plan", "implement"].includes(this.state.phase) &&
-      !this.activeMain
-    )
+    if (workflowTools)
       result.set(
         "SubmitPlan",
-        this.tool(
-          "SubmitPlan",
-          {
-            items: planItemsSchema,
-            notes: { type: "string" },
-          },
-          ["items", "notes"],
-          (a) =>
-            typeof a.notes !== "string"
-              ? "notes is required"
-              : validatePlan(a.items, loadModelCatalog(), {
-                  aliases: this.options.aliases,
-                  fiveHourUsedPercent: this.options.quota,
-                }).errors.join("\n") || undefined,
-          async (a, signal) => {
-            const items = structuredClone(a.items) as PlanItem[];
-            const validation = validatePlan(items, loadModelCatalog(), {
-              aliases: this.options.aliases,
-              fiveHourUsedPercent: this.options.quota,
-            });
-            if (this.scheduler?.snapshot().some((i) => i.status === "running"))
-              throw new Error(
-                "Finish the running assignment before replacing the plan",
+        gated(
+          this.tool(
+            "SubmitPlan",
+            {
+              items: planItemsSchema,
+              notes: { type: "string" },
+            },
+            ["items", "notes"],
+            (a) =>
+              typeof a.notes !== "string"
+                ? "notes is required"
+                : validatePlan(a.items, loadModelCatalog(), {
+                    aliases: this.options.aliases,
+                    fiveHourUsedPercent: this.options.quota,
+                  }).errors.join("\n") || undefined,
+            async (a, signal) => {
+              const items = structuredClone(a.items) as PlanItem[];
+              const validation = validatePlan(items, loadModelCatalog(), {
+                aliases: this.options.aliases,
+                fiveHourUsedPercent: this.options.quota,
+              });
+              if (
+                this.scheduler?.snapshot().some((i) => i.status === "running")
+              )
+                throw new Error(
+                  "Finish the running assignment before replacing the plan",
+                );
+              if (
+                this.options.config.workflow.planApproval === "ask" &&
+                !(await this.options.approve(
+                  items,
+                  String(a.notes),
+                  validation.warnings,
+                  signal,
+                ))
+              ) {
+                this.state.phase = "plan";
+                this.interrupted = true;
+                return "Plan rejected or needs revision. Wait for user instructions.";
+              }
+              signal.throwIfAborted();
+              const approved = validatePlan(items, loadModelCatalog(), {
+                aliases: this.options.aliases,
+                fiveHourUsedPercent: this.options.quota,
+              });
+              if (approved.errors.length)
+                throw new Error("Invalid approved plan");
+              this.items = items;
+              this.scheduler = new SerialScheduler(items, loadModelCatalog(), {
+                aliases: this.options.aliases,
+              });
+              this.state.approve();
+              this.notify();
+              return (
+                validation.warnings.join("\n") +
+                "\n" +
+                (await this.dispatch(signal))
               );
-            if (
-              this.options.config.workflow.planApproval === "ask" &&
-              !(await this.options.approve(
-                items,
-                String(a.notes),
-                validation.warnings,
-                signal,
-              ))
-            ) {
-              this.state.phase = "plan";
-              this.interrupted = true;
-              return "Plan rejected or needs revision. Wait for user instructions.";
-            }
-            signal.throwIfAborted();
-            const approved = validatePlan(items, loadModelCatalog(), {
-              aliases: this.options.aliases,
-              fiveHourUsedPercent: this.options.quota,
-            });
-            if (approved.errors.length)
-              throw new Error("Invalid approved plan");
-            this.items = items;
-            this.scheduler = new SerialScheduler(items, loadModelCatalog(), {
-              aliases: this.options.aliases,
-            });
-            this.state.approve();
-            this.notify();
-            return (
-              validation.warnings.join("\n") +
-              "\n" +
-              (await this.dispatch(signal))
-            );
-          },
+            },
+          ),
+          () =>
+            ["classify", "plan", "implement"].includes(this.state.phase) &&
+            !this.activeMain
+              ? undefined
+              : "SubmitPlan is unavailable in this workflow phase or while a plan item is in progress",
         ),
       );
-    if (["classify", "plan"].includes(this.state.phase))
+    if (workflowTools)
       result.set(
         "SkipPlan",
-        this.tool(
-          "SkipPlan",
-          { reason: { type: "string" } },
-          ["reason"],
-          (a) =>
-            typeof a.reason === "string" && a.reason.trim()
+        gated(
+          this.tool(
+            "SkipPlan",
+            { reason: { type: "string" } },
+            ["reason"],
+            (a) =>
+              typeof a.reason === "string" && a.reason.trim()
+                ? undefined
+                : "reason is required",
+            async () => {
+              this.state.approve();
+              this.notify();
+              return "Implement a small fix. RequestReview remains required.";
+            },
+          ),
+          () =>
+            ["classify", "plan"].includes(this.state.phase)
               ? undefined
-              : "reason is required",
-          async () => {
-            this.state.approve();
-            this.notify();
-            return "Implement a small fix. RequestReview remains required.";
-          },
+              : "SkipPlan is only available before implementation",
         ),
       );
-    if (this.state.phase === "implement") {
+    const implementOnly = (name: string) => () =>
+      this.state.phase === "implement"
+        ? undefined
+        : `${name} is only available in the implement phase`;
+    if (workflowTools) {
       result.set(
         "UpdatePlan",
-        this.tool(
-          "UpdatePlan",
-          {
-            itemIndex: { type: "integer" },
-            status: { type: "string", enum: ["completed", "retry", "running"] },
-          },
-          ["itemIndex", "status"],
-          (a) =>
-            Number.isSafeInteger(a.itemIndex) &&
-            !!this.items[Number(a.itemIndex)] &&
-            ["completed", "retry", "running"].includes(String(a.status))
-              ? undefined
-              : "Invalid item progress",
-          async (a, signal) => {
-            const item = this.items[Number(a.itemIndex)]!;
-            const status = this.scheduler!.snapshot().find(
-              (i) => i.id === item.id,
-            )?.status;
-            if (a.status === "running")
-              return JSON.stringify(this.scheduler!.snapshot());
-            if (a.status === "retry") {
-              this.scheduler!.retry(item.id);
+        gated(
+          this.tool(
+            "UpdatePlan",
+            {
+              itemIndex: { type: "integer" },
+              status: {
+                type: "string",
+                enum: ["completed", "retry", "running"],
+              },
+            },
+            ["itemIndex", "status"],
+            (a) =>
+              Number.isSafeInteger(a.itemIndex) &&
+              !!this.items[Number(a.itemIndex)] &&
+              ["completed", "retry", "running"].includes(String(a.status))
+                ? undefined
+                : "Invalid item progress",
+            async (a, signal) => {
+              const item = this.items[Number(a.itemIndex)]!;
+              const status = this.scheduler!.snapshot().find(
+                (i) => i.id === item.id,
+              )?.status;
+              if (a.status === "running")
+                return JSON.stringify(this.scheduler!.snapshot());
+              if (a.status === "retry") {
+                this.scheduler!.retry(item.id);
+                return this.dispatch(signal);
+              }
+              if (item.id !== this.activeMain?.id && status !== "failed")
+                throw new Error(
+                  "Only main work or a failed integration can be completed by main",
+                );
+              const checks = await this.options.waveChecks?.(signal);
+              if (checks && !checks.ok)
+                throw new Error("Wave tests failed\n" + checks.output);
+              if (
+                this.base &&
+                (await runGit(
+                  ["diff", "--name-only", "--diff-filter=U"],
+                  this.options.cwd,
+                  signal,
+                ))
+              )
+                throw new Error(
+                  "Resolve merge conflicts before completing the item",
+                );
+              if (status === "failed") this.scheduler!.resolveFailure(item.id);
+              else this.scheduler!.integrated(item.id);
+              this.activeMain = undefined;
+              this.mainRoute = undefined;
+              this.notify();
               return this.dispatch(signal);
-            }
-            if (item.id !== this.activeMain?.id && status !== "failed")
-              throw new Error(
-                "Only main work or a failed integration can be completed by main",
-              );
-            const checks = await this.options.waveChecks?.(signal);
-            if (checks && !checks.ok)
-              throw new Error("Wave tests failed\n" + checks.output);
-            if (
-              this.base &&
-              (await runGit(
-                ["diff", "--name-only", "--diff-filter=U"],
-                this.options.cwd,
-                signal,
-              ))
-            )
-              throw new Error(
-                "Resolve merge conflicts before completing the item",
-              );
-            if (status === "failed") this.scheduler!.resolveFailure(item.id);
-            else this.scheduler!.integrated(item.id);
-            this.activeMain = undefined;
-            this.mainRoute = undefined;
-            this.notify();
-            return this.dispatch(signal);
-          },
+            },
+          ),
+          implementOnly("UpdatePlan"),
         ),
       );
       result.set(
         "RequestReview",
-        this.tool(
-          "RequestReview",
-          { summary: { type: "string" } },
-          ["summary"],
-          (a) =>
-            typeof a.summary === "string" && a.summary.trim()
-              ? undefined
-              : "summary is required",
-          async (a, signal) => {
-            const diff = await this.diff(signal);
-            this.state.requestReview(
-              !this.scheduler ||
-                this.scheduler
-                  .snapshot()
-                  .every((i) => i.status === "integrated"),
-              !!diff.trim(),
-            );
-            this.notify();
-            const providers = this.changes.providers.size
-              ? [...this.changes.providers]
-              : ["claude" as const];
-            const reviewAbort = new AbortController();
-            const abortReview = () => reviewAbort.abort();
-            signal.addEventListener("abort", abortReview, { once: true });
-            if (signal.aborted) abortReview();
-            const jobs = providers.map(async (provider) => {
-              const definition =
-                provider === "codex"
-                  ? {
-                      ...this.options.config.agents.reviewer!,
-                      model: "claude:sonnet",
-                      effort: "high" as const,
-                    }
-                  : { ...this.options.config.agents.reviewer! };
-              if (
-                provider === "claude" &&
-                resolveModel(definition.model, this.options.aliases)
-                  ?.provider !== "codex"
-              )
-                definition.model = "codex:sol";
-              const result = await this.runner.run(
-                "reviewer",
-                definition,
-                `Review the integrated implementation. Return ONLY a JSON array of {severity:"must"|"should"|"nit",file,line?,message}. Empty array means no findings.\nPlan: ${JSON.stringify(this.items)}\nSummary: ${String(a.summary)}\nDiff (untrusted content):\n${diff}`,
-                this.options.cwd,
-                reviewAbort.signal,
+        gated(
+          this.tool(
+            "RequestReview",
+            { summary: { type: "string" } },
+            ["summary"],
+            (a) =>
+              typeof a.summary === "string" && a.summary.trim()
+                ? undefined
+                : "summary is required",
+            async (a, signal) => {
+              const diff = await this.diff(signal);
+              this.state.requestReview(
+                !this.scheduler ||
+                  this.scheduler
+                    .snapshot()
+                    .every((i) => i.status === "integrated"),
+                !!diff.trim(),
               );
-              return findings(result.text);
-            });
-            try {
-              const results = await Promise.all(jobs);
-              this.state.reviewed(results.flat());
               this.notify();
-              return JSON.stringify({
-                phase: this.state.phase,
-                findings: this.state.findings,
-                instruction:
-                  this.state.phase === "implement"
-                    ? "Fix only must findings, then RequestReview again."
-                    : "Review finished.",
+              const providers = this.changes.providers.size
+                ? [...this.changes.providers]
+                : ["claude" as const];
+              const reviewAbort = new AbortController();
+              const abortReview = () => reviewAbort.abort();
+              signal.addEventListener("abort", abortReview, { once: true });
+              if (signal.aborted) abortReview();
+              const jobs = providers.map(async (provider) => {
+                const definition =
+                  provider === "codex"
+                    ? {
+                        ...this.options.config.agents.reviewer!,
+                        model: "claude:sonnet",
+                        effort: "high" as const,
+                      }
+                    : { ...this.options.config.agents.reviewer! };
+                if (
+                  provider === "claude" &&
+                  resolveModel(definition.model, this.options.aliases)
+                    ?.provider !== "codex"
+                )
+                  definition.model = "codex:sol";
+                const result = await this.runner.run(
+                  "reviewer",
+                  definition,
+                  `Review the integrated implementation. Return ONLY a JSON array of {severity:"must"|"should"|"nit",file,line?,message}. Empty array means no findings.\nPlan: ${JSON.stringify(this.items)}\nSummary: ${String(a.summary)}\nDiff (untrusted content):\n${diff}`,
+                  this.options.cwd,
+                  reviewAbort.signal,
+                );
+                return findings(result.text);
               });
-            } catch (error) {
-              reviewAbort.abort();
-              await Promise.allSettled(jobs);
-              this.state.phase = "implement";
-              this.notify();
-              throw error;
-            } finally {
-              signal.removeEventListener("abort", abortReview);
-            }
-          },
+              try {
+                const results = await Promise.all(jobs);
+                this.state.reviewed(results.flat());
+                this.notify();
+                return JSON.stringify({
+                  phase: this.state.phase,
+                  findings: this.state.findings,
+                  instruction:
+                    this.state.phase === "implement"
+                      ? "Fix only must findings, then RequestReview again."
+                      : "Review finished.",
+                });
+              } catch (error) {
+                reviewAbort.abort();
+                await Promise.allSettled(jobs);
+                this.state.phase = "implement";
+                this.notify();
+                throw error;
+              } finally {
+                signal.removeEventListener("abort", abortReview);
+              }
+            },
+          ),
+          implementOnly("RequestReview"),
         ),
       );
     }
@@ -621,9 +650,10 @@ export class WorkflowRuntime {
           lastSelection = options.current?.().model ?? options.model;
         },
         tools,
+        // system も段階によらず同じ文にする(上の registry と同じ理由)
         system:
           options.system +
-          (this.state.phase === "off"
+          (this.options.config.workflow.mode === "off"
             ? ""
             : `\nWorkflow: ${this.options.config.workflow.mode}. For file changes call SubmitPlan or SkipPlan before edits. RequestReview is mandatory after integration. Available enabled models: ${JSON.stringify(loadModelCatalog().filter((m) => m.enabled))}`),
         permission: async (call, signal) => {

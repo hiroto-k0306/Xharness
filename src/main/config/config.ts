@@ -61,8 +61,67 @@ export function isEffort(value: unknown): value is ReasoningEffort {
   );
 }
 
+/** DESIGN.md §22.6 の web 設定 */
+export interface WebSettings {
+  enabled: boolean;
+  /** 従来の設定名。codexSearchMode が無いときの Codex の検索モード */
+  searchMode: "live" | "cached";
+  searchProvider: "auto" | "claude" | "codex";
+  codexSearchMode: "live" | "cached" | "disabled";
+  maxSearchesPerSession: number;
+  fetch: { maxChars: number; cacheMinutes: number };
+}
+export const DEFAULT_WEB: WebSettings = {
+  enabled: true,
+  searchMode: "live",
+  searchProvider: "auto",
+  codexSearchMode: "live",
+  maxSearchesPerSession: 100,
+  fetch: { maxChars: 100000, cacheMinutes: 15 },
+};
+
+/** web 設定を読む。不正な値は既定値のまま警告に残す */
+export function webSettings(
+  value: unknown,
+  warnings: string[] = [],
+): WebSettings {
+  const web: WebSettings = structuredClone(DEFAULT_WEB);
+  if (!value || typeof value !== "object") return web;
+  const v = value as Record<string, unknown>;
+  const bad = (key: string) =>
+    warnings.push(`config.yaml の web.${key} が不正です`);
+  const int = (n: unknown, min: number, max: number) =>
+    typeof n === "number" && Number.isInteger(n) && n >= min && n <= max;
+  if (typeof v.enabled === "boolean") web.enabled = v.enabled;
+  else if (v.enabled !== undefined) bad("enabled");
+  if (v.searchMode === "live" || v.searchMode === "cached") {
+    web.searchMode = v.searchMode;
+    web.codexSearchMode = v.searchMode;
+  } else if (v.searchMode !== undefined) bad("searchMode");
+  if (["live", "cached", "disabled"].includes(String(v.codexSearchMode)))
+    web.codexSearchMode = v.codexSearchMode as WebSettings["codexSearchMode"];
+  else if (v.codexSearchMode !== undefined) bad("codexSearchMode");
+  if (web.codexSearchMode !== "disabled") web.searchMode = web.codexSearchMode;
+  if (["auto", "claude", "codex"].includes(String(v.searchProvider)))
+    web.searchProvider = v.searchProvider as WebSettings["searchProvider"];
+  else if (v.searchProvider !== undefined) bad("searchProvider");
+  if (int(v.maxSearchesPerSession, 1, 1000))
+    web.maxSearchesPerSession = v.maxSearchesPerSession as number;
+  else if (v.maxSearchesPerSession !== undefined) bad("maxSearchesPerSession");
+  if (v.fetch && typeof v.fetch === "object") {
+    const f = v.fetch as Record<string, unknown>;
+    if (int(f.maxChars, 1000, 1000000))
+      web.fetch.maxChars = f.maxChars as number;
+    else if (f.maxChars !== undefined) bad("fetch.maxChars");
+    if (int(f.cacheMinutes, 0, 1440))
+      web.fetch.cacheMinutes = f.cacheMinutes as number;
+    else if (f.cacheMinutes !== undefined) bad("fetch.cacheMinutes");
+  } else if (v.fetch !== undefined) bad("fetch");
+  return web;
+}
+
 export interface MainConfig {
-  web: { enabled: boolean; searchMode: "live" | "cached" };
+  web: WebSettings;
   fallback?: Partial<Record<ProviderId, string>>;
   /** 解決済み。設定が無い・不正なら claude:opus / high */
   choice: ModelChoice;
@@ -153,13 +212,7 @@ export async function loadMainConfig(
         warnings.push(`config.yaml の fallback.${provider} が不正です`);
     }
   }
-  const web = { enabled: true, searchMode: "live" as "live" | "cached" };
-  if (root.web && typeof root.web === "object") {
-    const values = root.web as Record<string, unknown>;
-    if (typeof values.enabled === "boolean") web.enabled = values.enabled;
-    if (values.searchMode === "live" || values.searchMode === "cached")
-      web.searchMode = values.searchMode;
-  }
+  const web = webSettings(root.web, warnings);
   return { choice: { ...resolved, effort }, aliases, warnings, fallback, web };
 }
 

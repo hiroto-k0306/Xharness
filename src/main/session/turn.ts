@@ -33,7 +33,7 @@ export async function systemPrompt(
   scratch = false,
   config?: ProjectConfig,
 ): Promise<string> {
-  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7. Tool dates use ISO 8601. Respect project instructions. Reply in Japanese unless asked otherwise.`;
+  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7 and already runs in this working directory, so do not prefix commands with cd or Set-Location. Tool dates use ISO 8601. Respect project instructions. Reply in Japanese unless asked otherwise.`;
   if (config)
     return (
       system +
@@ -188,6 +188,15 @@ async function prepareRuntime(
         (event) => {
           if (event.type === "usage") options.emit(shapeUsage(event));
         },
+        {
+          settings: web,
+          providers: () => options.providers ?? [options.provider],
+          quota: ctx.quota,
+          budget: (rt.searchBudget ??= {
+            used: 0,
+            limit: web.maxSearchesPerSession ?? 100,
+          }),
+        },
       ))
         rt.tools.set(name, tool);
   }
@@ -216,12 +225,15 @@ export async function runSessionTurn(
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);
-    const system = await systemPrompt(
+    // preserved thinking: system は過去の thinking の前提として検査されるため、
+    // セッションの最初に決めたら変えない(途中で AGENTS.md が編集されても次のセッションから反映)
+    rt.system ??= await systemPrompt(
       ctx,
       session.cwd,
       !session.workspaceId,
       rt.config,
     );
+    const system = rt.system;
     const agentConfig = await loadAgentConfig(
       options.home,
       session.workspaceId ? session.cwd : undefined,
@@ -234,6 +246,8 @@ export async function runSessionTurn(
         web,
         events,
       });
+    // 自動圧縮に失敗したら、このターンでは再試行しない(次のターンで再試行する)
+    let compactionFailure: string | undefined;
     const result = await rt.workflow!.run(
       {
         prepareContext: options.phase4
@@ -250,6 +264,7 @@ export async function runSessionTurn(
                 tools:
                   context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
                 checkpoint: rt.checkpoint,
+                skipCompaction: !!compactionFailure,
                 limit,
                 threshold: rt.config?.context.compactThreshold ?? 0.8,
                 overhead:
@@ -273,6 +288,19 @@ export async function runSessionTurn(
                   kind: "compact",
                   durationMs: 0,
                   summary: `Compacted ${prepared.checkpoint.covered} older messages`,
+                });
+              }
+              if (prepared.failure && !compactionFailure) {
+                compactionFailure = prepared.failure;
+                emit({
+                  type: "notice",
+                  sessionId,
+                  tone: "warn",
+                  message: clean(
+                    prepared.fits
+                      ? `履歴の自動圧縮ができなかったため、圧縮せずに続けます(${route.model}: ${prepared.failure})。次のターンで再試行します`
+                      : `履歴の自動圧縮ができず、コンテキスト上限を超えるため停止します(${route.model}: ${prepared.failure})`,
+                  ),
                 });
               }
               return {

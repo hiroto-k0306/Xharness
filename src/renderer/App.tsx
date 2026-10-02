@@ -422,6 +422,7 @@ export function App() {
             />
           )}
           <PromptLine
+            onStop={s.abort}
             onModel={() => setModelOpen((v) => !v)}
             mode={
               app.phase4 ? (session?.permissionMode ?? "default") : undefined
@@ -436,6 +437,7 @@ export function App() {
                 });
             }}
             suggestions={[
+              { value: "/stop", description: "LLMに送信せず実行を停止" },
               { value: "/mcp", description: "MCP サーバーの状態と操作" },
               ...(view?.mcp?.prompts ?? []).map((p) => ({
                 value: p.command,

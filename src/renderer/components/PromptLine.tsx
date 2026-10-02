@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import styles from "./PromptLine.module.css";
 
 export interface PromptLineProps {
+  onStop?(): void;
   onModel?(): void;
   mode?: "default" | "acceptEdits" | "plan";
   readOnly?: boolean;
@@ -79,6 +80,11 @@ export function PromptLine(p: PromptLineProps) {
       )}
       <span className={styles.cwd}>{p.cwdLabel}</span>
       <span className={styles.gt}>❯</span>
+      {p.running && p.onStop && (
+        <button className={styles.stop} onClick={p.onStop}>
+          ■ 停止
+        </button>
+      )}
       <textarea
         ref={ref}
         className={styles.input}

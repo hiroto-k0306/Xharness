@@ -65,6 +65,32 @@ const idle = (id: string) =>
   events.some(
     (e) => e.type === "turn" && e.sessionId === id && e.status === "idle",
   );
+it.each(["/stop", "一旦停止して"])(
+  "handles %s locally and aborts a permission wait",
+  async (text) => {
+    const c = make();
+    await c.init();
+    const { sessionId } = (await c.handle({
+      type: "new_session",
+      workspaceId: null,
+    })) as { sessionId: string };
+    await c.handle({ type: "send", sessionId, text: "read a.txt" });
+    await until(() => events.some((e) => e.type === "permission_request"));
+    expect(await c.handle({ type: "send", sessionId, text })).toEqual({
+      ok: true,
+    });
+    await until(() => idle(sessionId));
+    expect(
+      events.find((e) => e.type === "turn" && e.status === "idle"),
+    ).toMatchObject({ stopCause: "aborted" });
+    const history = await readFile(
+      join(home, "sessions", `${sessionId}.jsonl`),
+      "utf8",
+    );
+    expect(history).not.toContain(text);
+    await c.shutdown();
+  },
+);
 it("exports an idle session through the host save dialog and handles cancellation", async () => {
   const output = join(home, "report.html");
   const saveReport = vi.fn(async () => output as string | undefined);

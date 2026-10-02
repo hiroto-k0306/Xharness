@@ -183,6 +183,25 @@ describe("Transcript", () => {
 });
 
 describe("PromptLine", () => {
+  it("allows stopping while a permission prompt disables message input", () => {
+    const onStop = vi.fn();
+    const onSubmit = vi.fn();
+    render(
+      <PromptLine
+        cwdLabel="test"
+        running
+        blocked
+        modelLabel="fake"
+        modelColor="var(--claude)"
+        onSubmit={onSubmit}
+        onStop={onStop}
+      />,
+    );
+    expect(screen.getByRole("textbox", { name: "prompt" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "■ 停止" }));
+    expect(onStop).toHaveBeenCalledOnce();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
   const base = {
     cwdLabel: "myapp",
     running: false,

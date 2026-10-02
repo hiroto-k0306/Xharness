@@ -447,6 +447,23 @@ export class SessionController {
   }
 
   private async send(sessionId: string, text: string): Promise<CommandResult> {
+    if (
+      /^(?:\/stop|一旦停止して|停止して|止めて|中断して)[。！!]?$/u.test(
+        text.trim(),
+      )
+    ) {
+      if (!this.sessions.get(sessionId))
+        return { ok: false, error: "Unknown session" };
+      const rt = this.runtimes.get(sessionId);
+      if (rt) this.release(rt);
+      this.options.emit({
+        type: "notice",
+        sessionId,
+        tone: "dim",
+        message: "停止しました。再開するときは新しい指示を入力してください。",
+      });
+      return { ok: true };
+    }
     if (!this.options.fake && this.options.authentication?.isBusy())
       return { ok: false, error: "認証完了後に送信してください" };
     const session = this.sessions.get(sessionId);

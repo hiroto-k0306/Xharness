@@ -97,3 +97,90 @@ main/reviewer の Read は計4回、UpdatePlan は2回、RequestReview は1回�
 - 前回レビューの「SubmitPlan の失敗回数がユーザーの却下も数える」はレビュー側の誤りだった(却下はエラーではなく通常の結果で、数えない)。変更していない。
 - 未実施(手元で必要): Opus 5.5 で `prefix_mismatch_behavior: "error"` を付けた、段階の切り替えをまたぐ送信と、サーバー圧縮後の継続の確認。Windows でのテスト全件。
 - **Web 検索の設定(§22、2026-10-02 追加)**: §22.8 に未実装として挙げた項目(検索プロバイダの自動選択と失敗時の再試行、ドメインの許可・除外、`pageAge`、1セッションの検索回数の上限、`codexSearchMode: disabled`、`web.fetch` の設定)を実装した。ドメインの絞り込みは結果を手元で絞る方式(プロバイダ側の引数は実通信で未確認のため送らない)。実録 fixture の再生と偽プロバイダで試験した。実通信での auto の切り替えは未確認。
+
+## レビュー対応後の Windows 確認（2026-10-02）
+
+`origin/main` を取得し、8578194 を含む **f74a743** から確認した。以下の回数は今回の確認だけのもので、上記の過去の送信と分けている。資格情報の更新・編集は行っていない。
+
+### 1. インストール・テスト・ビルド
+
+- `pnpm install --frozen-lockfile`: 成功。
+- 修正前: **66ファイル・579件成功、スキップ0**。Windows PowerShell 依存の試験も成功。
+- `pnpm format:check` は Windows の CRLF を理由に174ファイルで失敗。同じファイルは `--end-of-line auto` で全件成功したため、`.prettierrc.json` に `endOfLine: auto` を設定し、不要な全ファイル書き換えを避けた。
+- 最終: **66ファイル・581件成功、スキップ0**。追加は thinking-binding の即時結果保存と、引用符付きコマンドの永続許可の回帰テスト各1件。
+- 途中の再実行でローカル Git clone/fetch の既存テスト1件が5秒の制限を超えた。コードや制限値を変更せず再実行し、上記の全件成功を確認した。
+- `pnpm typecheck` / `pnpm lint` / `pnpm format:check` / `pnpm build` / `pnpm build:headless`: 最終結果はすべて成功。
+
+### 2. preserved thinking の実送信
+
+指定の既存コマンド `pnpm spike:claude:thinking-binding -- --yes` を1回実行。**Claude 3/4回、Codex 0回**で、`Context summarization failed; original history retained` により停止した。予約台帳の3件は a-workflow / a-workflow / b-compact。4件目の b-continue は送っていない。
+
+| 送信         | 結果                                                                               |
+| ------------ | ---------------------------------------------------------------------------------- |
+| a-workflow 1 | HTTP 200（次の圧縮へ進む条件から確認。元スクリプトは途中結果を保存していなかった） |
+| a-workflow 2 | HTTP 200（同上）                                                                   |
+| b-compact    | ステータス不明。圧縮処理で失敗し、応答が保存されなかった                           |
+| b-continue   | 未送信                                                                             |
+
+**合格とはしていない。** `spike/.out/thinking-binding.json` は例外で作成されず、`report.passed` は取得できなかった。400だったか、どのブロックで失敗したかを示すサーバーのエラーメッセージも復元できないため、推測で記録しない。
+
+既存スクリプトの不具合を修正した。workflow の要求後、圧縮時に system と tools を別の内容へ変更していたため、workflow が実際に使った両方を圧縮・継続でも維持する。また各 HTTP 応答のステータスとマスク済みエラーを直ちに保存し、圧縮失敗でも結果を残す。変換済み要求の system/tools 一致と、400の即時記録を単体テストで確認した。通常の Adapter に診断用 beta や error 指定は追加していない。
+
+残り1枠では4送信の全手順を再確認できないため、台帳をリセットせず、修正後の実送信は行っていない。**圧縮後の継続と修正後の report.passed は未確認。**
+
+### 3. 画面確認（実通信0回）
+
+実際の Electron の renderer / preload / SessionController を、隔離した home と通信しない合成 Claude provider で動かした。通常の FakeProvider は圧縮をローカル処理するため、Haiku のサーバー圧縮未対応経路にはこの合成 provider を使用した。
+
+- Haiku の自動圧縮閾値を超える短い会話で、黄色の「履歴の自動圧縮ができなかったため、圧縮せずに続けます」の通知を画面で確認。モデル処理が続き、`end_turn` / `idle` に戻った。
+- `cd '<実際の cwd>'; Write-Output 'grant-demo'` を「常に許可」しても、次の同一コマンドで再び確認が出る不具合を再現。保存時に引用符を除いた `Write-Output grant-demo *` を作り、元の文字列に一致しなかった。
+- 引用符を含む先頭の語を無理に展開せず、元のコマンド表記で保存するよう修正。画面で再度「常に許可」し、次の同一コマンドは **追加確認0回**で実行・完了した。保存されたルールは `Write-Output 'grant-demo'`。別 cwd・追加コマンド・別引数は確認を維持する回帰テストも成功。
+- 不正な Web 設定3項目の警告も起動画面に表示された。通常のユーザー設定やワークスペースは変更していない。
+
+### 4. Web 検索の設定
+
+隔離した `config.yaml` を読み、実装済み WebSearch と Adapter を使って確認。**Claude 2/3回、Codex 2/3回、全4送信 HTTP 200**。
+
+| 確認                                    | 結果                                                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `searchProvider: auto`、1回目           | Claude / Haiku を使用。9件の結果すべてに `pageAge` が付いた                                                                    |
+| `allowedDomains: ["nodejs.org"]`、2回目 | Claude の応答には hosted search の呼び出しがなく、Codex / Luna にフォールバック。結果1件は `nodejs.org` のみ。`pageAge` はなし |
+| `maxSearchesPerSession: 2`、3回目       | 「上限(2回)に達しました」の通常の結果。モデル送信0回、ツールエラーではない                                                     |
+| Codex を明示して検索                    | Luna が Node.js Releases の1件を返した。`pageAge` はなし                                                                       |
+| `codexSearchMode: disabled`             | Codex の provider 呼び出し0回（通信しない provider で検証）。Codex のみ指定した場合の戻りは `Web search did not complete`      |
+| 不正な Web 設定                         | 5項目の警告、既定値 auto / live / 上限100 / fetch.maxChars 100000 / cacheMinutes 15 で読み込み成功。画面でも警告を確認         |
+
+Codex の2応答には `page_age` / `published_at` / `publication_date` / `pageAge` の日付情報が見つからなかった。日付付き fixture は保存していない。調査用 SSE は秘密値をマスクして ignored の `.out` に保存し、認証ヘッダは保存していない。使用量に応じた auto の切り替えは未確認だが、初期選択と Claude から Codex への失敗時フォールバックは実測した。
+
+### 5. reviewer 再確認
+
+同じ加算の不具合を持つ新しい `.out/stabilize-sample-3` と専用 home で、Opus 5.5/high の main、既定 Codex Sol/high の reviewer を使用。**Claude 6/6回、Codex 4/4回、全10送信 HTTP 200**。
+
+main は初回で計画を提出し、Read / Edit で `a - b` を `a + b` に修正、自身の `npm test` は PASS。UpdatePlan による完了まで進んだが、RequestReview のための次のモデル送信は上限ガードで止まった。7回目の HTTP は送っていない。**自動の計画→実装→レビューは完走していない。**
+
+残る Codex 4枠で、同じ実差分と計画を実装済み ChildRunner の既定 reviewer に渡して独立に確認した。reviewer は sum.js / package.json / sum.test.js を読み、**自分で Bash の `npm test` を実行して PASS**。最終レビュー JSON のモデル送信は5回目になるため止めた。reviewer のテスト実行は確認済みだが、最終 findings とレビュー完了は未確認。これは自動 RequestReview の完走の代用とはしていない。
+
+### 今回の送信と残事項
+
+| 区分             | Claude | Codex |
+| ---------------- | -----: | ----: |
+| thinking-binding |    3/4 |   0/0 |
+| Web 設定         |    2/3 |   2/3 |
+| main / reviewer  |    6/6 |   4/4 |
+| 合計             | **11** | **6** |
+
+thinking-binding の3件目は結果欠落でも予算消費として数えた。上限後のローカル拒否・画面用合成 provider は実送信数に含めていない。資格情報とソース・fixture・main bundle 等297ファイルをメモリ内で照合し、秘密値一致0件・禁止ヘッダ0件を確認した。
+
+未完了は、thinking-binding 修正後の実確認（圧縮とその後の継続）、自動 RequestReview を含む通し確認と最終レビュー報告、使用量に応じた auto 切り替え。API 上限を越える再試行はしていない。変更は見つかった不具合の修正とそのテスト・結果記録のみ。今回の変更は未コミット。
+
+### Claude 20回の追加承認による再確認
+
+ユーザーの追加承認後、以前の台帳は保持し、`budget-stabilize-review-rerun-20` に今回の予約を分離した。thinking-binding は新しい診断スクリプトを作らず、既存の `main(["--yes"], {reserve})` を呼び、予約だけを今回の共通上限20回へ接続した。
+
+修正後の thinking-binding は **Claude 4回、全4送信 HTTP 200、`report.passed: true`**。a-workflow 2回で SkipPlan による段階切り替えを確認し、thinking ブロック1件を保持。b-compact でサーバー圧縮が成功し、圧縮ブロックが先頭にあることを確認。b-continue も HTTP 200 / `end_turn`。結果は `spike/.out/thinking-binding.json` に保存され、400はなかった。前節の「修正後の実確認」はこの再確認で解消した。
+
+続けて、ユーザーが **Codex 追加8回**を承認。新しい `.out/stabilize-sample-4` / 専用 home に同じ sum.js の減算バグを作り、main=Opus 5.5/high、既定 reviewer=Codex Sol/high の **自動の計画→実装→RequestReview→レビューが完走した**。通し確認だけで Claude 8回・Codex 6回、全14送信 HTTP 200。SubmitPlan は初回で受理され、変更は sum.js の `a - b` → `a + b` の1行。main の `npm test`、reviewer が自分で実行した `npm test`、終了後の独立した再実行がすべて PASS。最終状態 `complete`、停止理由 `workflow_complete`、レビュー指摘 `[]`、reviewRound 1。今回見つかった追加不具合はなく、ソースの追加修正はしていない。
+
+確認は計5回（試験に限り各回許可、恒久ルールなし）: SubmitPlan 1回、Edit 1回、main の `npm test` 1回、main の `git diff` 1回、reviewer の `npm test` 1回。画面の操作負担はこの実通信試験では再評価していない。
+
+今回の追加確認の合計は **Claude 12/20回（thinking-binding 4 + 通し8）、Codex 6/8回**。上限に達しておらず、追加予算は不要。以前の3/4回や6/6回・4/4回の台帳は消さず保持している。前節の未完了のうち、thinking-binding と最終レビューを含む自動通し確認は解消。使用量に応じた Web auto 切り替えは今回の対象外で未確認のまま。ユーザーの指示により、修正と確認結果をコミット・プッシュの対象とした。

@@ -3,7 +3,10 @@ import { projectHookApproval } from "./main/hooks/shell-hooks.js";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import { stat } from "node:fs/promises";
+import { stat, rm } from "node:fs/promises";
+import { FileCheckpointStore } from "./main/checkpoints/store.js";
+import { headlessRewind } from "./main/session/headless-rewind.js";
+import { rewindTurns } from "./shared/rewind.js";
 import { randomUUID } from "node:crypto";
 import {
   SessionStore,
@@ -265,6 +268,8 @@ export async function headless(args = process.argv.slice(2)) {
   await sessions.save(session);
   let messages: Message[] = resume ? await sessions.messages(session.id) : [];
   let persisted = messages.length;
+  const fileCheckpoints = new FileCheckpointStore(home);
+  await fileCheckpoints.purge(project.checkpoints?.retentionDays ?? 30);
   let checkpoint: Checkpoint | undefined;
   const checkpointFile = () =>
     new JsonFile<Checkpoint | undefined>(
@@ -358,6 +363,42 @@ export async function headless(args = process.argv.slice(2)) {
         break;
       }
       if (input.trim() === "/exit") break;
+      if (/^\/(?:undo|rewind)(?:\s|$)/.test(input.trim())) {
+        controller = new AbortController();
+        try {
+          const count = rewindTurns(input.trim());
+          if (!count) throw new Error();
+          const scope = await headlessRewind(
+            fileCheckpoints,
+            sessions,
+            session.id,
+            count,
+            (prompt) => rl.question(prompt, { signal: controller!.signal }),
+            (text) => process.stdout.write(text),
+            clean,
+            controller.signal,
+          );
+          if (scope) {
+            messages = await sessions.messages(session.id);
+            persisted = messages.length;
+            access.reads.clear();
+            workflow = undefined;
+            if (scope !== "code") {
+              checkpoint = undefined;
+              await rm(join(home, "context", session.id + ".json"), {
+                force: true,
+              });
+            }
+          }
+        } catch {
+          process.stdout.write(
+            "巻き戻しを完了できませんでした。指定・期限・アクセス権限を確認してください。\n",
+          );
+        } finally {
+          controller = undefined;
+        }
+        continue;
+      }
       if (/^\/(?:phase|review)(?:\s|$)/.test(input.trim())) {
         const [command, phase, extra] = input.trim().split(/\s+/);
         const requested = command === "/review" ? "review" : (phase ?? "");
@@ -491,6 +532,23 @@ export async function headless(args = process.argv.slice(2)) {
         input = expanded;
       }
       controller = new AbortController();
+      let fileCheckpoint;
+      try {
+        await fileCheckpoints.purge(project.checkpoints?.retentionDays ?? 30);
+        fileCheckpoint = await fileCheckpoints.begin(
+          session.id,
+          cwd,
+          messages.length,
+          clean,
+          (message) => process.stdout.write(clean(message) + "\n"),
+        );
+      } catch {
+        controller = undefined;
+        process.stdout.write(
+          "チェックポイントを準備できませんでした。保存先・アクセス権限を確認してください。\n",
+        );
+        continue;
+      }
       let bufferedText = "";
       // MCP の一覧の変化は、モデルにだけ注記で伝える(tools は変えない。§25.4)
       const note = mcpChangeNote(mcp);
@@ -663,6 +721,7 @@ export async function headless(args = process.argv.slice(2)) {
           messages,
           tools,
           redact: clean,
+          checkpoint: fileCheckpoint,
           permission: (call, signal) => ask(call, signal),
           onEvent(event) {
             if (event.type === "text_delta") {

@@ -21,7 +21,7 @@ Claude (Pro/Max) と GPT (ChatGPT Plus/Pro) のサブスク枠を直接利用す
 ### やらないこと(v1)
 - macOS / Linux 向けビルド(Electron なので後から追加可能)
 - 自動アップデート(v2で検討)
-- MCPクライアント(v2で検討)
+- MCPクライアント(v1 の範囲外としていたが、Phase 6 で実装する。§25)
 - マルチユーザー・サーバー運用
 
 ---
@@ -506,7 +506,7 @@ agents: { ... }              # §10
 
 ### Phase 6 以降(任意)
 - MCP クライアント、フック、git worktree によるサブエージェント隔離、自動アップデート、レシートのリプレイ
-- 初回はレシートの通信なし再生（§23）。MCP・自動アップデートは、その接続・配布仕様を決めてから後続の単位で進める。Phase 5 のフック・worker 隔離は再実装しない。
+- 初回はレシートの通信なし再生（§23）。MCP は §25 の仕様(2026-10-02 確定)で M1〜M4 に分けて進める。自動アップデートは配布仕様を決めてから後続の単位で進める。Phase 5 のフック・worker 隔離は再実装しない。
 
 ---
 
@@ -1394,3 +1394,103 @@ web:
 公式根拠: [on-demand compaction](https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand)、[preserved thinking](https://platform.claude.com/docs/en/build-with-claude/compaction-thinking-blocks)。対応モデル、先頭ブロック、署名保持、system/tools、完了したツール結果、usage.iterations の条件に従う。実通信結果と未確認事項は docs/stabilize-progress.md。
 
 実使用で SubmitPlan の型が伝わらず形式エラーを繰り返したため、§21.3 の全 PlanItem フィールドをツールの JSON Schema に提示する。同じターンで3回形式エラーになったら停止し、計画を捏造・自動承認せず、ユーザーの再開を待つ。
+
+## 25. MCP クライアント(Phase 6、仕様 2026-10-02)
+
+外部の MCP サーバーのツール・リソース・プロンプトを、main と子エージェントから使えるようにする。方式は Claude Code に合わせる。ただし §24 の「会話の途中で system と tools を変えない」を守るため、MCP のツールは tools に直接並べず、固定の窓口ツールから呼ぶ。
+
+### 25.1 決定事項(ユーザー確認 2026-10-02)
+
+| 項目 | 決定 |
+|---|---|
+| 接続方法 | Claude Code と同じ。stdio(手元のプロセス)と HTTP(Streamable HTTP)。リモートは OAuth に対応する |
+| 設定の置き場所 | プロジェクト側。リポジトリ直下の `.mcp.json`(Claude Code と同じ形式) |
+| 権限 | 初回は ask。「常に許可」で、そのワークスペースのローカルルール(リポジトリ外の `~/.xharness/projects/<鍵>/permissions.yaml`)に allow を保存し、次回から聞かない |
+| ツールの増減 | あり。tools は固定し、増減は会話のメッセージで伝える(25.4) |
+| 子エージェント | 公開する。worker はすべて使える。explorer / reviewer は、ルールで許可されていない呼び出しを毎回 ask にする(自動許可しない) |
+| 扱う範囲 | ツール・リソース・プロンプトのすべて |
+
+### 25.2 設定(`.mcp.json`)
+
+```json
+{
+  "mcpServers": {
+    "github": { "type": "http", "url": "https://example.com/mcp", "headers": { "X-Team": "${TEAM}" } },
+    "db": { "command": "npx", "args": ["-y", "some-mcp-server"], "env": { "DB_URL": "${DB_URL:-sqlite://local.db}" } }
+  }
+}
+```
+
+- `type` 省略時は stdio(`command` / `args` / `env`)。`type: "http"` は `url` / `headers`。Claude Code で非推奨の `sse` は読まずに警告する
+- `${VAR}` と `${VAR:-既定値}` を `command` / `args` / `env` / `url` / `headers` で展開する。未定義で既定値も無ければ、そのサーバーを無効にして警告する。秘密値を `.mcp.json` に直接書かせないため
+- サーバー名は `^[A-Za-z0-9_-]{1,64}$`。ツール名の区切り `__` を含む名前は拒否する
+- 全体の on/off とサーバー数などの上限は `~/.xharness/config.yaml` の `mcp:`(§12 へ追記)で持つ: `enabled`(既定 true)、`startupTimeoutSec`(30)、`toolTimeoutSec`(120)、`maxOutputTokens`(25000)
+
+### 25.3 承認と起動
+
+- リポジトリから来る設定なので、**ワークスペースの信頼(Phase 4 の workspace trust)に加えて、サーバーごとの承認**が要る。リポジトリを開いただけではプロセスを起動・接続しない
+- 承認の画面には、サーバー名・種類・`command` と `args`(または `url`)・`env` / `headers` の**キー名だけ**を表示する(値は出さない)
+- 承認はリポジトリ外(`~/.xharness/projects/<鍵>/mcp-approvals.json`)に、展開前の定義のハッシュで保存する。定義が変わったら再承認。拒否も記録し、`/mcp` から取り消せる
+- 接続はセッション開始時に行う。stdio のプロセスはセッション単位で1つ起動し、同じセッションの子エージェントと共有する。セッション終了・アプリ終了でプロセスツリーごと止める
+- 起動・初期化が `startupTimeoutSec` を超えた・失敗したサーバーは使えない状態にして通知し、セッションは続ける。自動再起動はしない(`/mcp` で再接続)
+- stderr は秘密値のマスク(AGENTS.md の規則)を通して、サーバーごとのログにだけ残す。画面には要約だけを出す
+
+### 25.4 ツール(tools は固定)
+
+`.mcp.json` がセッション開始時にあれば、次の4つを tools に加える(同じ会話では増減しない。セッション中に `.mcp.json` ができた場合は次のセッションから)。
+
+| ツール | 内容 | 権限 |
+|---|---|---|
+| `McpSearch` | 接続中サーバーのツールを名前・説明で探し、入力の JSON Schema を返す | 確認なし(承認済みサーバーの情報のみ) |
+| `McpCall` | `{server, tool, input}` でツールを呼ぶ | 25.5 |
+| `ListMcpResources` | サーバーのリソース一覧(URI・名前・説明) | 確認なし |
+| `ReadMcpResource` | `{server, uri}` でリソースを読む | 初回 ask、「常に許可」はサーバー単位 |
+
+- 使えるサーバーとツール名(名前と1行の説明)の一覧は、system ではなく**会話のメッセージ**で伝える。セッション最初の user メッセージに注記として付ける
+- サーバーの `notifications/tools/list_changed`(リソース・プロンプトも同様)を受けたら、次の要求の先頭の user 側メッセージに「追加・削除されたツール」の注記を足す。tools と system は変えない
+- 削除済み・未接続のツールを `McpCall` で呼んだら、エラーの結果を返す(例外にしない)
+- 入力は、XHarness では「オブジェクトであること」と、Schema の `required` の最上位キーがあることだけを確認し、詳しい検証はサーバーに任せる
+- サーバーのツール説明・結果・リソースは**信用しない外部コンテンツ**として扱い、WebFetch と同じ注記を付ける。結果は `maxOutputTokens` を超えたら切り詰め、切り詰めたことを書く。最初は text と埋め込みテキストリソースだけを渡し、画像などは「未対応の種類」と書いて省く
+- レシートには表示用に実際の名前 `mcp__<server>__<tool>` を使い、入出力は既存のマスクを通す
+
+### 25.5 権限
+
+- `McpCall` は、権限の判定前に実際の名前 `mcp__<server>__<tool>` の呼び出しへ置き換えて判定する(cd を外す正規化と同じ場所)
+- 既定は ask。「常に許可」は、そのワークスペースのローカルルールに `{tool: "mcp__<server>__<tool>", decision: "allow"}` を保存する。ルールでは `mcp__<server>` と `mcp__<server>__*` をサーバー全体として扱う
+- deny / ask ルールは常に優先(Phase 4 の権限ルールと同じ)。モード `acceptEdits` でも MCP は自動許可しない(副作用が分からないため)。`plan` モードでは `McpCall` を拒否する(リソースの読み取りは可)
+- サーバーの `readOnlyHint` などの注釈は表示のヒントにだけ使い、許可の判断には使わない
+- 子エージェント: worker は親と同じ判定。explorer / reviewer は「読み取り専用」なので、allow ルールに一致しない `McpCall` / `ReadMcpResource` は毎回 ask(「常に許可」は保存できるが、その子の実行中に自動で広げない)
+
+### 25.6 プロンプト
+
+- サーバーのプロンプトは `/mcp__<server>__<prompt> 引数…` で呼べる。引数は空白区切りで、プロンプトの `arguments` の順に割り当てる。必須の引数が足りなければ実行しない
+- 返ったメッセージのうち text だけを、ユーザーの入力として会話に入れる(送信前に画面で内容を見せる)。外部コンテンツとして扱う点は 25.4 と同じ
+- 入力欄の補完に、接続中サーバーのプロンプトを出す
+
+### 25.7 HTTP と OAuth
+
+- Streamable HTTP で接続する。401 を受けたら MCP の認可仕様(保護リソースのメタデータ → 認可サーバーのメタデータ → 動的クライアント登録 → PKCE、ループバックへのリダイレクト)で、既定のブラウザを開いて認可する
+- トークンは OS の暗号化ストレージに保存する(Electron の `safeStorage`、Windows では DPAPI)。core は electron を import しない(§4)ので、保存処理は main プロセスから注入する。headless では保存先が無いため、OAuth が要るサーバーは使えない状態にする
+- トークンを画面・ログ・レシート・エラーメッセージに出さない(AGENTS.md の規則と同じ)。表示が要るときは先頭6文字 + `…`
+- `/mcp` から、ログアウト(トークンの削除)と再認可ができる
+
+### 25.8 画面と headless
+
+- `/mcp`: サーバーごとの状態(接続中・失敗・未承認・要認可)、ツール・リソース・プロンプトの数、承認の取り消し、再接続、ログアウト
+- 承認は、フックの承認(§19.10)と同じダイアログの形。headless は readline で聞く
+- `--fake` では MCP サーバーを起動しない(試験は 25.10 の試験用サーバーで行う)
+
+### 25.9 実装の分け方
+
+1. **M1**: `.mcp.json` の読み込みと変数展開、承認、stdio、`tools/list` と `tools/call`、`McpSearch` / `McpCall`、権限(25.5)、レシート。試験用サーバーで単体・結合テスト
+2. **M2**: リソース・プロンプト(25.4、25.6)、`list_changed` の注記、子エージェントへの公開
+3. **M3**: Streamable HTTP と OAuth(25.7)
+4. **M4**: `/mcp` の画面、入力欄の補完
+
+各単位で、§24 の「system と tools が会話の途中で変わらない」ことを試験で確認する(サーバーのツールが増減しても、前後の要求の system / tools が同じであること)。
+
+### 25.10 試験と未確認事項
+
+- `test/fixtures/mcp/` に、Node で書いた小さな stdio の試験用サーバー(ツール・リソース・プロンプト・`list_changed` を返す)を置く。HTTP と OAuth は、テスト内で起こすローカルのサーバーで確認する。外部の MCP サーバーには接続しない(クラウドでも実行できる)
+- 実装前に確認して記録すること(AGENTS.md「推測で埋めない」): 対応する MCP 仕様の版、`initialize` の内容、Claude Code の `.mcp.json` の細かい形式と変数展開の規則、`McpCall` の Schema(入れ子の任意オブジェクト)を Codex の関数定義として受け付けるか(fixture で確認)
+- **要確認(ユーザー)**: 公式の MCP TypeScript SDK(`@modelcontextprotocol/sdk`)を使うか。AGENTS.md の「SDK を使わない」はサブスクの OAuth で API を呼ぶための規則で、MCP には当てはまらない。使えば通信・OAuth の実装と保守が大きく減る。使わない場合は JSON-RPC・Streamable HTTP・OAuth を自前で実装する

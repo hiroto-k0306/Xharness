@@ -6,9 +6,19 @@ export async function reserveRequest(
   provider: "claude" | "codex",
   name: string,
   root = ".",
+  /** 試験ごとの予算(既定は Phase 0 の共通予算) */
+  options: { bucket?: string; limit?: number } = {},
 ): Promise<number> {
-  const limit = provider === "claude" ? 20 : 25;
-  const directory = resolve(root, "spike", ".out", "budget", provider);
+  const limit = options.limit ?? (provider === "claude" ? 20 : 25);
+  if (options.bucket !== undefined && !/^[a-z0-9-]+$/.test(options.bucket))
+    throw new Error("Invalid budget bucket");
+  const directory = resolve(
+    root,
+    "spike",
+    ".out",
+    options.bucket ? `budget-${options.bucket}` : "budget",
+    provider,
+  );
   await mkdir(directory, { recursive: true });
   for (let count = 1; count <= limit; count++) {
     const path = join(directory, `${count}.json`);
@@ -28,5 +38,9 @@ export async function reserveRequest(
     }
     return count;
   }
-  throw new Error("Phase 0 request budget exhausted");
+  throw new Error(
+    options.bucket
+      ? `Request budget for ${options.bucket} exhausted`
+      : "Phase 0 request budget exhausted",
+  );
 }

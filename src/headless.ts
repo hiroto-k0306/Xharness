@@ -21,12 +21,9 @@ import {
   type Rule,
   permissionModes,
 } from "./main/core/permissions.js";
-import {
-  prepareHistory,
-  estimateTokens,
-  type Checkpoint,
-} from "./main/context/compactor.js";
+import { estimateTokens, type Checkpoint } from "./main/context/compactor.js";
 import { WorkflowRuntime } from "./main/workflow/runtime.js";
+import { prepareProviderHistory } from "./main/context/provider-compactor.js";
 import { loadAgentConfig } from "./main/agents/definitions.js";
 import { waveChecks } from "./main/workflow/wave-checks.js";
 import { defaultTools } from "./main/session/controller.js";
@@ -282,7 +279,12 @@ export async function headless(args = process.argv.slice(2)) {
         continue;
       }
       if (input.trim() === "/compact") {
-        const prepared = prepareHistory(messages, {
+        const prepared = await prepareProviderHistory(messages, {
+          provider: router.provider(model!),
+          model: model!,
+          system,
+          tools: [...tools.values()].map((t) => t.spec),
+          signal: AbortSignal.timeout(60000),
           checkpoint,
           force: true,
           threshold: project.context.compactThreshold,
@@ -435,7 +437,12 @@ export async function headless(args = process.argv.slice(2)) {
           provider: router.provider(model),
           sessionId: session.id,
           async prepareContext(history, route, _signal, context) {
-            const prepared = prepareHistory(history, {
+            const prepared = await prepareProviderHistory(history, {
+              provider: route.provider,
+              model: route.model,
+              signal: _signal,
+              system: context?.system ?? system,
+              tools: context?.tools ?? [...tools.values()].map((t) => t.spec),
               checkpoint,
               limit: route.provider.models().find((m) => m.id === route.model)
                 ?.contextTokens,

@@ -114,12 +114,56 @@ async function checkPath(subject: string, cwd: string): Promise<PathCheck> {
  * §9 の権限判定。Claude Code と同じく deny → ask → allow の順に評価し、
  * ルールの細かさで順序は変えない。保護パス・秘密ファイル・単純でないコマンドは allow ルールでも確認する。
  */
+/**
+ * 先頭の「作業フォルダそのものへの cd / Set-Location」を取り除く(何もしない操作のため)。
+ * Claude Code と同じく、cwd への移動は判定に影響させない。別のフォルダへの移動はそのまま残す。
+ */
+export async function withoutCwdPrefix(
+  command: string,
+  cwd: string,
+): Promise<string> {
+  const match =
+    /^\s*(?:cd|chdir|sl|Set-Location|Push-Location|pushd)\s+(?:-(?:Literal)?Path\s+)?(?:'([^']*)'|"([^"$`]*)"|([^\s;&|'"$`()]+))\s*(?:;|&&)\s*([\s\S]+)$/i.exec(
+      command,
+    );
+  if (!match) return command;
+  const target = match[1] ?? match[2] ?? match[3] ?? "";
+  try {
+    const [root, resolved] = await Promise.all([
+      canonical(cwd),
+      canonical(resolve(cwd, target)),
+    ]);
+    const same =
+      process.platform === "win32"
+        ? root.toLowerCase() === resolved.toLowerCase()
+        : root === resolved;
+    return same ? withoutCwdPrefix(match[4]!, cwd) : command;
+  } catch {
+    return command;
+  }
+}
+
+/** Bash の呼び出しを、cwd への cd を除いた形にそろえる(判定と「常に許可」の保存に使う) */
+export async function normalizeCall<T extends ToolCall>(
+  call: T,
+  cwd: string,
+): Promise<T> {
+  if (call.name !== "Bash") return call;
+  const input = call.input as Record<string, unknown> | null;
+  if (!input || typeof input.command !== "string") return call;
+  const command = await withoutCwdPrefix(input.command, cwd);
+  return command === input.command
+    ? call
+    : { ...call, input: { ...input, command } };
+}
+
 export async function decidePermission(
   call: ToolCall,
   config: PermissionConfig,
   cwd: string,
   opts: { readOnly?: boolean; scratch?: boolean; sessionRules?: Rule[] } = {},
 ): Promise<Decision> {
+  call = await normalizeCall(call, cwd);
   const subject = ruleSubject(call);
   const all = [...config.rules, ...(opts.sessionRules ?? [])].filter(
     (r) => r.tool === "*" || r.tool === call.name,

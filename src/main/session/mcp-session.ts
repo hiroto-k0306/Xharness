@@ -67,30 +67,32 @@ export async function prepareMcp(
       message: ctx.clean(message),
     });
   for (const warning of config.warnings) notice(warning);
+  const oauth =
+    options.mcpSecrets && options.openExternal
+      ? createMcpOAuth({
+          store: options.mcpSecrets,
+          scope: await workspaceKey(root),
+          openBrowser: (url) => {
+            // サーバーが示す認可の URL。https(または手元の http)だけを開く
+            if (!isAuthorizationUrl(url))
+              throw new Error("Unsafe authorization URL");
+            notice(
+              `MCP サーバーの認可のため、ブラウザで ${new URL(url).host} を開きます。認可すると接続を続けます`,
+              "dim",
+            );
+            options.openExternal!(url);
+          },
+        })
+      : undefined;
   const manager = new McpManager({
     cwd: session.cwd,
     connector: options.mcpConnector,
+    onChange: () => emitMcpState(ctx, session, rt),
     startupTimeoutMs: settings.startupTimeoutSec * 1000,
     toolTimeoutMs: settings.toolTimeoutSec * 1000,
     redact: ctx.clean,
     log: await mcpLogger(options.home, root),
-    oauth:
-      options.mcpSecrets && options.openExternal
-        ? createMcpOAuth({
-            store: options.mcpSecrets,
-            scope: await workspaceKey(root),
-            openBrowser: (url) => {
-              // サーバーが示す認可の URL。https(または手元の http)だけを開く
-              if (!isAuthorizationUrl(url))
-                throw new Error("Unsafe authorization URL");
-              notice(
-                `MCP サーバーの認可のため、ブラウザで ${new URL(url).host} を開きます。認可すると接続を続けます`,
-                "dim",
-              );
-              options.openExternal!(url);
-            },
-          })
-        : undefined,
+    oauth,
   });
   rt.mcp = manager;
   // .mcp.json があれば、接続の成否によらず窓口ツールを加える(セッション中に tools を変えないため)
@@ -99,15 +101,17 @@ export async function prepareMcp(
   };
   const trusted =
     rt.trustedSession || (await ctx.trust.isTrusted(root).catch(() => false));
+  const approvals = await McpApprovals.open(options.home, root);
+  rt.mcpSetup = { root, servers: config.servers, approvals, oauth, trusted };
   if (!trusted) {
     notice(
       "このワークスペースを信頼していないため、.mcp.json の MCP サーバーは起動しません",
     );
     for (const server of config.servers) manager.skip(server, "unapproved");
     addTools();
+    emitMcpState(ctx, session, rt);
     return;
   }
-  const approvals = await McpApprovals.open(options.home, root);
   const approved: McpServerConfig[] = [];
   for (const server of config.servers) {
     const saved = await approvals.get(server.name, server.hash);
@@ -119,17 +123,15 @@ export async function prepareMcp(
       manager.skip(server, "rejected");
       continue;
     }
-    const decision = await gate.request({
-      session,
-      rt,
-      call: { name: "McpServer", input: displayServer(server) },
-      signal,
-      forceAsk: true,
-    });
-    if (decision === "always")
-      await approvals.set(server.name, server.hash, "approved");
-    if (decision === "deny") manager.skip(server, "unapproved");
-    else approved.push(server);
+    if (await askApproval(gate, session, rt, approvals, server, signal))
+      approved.push(server);
+    else {
+      manager.skip(server, "rejected");
+      notice(
+        `MCP サーバー ${server.name} を拒否しました。/mcp から承認し直せます`,
+        "dim",
+      );
+    }
   }
   if (approved.length) await manager.connect(approved, signal);
   for (const state of manager.states())
@@ -144,6 +146,153 @@ export async function prepareMcp(
       "dim",
     );
   addTools();
+  emitMcpState(ctx, session, rt);
+}
+
+/**
+ * サーバーの承認を尋ねる。「常に許可」は保存、「許可」はこのセッションだけ、拒否は保存する
+ * (取り消しは /mcp から。§25.3)
+ */
+async function askApproval(
+  gate: PermissionGate,
+  session: StoredSession,
+  rt: Runtime,
+  approvals: McpApprovals,
+  server: McpServerConfig,
+  signal: AbortSignal,
+): Promise<boolean> {
+  const decision = await gate.request({
+    session,
+    rt,
+    call: { name: "McpServer", input: displayServer(server) },
+    signal,
+    forceAsk: true,
+  });
+  if (signal.aborted) return false;
+  if (decision === "always")
+    await approvals.set(server.name, server.hash, "approved");
+  if (decision === "deny")
+    await approvals.set(server.name, server.hash, "rejected");
+  return decision !== "deny";
+}
+
+/** 画面の /mcp 表示と入力欄の補完に使う状態を送る */
+export function emitMcpState(
+  ctx: ControllerContext,
+  session: StoredSession,
+  rt: Runtime,
+  show = false,
+) {
+  const manager = rt.mcp;
+  ctx.options.emit({
+    type: "mcp",
+    sessionId: session.id,
+    show,
+    servers: (manager?.states() ?? []).map((s) => ({
+      ...s,
+      ...(s.error ? { error: ctx.clean(s.error) } : {}),
+      oauth: s.type === "http" && !!rt.mcpSetup?.oauth,
+    })),
+    prompts: (manager?.prompts() ?? []).map((p) => ({
+      command: `/mcp__${p.server}__${p.name}`,
+      description: p.description
+        ? ctx.clean(p.description).slice(0, 200)
+        : undefined,
+      arguments: p.arguments.map((a) => ({
+        name: a.name,
+        required: !!a.required,
+      })),
+    })),
+  });
+}
+
+export const MCP_COMMAND = /^\/mcp(?:\s|$)/;
+
+/** /mcp の書式の誤り(MCP を準備する前に確かめる) */
+export function mcpCommandError(text: string): string | undefined {
+  const [, action, name, extra] = text.trim().split(/\s+/);
+  if (!action) return undefined;
+  return ["reconnect", "reset", "logout"].includes(action) && name && !extra
+    ? undefined
+    : "使い方: /mcp | /mcp reconnect <server> | /mcp reset <server> | /mcp logout <server>";
+}
+
+/**
+ * `/mcp`(状態の表示)と、`/mcp reconnect|reset|logout <server>`(§25.8)。
+ * - reconnect: 未承認・拒否なら承認を尋ねてから、接続し直す
+ * - reset: 保存した承認・拒否を取り消して切断する(次に接続するときに再び尋ねる)
+ * - logout: 保存した OAuth のトークンを消して切断する
+ * 一覧の増減は、次の発言でモデルに注記する。tools は変えない
+ */
+export async function handleMcpCommand(
+  ctx: ControllerContext,
+  gate: PermissionGate,
+  session: StoredSession,
+  rt: Runtime,
+  text: string,
+  signal: AbortSignal,
+): Promise<void> {
+  const [, action, name] = text.trim().split(/\s+/);
+  const notice = (message: string, tone: "warn" | "dim" = "warn") =>
+    ctx.options.emit({
+      type: "notice",
+      sessionId: session.id,
+      tone,
+      message: ctx.clean(message),
+    });
+  const setup = rt.mcpSetup;
+  if (!action) {
+    if (!rt.mcp) notice(".mcp.json が無いか、MCP は使えない設定です", "dim");
+    emitMcpState(ctx, session, rt, true);
+    return;
+  }
+  if (mcpCommandError(text)) {
+    notice(mcpCommandError(text)!);
+    return;
+  }
+  const server = setup?.servers.find((s) => s.name === name);
+  if (!rt.mcp || !setup || !server) {
+    notice(`MCP サーバー ${name} は .mcp.json にありません`);
+    return;
+  }
+  if (action === "reset") {
+    await setup.approvals.reset(name);
+    await rt.mcp.disconnect(server, "unapproved");
+    notice(`MCP サーバー ${name} の承認を取り消し、切断しました`, "dim");
+  } else if (action === "logout") {
+    if (server.type !== "http" || !setup.oauth) {
+      notice(`MCP サーバー ${name} は OAuth を使っていません`);
+      return;
+    }
+    await setup.oauth.logout(server);
+    await rt.mcp.disconnect(server, "needs_auth");
+    notice(`MCP サーバー ${name} からログアウトしました`, "dim");
+  } else {
+    if (!setup.trusted) {
+      notice(
+        "このワークスペースを信頼していないため、MCP サーバーは起動しません",
+      );
+      return;
+    }
+    const saved = await setup.approvals.get(server.name, server.hash);
+    if (
+      saved !== "approved" &&
+      !(await askApproval(gate, session, rt, setup.approvals, server, signal))
+    ) {
+      await rt.mcp.disconnect(server, "rejected");
+      notice(`MCP サーバー ${name} を拒否しました`, "dim");
+    } else {
+      await rt.mcp.reconnect(server, signal);
+      const state = rt.mcp.states().find((s) => s.name === name);
+      notice(
+        state?.status === "connected"
+          ? `MCP サーバー ${name} に接続しました`
+          : `MCP サーバー ${name} に接続できませんでした: ${state?.error ?? state?.status}`,
+        state?.status === "connected" ? "dim" : "warn",
+      );
+    }
+  }
+  emitMcpState(ctx, session, rt, true);
 }
 
 /**

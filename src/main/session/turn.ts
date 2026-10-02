@@ -27,6 +27,8 @@ import {
 } from "./context.js";
 import {
   expandMcpPrompt,
+  handleMcpCommand,
+  mcpCommandError,
   MCP_PROMPT_COMMAND,
   mcpChangeNote,
   prepareMcp,
@@ -442,6 +444,51 @@ export async function runSessionTurn(
       emit({ type: "error", sessionId, message: "内部エラーで停止しました" });
   }
   await finishTurn(ctx, session, rt, events, stopCause);
+}
+
+/**
+ * /mcp の表示と操作(§25.8)。MCP をまだ準備していなければ、ここで準備する(承認の確認が出る)。
+ * モデルには送らず、履歴にも残さない
+ */
+export async function runMcpCommand(
+  ctx: ControllerContext,
+  gate: PermissionGate,
+  session: StoredSession,
+  rt: Runtime,
+  text: string,
+): Promise<void> {
+  const { emit } = ctx.options;
+  const abort = new AbortController();
+  rt.abort = abort;
+  emit({ type: "turn", sessionId: session.id, status: "running" });
+  try {
+    const usage = mcpCommandError(text);
+    if (usage)
+      emit({
+        type: "notice",
+        sessionId: session.id,
+        tone: "warn",
+        message: usage,
+      });
+    else {
+      await prepareRuntime(ctx, gate, session, rt, abort.signal);
+      await handleMcpCommand(ctx, gate, session, rt, text, abort.signal);
+    }
+  } catch {
+    if (!abort.signal.aborted)
+      emit({
+        type: "notice",
+        sessionId: session.id,
+        tone: "warn",
+        message: "MCP の操作に失敗しました",
+      });
+  }
+  rt.abort = undefined;
+  rt.pending = undefined;
+  rt.status = "idle";
+  emit({ type: "turn", sessionId: session.id, status: "idle" });
+  if (rt.closing) ctx.dropRuntime(session.id);
+  await ctx.emitState();
 }
 
 /** 履歴・レシート・索引を保存し、idle に戻す */

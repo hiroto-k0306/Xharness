@@ -305,6 +305,7 @@ export function App() {
                 items={activeView?.items ?? []}
                 running={!!view?.running}
                 model={model}
+                onCommand={(text) => void s.send(text)}
               />
               {app.phase4 && (
                 <LoopFlow view={activeView} model={agent?.model ?? model} />
@@ -412,6 +413,16 @@ export function App() {
                   mode,
                 });
             }}
+            suggestions={[
+              { value: "/mcp", description: "MCP サーバーの状態と操作" },
+              ...(view?.mcp?.prompts ?? []).map((p) => ({
+                value: p.command,
+                args: p.arguments
+                  .map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`))
+                  .join(" "),
+                description: p.description,
+              })),
+            ]}
             cwdLabel={workspace?.name ?? (session ? "scratch" : "~")}
             running={!!view?.running}
             blocked={waiting}

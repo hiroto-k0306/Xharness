@@ -14,18 +14,69 @@ export interface PromptLineProps {
   modelColor: string;
   /** false を返したら(送信を断られたら)、入力欄が空のままなら文を戻す */
   onSubmit(text: string): void | boolean | Promise<boolean | void>;
+  /** `/` で始まる入力の補完候補(/mcp と MCP のプロンプト。§25.8) */
+  suggestions?: Suggestion[];
+}
+
+export interface Suggestion {
+  /** 入力欄に入れる文字列 */
+  value: string;
+  /** 引数の形(例: `<file> [focus]`) */
+  args?: string;
+  description?: string;
+}
+
+/** 入力中のコマンド名(最初の空白より前)に前方一致する候補。空白を打ったら閉じる */
+export function matchSuggestions(
+  text: string,
+  all: Suggestion[] | undefined,
+): Suggestion[] {
+  if (!all?.length || !text.startsWith("/") || /\s/.test(text)) return [];
+  const query = text.toLowerCase();
+  return all
+    .filter((s) => s.value.toLowerCase().startsWith(query) && s.value !== text)
+    .slice(0, 8);
 }
 
 /** `name ❯ ` 形式の入力欄。Enter 送信 / Shift+Enter 改行(実行中の Esc 中断は App が受ける) */
 export function PromptLine(p: PromptLineProps) {
   const [text, setText] = useState("");
+  const [selected, setSelected] = useState(0);
   const ref = useRef<HTMLTextAreaElement>(null);
   const disabled = p.running || p.blocked;
+  const matches = matchSuggestions(text, p.suggestions);
+  const accept = (s: Suggestion) => {
+    setText(s.args ? `${s.value} ` : s.value);
+    setSelected(0);
+    ref.current?.focus();
+  };
   useEffect(() => {
     if (!disabled) ref.current?.focus();
   }, [disabled]);
   return (
     <div className={`${styles.prompt} ${p.blocked ? styles.blocked : ""}`}>
+      {matches.length > 0 && !disabled && (
+        <ul className={styles.suggest} role="listbox" aria-label="commands">
+          {matches.map((s, i) => (
+            <li
+              key={s.value}
+              role="option"
+              aria-selected={i === selected}
+              className={i === selected ? styles.selected : undefined}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                accept(s);
+              }}
+            >
+              <span className={styles.cmd}>{s.value}</span>
+              {s.args && <span className={styles.args}> {s.args}</span>}
+              {s.description && (
+                <span className={styles.desc}> — {s.description}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
       <span className={styles.cwd}>{p.cwdLabel}</span>
       <span className={styles.gt}>❯</span>
       <textarea
@@ -42,10 +93,27 @@ export function PromptLine(p: PromptLineProps) {
               ? "# 実行中… Esc で中断"
               : ""
         }
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          setSelected(0);
+        }}
         onKeyDown={(e) => {
           // 日本語入力の変換確定の Enter は送信しない
           if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+          // 補完: Tab で選んだ候補を入れる、↑↓ で選ぶ
+          if (matches.length) {
+            if (e.key === "Tab") {
+              e.preventDefault();
+              accept(matches[Math.min(selected, matches.length - 1)]!);
+              return;
+            }
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              const step = e.key === "ArrowDown" ? 1 : -1;
+              setSelected((i) => (i + step + matches.length) % matches.length);
+              return;
+            }
+          }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             if (!text.trim()) return;

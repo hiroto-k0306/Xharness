@@ -42,6 +42,8 @@ export interface SessionView {
     total?: number;
   };
   pending?: PendingPermission;
+  /** MCP の状態とプロンプト(/mcp の表示・入力欄の補完。§25.8) */
+  mcp?: Omit<Extract<UiEvent, { type: "mcp" }>, "type" | "sessionId" | "show">;
 }
 export interface EventState {
   repositoryProgress?: string;
@@ -222,6 +224,24 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
               )
             : v.items,
       });
+    }
+    case "mcp": {
+      const v = view(s, e.sessionId);
+      const next = {
+        ...v,
+        mcp: { servers: e.servers, prompts: e.prompts },
+      };
+      return put(
+        s,
+        e.sessionId,
+        e.show
+          ? withItem(next, {
+              kind: "mcp",
+              id: `m${++noticeSeq}`,
+              servers: e.servers,
+            })
+          : next,
+      );
     }
     case "notice":
     case "error": {

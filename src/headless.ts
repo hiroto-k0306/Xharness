@@ -401,6 +401,27 @@ export async function headless(args = process.argv.slice(2)) {
         continue;
       }
       if (!input.trim()) continue;
+      if (input.trim() === "/mcp") {
+        // MCP の状態(§25.8)。操作(承認の取り消し・ログアウト)はアプリの /mcp で行う
+        const states = mcp?.states() ?? [];
+        if (!states.length) process.stdout.write("MCP: no servers\n");
+        for (const state of states)
+          process.stdout.write(
+            `MCP ${state.name} (${state.type}): ${state.status}` +
+              (state.status === "connected"
+                ? ` · tools ${state.tools} · resources ${state.resources ?? 0} · prompts ${state.prompts ?? 0}`
+                : "") +
+              (state.error ? ` (${clean(state.error)})` : "") +
+              "\n",
+          );
+        for (const prompt of mcp?.prompts() ?? [])
+          process.stdout.write(
+            `  /mcp__${prompt.server}__${prompt.name} ${prompt.arguments
+              .map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`))
+              .join(" ")}\n`,
+          );
+        continue;
+      }
       if (MCP_PROMPT_COMMAND.test(input.trim())) {
         // MCP のプロンプト(§25.6): 展開した内容を見せ、y で通常の発言として送る
         const parsed = parseMcpPrompt(mcp, input);

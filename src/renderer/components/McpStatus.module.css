@@ -1,0 +1,65 @@
+.box {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 12px;
+}
+.title {
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 4px 0;
+  border-top: 1px solid var(--line);
+}
+.row:first-of-type {
+  border-top: none;
+}
+.name {
+  color: var(--tool);
+  min-width: 8em;
+}
+.connected {
+  color: var(--code);
+}
+.failed,
+.needs_auth {
+  color: var(--err);
+}
+.unapproved,
+.rejected {
+  color: var(--warn);
+}
+.counts {
+  color: var(--dim);
+}
+.error {
+  flex-basis: 100%;
+  color: var(--err);
+  overflow-wrap: anywhere;
+}
+.actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.actions button {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 8px;
+  cursor: pointer;
+}
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

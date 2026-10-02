@@ -27,12 +27,13 @@ import { Repository } from "./repository.js";
 import { compactNow, saveDefaultModel, setMode } from "./settings-commands.js";
 import { SessionStore, WorkspaceStore, type StoredSession } from "./store.js";
 import { itemsFromMessages } from "./transcript.js";
-import { runSessionTurn } from "./turn.js";
+import { runMcpCommand, runSessionTurn } from "./turn.js";
 import {
   finishWorktree,
   RepositoryOpener,
   restoreWorktree,
 } from "./worktree-commands.js";
+import { emitMcpState, MCP_COMMAND } from "./mcp-session.js";
 
 export { defaultTools } from "./context.js";
 export type { ControllerOptions, Host } from "./context.js";
@@ -422,6 +423,21 @@ export class SessionController {
       return this.setModel(sessionId, model, effort as Effort | undefined);
     }
     const rt = await this.load(sessionId);
+    if (MCP_COMMAND.test(command)) {
+      // /mcp はモデルに送らない。状態の表示は実行中でもできるが、操作は待機中だけ(§25.8)
+      if (rt.status !== "idle") {
+        if (command !== "/mcp")
+          return { ok: false, error: "Turn already running" };
+        emitMcpState(this.ctx, session, rt, true);
+        return { ok: true };
+      }
+      rt.status = "running";
+      rt.closing = false;
+      rt.done = runMcpCommand(this.ctx, this.gate, session, rt, command).catch(
+        () => undefined,
+      );
+      return { ok: true, sessionId };
+    }
     const phaseCommand = /^\/(?:phase|review)(?:\s|$)/.test(command);
     if (rt.status !== "idle") {
       if (phaseCommand && rt.workflow) {

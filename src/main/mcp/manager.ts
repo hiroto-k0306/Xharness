@@ -535,6 +535,72 @@ export class McpManager {
     this.options.onChange?.({ server, kind });
   }
 
+  /** サーバーのツール・リソースの名前(変化の注記用) */
+  private names(server: string) {
+    return {
+      tools: this.toolList
+        .filter((t) => t.server === server)
+        .map((t) => t.name),
+      resources: this.resourceList
+        .filter((r) => r.server === server)
+        .map((r) => r.uri),
+    };
+  }
+
+  private noteDiff(
+    server: string,
+    before: { tools: string[]; resources: string[] },
+  ) {
+    const after = this.names(server);
+    for (const kind of ["tools", "resources"] as const) {
+      const added = after[kind].filter((x) => !before[kind].includes(x));
+      const removed = before[kind].filter((x) => !after[kind].includes(x));
+      if (added.length || removed.length)
+        this.changes.push({ server, kind, added, removed });
+    }
+  }
+
+  /** 1つのサーバーとの接続を切り、そのツール・リソース・プロンプトを外す(/mcp の取り消し・ログアウト) */
+  async disconnect(
+    server: McpServerConfig,
+    status: "unapproved" | "rejected" | "needs_auth",
+  ) {
+    const before = this.names(server.name);
+    const connection = this.connections.get(server.name);
+    this.connections.delete(server.name);
+    await connection?.close().catch(() => undefined);
+    this.toolList = this.toolList.filter((t) => t.server !== server.name);
+    this.resourceList = this.resourceList.filter(
+      (r) => r.server !== server.name,
+    );
+    this.promptList = this.promptList.filter((p) => p.server !== server.name);
+    this.state.set(server.name, {
+      name: server.name,
+      type: server.type,
+      status,
+      tools: 0,
+    });
+    this.noteDiff(server.name, before);
+    this.options.onChange?.({ server: server.name, kind: "tools" });
+  }
+
+  /** 切ってから接続し直す(/mcp の再接続)。増減は次の発言で会話に伝える */
+  async reconnect(server: McpServerConfig, signal: AbortSignal) {
+    const before = this.names(server.name);
+    const connection = this.connections.get(server.name);
+    this.connections.delete(server.name);
+    await connection?.close().catch(() => undefined);
+    this.toolList = this.toolList.filter((t) => t.server !== server.name);
+    this.resourceList = this.resourceList.filter(
+      (r) => r.server !== server.name,
+    );
+    this.promptList = this.promptList.filter((p) => p.server !== server.name);
+    await this.connectOne(server, signal);
+    this.sort();
+    this.noteDiff(server.name, before);
+    this.options.onChange?.({ server: server.name, kind: "tools" });
+  }
+
   /** まだ会話に伝えていない一覧の変化を取り出す */
   takeChanges(): McpListChange[] {
     const all = this.changes;

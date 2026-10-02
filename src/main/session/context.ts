@@ -13,7 +13,9 @@ import { FileAccess, fileTools } from "../tools/files.js";
 import { type ToolRegistry } from "../tools/registry.js";
 import { type ProviderUsage, type SearchBudget } from "../tools/web-search.js";
 import { type McpConnector, type McpManager } from "../mcp/manager.js";
-import { type SecretStore } from "../mcp/oauth.js";
+import { type McpOAuth, type SecretStore } from "../mcp/oauth.js";
+import { type McpApprovals } from "../mcp/approvals.js";
+import { type McpServerConfig } from "../mcp/config.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
@@ -106,6 +108,14 @@ export interface Runtime {
   /** MCP の接続(セッション開始時に1回だけ準備する。§25.3) */
   mcp?: McpManager;
   mcpPrepared?: boolean;
+  /** /mcp の操作に使う、セッション開始時の MCP の設定 */
+  mcpSetup?: {
+    root: string;
+    servers: McpServerConfig[];
+    approvals: McpApprovals;
+    oauth?: McpOAuth;
+    trusted: boolean;
+  };
   receiptSeq: number;
   messageSeq: number;
   /** 実行中のターン(終了待ち用) */

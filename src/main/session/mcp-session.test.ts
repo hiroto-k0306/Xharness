@@ -393,6 +393,23 @@ describe("MCP OAuth in a session (§25.7)", () => {
       expect(token).toBeTruthy();
       expect(JSON.stringify(events)).not.toContain(token);
       expect(JSON.stringify(requests)).not.toContain(token);
+      // /mcp logout で保存したトークンを消し、切断する(状態の表示にもトークンを出さない)
+      await controller.handle({
+        type: "send",
+        sessionId: id,
+        text: "/mcp logout remote",
+      });
+      await until(() => JSON.stringify(events).includes("ログアウトしました"));
+      expect(secrets.size).toBe(0);
+      const last = events
+        .filter((e): e is Extract<UiEvent, { type: "mcp" }> => e.type === "mcp")
+        .at(-1)!;
+      expect(last.servers[0]).toMatchObject({
+        name: "remote",
+        status: "needs_auth",
+        oauth: true,
+      });
+      expect(JSON.stringify(events)).not.toContain(token);
     } finally {
       await controller.shutdown(100);
       await server.close();
@@ -407,4 +424,124 @@ describe("MCP OAuth in a session (§25.7)", () => {
     expect(isAuthorizationUrl("file:///C:/x")).toBe(false);
     expect(isAuthorizationUrl("javascript:alert(1)")).toBe(false);
   });
+});
+
+describe("/mcp command (§25.8)", () => {
+  const mcpEvents = (events: UiEvent[]) =>
+    events.filter(
+      (e): e is Extract<UiEvent, { type: "mcp" }> => e.type === "mcp",
+    );
+  const turns = (events: UiEvent[], id: string) =>
+    events.filter(
+      (e) => e.type === "turn" && e.sessionId === id && e.status === "idle",
+    ).length;
+  it("shows the state without calling the model, and reset / reconnect / deny change it", async () => {
+    const w = await setup(true);
+    const controller = w.make();
+    const id = await start(controller);
+    // 最初の /mcp で準備する(承認を尋ねる)。モデルには送らない
+    await controller.handle({ type: "send", sessionId: id, text: "/mcp" });
+    await until(() => asks(w.events).length === 1);
+    await answer(controller, id, asks(w.events)[0]!, "always");
+    await until(() => mcpEvents(w.events).some((e) => e.show));
+    const shown = mcpEvents(w.events).find((e) => e.show)!;
+    expect(shown.servers).toEqual([
+      expect.objectContaining({ name: "fx", status: "connected", tools: 6 }),
+    ]);
+    expect(shown.prompts[0]).toEqual({
+      command: "/mcp__fx__review",
+      description: "Ask for a code review",
+      arguments: [
+        { name: "file", required: true },
+        { name: "focus", required: false },
+      ],
+    });
+    await until(() => turns(w.events, id) >= 1);
+    expect(w.requests).toHaveLength(0);
+
+    // 承認を取り消すと切断し、次の発言でモデルに「消えた」ことを伝える
+    await controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "/mcp reset fx",
+    });
+    await until(() => turns(w.events, id) >= 2);
+    expect(mcpEvents(w.events).at(-1)!.servers[0]!.status).toBe("unapproved");
+    await controller.handle({ type: "send", sessionId: id, text: "hello" });
+    await until(() => turns(w.events, id) >= 3);
+    const hello = w.requests
+      .at(-1)!
+      .messages.find(
+        (m) => (m.content[0] as { text?: string }).text === "hello",
+      )!;
+    const note = (hello.content[1] as { text: string }).text;
+    expect(note).toContain("fx tools: removed");
+
+    // 接続し直すときは承認を尋ね直す。拒否は保存され、次のセッションでも尋ねない
+    await controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "/mcp reconnect fx",
+    });
+    await until(() => asks(w.events).length === 2);
+    await answer(controller, id, asks(w.events)[1]!, "deny");
+    await until(() => turns(w.events, id) >= 4);
+    expect(mcpEvents(w.events).at(-1)!.servers[0]!.status).toBe("rejected");
+    await controller.shutdown(100);
+    const again = w.make();
+    const second = await start(again);
+    await again.handle({ type: "send", sessionId: second, text: "/mcp" });
+    await until(
+      () =>
+        mcpEvents(w.events).filter((e) => e.sessionId === second && e.show)
+          .length > 0,
+    );
+    expect(asks(w.events)).toHaveLength(2);
+    expect(
+      mcpEvents(w.events)
+        .filter((e) => e.sessionId === second)
+        .at(-1)!.servers[0]!.status,
+    ).toBe("rejected");
+    // reconnect で承認し直せる
+    await again.handle({
+      type: "send",
+      sessionId: second,
+      text: "/mcp reconnect fx",
+    });
+    await until(() => asks(w.events).length === 3);
+    await answer(again, second, asks(w.events)[2]!, "allow");
+    await until(
+      () =>
+        mcpEvents(w.events)
+          .filter((e) => e.sessionId === second)
+          .at(-1)!.servers[0]!.status === "connected",
+    );
+    await again.shutdown(100);
+  }, 30_000);
+
+  it("rejects bad usage and operations on unknown servers", async () => {
+    const w = await setup(true);
+    const controller = w.make();
+    const id = await start(controller);
+    await controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "/mcp nope fx",
+    });
+    await until(() => JSON.stringify(w.events).includes("使い方: /mcp"));
+    await until(() => turns(w.events, id) >= 1);
+    await controller.handle({
+      type: "send",
+      sessionId: id,
+      text: "/mcp reset other",
+    });
+    // 書式が正しければ MCP を準備する(fx の承認を尋ねる)
+    await until(() => asks(w.events).length === 1);
+    await answer(controller, id, asks(w.events)[0]!, "allow");
+    await until(() =>
+      JSON.stringify(w.events).includes("other は .mcp.json にありません"),
+    );
+    expect(w.requests).toHaveLength(0);
+    await controller.shutdown(100);
+  }, 30_000);
 });

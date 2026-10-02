@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { type TranscriptItem } from "../../shared/ipc.js";
 import { Logo } from "./Logo.js";
+import { McpStatus } from "./McpStatus.js";
 import styles from "./Transcript.module.css";
 
 const STATUS = {
@@ -14,10 +15,17 @@ export interface TranscriptProps {
   items: TranscriptItem[];
   running: boolean;
   model: string;
+  /** /mcp の表示のボタンから送るコマンド */
+  onCommand?(text: string): void;
 }
 
 /** モデル出力は文字列としてだけ描画する(React が escape する)。HTML / Markdown は解釈しない。 */
-export function Transcript({ items, running, model }: TranscriptProps) {
+export function Transcript({
+  items,
+  running,
+  model,
+  onCommand,
+}: TranscriptProps) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
@@ -66,6 +74,15 @@ export function Transcript({ items, running, model }: TranscriptProps) {
             </div>
           );
         }
+        if (item.kind === "mcp")
+          return (
+            <McpStatus
+              key={item.id}
+              servers={item.servers}
+              busy={running}
+              onCommand={onCommand}
+            />
+          );
         if (item.kind === "notice")
           return (
             <div

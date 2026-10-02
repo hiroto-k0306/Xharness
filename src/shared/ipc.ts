@@ -95,8 +95,27 @@ export interface AppState {
   version: string;
 }
 
+/** /mcp の表示(§25.8)。トークンなどの秘密は含めない */
+export interface McpServerView {
+  name: string;
+  type: "stdio" | "http";
+  status: "connected" | "failed" | "unapproved" | "rejected" | "needs_auth";
+  tools: number;
+  resources?: number;
+  prompts?: number;
+  error?: string;
+  /** OAuth を使える(ログアウトを出す) */
+  oauth?: boolean;
+}
+export interface McpPromptView {
+  command: string;
+  description?: string;
+  arguments: { name: string; required: boolean }[];
+}
+
 export type TranscriptItem =
   | { kind: "user"; id: string; text: string }
+  | { kind: "mcp"; id: string; servers: McpServerView[] }
   | { kind: "assistant"; id: string; text: string }
   | {
       kind: "tool";
@@ -146,6 +165,14 @@ export type UiEvent =
     }
   | { type: "tool_progress"; sessionId: string; index: number; total: number }
   | { type: "notice"; sessionId: string; message: string; tone: "dim" | "warn" }
+  | {
+      type: "mcp";
+      sessionId: string;
+      servers: McpServerView[];
+      prompts: McpPromptView[];
+      /** /mcp で表示を求められた(会話欄に状態を出す) */
+      show: boolean;
+    }
   | { type: "repository_progress"; message: string }
   | { type: "receipt_history"; sessionId: string; receipts: Receipt[] }
   | { type: "user_message"; sessionId: string; messageId: string; text: string }

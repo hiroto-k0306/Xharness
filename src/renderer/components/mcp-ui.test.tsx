@@ -141,3 +141,27 @@ describe("prompt completion (§25.6)", () => {
     expect(onSubmit).toHaveBeenCalledWith("/mcp__github__review 42");
   });
 });
+
+describe("older /mcp blocks", () => {
+  it("only the latest block can be operated; older ones are marked as past state", () => {
+    const items = [
+      { kind: "mcp" as const, id: "m1", servers },
+      { kind: "notice" as const, id: "n1", tone: "dim" as const, text: "x" },
+      { kind: "mcp" as const, id: "m2", servers },
+    ];
+    render(
+      <Transcript
+        items={items}
+        running={false}
+        model="m"
+        onCommand={() => {}}
+      />,
+    );
+    const [old, latest] = screen.getAllByTestId("mcp-status");
+    expect(old).toHaveAttribute("data-stale", "true");
+    expect(within(old!).getByText(/過去の状態/)).toBeInTheDocument();
+    expect(within(old!).queryAllByRole("button")).toHaveLength(0);
+    expect(latest).not.toHaveAttribute("data-stale");
+    expect(within(latest!).getAllByRole("button").length).toBeGreaterThan(0);
+  });
+});

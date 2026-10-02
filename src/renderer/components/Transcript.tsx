@@ -30,6 +30,8 @@ export function Transcript({
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
   }, [items]);
+  // /mcp の表示は最新のものだけ操作できる(古い表示はその時点の状態)
+  const latestMcp = items.findLast((i) => i.kind === "mcp")?.id;
   if (!items.length)
     return (
       <div className={styles.pane} data-testid="transcript">
@@ -81,6 +83,7 @@ export function Transcript({
               servers={item.servers}
               busy={running}
               onCommand={onCommand}
+              stale={item.id !== latestMcp}
             />
           );
         if (item.kind === "notice")

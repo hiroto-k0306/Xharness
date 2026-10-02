@@ -377,13 +377,17 @@ describe("MCP permissions (§25.5)", () => {
   });
 });
 
-describe.skipIf(process.platform === "win32")("process cleanup", () => {
+describe("process cleanup", () => {
   it("does not leave a server process behind after a startup timeout", async () => {
     const { sdkConnector } = await import("./manager.js");
-    const { execFileSync } = await import("node:child_process");
-    const marker = `xh-mcp-slow-${Date.now()}`;
-    const server = { ...fixtureServer("slow", { FIXTURE_MODE: "slow" }) };
-    server.args = [FIXTURE, marker];
+    const { mkdtemp, readFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const pidFile = join(await mkdtemp(join(tmpdir(), "xh-mcp-pid-")), "pid");
+    const server = fixtureServer("slow", {
+      FIXTURE_MODE: "slow",
+      FIXTURE_PID_FILE: pidFile,
+    });
     await expect(
       sdkConnector(server, {
         cwd: process.cwd(),
@@ -393,15 +397,21 @@ describe.skipIf(process.platform === "win32")("process cleanup", () => {
         outer: new AbortController().signal,
       }),
     ).rejects.toThrow();
-    await new Promise((r) => setTimeout(r, 4500));
-    const running = () => {
+    const pid = Number(await readFile(pidFile, "utf8"));
+    expect(pid).toBeGreaterThan(0);
+    // process.kill(pid, 0) は送らずに存在だけを確かめる(Windows でも同じ)。EPERM は存在している
+    const alive = () => {
       try {
-        return execFileSync("pgrep", ["-f", marker]).toString().trim();
-      } catch {
-        return "";
+        process.kill(pid, 0);
+        return true;
+      } catch (error) {
+        return (error as NodeJS.ErrnoException).code === "EPERM";
       }
     };
-    expect(running()).toBe("");
+    const end = Date.now() + 8000;
+    while (alive() && Date.now() < end)
+      await new Promise((r) => setTimeout(r, 100));
+    expect(alive()).toBe(false);
   }, 20_000);
 });
 

@@ -15,13 +15,22 @@ export interface McpStatusProps {
   busy: boolean;
   /** `/mcp reconnect <server>` などを送る */
   onCommand?(text: string): void;
+  /** 後から新しい表示が出た(この表示は過去の状態。操作できない) */
+  stale?: boolean;
 }
 
 /** /mcp の表示(§25.8)。サーバーごとの状態と、再接続・承認の取り消し・ログアウト */
-export function McpStatus({ servers, busy, onCommand }: McpStatusProps) {
+export function McpStatus({ servers, busy, onCommand, stale }: McpStatusProps) {
+  const command = stale ? undefined : onCommand;
   return (
-    <div className={styles.box} data-testid="mcp-status">
-      <div className={styles.title}># MCP サーバー</div>
+    <div
+      className={`${styles.box} ${stale ? styles.stale : ""}`}
+      data-testid="mcp-status"
+      data-stale={stale ? "true" : undefined}
+    >
+      <div className={styles.title}>
+        # MCP サーバー{stale ? "(過去の状態)" : ""}
+      </div>
       {servers.length === 0 && (
         <div className={styles.counts}>.mcp.json にサーバーがありません</div>
       )}
@@ -36,12 +45,12 @@ export function McpStatus({ servers, busy, onCommand }: McpStatusProps) {
               {s.prompts ?? 0}
             </span>
           )}
-          {onCommand && (
+          {command && (
             <span className={styles.actions}>
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => onCommand(`/mcp reconnect ${s.name}`)}
+                onClick={() => command(`/mcp reconnect ${s.name}`)}
               >
                 {s.status === "connected" ? "再接続" : "接続"}
               </button>
@@ -51,7 +60,7 @@ export function McpStatus({ servers, busy, onCommand }: McpStatusProps) {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => onCommand(`/mcp reset ${s.name}`)}
+                  onClick={() => command(`/mcp reset ${s.name}`)}
                 >
                   承認を取り消す
                 </button>
@@ -60,7 +69,7 @@ export function McpStatus({ servers, busy, onCommand }: McpStatusProps) {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => onCommand(`/mcp logout ${s.name}`)}
+                  onClick={() => command(`/mcp logout ${s.name}`)}
                 >
                   ログアウト
                 </button>

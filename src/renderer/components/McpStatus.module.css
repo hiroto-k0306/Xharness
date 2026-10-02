@@ -63,3 +63,6 @@
   opacity: 0.5;
   cursor: default;
 }
+.stale {
+  opacity: 0.55;
+}

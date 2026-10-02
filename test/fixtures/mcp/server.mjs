@@ -1,5 +1,6 @@
 // 試験用の stdio MCP サーバー(DESIGN.md §25.10)。外部に接続しない。
 // 環境変数 FIXTURE_MODE: "slow" は初期化に応答しない、"crash" は起動直後に終了する。
+// FIXTURE_PID_FILE があれば、起動時にプロセス番号をそのファイルへ書く。
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -11,7 +12,12 @@ import {
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 
+import { writeFileSync } from "node:fs";
+
 const mode = process.env.FIXTURE_MODE ?? "";
+// 試験がプロセスの後片付けを確かめるため、自分のプロセス番号を書く(Windows でも使える方法)
+if (process.env.FIXTURE_PID_FILE)
+  writeFileSync(process.env.FIXTURE_PID_FILE, String(process.pid));
 if (mode === "crash") {
   process.stderr.write("fixture crashed on purpose\n");
   process.exit(3);

@@ -44,6 +44,7 @@ export interface ChildContext {
   files?: string[];
 }
 export interface ChildOptions {
+  checkpoint?(cwd: string): LoopOptions["checkpoint"];
   onTraceWarning?(message: string): void;
   onTranscript?(
     context: ChildContext,
@@ -235,6 +236,7 @@ export class ChildRunner {
       let compactionFailed = false;
       const result = await runTurn(
         {
+          checkpoint: this.options.checkpoint?.(cwd),
           provider: this.options.router.provider(choice.model),
           router: this.options.router,
           onFallback: (route) =>

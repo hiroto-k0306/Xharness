@@ -26,6 +26,7 @@ export interface Message {
   role: Role;
   content: ContentBlock[];
   meta?: {
+    rewind?: { keep: number };
     provider?: ProviderId;
     model?: string;
     usage?: Usage;

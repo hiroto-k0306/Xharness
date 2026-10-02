@@ -58,6 +58,7 @@ async function writes(call: ToolCall, cwd: string): Promise<boolean> {
   );
 }
 export class WorkflowRuntime {
+  private fileCheckpoint?: LoopOptions["checkpoint"];
   manualReview = false;
   private queuedPhase?: string;
   queuePhase(phase: string) {
@@ -124,6 +125,8 @@ export class WorkflowRuntime {
     });
     this.runner = new ChildRunner({
       ...options,
+      checkpoint: (cwd) =>
+        cwd === options.cwd ? this.fileCheckpoint : undefined,
       hooks: (context, onReceipt) =>
         shellHooks({
           hooks: options.config.hooks ?? [],
@@ -596,6 +599,7 @@ export class WorkflowRuntime {
     );
   }
   private async runTraced(options: LoopOptions, signal: AbortSignal) {
+    this.fileCheckpoint = options.checkpoint;
     if (
       this.options.config.workflow.mode === "auto" &&
       this.state.phase === "off"

@@ -92,6 +92,7 @@ export type StepHook = (
   signal: AbortSignal,
 ) => Promise<HookResult>;
 export interface LoopOptions {
+  checkpoint?: import("../tools/registry.js").WriteCheckpoint;
   prepareContext?(
     messages: Message[],
     route: Route,

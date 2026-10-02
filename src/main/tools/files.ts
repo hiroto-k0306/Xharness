@@ -112,6 +112,7 @@ export function fileTools(access: FileAccess): ToolRegistry {
       }
     };
     const tool: Tool = {
+      invalidate: () => access.reads.clear(),
       spec: {
         name,
         description:
@@ -129,7 +130,7 @@ export function fileTools(access: FileAccess): ToolRegistry {
       },
       readOnly: name === "Read",
       validate,
-      async execute(input, signal) {
+      async execute(input, signal, context) {
         signal.throwIfAborted();
         const invalid = await validate(input);
         if (invalid)
@@ -184,8 +185,21 @@ export function fileTools(access: FileAccess): ToolRegistry {
             isError: true,
             error: failure("invalid_args"),
           };
+        await context?.checkpoint?.beforeWrite(path);
+        signal.throwIfAborted();
+        const stale = await access.check(path);
+        if (stale)
+          return {
+            content: stale,
+            isError: true,
+            error: failure("invalid_args"),
+          };
         await mkdir(dirname(path), { recursive: true });
         await writeFile(path, content, "utf8");
+        await context?.checkpoint?.afterWrite(
+          path,
+          Buffer.from(content, "utf8"),
+        );
         // A new Read is required before the next mutation.
         access.reads.delete(path);
         return {

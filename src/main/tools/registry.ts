@@ -11,7 +11,12 @@ export interface ToolOutput {
   content: string;
   isError?: boolean;
 }
+export interface WriteCheckpoint {
+  beforeWrite(path: string): Promise<void>;
+  afterWrite(path: string, bytes: Buffer): Promise<void>;
+}
 export interface Tool {
+  invalidate?(): void;
   /** Output text is bounded by the tool before JSON serialization. */
   boundedOutput?: boolean;
   /** Release turn-owned resources even on stop/error. */
@@ -26,7 +31,10 @@ export interface Tool {
   execute(
     input: unknown,
     signal: AbortSignal,
-    context?: { redact?: (text: string) => string },
+    context?: {
+      redact?: (text: string) => string;
+      checkpoint?: WriteCheckpoint;
+    },
   ): Promise<ToolOutput>;
 }
 export type ToolRegistry = Map<string, Tool>;

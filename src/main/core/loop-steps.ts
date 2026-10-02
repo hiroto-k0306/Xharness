@@ -340,6 +340,7 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
                     () =>
                       item.tool!.execute(item.call.input, signal, {
                         redact: options.redact,
+                        checkpoint: options.checkpoint,
                       }),
                     { callId: item.call.id },
                   );

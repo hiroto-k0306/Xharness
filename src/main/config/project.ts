@@ -13,6 +13,7 @@ import { localRulesPath } from "./trust.js";
 import { randomUUID } from "node:crypto";
 import { FileAccess } from "../tools/files.js";
 export interface ProjectConfig {
+  checkpoints?: { retentionDays: number };
   permissions: PermissionConfig;
   context: { compactThreshold: number; memoryFiles: string[] };
   /**
@@ -51,10 +52,20 @@ export async function loadProjectConfig(
     : {};
   const local = cwd ? await document(await localRulesPath(home, cwd)) : {};
   const result: ProjectConfig = {
+    checkpoints: { retentionDays: 30 },
     permissions: { mode: "default", rules: [] },
     context: { compactThreshold: 0.8, memoryFiles: ["AGENTS.md", "CLAUDE.md"] },
   };
   const held: { rules: Rule[]; mode?: PermissionMode } = { rules: [] };
+  const retentionDays = (
+    user.checkpoints as { retentionDays?: unknown } | undefined
+  )?.retentionDays;
+  if (
+    typeof retentionDays === "number" &&
+    Number.isSafeInteger(retentionDays) &&
+    retentionDays > 0
+  )
+    result.checkpoints = { retentionDays };
   const permissionsOf = (doc: Record<string, unknown>) =>
     doc.permissions && typeof doc.permissions === "object"
       ? (doc.permissions as Record<string, unknown>)

@@ -93,11 +93,71 @@ async function beginTurn(
   return session;
 }
 
+/**
+ * プロジェクト設定を読む。権限を広げる項目(allow ルール・acceptEdits)があり、
+ * まだ信頼していないワークスペースなら、内容を見せて信頼するか尋ねる(Claude Code の workspace trust)。
+ * 「常に」は記録し、「許可」はこのセッションだけ、「拒否」は広げる項目を適用せずに続ける。
+ */
+async function loadTrustedConfig(
+  ctx: ControllerContext,
+  gate: PermissionGate,
+  session: StoredSession,
+  rt: Runtime,
+  root: string | undefined,
+  signal: AbortSignal,
+): Promise<ProjectConfig> {
+  const home = ctx.options.home;
+  const trusted = async () =>
+    !root || !!rt.trustedSession || (await ctx.trust.isTrusted(root));
+  let config = await loadProjectConfig(home, root, {
+    trusted: await trusted(),
+  });
+  if (!root || !config.untrusted || rt.trustDeclined) return config;
+  const decision = await gate.request({
+    session,
+    rt,
+    call: {
+      name: "ProjectSettings",
+      input: { workspace: root, ...config.untrusted },
+    },
+    signal,
+    forceAsk: true,
+  });
+  if (decision === "always") await ctx.trust.trust(root);
+  else if (decision === "allow" || decision === "session")
+    rt.trustedSession = true;
+  else {
+    rt.trustDeclined = true;
+    ctx.options.emit({
+      type: "notice",
+      sessionId: session.id,
+      tone: "warn",
+      message:
+        "このワークスペースの設定にある許可ルール・acceptEdits は適用せずに続けます(deny / ask は適用します)",
+    });
+    return config;
+  }
+  const heldMode = config.untrusted?.mode;
+  config = await loadProjectConfig(home, root, { trusted: true });
+  // 信頼前に作ったセッションは既定モードのまま保存されている。保留していたモードを反映する
+  const latest = ctx.sessions.get(session.id);
+  if (
+    heldMode &&
+    latest &&
+    !latest.readOnly &&
+    (latest.permissionMode ?? "default") === "default"
+  )
+    await ctx.sessions.save({ ...latest, permissionMode: heldMode });
+  return config;
+}
+
 /** ツール・設定・圧縮チェックポイントを、このターン用に読み直す */
 async function prepareRuntime(
   ctx: ControllerContext,
+  gate: PermissionGate,
   session: StoredSession,
   rt: Runtime,
+  signal: AbortSignal,
 ) {
   const { options } = ctx;
   const root = ctx.workspaceRoot(session);
@@ -107,7 +167,7 @@ async function prepareRuntime(
     session.readOnly,
   );
   if (options.phase4) {
-    rt.config = await loadProjectConfig(options.home, root);
+    rt.config = await loadTrustedConfig(ctx, gate, session, rt, root, signal);
     rt.mainConfig = await loadMainConfig(options.home, undefined, root);
   }
   const web = rt.mainConfig?.web ?? options.web;
@@ -150,7 +210,7 @@ export async function runSessionTurn(
   session = await beginTurn(ctx, session, rt, text);
   let stopCause = "step_failed";
   try {
-    const { web } = await prepareRuntime(ctx, session, rt);
+    const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);
     const system = await systemPrompt(
       ctx,
       session.cwd,

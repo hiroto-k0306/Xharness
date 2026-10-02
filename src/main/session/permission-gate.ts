@@ -24,8 +24,13 @@ export interface PermissionRequest {
 export class PermissionGate {
   constructor(private readonly ctx: ControllerContext) {}
 
-  /** 1つのセッションの確認は順番に1件ずつ出す(画面の確認欄は1つ) */
+  /** 許可されたか(deny 以外)だけを返す */
   async ask(request: PermissionRequest): Promise<boolean> {
+    return (await this.request(request)) !== "deny";
+  }
+
+  /** 1つのセッションの確認は順番に1件ずつ出す(画面の確認欄は1つ)。ユーザーの答えをそのまま返す */
+  async request(request: PermissionRequest): Promise<PermissionDecision> {
     const { rt, signal } = request;
     const previous = rt.permissionTail ?? Promise.resolve();
     let release!: () => void;
@@ -34,7 +39,7 @@ export class PermissionGate {
     });
     await previous.catch(() => undefined);
     try {
-      if (signal.aborted) return false;
+      if (signal.aborted) return "deny";
       return await this.askNow(request);
     } finally {
       release();
@@ -50,7 +55,7 @@ export class PermissionGate {
     forceAsk = false,
     agentName,
     agentId,
-  }: PermissionRequest): Promise<boolean> {
+  }: PermissionRequest): Promise<PermissionDecision> {
     const { ctx } = this;
     const fullCall = { ...call, id: "permission" };
     rt.asked = false;
@@ -69,9 +74,9 @@ export class PermissionGate {
           sessionRules: rt.sessionRules,
         },
       );
-      if (decision === "deny") return false;
-      if (decision === "allow" && !forceAsk) return true;
-    } else if (!forceAsk && rt.always.has(call.name)) return true;
+      if (decision === "deny") return "deny";
+      if (decision === "allow" && !forceAsk) return "allow";
+    } else if (!forceAsk && rt.always.has(call.name)) return "allow";
     const requestId = randomUUID().slice(0, 8);
     rt.asked = true;
     rt.status = "ask";
@@ -102,7 +107,7 @@ export class PermissionGate {
       tool: call.name,
       summary:
         (agentName ? `${agentName} · ` : "") +
-        (["SubmitPlan", "ProjectHooks"].includes(call.name)
+        (["SubmitPlan", "ProjectHooks", "ProjectSettings"].includes(call.name)
           ? ctx.clean(JSON.stringify(call.input))
           : summarizeInput(call.name, call.input, ctx.clean, 300)),
     });
@@ -134,7 +139,8 @@ export class PermissionGate {
         ...fullCall,
         input: safeInput(fullCall.input, ctx.clean),
       });
-      await saveRule(ctx.options.home, grant);
+      // ワークスペースのセッションなら、そのワークスペースだけに効く場所へ保存する
+      await saveRule(ctx.options.home, grant, ctx.workspaceRoot(session));
       rt.config.permissions.rules.push(grant);
     } else if (decision === "session" && rt.config)
       (rt.sessionRules ??= []).push(grantFor(fullCall));
@@ -147,6 +153,6 @@ export class PermissionGate {
       decision,
     });
     void ctx.emitState();
-    return decision !== "deny";
+    return decision;
   }
 }

@@ -21,6 +21,7 @@ import {
   type SessionStatus,
   type UiEvent,
 } from "../../shared/ipc.js";
+import { type WorkspaceTrust } from "../config/trust.js";
 import { type ReceiptStore } from "./receipts.js";
 import { type Repository } from "./repository.js";
 import {
@@ -91,6 +92,10 @@ export interface Runtime {
   done?: Promise<void>;
   closing?: boolean;
   loading?: Promise<void>;
+  /** このセッションの間だけ、ワークスペースの設定を信頼した */
+  trustedSession?: boolean;
+  /** 信頼を断った(このセッションでは再び尋ねない) */
+  trustDeclined?: boolean;
 }
 
 export function createRuntime(): Runtime {
@@ -115,6 +120,7 @@ export interface ControllerContext {
   readonly receipts: ReceiptStore;
   readonly workspaces: WorkspaceStore;
   readonly repository: Repository;
+  readonly trust: WorkspaceTrust;
   readonly quota: Partial<Record<"claude" | "codex", number>>;
   readonly worktreeBusy: Set<string>;
   clean(text: string): string;

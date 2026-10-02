@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { isEffort, loadMainConfig, resolveModel } from "../config/config.js";
 import { loadModelCatalog } from "../config/model-catalog.js";
 import { loadProjectConfig } from "../config/project.js";
+import { WorkspaceTrust } from "../config/trust.js";
 import { redact } from "../core/redact.js";
 import { validatePlan, type PlanItem } from "../workflow/plan-validate.js";
 import {
@@ -76,6 +77,7 @@ export class SessionController {
       receipts,
       workspaces: this.workspaces,
       repository: new Repository(options.home),
+      trust: new WorkspaceTrust(options.home),
       quota: {},
       worktreeBusy: new Set(),
       clean,
@@ -356,8 +358,11 @@ export class SessionController {
         ? {
             permissionMode: readOnly
               ? "plan"
-              : (await loadProjectConfig(this.options.home, root)).permissions
-                  .mode,
+              : (
+                  await loadProjectConfig(this.options.home, root, {
+                    trusted: !root || (await this.ctx.trust.isTrusted(root)),
+                  })
+                ).permissions.mode,
           }
         : {}),
     };

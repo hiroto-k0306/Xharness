@@ -33,6 +33,7 @@ import { defaultTools } from "./main/session/controller.js";
 import { childNeedsAsk } from "./main/agents/permissions.js";
 import { type Message } from "./main/core/types.js";
 import { redact } from "./main/core/redact.js";
+import { WorkspaceTrust } from "./main/config/trust.js";
 import { readLocalSecrets } from "./main/auth/local-secrets.js";
 import { FakeProvider } from "./main/providers/fake/fake-provider.js";
 import { ClaudeAdapter } from "./main/providers/claude/adapter.js";
@@ -94,7 +95,9 @@ export async function headless(args = process.argv.slice(2)) {
       )
         throw new Error("Replay comparison needs a permission mode and --cwd");
       const cwd = resolve(value("--cwd"));
-      const project = await loadProjectConfig(home, cwd);
+      const project = await loadProjectConfig(home, cwd, {
+        trusted: await new WorkspaceTrust(home).isTrusted(cwd),
+      });
       comparisons = await compareReplayPermissions(
         replay,
         {
@@ -129,7 +132,14 @@ export async function headless(args = process.argv.slice(2)) {
   if (!(await stat(cwd)).isDirectory())
     throw new Error("Working directory unavailable");
   const config = await loadMainConfig(home, undefined, cwd);
-  const project = await loadProjectConfig(home, cwd);
+  // headless は信頼の確認を出さない。アプリで信頼したワークスペースだけ、設定の許可ルールを適用する
+  const project = await loadProjectConfig(home, cwd, {
+    trusted: await new WorkspaceTrust(home).isTrusted(cwd),
+  });
+  if (project.untrusted)
+    process.stderr.write(
+      "Project settings in this folder grant extra permissions but the folder is not trusted; those entries are ignored (trust it from the app).\n",
+    );
   let model =
     fake && !args.includes("--model")
       ? "fake"
@@ -355,7 +365,7 @@ export async function headless(args = process.argv.slice(2)) {
             ...fullCall,
             input: JSON.parse(clean(JSON.stringify(call.input))) as unknown,
           });
-          await saveRule(home, grant);
+          await saveRule(home, grant, cwd);
           project.permissions.rules.push(grant);
         }
         return ["y", "s", "a"].includes(choice);

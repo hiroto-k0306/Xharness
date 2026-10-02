@@ -1,25 +1,40 @@
-stabilize の最終確認。main(fb41424 以降)から作業し、手元の Windows で次の確認をしてください。コードの修正は、確認で不具合が見つかった場合だけ行ってください。
+MCP クライアント(DESIGN.md §25、M1〜M4)の手元確認。main(b3229c6 以降)から作業し、手元の Windows で次の確認をしてください。コードの修正は、確認で不具合が見つかった場合だけ行ってください。結果は新しく docs/mcp-progress.md に記録してください。
 
-1. 改行の統一とテスト(実通信0回)
-   ・.gitattributes で LF に統一した。既存の作業コピーは CRLF のままなので、未コミットの変更が無いことを確認してから、次で取り出し直す:
-     git rm --cached -r -q . ; git reset --hard
-   ・git ls-files --eol で、brand/*.svg と resources/icon.ico 以外が i/lf w/lf になっていることを確認。
-   ・pnpm install --frozen-lockfile、pnpm test(PowerShell 依存を含めて 582 件全件、スキップ 0 を期待)、pnpm typecheck / pnpm lint / pnpm format:check / pnpm build / pnpm build:headless。
-   ・repository の git 試験(時間制限を30秒に変更済み)が、時間切れにならないかを3回続けて実行して確認する(pnpm vitest run src/main/session/repository.test.ts)。
+0. 前提
+   ・確認用の home は XHARNESS_HOME で .out/mcp-check 配下に分け、通常の設定・履歴・ワークスペースを変えないこと。
+   ・確認用のワークスペースは、リポジトリ外の新しいフォルダ(例: D:\AIwork\xh-mcp-ws)にし、アプリで信頼する。
+   ・秘密値・トークン・認証ヘッダを、記録・ログ・コミットに残さないこと。
 
-2. exe の再確認(stabilize 後の初回。実通信は Claude 1回まで)
-   ・pnpm package を実行し、portable exe をリポジトリ外のフォルダにコピーして、XHARNESS_HOME を確認用の .out 配下にして起動する。
-   ・fake(--fake)で次を確認する:
-     ・workflow の計画 → 実装 → 完了が画面で進むこと
-     ・Haiku の自動圧縮ができないときに、黄色の警告が出て会話が続くこと
-     ・cd '<cwd>'; Write-Output 'x' を「常に許可」した後、同じコマンドで確認が出ないこと
-     ・web の設定が不正なときに、起動画面に警告が出ること
-   ・実通信は、Haiku に "Reply only pong." を1回だけ送り、packaged 版で応答が返り idle に戻ることを確認する。
+1. テスト(実通信0回)
+   ・pnpm install --frozen-lockfile、pnpm test(PowerShell 依存を含めて全件、スキップ 0 を期待)、pnpm typecheck / pnpm lint / pnpm format:check / pnpm build / pnpm build:headless。
 
-3. Web 検索 auto の使用率による切り替え(上限: Claude 2回・Codex 2回。承認します)
-   ・同じセッションで Haiku と Luna に短い返答を1回ずつ送り、5時間枠の使用率を両方取得する(UsagePopover の値を記録)。
-   ・web.searchProvider: auto で WebSearch を1回実行し、使用率の低い方のプロバイダが使われることを確認する。
-   ・使用率が同じだった場合は、セッションのプロバイダが使われたことを記録する。もう一度送り直さないこと。
-   ・検索の結果、使われた provider、pageAge の有無を記録する。
+2. stdio のサーバー(npx。モデルへの送信0回)
+   ・ワークスペースに次の .mcp.json を置く:
+     {"mcpServers":{"everything":{"command":"npx","args":["-y","@modelcontextprotocol/server-everything"]}}}
+   ・pnpm package で作った portable exe を、リポジトリ外にコピーして起動する(dev ではなく、パッケージ後の exe で確認する)。
+   ・新しいセッションで /mcp を送り、次を確認する。
+     ・承認の確認が出ること
+     ・「常に許可」の後、接続中になり、ツール・リソース・プロンプトの数が出ること
+     ・モデルには送られないこと(レシートが増えない)
+   ・入力欄で /mcp__ と打ち、プロンプトの補完候補(引数の形・説明つき)が出ること。Tab で入ること。
+   ・/mcp のボタンで「再接続」「承認を取り消す」を試し、状態が変わること。取り消し後の「接続」で承認を尋ね直すこと。
+   ・プロセスの後片付け: 接続中にタスクマネージャー(または Get-CimInstance Win32_Process)で、npx・node の子プロセスを記録する。セッションを閉じた後とアプリの終了後に、それらが残っていないこと(taskkill /T によるプロセスツリーの停止)。
+   ・~/.xharness(確認用 home)の logs/mcp/ に、サーバーの stderr がマスクされて書かれていること。
+   ・不正な .mcp.json(sse 指定、未定義の ${VAR}、名前に __)で、警告が出てそのサーバーだけが無効になること。
 
-4. 結果を docs/stabilize-progress.md に追記してください(各確認の結果、送信回数、未確認のもの)。秘密値・認証ヘッダは保存しないこと。
+3. モデルからの利用(上限: Claude 3回・Codex 0回。ユーザー承認済みの場合のみ実施)
+   ・Haiku のセッションで、「MCP の everything サーバーの echo ツールで "hi" を返して。McpSearch で調べてから McpCall で呼んで」と1回送る。
+   ・McpSearch は確認なしで動くこと、McpCall は初回に確認が出ること、「常に許可」の後は同じツールで確認が出ないことを記録する。
+   ・送信回数と各要求の HTTP ステータスを記録する。2回目以降の要求で tools と system が変わらないことは、レシートの入力で確認する。
+
+4. OAuth(モデルへの送信0回)
+   (a) SDK 同梱の試験用サーバー: 別の PowerShell で
+       node node_modules/@modelcontextprotocol/sdk/dist/esm/examples/server/simpleStreamableHttp.js --oauth
+       を起動し、.mcp.json に {"mcpServers":{"demo":{"type":"http","url":"http://localhost:3000/mcp"}}} を書く。
+       既定のブラウザが開いて認可され、接続中になること / アプリ再起動後にブラウザが開かないこと /
+       確認用 home の secrets/mcp-oauth.json に平文のトークンが無いこと(中身は記録しない) /
+       /mcp のログアウトで要認可になることを確認する。
+   (b) ユーザーが Linear のアカウントを用意した場合のみ: https://mcp.linear.app/mcp/readonly で同じ確認をする。
+       書き込みのツールは呼ばない。用意が無ければ「未確認」と記録する。
+
+5. 結果を docs/mcp-progress.md に記録してください(各確認の結果、送信回数、未確認のもの、見つけた不具合と修正)。画面の見た目で気になる点(/mcp の表示、補完候補の位置や色)があれば、スクリーンショットの説明として書いてください(秘密値が写っていないものだけ)。

@@ -20,6 +20,7 @@ import { shellHooks, type ShellHook } from "../hooks/shell-hooks.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { AgentTasks } from "../agents/tasks.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
+import { todoTools } from "../tools/todos.js";
 
 export interface RuntimeOptions extends ChildOptions {
   approveHooks?(
@@ -289,6 +290,7 @@ export class WorkflowRuntime {
     // 段階による制限は validate(STEP 3 と実行直前)で行う。
     const result = new Map(base);
     for (const [name, tool] of lifecycleTools()) result.set(name, tool);
+    for (const [name, tool] of todoTools()) result.set(name, tool);
     for (const [name, tool] of this.tasks.tools()) result.set(name, tool);
     const workflowTools = this.options.config.workflow.mode !== "off";
     const gated = (

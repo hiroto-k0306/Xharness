@@ -13,6 +13,7 @@ import { ReceiptStore } from "../session/receipts.js";
 import { type AgentDefinition } from "./definitions.js";
 import { MCP_TOOL_NAMES } from "../tools/mcp.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
+import { todoTools } from "../tools/todos.js";
 import { diagnoseEnvironment } from "../tools/environment.js";
 
 import { loadProjectConfig, projectMemory } from "../config/project.js";
@@ -189,6 +190,7 @@ export class ChildRunner {
     }
     for (const [name, tool] of worker?.reportTool ?? []) tools.set(name, tool);
     for (const [name, tool] of lifecycleTools()) tools.set(name, tool);
+    for (const [name, tool] of todoTools()) tools.set(name, tool);
     let sequence = 0;
     const writes: Promise<void>[] = [];
     this.options.onStatus?.(context, choice.model, "running");

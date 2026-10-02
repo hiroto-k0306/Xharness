@@ -288,7 +288,9 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
         for (const item of ctx.pending) {
           if (item.error) continue;
           signal.throwIfAborted();
-          item.allowed = await options.permission(item.call, signal);
+          item.allowed =
+            item.tool?.autoAllow ||
+            (await options.permission(item.call, signal));
           if (!item.allowed) {
             item.error = "操作がユーザーに拒否されました。";
             item.errorKind = "denied";

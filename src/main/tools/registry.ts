@@ -12,6 +12,8 @@ export interface ToolOutput {
   isError?: boolean;
 }
 export interface Tool {
+  /** Pure local display/history update with no external side effects. */
+  autoAllow?: boolean;
   /** Local lifecycle operation: execute before any other call in the response. */
   control?: boolean;
   spec: ToolSpec;

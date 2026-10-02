@@ -135,6 +135,7 @@ export type TranscriptItem =
       id: string;
       tool: string;
       summary: string;
+      todos?: import("./todos.js").Todo[];
       status: "pending" | "ok" | "error" | "denied";
     }
   | {

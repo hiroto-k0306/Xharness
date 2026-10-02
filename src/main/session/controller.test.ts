@@ -404,6 +404,7 @@ describe("SessionController", () => {
       "Grep",
       "Read",
       "StopTask",
+      "TodoWrite",
     ]);
     expect([...ro.values()].every((t) => t.readOnly)).toBe(true);
   });

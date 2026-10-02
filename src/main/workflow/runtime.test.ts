@@ -27,6 +27,29 @@ const text = (text: string): FakeStep => ({
   stopReason: "end_turn",
   message: { role: "assistant", content: [{ type: "text", text }] },
 });
+it("TodoWrite does not replace the plan or waive review for real changes", async () => {
+  const s = await setup(
+    [
+      call("TodoWrite", {
+        todos: [{ content: "計画外の進捗", status: "completed" }],
+      }),
+      call("SkipPlan", { reason: "Small fix" }),
+      call("Write", { path: "fix.txt", content: "pending review" }),
+      call("TodoWrite", {
+        todos: [{ content: "完了表示", status: "completed" }],
+      }),
+      call("StopTask", { reason: "review pending" }),
+    ],
+    [],
+  );
+  expect((await s.run()).stopCause).toBe("agent_stopped");
+  expect(s.runtime.state.phase).toBe("implement");
+  expect(s.requests).toHaveLength(5);
+  expect(
+    s.requests.every((r) => r.tools.some((t) => t.name === "TodoWrite")),
+  ).toBe(true);
+  expect(await readFile(join(s.cwd, "fix.txt"), "utf8")).toBe("pending review");
+});
 it.each(["StopTask", "AskUserQuestion"])(
   "%s preserves actual changes and mandatory review without continuing",
   async (name) => {
@@ -306,6 +329,41 @@ async function setup(claude: FakeStep[], codex: FakeStep[], git = false) {
   };
 }
 
+it("child TodoWrite has its own history and never replaces the parent's list", async () => {
+  const s = await setup(
+    [
+      call("TodoWrite", {
+        todos: [{ content: "PARENT TODO", status: "pending" }],
+      }),
+      call("Task", {
+        description: "Investigate",
+        prompt: "Child",
+        agent: "explorer",
+      }),
+      call("TodoWrite", {
+        todos: [{ content: "CHILD TODO", status: "completed" }],
+      }),
+      text("child answer"),
+      text("main answer"),
+    ],
+    [],
+  );
+  const result = await s.run();
+  const child = s.requests.find((r) => r.system.includes("You are explorer"))!;
+  expect(child.tools.some((t) => t.name === "TodoWrite")).toBe(true);
+  expect(
+    result.messages
+      .flatMap((m) => m.content)
+      .filter((b) => b.type === "tool_use" && b.name === "TodoWrite"),
+  ).toHaveLength(1);
+  expect(JSON.stringify(result.messages)).not.toContain("CHILD TODO");
+  const saved = await readFile(
+    join(s.home, "agents", "session1", "sessions", `${child.sessionId}.jsonl`),
+    "utf8",
+  );
+  expect(saved).toContain("CHILD TODO");
+  expect(saved).not.toContain("PARENT TODO");
+});
 it("Task uses a new session, returns only final text and excludes nested Task and writes", async () => {
   const s = await setup(
     [

@@ -62,6 +62,7 @@ import { join } from "node:path";
 import { type ReasoningEffort } from "./main/providers/provider.js";
 import { FileAccess, fileTools } from "./main/tools/files.js";
 import { shellSearchTools } from "./main/tools/shell-search.js";
+import { todoTools } from "./main/tools/todos.js";
 import { diagnoseEnvironment } from "./main/tools/environment.js";
 import { webTools } from "./main/tools/web.js";
 import {
@@ -210,7 +211,11 @@ export async function headless(args = process.argv.slice(2)) {
   const router = new Router(providers, config?.fallback, config?.aliases);
   router.provider(model);
   const access = new FileAccess(cwd);
-  const tools = new Map([...fileTools(access), ...shellSearchTools(cwd)]);
+  const tools = new Map([
+    ...fileTools(access),
+    ...shellSearchTools(cwd),
+    ...todoTools(),
+  ]);
   // 検索回数の上限は、子エージェントを含むセッション全体で数える(§22.6)
   const searchBudget = {
     used: 0,

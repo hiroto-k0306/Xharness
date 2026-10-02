@@ -19,6 +19,7 @@ import { type McpApprovals } from "../mcp/approvals.js";
 import { type McpServerConfig } from "../mcp/config.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
+import { todoTools } from "../tools/todos.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
 import {
@@ -285,6 +286,7 @@ export function defaultTools(cwd: string, readOnly: boolean): ToolRegistry {
     ...fileTools(access),
     ...shellSearchTools(cwd),
     ...lifecycleTools(),
+    ...todoTools(),
   ]);
   if (!readOnly) return all;
   // 読み取り専用で開いたセッションは plan 相当: 書き込み系ツールを渡さない(§9.1, §18.2)

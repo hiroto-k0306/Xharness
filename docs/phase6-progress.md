@@ -33,3 +33,13 @@
 Phase 6 全体の完了ではない。MCP クライアント、自動アップデート、新しいモデルでの有料再実行・比較は未実装で、接続・配布仕様も未確定。worker 並列数拡張・workflow 自動再開・worktree の片付け UI は引き続き後続。Phase 5 の残る画面操作・実プロジェクトでのレビュー品質確認は `phase5-local-result.md` に残している。
 
 今回の変更は `codex/phase6` ブランチで、認証確認の記録・再生基盤・権限比較・headless・画面・進捗記録の目的別に6コミットし、プッシュ済み。2026-10-02 にユーザーが、この初回実装単位の main へのマージを承認した。Phase 6 全体の完了は意味しない。
+
+## レビュー対応(2026-10-02、クラウド)
+
+- **保守性**: `src/main/session/controller.ts`(1627 行)を、共有の型(`context.ts`)・1ターンの実行(`turn.ts`)・イベント変換(`turn-events.ts`)・workflow の組み立て(`workflow-factory.ts`)・権限確認(`permission-gate.ts`)・worktree 操作(`worktree-commands.ts`)・設定コマンド(`settings-commands.ts`)に分けた。controller は 576 行の窓口になり、公開 API と挙動は変えていない(分割直後に既存 457 件が全件成功)。
+- **権限のすり抜け**: PowerShell の部分式 `( )`・スクリプトブロック・`rg --pre`・`git -c` などで、plan モードや `git *` の許可から任意のコマンドが動いた問題を修正。コマンドの解析を `core/shell-command.ts` に分け、単純でないコマンドはルールで許可しない。「常に許可」はサブコマンド単位(`git status *`)に狭めた。WebFetch はドメイン単位。
+- **ワークスペースの信頼**: Claude Code の仕様に合わせ、プロジェクト設定の allow ルールと acceptEdits は信頼後だけ適用する。「常に許可」はリポジトリの外(ユーザー側)へワークスペース単位で保存する。
+- **秘密情報**: memoryFiles はホームと作業フォルダの中だけを読む。作業フォルダ外の Read/Grep/Glob は確認する。秘密ファイルの一覧を広げ、保護パスへの書き込みは常に確認する(`core/sensitive-paths.ts`)。
+- Prettier の不合格(4 ファイル)を解消し、録画 fixtures を整形対象から外した。
+- 検証: Vitest 521 件成功・6 件スキップ(Linux に pwsh が無いため)。型チェック・lint・Prettier・`electron-vite build` 成功。追加した回帰テストは、修正を外すと失敗することを確認した。
+- 手元で実施が必要: Windows でのテスト全件(PowerShell 依存を含む)、信頼の確認が画面に出ること、既存の `~/.xharness/config.yaml` に保存済みの広い Bash 許可(`git *` など)は自動では狭めないため、必要なら手で見直すこと。

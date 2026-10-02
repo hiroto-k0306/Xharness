@@ -330,10 +330,19 @@ type Decision = "allow" | "deny" | "ask";
 interface Rule { tool: string; pattern?: string; decision: Decision }
 ```
 
-- 既定値: Read/Grep/Glob は allow、Write/Edit/Bash/WebFetch は ask
+- 既定値: 作業フォルダ内の Read/Grep/Glob は allow、Write/Edit/Bash/WebFetch は ask
 - `ask` 時の選択肢: 今回のみ許可 / このセッション中許可 / 常に許可(設定に保存)/ 拒否(理由をモデルに返す)
-- Bash はコマンド先頭トークン単位でルール化(例: `git status*` → allow)
-- 作業ディレクトリ外への書き込みは常に ask
+- 評価順は Claude Code と同じ **deny → ask → allow**。ルールの細かさで順序は変えない(2026-10-02 ユーザー承認で Claude Code の仕様に合わせた)
+- Bash(PowerShell)のルール:
+  - 「常に許可」はサブコマンドまで含めて保存する(`git status` → `git status *`。`git *` にはしない)。先頭の語の次がオプション・パスなら完全一致で保存する
+  - 連結(`;` `|` `&` `&&` `||`)・リダイレクト(`>` `<`)・改行・変数や式の展開(`$` `` ` ``)・部分式やスクリプトブロック(`(` `)` `{` `}` `@(`)・ドットソースを含むコマンドは、allow ルールやモードでは許可せず、必ず確認する(plan では拒否)。PowerShell では `git status (Remove-Item …)` の括弧の中も実行されるため
+  - 別のプログラムを起動させうるオプション(`git -c` / `-C` / `--upload-pack` / `--ext-diff`、`rg --pre` など)を含むコマンドも同じ扱い
+  - deny / ask ルールは、連結や括弧の中の部分コマンドに一致しても効く
+- 作業フォルダ外への書き込みは常に ask。作業フォルダ外の Read/Grep/Glob も、それを許可するルールが無ければ ask(Claude Code の working directories と同じ)
+- 秘密ファイル(`.env*`、鍵・証明書 `*.pem` `*.key` `id_*`、`.npmrc` `.netrc` `.git-credentials`、`.ssh/` `.aws/` `.kube/config` など)の読み取りは、ルールに関係なく ask(§A6)
+- **保護パス**(Claude Code の protected paths に準拠): 作業フォルダ内の `.git/` `.xharness/` `.claude/` `.vscode/` `.idea/` `.husky/` など、`.gitmodules` やシェル・パッケージマネージャの設定ファイルへの書き込みは、acceptEdits や allow ルールでも自動承認せず ask
+- **ワークスペースの信頼**(Claude Code の workspace trust に準拠): プロジェクトの `.xharness/config.yaml` は リポジトリから来るため、権限を広げる項目(allow ルールと `mode: acceptEdits`)は、ユーザーがそのワークスペースを信頼するまで適用しない。該当する項目があるとき、最初のターンの前に内容を見せて確認する(常に=記録して以後は尋ねない / 許可=このセッションだけ / 拒否=広げる項目を除いて続ける)。deny / ask と、権限を狭めるモード(plan / default)は信頼に関係なく適用する。信頼は `~/.xharness/trusted-workspaces.json` にフォルダの実体パスで記録する
+- 「常に許可」のルールは、ワークスペースのセッションなら `~/.xharness/projects/<フォルダの鍵>/permissions.yaml`(そのワークスペースだけに効く。リポジトリの外なので、リポジトリの内容からは書き換えられない)へ、ワークスペース指定なしなら `~/.xharness/config.yaml` へ保存する
 - WebSearch / WebFetch は §22 の外部通信ツールとして ask。Phase 3 では既存の全ツール ask を維持する。承認前に検索 API や取得先へ送信しない。
 - WebFetch のネットワーク拒否条件は権限の許可では解除できない。
 
@@ -436,7 +445,7 @@ permissions:
     - { tool: Bash, pattern: "git status*", decision: allow }
 context:
   compactThreshold: 0.8      # コンテキスト窓の80%で圧縮
-  memoryFiles: [AGENTS.md, CLAUDE.md]
+  memoryFiles: [AGENTS.md, CLAUDE.md]   # ~/.xharness と作業フォルダの中だけ(絶対パス・.. で外へ出る指定・秘密ファイルは読まない)
 agents: { ... }              # §10
 ```
 

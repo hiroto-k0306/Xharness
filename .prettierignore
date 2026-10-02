@@ -9,3 +9,5 @@ DESIGN.md
 AGENTS.md
 docs/phase0-runbook.md
 docs/phase0-findings.md
+# 実通信の録画は記録したままの形を保つ
+test/fixtures/

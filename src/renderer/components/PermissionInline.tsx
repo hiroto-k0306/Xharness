@@ -50,9 +50,14 @@ export function PermissionInline({
           <kbd>y</kbd>allow
         </button>
         <button type="button" onClick={() => onRespond("always")}>
-          <kbd>a</kbd>{persistent ? "always" : "session"}
+          <kbd>a</kbd>
+          {persistent ? "always" : "session"}
         </button>
-        {persistent && <button type="button" onClick={() => onRespond("session")}>session</button>}
+        {persistent && (
+          <button type="button" onClick={() => onRespond("session")}>
+            session
+          </button>
+        )}
         <button type="button" onClick={() => onRespond("deny")}>
           <kbd>n</kbd>deny
         </button>

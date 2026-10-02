@@ -557,6 +557,7 @@ export class WorkflowRuntime {
       this.options.parentId,
       this.options.redact ?? ((s) => s),
       () => this.runTraced(options, signal),
+      { onWarning: this.options.onTraceWarning },
     );
   }
   private async runTraced(options: LoopOptions, signal: AbortSignal) {

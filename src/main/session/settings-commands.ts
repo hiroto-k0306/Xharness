@@ -114,6 +114,15 @@ export async function compactNow(
           threshold: 0.8,
           force: true,
         }),
+      {
+        onWarning: (message) =>
+          ctx.options.emit({
+            type: "notice",
+            tone: "warn",
+            sessionId,
+            message,
+          }),
+      },
     );
     if (result.checkpoint) {
       rt.checkpoint = result.checkpoint;

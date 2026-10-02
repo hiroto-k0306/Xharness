@@ -128,6 +128,8 @@ export function createWorkflow(
         signal,
         forceAsk: true,
       }),
+    onTraceWarning: (message) =>
+      emit({ type: "notice", tone: "warn", sessionId, message }),
     onStatus: (context, model, status) =>
       emit({
         type: "agent",

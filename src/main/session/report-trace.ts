@@ -1,5 +1,5 @@
+import { traceFiles } from "../core/trace-store.js";
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
 import { traceJson, type TraceRecord } from "../core/trace.js";
 import {
   requestView,
@@ -13,6 +13,7 @@ import {
 export interface TraceReplay {
   records: TraceRecord[];
   skipped: number;
+  omittedFiles?: number;
 }
 const escape = (s: string) =>
   s.replace(
@@ -42,14 +43,31 @@ export async function readTraceReplay(
   id: string,
   clean: (s: string) => string,
 ): Promise<TraceReplay | undefined> {
-  const path = join(home, "traces", `${id}.jsonl`);
   try {
-    if ((await stat(path)).size > 32_000_000)
-      throw new Error("Trace exceeds size limit");
-    const lines = (await readFile(path, "utf8"))
-      .split(/\r?\n/)
-      .filter((s) => s.trim());
-    if (lines.length > 20000) throw new Error("Too many trace records");
+    const files = await traceFiles(home, id);
+    if (!files.length) return undefined;
+    let bytes = 0;
+    let omittedFiles = 0;
+    const selected: string[][] = [];
+    for (const path of [...files].reverse()) {
+      const size = (await stat(path)).size;
+      if (files.length === 1 && size > 32_000_000)
+        throw new Error("Trace exceeds size limit");
+      if (bytes + size > 16_000_000) {
+        omittedFiles = files.length - selected.length;
+        break;
+      }
+      const lines = (await readFile(path, "utf8"))
+        .split(/\r?\n/)
+        .filter((s) => s.trim());
+      if (selected.reduce((n, v) => n + v.length, 0) + lines.length > 20000) {
+        omittedFiles = files.length - selected.length;
+        break;
+      }
+      selected.unshift(lines);
+      bytes += size;
+    }
+    const lines = selected.flat();
     const records: TraceRecord[] = [];
     let skipped = 0;
     for (const line of lines) {
@@ -78,7 +96,7 @@ export async function readTraceReplay(
         skipped++;
       }
     }
-    return { records, skipped };
+    return { records, skipped, omittedFiles };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     throw new Error("Report trace could not be read");

@@ -30,6 +30,7 @@ export interface ChildContext {
   files?: string[];
 }
 export interface ChildOptions {
+  onTraceWarning?(message: string): void;
   onTranscript?(
     context: ChildContext,
     messages: import("../core/types.js").Message[],

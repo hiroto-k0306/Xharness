@@ -377,17 +377,22 @@ export async function headless(args = process.argv.slice(2)) {
         continue;
       }
       if (input.trim() === "/compact") {
-        const prepared = await withSessionTrace(home, session.id, clean, () =>
-          prepareProviderHistory(messages, {
-            provider: router.provider(model!),
-            model: model!,
-            system,
-            tools: [...tools.values()].map((t) => t.spec),
-            signal: AbortSignal.timeout(60000),
-            checkpoint,
-            force: true,
-            threshold: project.context.compactThreshold,
-          }),
+        const prepared = await withSessionTrace(
+          home,
+          session.id,
+          clean,
+          () =>
+            prepareProviderHistory(messages, {
+              provider: router.provider(model!),
+              model: model!,
+              system,
+              tools: [...tools.values()].map((t) => t.spec),
+              signal: AbortSignal.timeout(60000),
+              checkpoint,
+              force: true,
+              threshold: project.context.compactThreshold,
+            }),
+          { onWarning: (message) => process.stderr.write(message + "\n") },
         );
         checkpoint = prepared.checkpoint;
         if (checkpoint) await checkpointFile().write(checkpoint);
@@ -588,6 +593,7 @@ export async function headless(args = process.argv.slice(2)) {
           onStatus: (context, model, status) =>
             process.stdout.write(`\n${context.name} · ${model} · ${status}\n`),
           redact: clean,
+          onTraceWarning: (message) => process.stderr.write(message + "\n"),
           onPhase: (state) =>
             process.stdout.write(
               `\nWorkflow ${state.phase} · review ${state.reviewRound}\n`,

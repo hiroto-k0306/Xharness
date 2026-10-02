@@ -1,7 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { createTraceStorage, type TraceStorageOptions } from "./trace-store.js";
 
 export interface TraceRecord {
   id: string;
@@ -51,7 +50,7 @@ export function traceJson(value: unknown, clean: (s: string) => string) {
 
 interface Writer {
   sequence: number;
-  pending: Promise<void>;
+  warn(): void;
   clean: (s: string) => string;
   write(record: TraceRecord): void;
 }
@@ -71,63 +70,48 @@ export async function withSessionTrace<T>(
   id: string,
   clean: (s: string) => string,
   run: () => Promise<T>,
+  options: TraceStorageOptions = {},
 ): Promise<T> {
   if (scopes.getStore()) return run();
   if (!/^[\w-]{1,512}$/.test(id)) throw new Error("Invalid trace session id");
-  const path = join(home, "traces", `${id}.jsonl`);
-  await mkdir(join(home, "traces"), { recursive: true });
-  let sequence = 0;
-  try {
-    if ((await stat(path)).size > 32_000_000)
-      throw new Error("Trace exceeds size limit");
-    const saved = await readFile(path, "utf8");
-    for (const line of saved.split("\n")) {
-      try {
-        const record = JSON.parse(line) as TraceRecord;
-        if (Number.isSafeInteger(record.sequence))
-          sequence = Math.max(sequence, record.sequence);
-      } catch {
-        /* interrupted last line */
-      }
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-  }
+  const storage = await createTraceStorage(home, id, options);
   const writer: Writer = {
-    sequence,
+    sequence: storage.sequence,
     clean,
-    pending: Promise.resolve(),
+    warn: storage.warn,
     write(record) {
-      let line = traceJson(record, clean);
-      if (line.length > 1_000_000)
-        line = traceJson(
-          {
-            ...record,
-            input: "容量上限のため省略",
-            output:
-              record.kind === "llm" &&
-              record.output &&
-              typeof record.output === "object"
-                ? {
-                    dispatched:
-                      "dispatched" in record.output && record.output.dispatched,
-                    truncated: true,
-                    body: "容量上限のため省略",
-                  }
-                : "容量上限のため省略",
-          },
-          clean,
-        );
-      writer.pending = writer.pending.then(() =>
-        appendFile(path, line + "\n", "utf8"),
-      );
-      void writer.pending.catch(() => undefined);
+      try {
+        let line = traceJson(record, clean);
+        if (line.length > 1_000_000)
+          line = traceJson(
+            {
+              ...record,
+              input: "容量上限のため省略",
+              output:
+                record.kind === "llm" &&
+                record.output &&
+                typeof record.output === "object"
+                  ? {
+                      dispatched:
+                        "dispatched" in record.output &&
+                        record.output.dispatched,
+                      truncated: true,
+                      body: "容量上限のため省略",
+                    }
+                  : "容量上限のため省略",
+            },
+            clean,
+          );
+        storage.write(line);
+      } catch {
+        storage.warn();
+      }
     },
   };
   try {
     return await scopes.run({ writer, agentId: id }, run);
   } finally {
-    await writer.pending;
+    await storage.flush();
   }
 }
 
@@ -216,7 +200,12 @@ export async function traceOperation<T>(
 }
 
 export function captureTraceResponse(value: unknown) {
-  scopes.getStore()?.capture?.(value);
+  const scope = scopes.getStore();
+  try {
+    scope?.capture?.(value);
+  } catch {
+    scope?.writer.warn();
+  }
 }
 
 /** Bind every iterator.next(), so nested async generators retain the call scope. */

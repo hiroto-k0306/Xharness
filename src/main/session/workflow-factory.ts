@@ -5,6 +5,7 @@ import { Router } from "../core/router.js";
 import { type Message } from "../core/types.js";
 import { projectHookApproval } from "../hooks/shell-hooks.js";
 import { shellSearchTools } from "../tools/shell-search.js";
+import { type WebSettings } from "../config/config.js";
 import { webTools } from "../tools/web.js";
 import { WorkflowRuntime } from "../workflow/runtime.js";
 import { waveChecks } from "../workflow/wave-checks.js";
@@ -38,7 +39,10 @@ export function createWorkflow(
     session: StoredSession;
     rt: Runtime;
     agentConfig: AgentConfig;
-    web?: { enabled: boolean; searchMode: "live" | "cached" };
+    web?: Partial<WebSettings> & {
+      enabled: boolean;
+      searchMode: "live" | "cached";
+    };
     events: TurnEvents;
   },
 ): WorkflowRuntime {
@@ -85,6 +89,17 @@ export function createWorkflow(
           () => options.provider,
           web.searchMode,
           options.fake,
+          undefined,
+          {
+            settings: web,
+            providers: () => options.providers ?? [options.provider],
+            quota: ctx.quota,
+            // 子エージェントの検索も、親と同じセッションの上限に数える
+            budget: (rt.searchBudget ??= {
+              used: 0,
+              limit: web.maxSearchesPerSession ?? 100,
+            }),
+          },
         ))
           tools.set(name, tool);
       return tools;

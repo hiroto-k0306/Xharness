@@ -188,6 +188,15 @@ async function prepareRuntime(
         (event) => {
           if (event.type === "usage") options.emit(shapeUsage(event));
         },
+        {
+          settings: web,
+          providers: () => options.providers ?? [options.provider],
+          quota: ctx.quota,
+          budget: (rt.searchBudget ??= {
+            used: 0,
+            limit: web.maxSearchesPerSession ?? 100,
+          }),
+        },
       ))
         rt.tools.set(name, tool);
   }

@@ -169,11 +169,22 @@ export async function headless(args = process.argv.slice(2)) {
   router.provider(model);
   const access = new FileAccess(cwd);
   const tools = new Map([...fileTools(access), ...shellSearchTools(cwd)]);
+  // 検索回数の上限は、子エージェントを含むセッション全体で数える(§22.6)
+  const searchBudget = {
+    used: 0,
+    limit: config?.web.maxSearchesPerSession ?? 100,
+  };
   if (config?.web.enabled !== false)
     for (const [name, tool] of webTools(
       () => router.provider(model!),
       config?.web.searchMode ?? "live",
       fake,
+      undefined,
+      {
+        settings: config?.web,
+        providers: () => providers,
+        budget: searchBudget,
+      },
     ))
       tools.set(name, tool);
   // --fake は通信も資格情報の読み取りも行わない。
@@ -398,6 +409,12 @@ export async function headless(args = process.argv.slice(2)) {
                 () => router.provider(model!),
                 config.web.searchMode,
                 fake,
+                undefined,
+                {
+                  settings: config.web,
+                  providers: () => providers,
+                  budget: searchBudget,
+                },
               ))
                 available.set(name, tool);
             return available;

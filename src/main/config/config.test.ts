@@ -34,7 +34,11 @@ describe("main model from config (DESIGN §12)", () => {
       model: "gpt-6-luna",
       effort: "max",
     });
-    expect(cfg.web).toEqual({ enabled: true, searchMode: "cached" });
+    expect(cfg.web).toMatchObject({
+      enabled: true,
+      searchMode: "cached",
+      codexSearchMode: "cached",
+    });
     expect(cfg.fallback).toEqual({ claude: "codex:sol" });
     expect(cfg.aliases.opus).toBe("claude-opus-5-5");
   });
@@ -44,11 +48,15 @@ describe("main model from config (DESIGN §12)", () => {
         "web:\n  enabled: false\n  searchMode: cached\nfallback:\n  claude: false\n  codex: claude:opus\n",
       ),
     );
-    expect(cfg.web).toEqual({ enabled: false, searchMode: "cached" });
+    expect(cfg.web).toMatchObject({ enabled: false, searchMode: "cached" });
     expect(cfg.fallback).toEqual({ codex: "claude:opus" });
     expect((await loadMainConfig(await homeWith())).web).toEqual({
       enabled: true,
       searchMode: "live",
+      searchProvider: "auto",
+      codexSearchMode: "live",
+      maxSearchesPerSession: 100,
+      fetch: { maxChars: 100000, cacheMinutes: 15 },
     });
   });
   it("defaults to claude:opus / high when there is no config file", async () => {

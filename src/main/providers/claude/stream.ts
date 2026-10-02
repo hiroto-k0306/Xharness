@@ -197,6 +197,9 @@ export async function* decodeClaudeStream(
                     typeof result.title === "string"
                       ? result.title
                       : result.url,
+                  ...(typeof result.page_age === "string"
+                    ? { pageAge: result.page_age }
+                    : {}),
                 });
             }
           }

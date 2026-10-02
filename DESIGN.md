@@ -1360,7 +1360,11 @@ web:
 
 実装済み: §22.3 の WebFetch(prompt 必須、Haiku 4.5 / GPT-6 Luna による要約だけを返す、15 分キャッシュ、http→https、localhost・非公開 IP・別ホストへのリダイレクトの拒否、外部コンテンツの注記)、§22.4 のドメイン単位の許可(`WebFetch` / `domain:example.com`、ホストの完全一致)、使えるエージェント(main と explorer)、WebSearch がタイトルと URL だけを返すこと。
 
-**未実装**(上の記述のうち、まだコードに無いもの): `web.searchProvider: auto`(使用量による選択と、失敗時のもう一方での再試行)、WebSearch の `allowedDomains` / `blockedDomains`、結果の `pageAge`、1セッション100回の上限(子エージェント合算)と上限時の通知、`codexSearchMode: disabled`、設定ファイルの `web.fetch.maxChars` / `cacheMinutes` の読み込み(今は既定値の 100,000 文字・15 分で固定)。現在の設定は従来の `web.enabled` / `web.searchMode` だけを読む。
+追加実装(2026-10-02、クラウド・実送信なし): `web.searchProvider`(auto は5時間枠の使用率が分かれば低い方、分からなければセッションのプロバイダを先にし、失敗したらもう一方で1回だけ再試行。claude / codex 指定時は再試行しない)、WebSearch の `allowedDomains` / `blockedDomains`(どちらか一方・1〜20件・ドメイン自身とサブドメインに一致)、結果の `pageAge`(Claude の `page_age`)と URL の重複除去、1セッションの上限(既定100回、子エージェントと同じ数を共有。上限に達したらエラーにせず「上限に達した」旨を外部コンテンツとして返す)、`codexSearchMode: disabled`(Codex を検索に使わない)、`web.fetch.maxChars` / `cacheMinutes` の読み込み。不正な値は既定値のまま警告に出す。従来の `web.searchMode` は `codexSearchMode` として読む。
+
+ドメインの絞り込みは、**検索結果を手元で絞る方式**とした。各プロバイダの API にドメイン指定の引数を送る方式は実通信で未確認のため使わない。そのため、絞り込みで除外された結果の分も検索1回として数え、0件になることがある。
+
+手元で未確認: 実通信での auto の切り替えと、Codex の `page_age` 相当の有無(Codex の実録 fixture には日付が無い)。
 
 ## 23. レシートの再生（Phase 6 初回）
 

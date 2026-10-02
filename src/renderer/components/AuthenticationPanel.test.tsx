@@ -15,7 +15,7 @@ it("asks for auth consent for missing/expired providers without launching anythi
     />,
   );
   expect(screen.getByText("Claude · 期限切れ")).toBeInTheDocument();
-  expect(screen.getByText("Codex · 資格情報あり")).toBeInTheDocument();
+  expect(screen.queryByText("Codex · 資格情報あり")).toBeNull();
   expect(command).not.toHaveBeenCalled();
   expect(
     screen.queryByRole("button", { name: "Codexの認証・更新を許可" }),
@@ -26,6 +26,35 @@ it("asks for auth consent for missing/expired providers without launching anythi
   await waitFor(() =>
     expect(command).toHaveBeenCalledWith("authenticate", "claude"),
   );
+});
+it("hides after authentication and reappears when credentials are rejected", () => {
+  const command = vi.fn(async () => ({ ok: true }));
+  const { rerender } = render(
+    <AuthenticationPanel
+      views={[
+        { provider: "claude", status: "available" },
+        { provider: "codex", status: "available" },
+      ]}
+      disabled={false}
+      command={command}
+    />,
+  );
+  expect(screen.queryByRole("region", { name: "モデルの認証" })).toBeNull();
+  rerender(
+    <AuthenticationPanel
+      views={[
+        { provider: "claude", status: "rejected" },
+        { provider: "codex", status: "available" },
+      ]}
+      disabled={false}
+      command={command}
+    />,
+  );
+  expect(
+    screen.getByRole("region", { name: "モデルの認証" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("Claude · 再認証が必要")).toBeInTheDocument();
+  expect(command).not.toHaveBeenCalled();
 });
 it("disables login while a session is active and allows explicit status refresh", async () => {
   const command = vi.fn(async () => ({ ok: false, error: "再確認エラー" }));

@@ -448,7 +448,7 @@ export class SessionController {
 
   private async send(sessionId: string, text: string): Promise<CommandResult> {
     if (
-      /^(?:\/stop|一旦停止して|停止して|止めて|中断して)[。！!]?$/u.test(
+      /^(?:\/stop|(?:一旦)?(?:停止|中断)(?:して)?|止めて)[。！!]?$/u.test(
         text.trim(),
       )
     ) {

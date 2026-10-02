@@ -50,12 +50,21 @@
   position: relative;
   min-height: 30px;
   max-height: 160px;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 .heading {
+  flex-shrink: 0;
+  background: var(--bg);
   color: var(--dim);
   padding: 4px 24px;
   font-size: 11px;
+}
+.rows {
+  min-height: 0;
+  overflow: auto;
 }
 .replayButton {
   margin-left: 12px;

@@ -44,7 +44,8 @@ export function AuthenticationPanel({
       setPending(false);
     }
   }
-  if (!views.length) return null;
+  const needsAuthentication = views.filter((v) => v.status !== "available");
+  if (!needsAuthentication.length) return null;
   return (
     <section className={styles.panel} aria-label="モデルの認証">
       <div className={styles.heading}>
@@ -53,7 +54,7 @@ export function AuthenticationPanel({
           状態を再確認
         </button>
       </div>
-      {views.map((v) => (
+      {needsAuthentication.map((v) => (
         <div key={v.provider} className={styles.row} data-status={v.status}>
           <span>
             {v.provider === "claude" ? "Claude" : "Codex"} · {labels[v.status]}

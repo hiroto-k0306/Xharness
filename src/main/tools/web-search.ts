@@ -116,8 +116,15 @@ export function webSearchTool(
           limitReached: true,
           message: `このセッションの WebSearch は上限(${budget.limit} 回)に達しました。集めた情報で進めてください`,
         });
-      if (budget) budget.used++;
       const candidates = options.candidates?.() ?? [provider()];
+      // 設定で使えるプロバイダが無いときは、検索回数を使わずに理由を返す
+      if (candidates.length === 0)
+        return {
+          isError: true,
+          content:
+            "No web search provider is available with the current settings (web.searchProvider / web.codexSearchMode)",
+        };
+      if (budget) budget.used++;
       const allowed = domainList(args.allowedDomains) || undefined;
       const blocked = domainList(args.blockedDomains) || undefined;
       for (const selected of candidates) {

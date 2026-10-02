@@ -20,7 +20,8 @@ async function fixture() {
   await runGit(["commit", "-m", "initial"], root, signal());
   return { home, root, repo: new Repository(home) };
 }
-describe("repository / worktree isolation", () => {
+// 実際の git を何度も起動する。Windows ではプロセス起動が遅く、既定の5秒を超えることがある
+describe("repository / worktree isolation", { timeout: 30_000 }, () => {
   it("runs actual clone and fetch against a local fixture and switches only a clean checkout", async () => {
     const { home, root } = await fixture();
     await runGit(["branch", "other"], root, signal());

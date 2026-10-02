@@ -1,0 +1,6 @@
+# リポジトリ内のテキストは LF に統一する(Windows の作業コピーでも LF で取り出す)
+* text=auto eol=lf
+# ブランド素材は元の改行のまま扱う
+*.svg -text
+*.ico binary
+*.png binary

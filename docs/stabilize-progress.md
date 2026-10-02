@@ -141,14 +141,14 @@ main/reviewer の Read は計4回、UpdatePlan は2回、RequestReview は1回�
 
 隔離した `config.yaml` を読み、実装済み WebSearch と Adapter を使って確認。**Claude 2/3回、Codex 2/3回、全4送信 HTTP 200**。
 
-| 確認                                    | 結果                                                                                                                           |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `searchProvider: auto`、1回目           | Claude / Haiku を使用。9件の結果すべてに `pageAge` が付いた                                                                    |
-| `allowedDomains: ["nodejs.org"]`、2回目 | Claude の応答には hosted search の呼び出しがなく、Codex / Luna にフォールバック。結果1件は `nodejs.org` のみ。`pageAge` はなし |
-| `maxSearchesPerSession: 2`、3回目       | 「上限(2回)に達しました」の通常の結果。モデル送信0回、ツールエラーではない                                                     |
-| Codex を明示して検索                    | Luna が Node.js Releases の1件を返した。`pageAge` はなし                                                                       |
-| `codexSearchMode: disabled`             | Codex の provider 呼び出し0回（通信しない provider で検証）。Codex のみ指定した場合の戻りは `Web search did not complete`      |
-| 不正な Web 設定                         | 5項目の警告、既定値 auto / live / 上限100 / fetch.maxChars 100000 / cacheMinutes 15 で読み込み成功。画面でも警告を確認         |
+| 確認                                    | 結果                                                                                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `searchProvider: auto`、1回目           | Claude / Haiku を使用。9件の結果すべてに `pageAge` が付いた                                                                                                                                                  |
+| `allowedDomains: ["nodejs.org"]`、2回目 | Claude の応答には hosted search の呼び出しがなく、Codex / Luna にフォールバック。結果1件は `nodejs.org` のみ。`pageAge` はなし                                                                               |
+| `maxSearchesPerSession: 2`、3回目       | 「上限(2回)に達しました」の通常の結果。モデル送信0回、ツールエラーではない                                                                                                                                   |
+| Codex を明示して検索                    | Luna が Node.js Releases の1件を返した。`pageAge` はなし                                                                                                                                                     |
+| `codexSearchMode: disabled`             | Codex の provider 呼び出し0回（通信しない provider で検証）。Codex のみ指定した場合の戻りは `Web search unavailable or incomplete`(後の修正で、検索回数を使わずに設定が原因と分かるメッセージを返すよう変更) |
+| 不正な Web 設定                         | 5項目の警告、既定値 auto / live / 上限100 / fetch.maxChars 100000 / cacheMinutes 15 で読み込み成功。画面でも警告を確認                                                                                       |
 
 Codex の2応答には `page_age` / `published_at` / `publication_date` / `pageAge` の日付情報が見つからなかった。日付付き fixture は保存していない。調査用 SSE は秘密値をマスクして ignored の `.out` に保存し、認証ヘッダは保存していない。使用量に応じた auto の切り替えは未確認だが、初期選択と Claude から Codex への失敗時フォールバックは実測した。
 
@@ -171,7 +171,7 @@ main は初回で計画を提出し、Read / Edit で `a - b` を `a + b` に修
 
 thinking-binding の3件目は結果欠落でも予算消費として数えた。上限後のローカル拒否・画面用合成 provider は実送信数に含めていない。資格情報とソース・fixture・main bundle 等297ファイルをメモリ内で照合し、秘密値一致0件・禁止ヘッダ0件を確認した。
 
-未完了は、thinking-binding 修正後の実確認（圧縮とその後の継続）、自動 RequestReview を含む通し確認と最終レビュー報告、使用量に応じた auto 切り替え。API 上限を越える再試行はしていない。変更は見つかった不具合の修正とそのテスト・結果記録のみ。今回の変更は未コミット。
+未完了は、thinking-binding 修正後の実確認（圧縮とその後の継続）、自動 RequestReview を含む通し確認と最終レビュー報告、使用量に応じた auto 切り替え。API 上限を越える再試行はしていない。変更は見つかった不具合の修正とそのテスト・結果記録のみ(後の追加確認と合わせて 3562b4d までにコミット済み)。
 
 ### Claude 20回の追加承認による再確認
 
@@ -184,3 +184,10 @@ thinking-binding の3件目は結果欠落でも予算消費として数えた�
 確認は計5回（試験に限り各回許可、恒久ルールなし）: SubmitPlan 1回、Edit 1回、main の `npm test` 1回、main の `git diff` 1回、reviewer の `npm test` 1回。画面の操作負担はこの実通信試験では再評価していない。
 
 今回の追加確認の合計は **Claude 12/20回（thinking-binding 4 + 通し8）、Codex 6/8回**。上限に達しておらず、追加予算は不要。以前の3/4回や6/6回・4/4回の台帳は消さず保持している。前節の未完了のうち、thinking-binding と最終レビューを含む自動通し確認は解消。使用量に応じた Web auto 切り替えは今回の対象外で未確認のまま。ユーザーの指示により、修正と確認結果をコミット・プッシュの対象とした。
+
+## Windows 確認のレビュー対応(2026-10-02、クラウド・実送信なし)
+
+- 使える検索プロバイダが設定で0件になる場合(`searchProvider: codex` と `codexSearchMode: disabled` など)は、検索回数を使わず、設定が原因と分かるエラーを返す。
+- `.gitattributes` でテキストを LF に統一した(svg はそのまま)。Windows の作業コピーも LF で取り出されるため、`endOfLine: auto` は残しても CRLF がコミットされない。既存の作業コピーは一度取り出し直すと LF になる。
+- 実際の git を何度も起動する repository の試験は、Windows でのプロセス起動の遅さを見込み、時間制限を30秒にした(内容は変えていない)。
+- 追加の通信予算(Claude 20回・Codex 8回)の承認を AGENTS.md の例外一覧に記録した。

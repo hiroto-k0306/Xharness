@@ -312,3 +312,22 @@ describe("web settings (§22.6)", () => {
     });
   });
 });
+
+describe("no usable search provider", () => {
+  it("explains the settings and does not use the search budget", async () => {
+    const codex = searcher("codex", sources);
+    const budget: SearchBudget = { used: 0, limit: 5 };
+    const tools = new Map(
+      webTools(() => codex, "live", false, undefined, {
+        settings: { searchProvider: "codex", codexSearchMode: "disabled" },
+        providers: () => [codex],
+        budget,
+      }),
+    );
+    const out = await tools.get("WebSearch")!.execute({ query: "q" }, signal());
+    expect(out.isError).toBe(true);
+    expect(out.content).toContain("web.codexSearchMode");
+    expect(budget.used).toBe(0);
+    expect(codex.calls).toBe(0);
+  });
+});

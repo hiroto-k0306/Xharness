@@ -80,6 +80,7 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  environment?: import("../tools/environment.js").EnvironmentReport;
   hookApproval?: {
     fingerprint: string;
     approve(signal: AbortSignal): Promise<boolean>;
@@ -249,6 +250,7 @@ export function toReceipt(
             : "model_call",
     input: r.input,
     output: r.output,
+    error: r.error,
     tool: r.tool,
     decision: isTool ? (r.decision === "error" ? "deny" : "allow") : undefined,
     durationMs,
@@ -259,7 +261,7 @@ export function toReceipt(
     summary:
       r.provider === "hook"
         ? `hook ${r.timing}:${r.step} → ${r.tool ?? "workflow"} ${r.decision}`
-        : `${r.tool ?? r.model}: ${r.decision}`,
+        : `${r.tool ?? r.model}: ${r.decision}${r.error ? " · " + r.error.kind : ""}`,
   };
 }
 

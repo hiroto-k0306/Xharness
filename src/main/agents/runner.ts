@@ -13,6 +13,7 @@ import { ReceiptStore } from "../session/receipts.js";
 import { type AgentDefinition } from "./definitions.js";
 import { MCP_TOOL_NAMES } from "../tools/mcp.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
+import { diagnoseEnvironment } from "../tools/environment.js";
 
 import { loadProjectConfig, projectMemory } from "../config/project.js";
 import { type Checkpoint, estimateTokens } from "../context/compactor.js";
@@ -194,6 +195,10 @@ export class ChildRunner {
     try {
       const project = await loadProjectConfig(this.options.home, cwd);
       const system = `You are ${name}. Work in ${cwd}. You have no parent conversation history. Never launch child agents. ${worker ? "Stay inside your workspace. ReportDone is required." : "Read-only investigation/review. Do not modify files. Return only your final report."}${!worker && tools.has("Bash") ? " " + (await reviewerTestHint(cwd)) : ""}\nProject instructions:\n${clean(await projectMemory(this.options.home, cwd, project.context.memoryFiles))}`;
+      const environment = await diagnoseEnvironment(cwd);
+      for (const message of environment.warnings)
+        this.options.onTraceWarning?.(message);
+      const diagnosedSystem = system + "\n" + environment.summary;
       const hooks = this.options.hooks?.(context, (r) => {
         const write = receipts.append(
           context.id,
@@ -232,7 +237,7 @@ export class ChildRunner {
           reasoning: definition.effort
             ? { effort: definition.effort }
             : undefined,
-          system,
+          system: diagnosedSystem,
           prepareContext: async (messages, route, signal, loopContext) => {
             const prepared = await prepareProviderHistory(messages, {
               provider: route.provider,
@@ -240,14 +245,14 @@ export class ChildRunner {
               signal,
               checkpoint,
               skipCompaction: compactionFailed,
-              system: loopContext?.system ?? system,
+              system: loopContext?.system ?? diagnosedSystem,
               tools:
                 loopContext?.tools ?? [...tools.values()].map((t) => t.spec),
               limit: route.provider.models().find((m) => m.id === route.model)
                 ?.contextTokens,
               overhead:
                 estimateTokens({
-                  system,
+                  system: diagnosedSystem,
                   tools: [...tools.values()].map((t) => t.spec),
                 }) + 4096,
               threshold: project.context.compactThreshold,
@@ -307,9 +312,10 @@ export class ChildRunner {
                     tool: r.tool,
                     durationMs:
                       Date.parse(r.completedAt) - Date.parse(r.startedAt),
-                    summary: `${r.tool ?? r.model}: ${r.decision}`,
+                    summary: `${r.tool ?? r.model}: ${r.decision}${r.error ? " · " + r.error.kind : ""}`,
                     input: r.input,
                     output: r.output,
+                    error: r.error,
                   },
                 ],
                 clean,

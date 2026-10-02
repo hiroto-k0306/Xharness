@@ -12,6 +12,7 @@ import { estimateTokens } from "../context/compactor.js";
 import { prepareProviderHistory } from "../context/provider-compactor.js";
 import { Router } from "../core/router.js";
 import { webTools } from "../tools/web.js";
+import { diagnoseEnvironment } from "../tools/environment.js";
 import { type Receipt } from "../../shared/ipc.js";
 import { usedProviders, type StoredSession } from "./store.js";
 import { type PermissionGate } from "./permission-gate.js";
@@ -273,14 +274,24 @@ export async function runSessionTurn(
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);
+    if (!rt.environment) {
+      rt.environment =
+        session.environment ?? (await diagnoseEnvironment(session.cwd));
+      if (!session.environment) {
+        await ctx.sessions.save({
+          ...(ctx.sessions.get(sessionId) ?? session),
+          environment: rt.environment,
+        });
+        for (const message of rt.environment.warnings)
+          emit({ type: "notice", sessionId, tone: "warn", message });
+      }
+    }
     // preserved thinking: system は過去の thinking の前提として検査されるため、
     // セッションの最初に決めたら変えない(途中で AGENTS.md が編集されても次のセッションから反映)
-    rt.system ??= await systemPrompt(
-      ctx,
-      session.cwd,
-      !session.workspaceId,
-      rt.config,
-    );
+    rt.system ??=
+      (await systemPrompt(ctx, session.cwd, !session.workspaceId, rt.config)) +
+      "\n" +
+      rt.environment.summary;
     const system = rt.system;
     const agentConfig = await loadAgentConfig(
       options.home,

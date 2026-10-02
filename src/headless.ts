@@ -62,6 +62,7 @@ import { join } from "node:path";
 import { type ReasoningEffort } from "./main/providers/provider.js";
 import { FileAccess, fileTools } from "./main/tools/files.js";
 import { shellSearchTools } from "./main/tools/shell-search.js";
+import { diagnoseEnvironment } from "./main/tools/environment.js";
 import { webTools } from "./main/tools/web.js";
 import {
   readReceiptReplay,
@@ -232,12 +233,17 @@ export async function headless(args = process.argv.slice(2)) {
   const secrets = fake ? [] : await readLocalSecrets();
   const clean = (text: string) => redact(text, secrets);
   let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7 and already runs in this working directory, so do not prefix commands with cd or Set-Location. Tool dates use ISO 8601. Respect project instructions.`;
+  const environment = resume?.environment ?? (await diagnoseEnvironment(cwd));
+  if (!resume?.environment)
+    for (const warning of environment.warnings) console.error(warning);
+  system += "\n" + environment.summary;
   system +=
     "\n\n" + clean(await projectMemory(home, cwd, project.context.memoryFiles));
   const workspaces = new WorkspaceStore(home);
   await workspaces.load();
   const workspaceId = resume?.workspaceId ?? (await workspaces.add(cwd));
   let session: StoredSession = resume ?? {
+    environment,
     id: randomUUID().slice(0, 8),
     title: "Headless session",
     cwd,
@@ -250,6 +256,7 @@ export async function headless(args = process.argv.slice(2)) {
     updatedAt: Date.now(),
     providers: [],
   };
+  session = { ...session, environment };
   await sessions.save(session);
   let messages: Message[] = resume ? await sessions.messages(session.id) : [];
   let persisted = messages.length;

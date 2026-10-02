@@ -17,7 +17,9 @@ import {
 } from "../../shared/ipc.js";
 
 /** DESIGN.md §18.4。~/.xharness/ 以下の索引と履歴。electron を使わない。 */
-export type StoredSession = Omit<SessionSummary, "status" | "branch">;
+export type StoredSession = Omit<SessionSummary, "status" | "branch"> & {
+  environment?: import("../tools/environment.js").EnvironmentReport;
+};
 
 let tempSeq = 0;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

@@ -321,7 +321,13 @@ export function App() {
               }}
             />
           </div>
-          {app.phase4 && <Receipts receipts={view?.receipts} />}
+          {app.phase4 && (
+            <Receipts
+              receipts={view?.receipts}
+              sessionId={current ?? undefined}
+              running={session?.status !== "idle"}
+            />
+          )}
           {view?.pending?.plan && current ? (
             <PlanApproval
               key={view.pending.requestId}

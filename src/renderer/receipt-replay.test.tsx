@@ -17,6 +17,27 @@ const values = [0, 1, 2].map((n) => ({
   ...(n === 1 ? { agentId: "worker" } : {}),
 }));
 afterEach(() => vi.useRealTimers());
+it("exports the parent session using the typed command and disables export while running", async () => {
+  const command = vi.fn().mockResolvedValue({ ok: true });
+  vi.stubGlobal("harness", { command });
+  try {
+    const { rerender } = render(
+      <Receipts receipts={values} sessionId="parent" />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "HTML出力" }));
+    });
+    expect(command).toHaveBeenCalledWith({
+      type: "export_report",
+      sessionId: "parent",
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("HTMLを保存しました");
+    rerender(<Receipts receipts={values} sessionId="parent" running />);
+    expect(screen.getByRole("button", { name: "HTML出力" })).toBeDisabled();
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 it("moves forward/back with immutable ownership, raw HTML and no harness commands", () => {
   window.harness = { command: vi.fn(), onEvent: () => () => {} };
   render(

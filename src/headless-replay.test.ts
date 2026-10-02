@@ -6,6 +6,29 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 
 const run = promisify(execFile);
+it("exports an offline HTML report without session initialization or source writes", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-report-cli-"));
+  await mkdir(join(home, "receipts"));
+  const raw = await readFile(
+    "test/fixtures/replay/receipts/haiku-read.jsonl",
+    "utf8",
+  );
+  await writeFile(join(home, "receipts", "haiku-read.jsonl"), raw);
+  const output = join(home, "report.html");
+  const { stdout, stderr } = await replay(home, [
+    "--report",
+    "haiku-read",
+    "--output",
+    output,
+  ]);
+  expect(stdout).toBe("HTML report saved\n");
+  expect(stderr).toBe("");
+  expect(await readFile(output, "utf8")).toContain("XHarness 実行レポート");
+  expect(
+    await readFile(join(home, "receipts", "haiku-read.jsonl"), "utf8"),
+  ).toBe(raw);
+  expect(await readdir(home)).toEqual(["receipts", "report.html"]);
+});
 async function replay(home: string, args: string[]) {
   return run(
     process.execPath,

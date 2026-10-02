@@ -16,6 +16,17 @@ import { type Host, type SessionController } from "./session/controller.js";
 /** Electron に依存する部分はこのファイルと index.ts だけ(DESIGN.md §4)。 */
 export function createHost(getWindow: () => BrowserWindow | null): Host {
   return {
+    async saveReport(filename) {
+      const win = getWindow();
+      const options = {
+        defaultPath: filename,
+        filters: [{ name: "HTML", extensions: ["html"] }],
+      };
+      const result = win
+        ? await dialog.showSaveDialog(win, options)
+        : await dialog.showSaveDialog(options);
+      return result.canceled ? undefined : result.filePath;
+    },
     async pickFolder() {
       const win = getWindow();
       const options = { properties: ["openDirectory" as const] };

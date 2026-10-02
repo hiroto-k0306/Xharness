@@ -66,11 +66,12 @@ import {
   readReceiptReplay,
   compareReplayPermissions,
 } from "./main/session/replay.js";
+import { exportExecutionReport } from "./main/session/report.js";
 
 export async function headless(args = process.argv.slice(2)) {
   if (args.includes("--help")) {
     process.stdout.write(
-      "XHarness Phase 6\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\nnode dist/headless.js --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path] [--fake]\n/model provider:model [effort] /mode default|acceptEdits|plan /phase plan|implement|review /review /compact /exit /clear · Ctrl+C interrupts a turn\n",
+      "XHarness Phase 6\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\nnode dist/headless.js --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path] [--fake]\nnode dist/headless.js --report sessionId --output new-report.html [--fake]\n/model provider:model [effort] /mode default|acceptEdits|plan /phase plan|implement|review /review /compact /exit /clear · Ctrl+C interrupts a turn\n",
     );
     return;
   }
@@ -82,6 +83,30 @@ export async function headless(args = process.argv.slice(2)) {
   const home =
     process.env.XHARNESS_HOME ??
     join(homedir(), fake ? ".xharness-fake" : ".xharness");
+  if (args.includes("--report")) {
+    const id = option("--report", "");
+    const output = option("--output", "");
+    if (!id || id.startsWith("--") || !output || output.startsWith("--"))
+      throw new Error("Report needs --report sessionId --output new-file.html");
+    if (
+      [
+        "--resume",
+        "--model",
+        "--effort",
+        "--replay",
+        "--replay-mode",
+        "--replay-parent",
+      ].some((name) => args.includes(name))
+    )
+      throw new Error("Report cannot resume or call a model");
+    const secrets = fake ? [] : await readLocalSecrets();
+    await exportExecutionReport(home, id, resolve(output), (text) =>
+      redact(text, secrets),
+    );
+    process.stdout.write("HTML report saved\n");
+    return;
+  }
+  if (args.includes("--output")) throw new Error("--output requires --report");
   if (args.includes("--replay")) {
     const value = (name: string) => {
       const result = option(name, "");

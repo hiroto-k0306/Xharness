@@ -1589,7 +1589,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 
 ---
 
-## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3実装済み）
+## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4実装済み）
 
 実アプリの試用（docs/bugs/2026-10-02-workflow-loop.md）後のレビューで挙がった不足機能。優先度の高・中・低の順に実装する。各単位は AGENTS.md の作業ルール（1コミット1目的）で小さく区切り、前の優先度の単位を検証してから次へ進む。
 
@@ -1614,7 +1614,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - 同じツール・同じ種別の失敗が同一ターンで3回続いたら、継続せず AskUserQuestion 相当でユーザーへ取り次ぐ（`workflow_stalled` と同様に、未完了の作業は完了扱いにしない）。
 
 **H3. Bash のバックグラウンド実行**
-- 実装・検証結果は [docs/h3-progress.md](docs/h3-progress.md)。H4以降は未着手。
+- 実装・検証結果は [docs/h3-progress.md](docs/h3-progress.md)。
 - `Bash` に `run_in_background: true` を追加する。起動すると `shellId` を返し、待たない。`BashOutput({shellId, wait?, timeoutSec?})`（前回以降の出力と状態。待機は最大60秒）と `KillShell({shellId})` を新設する。
 - 同時実行は5件まで（Claude Code に件数の上限はないが、Windows の資源を守る XHarness 独自の安全弁）。BashOutput が1回に返す出力は30,000文字（Claude Code の `BASH_MAX_OUTPUT_LENGTH` 既定値）で、超過分は先頭と末尾を残して中略し、未取得分は次の BashOutput で続きを返す。保持する出力は1件につき直近1 MB。ターンの終了・停止・セッション終了でプロセスツリーごと終了する（MCP の stdio と同じ後片付け）。次のターンへの持ち越しはしない。
 - 権限は通常の Bash と同じ gate を起動時に通す。BashOutput / KillShell は自分が起動した shellId のみ操作でき、allow。出力は秘密値のマスクを通す。
@@ -1626,6 +1626,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Bash による変更は追跡しない（範囲外）。画面にもその旨を表示する。worktree の worker は worktree ごと破棄できるため対象外。
 - 保存期間は Claude Code の `cleanupPeriodDays` 既定値に合わせて30日（設定 `checkpoints.retentionDays` で変更可）。期限切れとセッション削除の際に削除する。ターン数・容量の上限は設けないが、1ファイル10 MB超は退避せず、そのファイルは巻き戻せないと画面に表示する。
 - 戻す対象の選び方も Claude Code に合わせ、コード・会話・両方から選ぶ（既定はコードのみ。会話を戻すのは履歴の追記に「巻き戻し」を記録し、元の履歴は消さない）。
+- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3以降は未着手。
 
 ### 26.2 優先度: 中
 
@@ -1662,7 +1663,7 @@ H2 → H1 → H3 → H4 → M3 → M1 → M2 → M4 → M5 → L1〜L3。H2 を�
 
 **実装前に確認する未決事項**
 規定値は Claude Code の仕様に合わせて決めた（2026-10-02、ユーザー指示）。ただし値は設計者の知識によるもので、公式ドキュメントでの再確認が済んでいない。実装前に確認し、違えばここを直す。
-1. H4: 保存30日（`cleanupPeriodDays` 既定）、Bash の変更は追跡しない、復元はコード・会話・両方から選ぶ。外部で変更されたファイルは Claude Code が追跡しないのに対し、XHarness は不一致を検出して既定で戻さない（安全側の独自仕様）。
+1. H4（公式資料確認済み、2026-10-03）: [Claude Code公式チェックポイント資料](https://code.claude.com/docs/en/checkpointing)で保存30日・Bashの変更は追跡しないこと・コード／会話／両方の復元を確認した。現在の同資料は最大100チェックポイントとするが、XHarnessは本節の指定どおりターン数・総容量を制限しない。外部変更の不一致を検出して既定で除外することと1ファイル10 MB上限も独自仕様。
 2. H2（公式資料確認済み、2026-10-02）: [Claude Code公式ツール資料](https://code.claude.com/docs/en/tools-reference#grep-tool-behavior)でGrepの`.gitignore`尊重を確認した。同資料ではGrepの250件上限を確認できず、Globは既定では`.gitignore`を尊重しないと記載されている。XHarnessでは本節の指定どおり、両検索で`.gitignore`を尊重し、Grepを250件で打ち切る独自の規定値として実装する。
 3. M3: 上限は既定で無効（Claude Code と同じ）。
 4. M4: 新規ファイルは LF、既存ファイルは改行コードと BOM を保持（Claude Code の Edit と同じ）。

@@ -171,6 +171,8 @@ export interface ControllerContext {
 }
 
 export const STOP_NOTICE: Record<string, string> = {
+  workflow_stalled:
+    "作業状態が変わらないまま継続指示が繰り返されたため停止しました。依頼内容・対象フォルダ・失敗したツールを確認してから再開してください。",
   plan_validation_failed:
     "計画の形式エラーが3回繰り返されたため停止しました。計画内容を確認してから再開してください",
   context_overflow:

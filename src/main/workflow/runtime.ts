@@ -561,6 +561,11 @@ export class WorkflowRuntime {
     );
   }
   private async runTraced(options: LoopOptions, signal: AbortSignal) {
+    if (
+      this.options.config.workflow.mode === "auto" &&
+      this.state.phase === "off"
+    )
+      this.state.phase = "classify";
     if (!this.initialized) {
       try {
         if ((await gitInfo(this.options.cwd)).git)
@@ -639,6 +644,8 @@ export class WorkflowRuntime {
       onReceipt: (receipt) => options.onEvent?.({ type: "receipt", receipt }),
     });
     let invalidPlanAttempts = 0;
+    let previousProgress = "";
+    let stalledCompletions = 0;
     return runTurn(
       {
         ...options,
@@ -730,10 +737,7 @@ export class WorkflowRuntime {
             for (const block of ctx.completion?.message.content ?? [])
               if (
                 block.type === "tool_use" &&
-                (await writes(
-                  { id: block.id, name: block.name, input: block.input },
-                  this.options.cwd,
-                ))
+                ["Write", "Edit", "SubmitPlan", "SkipPlan"].includes(block.name)
               ) {
                 this.state.phase = "plan";
                 this.notify();
@@ -773,6 +777,33 @@ export class WorkflowRuntime {
             return { kind: "stop", reason: "review_attention" };
           if (ctx.stopCause || ctx.completion?.stopReason !== "end_turn")
             return custom;
+          const diff = await this.diff(signal);
+          // An end_turn with no plan or changes is a proposal or a blocked task,
+          // not an instruction to invent a change merely to pass review.
+          if (
+            this.options.config.workflow.mode === "auto" &&
+            !this.items.length &&
+            !diff &&
+            ["classify", "implement"].includes(this.state.phase)
+          ) {
+            this.state.phase = "off";
+            this.notify();
+            return custom;
+          }
+          const progress = JSON.stringify({
+            phase: this.state.phase,
+            items: this.scheduler?.snapshot() ?? [],
+            reviewRound: this.state.reviewRound,
+            diff,
+          });
+          stalledCompletions =
+            progress === previousProgress ? stalledCompletions + 1 : 0;
+          previousProgress = progress;
+          if (
+            ["plan", "implement"].includes(this.state.phase) &&
+            stalledCompletions >= 2
+          )
+            return { kind: "stop", reason: "workflow_stalled" };
           if (this.state.phase === "classify") {
             this.state.phase = "off";
             this.notify();

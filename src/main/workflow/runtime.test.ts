@@ -27,6 +27,53 @@ const text = (text: string): FakeStep => ({
   stopReason: "end_turn",
   message: { role: "assistant", content: [{ type: "text", text }] },
 });
+it("finishes a proposal after a denied inspection command without requiring implementation", async () => {
+  const s = await setup(
+    [
+      call("Bash", { command: "Get-ChildItem | Format-Table" }),
+      text("修正案です。変更は行っていません。"),
+      text("must not send"),
+    ],
+    [],
+  );
+  const result = await s.run();
+  expect(result.stopCause).toBe("end_turn");
+  expect(s.requests).toHaveLength(2);
+  expect(s.runtime.state.phase).toBe("off");
+});
+it("allows a no-change proposal to finish after SkipPlan and classifies the next request again", async () => {
+  const s = await setup(
+    [
+      call("SkipPlan", { reason: "提案だけで変更はありません" }),
+      text("調査結果です。"),
+      call("SkipPlan", { reason: "今度は実装する" }),
+      call("Write", { path: "fix.txt", content: "fix" }),
+      call("RequestReview", { summary: "Implemented" }),
+    ],
+    [text("[]")],
+  );
+  expect((await s.run()).stopCause).toBe("end_turn");
+  expect(s.requests).toHaveLength(2);
+  expect(s.runtime.state.phase).toBe("off");
+  expect((await s.run()).stopCause).toBe("workflow_complete");
+});
+it("stops repeated completion reminders without waiving review for actual changes", async () => {
+  const s = await setup(
+    [
+      call("SkipPlan", { reason: "Small fix" }),
+      call("Write", { path: "fix.txt", content: "fix" }),
+      text("停止しています"),
+      text("停止しています"),
+      text("停止しています"),
+      text("must not send"),
+    ],
+    [],
+  );
+  expect((await s.run()).stopCause).toBe("workflow_stalled");
+  expect(s.requests).toHaveLength(5);
+  expect(s.runtime.state.phase).toBe("implement");
+  expect(await readFile(join(s.cwd, "fix.txt"), "utf8")).toBe("fix");
+});
 it("rejects the real malformed SubmitPlan while advertising the full item shape for recovery", async () => {
   const bad = JSON.parse(
     await readFile("test/fixtures/stabilize/malformed-plan.json", "utf8"),

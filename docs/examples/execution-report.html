@@ -142,18 +142,80 @@
           background: #eee;
         }
       }
+      .receipt-card {
+        border-left-color: #354052;
+        background: #141b26;
+      }
+      .receipt-card.model {
+        border-left-color: #ab9bff;
+        background: #221f34;
+      }
+      .receipt-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      .receipt-heading h3 {
+        margin: 0;
+      }
+      .badge {
+        border: 1px solid #566176;
+        border-radius: 20px;
+        padding: 2px 10px;
+        white-space: nowrap;
+        font-size: 12px;
+      }
+      .model .badge {
+        border-color: #ab9bff;
+        color: #d3c9ff;
+      }
+      .model .readable-block,
+      .model details {
+        background: #2b2741;
+      }
+      .legend {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .legend .llm {
+        border-left: 4px solid #ab9bff;
+        padding: 4px 10px;
+        background: #221f34;
+      }
+      @media print {
+        .receipt-card {
+          background: white;
+        }
+        .receipt-card.model {
+          background: #f2efff;
+        }
+        .model .readable-block,
+        .model details {
+          background: #eae6fa;
+        }
+        .model .badge {
+          color: #49317c;
+        }
+      }
     </style>
   </head>
   <body>
     <main>
       <h1>XHarness 実行レポート</h1>
-      <p>セッション：haiku-read · 出力日時：2026-10-02T07:44:03.019Z</p>
+      <p>セッション：haiku-read · 出力日時：2026-10-02T07:58:08.761Z</p>
       <p class="steps">
         1 context：入力構築 → 2 model：LLM → 3 tool_use：検証 → 4 gate：権限 → 5
         act：実行・委託 → 6 receipt：記録
       </p>
+      <p class="legend">
+        <span class="llm">紫：LLMのモデル呼び出し記録</span
+        ><span>通常色：ハーネスの処理</span>
+      </p>
       <p class="note">
-        依頼・LLMの返答・ツール結果を簡易表示しています。本文は原文のままです。全文は各項目の詳細JSONで確認できます。
+        すべての記録を「処理・入力・出力・詳細」の同じ形式で表示しています。本文は原文のままです。全文は各項目の詳細JSONで確認できます。
       </p>
       <details>
         <summary>記録の範囲と表示方法</summary>
@@ -179,15 +241,21 @@ Read a.txt with Read exactly once. Return its contents. Do not call other tools.
           <summary>保存会話の全体（詳細JSON）</summary>
           <pre>[]</pre>
         </details>
-        <article class="model">
-          <h3>#6 · LLMへの依頼と応答</h3>
-          <p class="meta">
-            STEP 2 · モデル呼び出しの記録 · claude-haiku-4-5-20251001
-          </p>
-          <p>LLMがツールの利用を要求しました。</p>
+        <article class="receipt-card model">
+          <header class="receipt-heading">
+            <h3>#6 · LLMへの依頼と応答</h3>
+            <span class="badge">LLM</span>
+          </header>
+          <div class="receipt-process">
+            <h4>処理</h4>
+            <p class="meta">
+              STEP 2 · モデル呼び出しの記録 · claude-haiku-4-5-20251001
+            </p>
+            <p>LLMがツールの利用を要求しました。</p>
+          </div>
           <div class="exchange">
             <div>
-              <h4>LLMに渡した内容</h4>
+              <h4>入力</h4>
               <p class="meta">初回の入力（送信履歴 1 件）</p>
               <div class="readable-block">
                 <h4>依頼・追加の指示</h4>
@@ -203,7 +271,7 @@ Read a.txt with Read exactly once. Return its contents. Do not call other tools.
               </details>
             </div>
             <div>
-              <h4>LLMから返った内容</h4>
+              <h4>出力</h4>
               <div class="tool-request">
                 <h4>LLMが要求した操作：Read · ファイルを読む</h4>
                 <div class="readable-block">
@@ -214,7 +282,7 @@ Read a.txt with Read exactly once. Return its contents. Do not call other tools.
             </div>
           </div>
           <details class="raw">
-            <summary>詳細JSON・記録情報を確認</summary>
+            <summary>詳細</summary>
             <p>2026-10-01T23:20:53.182Z · 899 ms</p>
             <p>claude-haiku-4-5-20251001: tool_use</p>
             <details>
@@ -286,29 +354,42 @@ Read a.txt with Read exactly once. Return its contents. Do not call other tools.
             </details>
           </details>
         </article>
-        <article class="harness">
-          <h3>#7 · Read · ファイルを読む</h3>
-          <p class="meta">
-            STEP 3–5 · 検証・権限・ツール実行の結果 · claude-haiku-4-5-20251001
-          </p>
-          <p></p>
-          <p>ハーネスが「Read · ファイルを読む」を処理しました。</p>
-          <div class="readable-block">
-            <h4>対象ファイル</h4>
-            <pre>D:/AIwork/Xharness/.out/phase6-auth-work/a.txt</pre>
+        <article class="receipt-card harness">
+          <header class="receipt-heading">
+            <h3>#7 · Read · ファイルを読む</h3>
+            <span class="badge">ハーネス</span>
+          </header>
+          <div class="receipt-process">
+            <h4>処理</h4>
+            <p class="meta">
+              STEP 3–5 · 検証・権限・ツール実行の結果 · ハーネス
+            </p>
+            <p>Read: allow</p>
           </div>
-          <div class="readable-block">
-            <h4>対象ファイル</h4>
-            <pre>d:\aiwork\xharness\.out\phase6-auth-work\a.txt</pre>
-          </div>
-          <div class="readable-block">
-            <h4>結果</h4>
-            <pre>
+          <div class="exchange">
+            <div>
+              <h4>入力</h4>
+              <div class="readable-block">
+                <h4>対象ファイル</h4>
+                <pre>D:/AIwork/Xharness/.out/phase6-auth-work/a.txt</pre>
+              </div>
+            </div>
+            <div>
+              <h4>出力</h4>
+              <div class="readable-block">
+                <h4>対象ファイル</h4>
+                <pre>d:\aiwork\xharness\.out\phase6-auth-work\a.txt</pre>
+              </div>
+              <div class="readable-block">
+                <h4>結果</h4>
+                <pre>
 local read check
 </pre>
+              </div>
+            </div>
           </div>
           <details class="raw">
-            <summary>詳細JSON・記録情報を確認</summary>
+            <summary>詳細</summary>
             <p>2026-10-01T23:20:53.182Z · 899 ms</p>
             <p>Read: allow</p>
             <details>
@@ -329,15 +410,21 @@ local read check
             </details>
           </details>
         </article>
-        <article class="model">
-          <h3>#11 · LLMへの依頼と応答</h3>
-          <p class="meta">
-            STEP 2 · モデル呼び出しの記録 · claude-haiku-4-5-20251001
-          </p>
-          <p>LLMが今回の応答を終了しました。</p>
+        <article class="receipt-card model">
+          <header class="receipt-heading">
+            <h3>#11 · LLMへの依頼と応答</h3>
+            <span class="badge">LLM</span>
+          </header>
+          <div class="receipt-process">
+            <h4>処理</h4>
+            <p class="meta">
+              STEP 2 · モデル呼び出しの記録 · claude-haiku-4-5-20251001
+            </p>
+            <p>LLMが今回の応答を終了しました。</p>
+          </div>
           <div class="exchange">
             <div>
-              <h4>LLMに渡した内容</h4>
+              <h4>入力</h4>
               <p class="meta">前回から追加した情報 2 件（送信履歴全体 3 件）</p>
               <div class="tool-request">
                 <h4>LLMが要求した操作：Read · ファイルを読む</h4>
@@ -368,7 +455,7 @@ local read check
               </details>
             </div>
             <div>
-              <h4>LLMから返った内容</h4>
+              <h4>出力</h4>
               <div class="readable-block">
                 <h4>LLMの返答</h4>
                 <pre>
@@ -382,7 +469,7 @@ local read check
             </div>
           </div>
           <details class="raw">
-            <summary>詳細JSON・記録情報を確認</summary>
+            <summary>詳細</summary>
             <p>2026-10-01T23:20:53.771Z · 589 ms</p>
             <p>claude-haiku-4-5-20251001: end_turn</p>
             <details>

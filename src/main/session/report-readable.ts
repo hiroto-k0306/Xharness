@@ -163,8 +163,13 @@ export function responseView(value: unknown) {
     ? blocksView(m.content, "assistant")
     : resultView(response);
 }
-export function toolView(name: string, input: unknown, output: unknown) {
-  return `<p>ハーネスが「${escape(toolName(name))}」を処理しました。</p>${argumentsView(input)}${output === undefined ? "<p>結果は未記録です。</p>" : resultView(output)}`;
+export function receiptInputView(value: unknown) {
+  if (value === undefined) return "<p>入力は未記録です。</p>";
+  const input = parse(value);
+  return typeof input === "string" ? text("内容", input) : argumentsView(input);
+}
+export function receiptOutputView(value: unknown) {
+  return value === undefined ? "<p>出力は未記録です。</p>" : resultView(value);
 }
 export function initialRequest(messages: unknown[], requests: unknown[]) {
   const source = messages.length

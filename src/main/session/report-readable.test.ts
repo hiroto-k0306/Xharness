@@ -2,7 +2,8 @@ import { expect, it } from "vitest";
 import {
   requestView,
   responseView,
-  toolView,
+  receiptInputView,
+  receiptOutputView,
   initialRequest,
   recordedStatus,
   toolName,
@@ -84,11 +85,9 @@ it("explains model tool requests in Japanese and renders text as inert content",
   expect(html).not.toContain("hidden-thinking");
 });
 it("bounds previews and handles unknown records while leaving details to the original JSON", () => {
-  const html = toolView(
-    "CustomTool",
-    { unusual: "opaque-input" },
-    "x".repeat(1300),
-  );
+  const html =
+    receiptInputView({ unusual: "opaque-input" }) +
+    receiptOutputView("x".repeat(1300));
   expect(html).toContain("続きは詳細JSON");
   expect(html).not.toContain("x".repeat(1201));
   expect(html).toContain("引数の詳細はJSON欄");
@@ -96,9 +95,9 @@ it("bounds previews and handles unknown records while leaving details to the ori
   expect(responseView({ content: [null] })).toContain("対応していないブロック");
   expect(toolName("toString")).toBe("toString");
   expect(recordedStatus("model: __proto__")).toBe("");
-  expect(
-    toolView("Unknown", { toString: "inherited-name" }, undefined),
-  ).not.toContain("inherited-name");
+  expect(receiptInputView({ toString: "inherited-name" })).not.toContain(
+    "inherited-name",
+  );
 });
 it("recovers an initial request from the model input when no separate history file exists", () => {
   expect(

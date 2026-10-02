@@ -2,6 +2,70 @@ import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { renderExecutionReport } from "../main/session/report.js";
 import { buildReceiptReplay } from "../shared/replay.js";
+import { type Receipt } from "../shared/ipc.js";
+
+it("uses the same card structure for every receipt and highlights only recorded model calls", () => {
+  const kinds: Receipt["kind"][] = [
+    "model_call",
+    "tool",
+    "permission",
+    "fallback",
+    "compact",
+    "hook",
+  ];
+  const values = kinds.map((kind, i) => ({
+    id: `#${i}`,
+    sessionId: "s",
+    kind,
+    provider:
+      kind === "model_call" || kind === "compact"
+        ? "claude"
+        : kind === "hook"
+          ? "hook"
+          : "harness",
+    ts: i,
+    durationMs: 1,
+    summary: `${kind}: recorded`,
+    ...(kind === "tool"
+      ? { tool: "Read", input: { path: "a.txt" }, output: "file body" }
+      : {}),
+  }));
+  const html = renderExecutionReport([
+    {
+      id: "s",
+      messages: [],
+      skippedMessages: 0,
+      replay: buildReceiptReplay(values),
+    },
+  ]);
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const cards = [...doc.querySelectorAll("article.receipt-card")];
+  expect(cards).toHaveLength(6);
+  for (const [i, card] of cards.entries()) {
+    expect(card.querySelector(".receipt-process > h4")?.textContent).toBe(
+      "処理",
+    );
+    expect(
+      [...card.querySelectorAll(".exchange > div > h4")].map(
+        (h) => h.textContent,
+      ),
+    ).toEqual(["入力", "出力"]);
+    expect(card.querySelector(".raw > summary")?.textContent).toBe("詳細");
+    expect(card.classList.contains("model")).toBe(i === 0);
+    expect(card.querySelector(".badge")?.textContent).toBe(
+      i === 0 ? "LLM" : "ハーネス",
+    );
+  }
+  expect(cards[1]!.querySelector(".exchange")?.textContent).toContain(
+    "file body",
+  );
+  expect(cards[2]!.querySelector(".exchange")?.textContent).toContain(
+    "入力は未記録",
+  );
+  expect(cards[2]!.querySelector(".exchange")?.textContent).toContain(
+    "出力は未記録",
+  );
+});
 
 it("puts the readable exchange outside closed JSON details and keeps original input available", async () => {
   const raw = await readFile(

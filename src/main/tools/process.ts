@@ -14,6 +14,7 @@ export async function runProcess(
     isError: boolean;
     exitCode: number | null;
     stopped: boolean;
+    errorKind?: "timeout" | "aborted" | "failed";
   }>((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
@@ -66,6 +67,11 @@ export async function runProcess(
             : error.code === "EACCES" || error.code === "EPERM"
               ? "プログラムを起動する権限がありません。"
               : "プログラムを起動できませんでした。",
+          error.code === "ENOENT"
+            ? "missing_cli"
+            : error.code === "EACCES" || error.code === "EPERM"
+              ? "denied"
+              : "failed",
         ),
       );
     });
@@ -86,6 +92,13 @@ export async function runProcess(
         isError: stopped || code !== 0,
         exitCode: code,
         stopped,
+        errorKind: stopped
+          ? signal.aborted
+            ? "aborted"
+            : "timeout"
+          : code !== 0
+            ? "failed"
+            : undefined,
       });
     });
   });

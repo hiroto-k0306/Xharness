@@ -6,6 +6,7 @@ export interface ToolCall {
   input: unknown;
 }
 export interface ToolOutput {
+  error?: import("./errors.js").ToolFailure;
   stop?: { reason: "agent_stopped" | "awaiting_user"; message: string };
   content: string;
   isError?: boolean;

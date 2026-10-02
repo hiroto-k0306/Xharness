@@ -29,6 +29,7 @@ export type StepNode = (typeof STEP_NODES)[number];
 
 /** DESIGN.md §16.5 */
 export interface Receipt {
+  error?: import("../main/tools/errors.js").ToolFailure;
   agentId?: string;
   input?: unknown;
   output?: string;

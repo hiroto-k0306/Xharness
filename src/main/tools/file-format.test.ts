@@ -52,7 +52,7 @@ it("does not introduce BOM into existing files and uses LF for new files", async
     .execute({ path: "new.txt", content: "\ufeffthree\r\n" }, signal());
   expect(await readFile(join(cwd, "new.txt"))).toEqual(Buffer.from("three\n"));
 });
-it("keeps untouched mixed newlines during Edit and defaults to LF when none exists", async () => {
+it("keeps untouched mixed newlines during Edit and preserves Write input when none exists", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "xh-format-"));
   const tools = fileTools(new FileAccess(cwd));
   await writeFile(join(cwd, "mixed"), "a\r\nb\nc");
@@ -66,7 +66,7 @@ it("keeps untouched mixed newlines during Edit and defaults to LF when none exis
   await tools
     .get("Write")!
     .execute({ path: "none", content: "x\r\ny" }, signal());
-  expect(await readFile(join(cwd, "none"), "utf8")).toBe("\ufeffx\ny");
+  expect(await readFile(join(cwd, "none"), "utf8")).toBe("\ufeffx\r\ny");
 });
 it("accepts BOM copied from Read without duplicating or removing the file BOM", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "xh-format-bom-"));

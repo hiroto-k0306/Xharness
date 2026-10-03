@@ -176,7 +176,7 @@ export function fileTools(access: FileAccess): ToolRegistry {
           name === "Read"
             ? "Read a UTF-8 file or PNG/JPEG/GIF/WebP image (max 5 MB, 8000px; no resizing) before editing it"
             : name === "Write"
-              ? "Write a UTF-8 file; existing files require Read first. Preserve existing newline/BOM; new files use LF"
+              ? "Write a UTF-8 file; existing files require Read first. Preserve newline/BOM; newline-free existing files keep input newlines. New .bat/.cmd use CRLF; other new files use LF"
               : name === "MultiEdit"
                 ? "Apply ordered edits to one previously read UTF-8 file atomically; each old must match exactly once in the result of preceding edits. Preserve newline/BOM; no write if any edit fails"
                 : "Replace exactly one occurrence in a previously read UTF-8 file, preserving newline/BOM",
@@ -270,7 +270,7 @@ export function fileTools(access: FileAccess): ToolRegistry {
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         }
-        const format = textFormat(original);
+        const format = textFormat(original, path);
         if (name === "Edit" || name === "MultiEdit") {
           let body = format.body!;
           const edits =

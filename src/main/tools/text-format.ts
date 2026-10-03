@@ -1,12 +1,19 @@
 /** File tools support UTF-8 (with or without BOM). Use the first newline for mixed files. */
-export function textFormat(original?: string) {
+export function textFormat(original?: string, path = "") {
   const bom = original?.startsWith("\ufeff") ?? false;
-  const newline = /\r?\n/.exec(original ?? "")?.[0] ?? "\n";
+  const found = /\r?\n/.exec(original ?? "")?.[0];
+  const newline =
+    found ??
+    (original === undefined && /\.(bat|cmd)$/i.test(path) ? "\r\n" : "\n");
   return {
     body: original?.replace(/^\ufeff/, ""),
     normalize: (text: string) => text.replace(/\r?\n/g, newline),
     write(text: string) {
-      const body = text.replace(/^\ufeff/, "").replace(/\r?\n/g, newline);
+      const withoutBom = text.replace(/^\ufeff/, "");
+      const body =
+        original !== undefined && !found
+          ? withoutBom
+          : withoutBom.replace(/\r?\n/g, newline);
       return (
         (bom || (original === undefined && text.startsWith("\ufeff"))
           ? "\ufeff"

@@ -307,3 +307,25 @@ it("recognizes its own both-scope restore when a new conversation branch writes 
   );
   expect(await readFile(join(cwd, "a"), "utf8")).toBe("original");
 });
+it("treats a second code-only undo as unchanged and replaces atomically without temporary files", async () => {
+  await writeFile(join(cwd, "a"), "original");
+  await change("a", "model");
+  await store.restore(
+    await store.preview("s", 1),
+    { scope: "code", includeConflicts: [] },
+    signal(),
+  );
+  const repeated = await store.preview("s", 1);
+  expect(repeated.preview.files[0]!.conflict).toBe(false);
+  expect(
+    (
+      await store.restore(
+        repeated,
+        { scope: "code", includeConflicts: [] },
+        signal(),
+      )
+    ).restored,
+  ).toHaveLength(1);
+  expect(await readFile(join(cwd, "a"), "utf8")).toBe("original");
+  expect(await readdir(cwd)).toEqual(["a"]);
+});

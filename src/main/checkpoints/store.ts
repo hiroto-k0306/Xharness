@@ -377,7 +377,29 @@ export class FileCheckpointStore {
           skipped.push(entry.path);
         }
       }
+    await this.recordRestored(plan, restored);
     return { restored, skipped };
+  }
+  private async recordRestored(plan: RestorePlan, restored: string[]) {
+    const originals = new Map(
+      plan.entries.map((entry) => [entry.path, entry.before]),
+    );
+    const remaining = new Set(restored);
+    for (const id of [...plan.turnIds].reverse()) {
+      const directory = plan.entries[0]?.directory;
+      if (!directory || !remaining.size) break;
+      const folder = join(dirname(directory), identifier(id));
+      await this.checked(folder);
+      const path = join(folder, "turn.json");
+      const turn = JSON.parse(await readFile(path, "utf8")) as Turn;
+      let changed = false;
+      for (const file of turn.files)
+        if (remaining.delete(file.path)) {
+          file.after = originals.get(file.path)!;
+          changed = true;
+        }
+      if (changed) await json(path, turn);
+    }
   }
   async conversationRewound(
     sessionId: string,

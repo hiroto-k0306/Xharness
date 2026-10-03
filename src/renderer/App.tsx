@@ -321,10 +321,15 @@ export function App() {
           <div className={styles.agentArea}>
             <div className={styles.middle} data-pane={pane}>
               <Transcript
+                key={`${current}:${agentId}`}
                 items={activeView?.items ?? []}
                 running={!!view?.running}
                 model={model}
                 onCommand={(text) => void s.send(text)}
+                blocked={
+                  waiting || !!view?.rewind || session?.status !== "idle"
+                }
+                onReply={agent ? undefined : s.send}
               />
               {app.phase4 && (
                 <LoopFlow view={activeView} model={agent?.model ?? model} />

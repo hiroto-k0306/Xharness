@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { FakeProvider } from "../main/providers/fake/fake-provider.js";
 import { SessionController } from "../main/session/controller.js";
 import { type Tool } from "../main/tools/registry.js";
+import { lifecycleTools } from "../main/tools/lifecycle.js";
 import { parseCommand, type HarnessApi, type UiEvent } from "../shared/ipc.js";
 import { App } from "./App.js";
 import { useStore } from "./state/store.js";
@@ -21,13 +22,13 @@ const readTool: Tool = {
 };
 let controller: SessionController;
 
-beforeEach(async () => {
+async function setup(provider = new FakeProvider()) {
   // テストごとに独立した配線にする(前のテストの遅れたイベントを混ぜない)
   const bus: { listener?: (e: UiEvent) => void } = {};
   const home = await mkdtemp(join(tmpdir(), "xh-app-"));
   const folder = await mkdtemp(join(tmpdir(), "xh-folder-"));
   controller = new SessionController({
-    provider: new FakeProvider(),
+    provider,
     model: "fake",
     home,
     fake: true,
@@ -38,7 +39,7 @@ beforeEach(async () => {
     emit: (e) => {
       setTimeout(() => act(() => bus.listener?.(e)), 0);
     },
-    createTools: () => new Map([["Read", readTool]]),
+    createTools: () => new Map([...lifecycleTools(), ["Read", readTool]]),
   });
   await controller.init();
   const api: HarnessApi = {
@@ -65,9 +66,57 @@ beforeEach(async () => {
       pickerOpen: false,
     },
   });
-});
+}
+beforeEach(() => setup());
 
 describe("App wired to the real SessionController", () => {
+  it("answers AskUserQuestion through the normal send command and provider history", async () => {
+    const requests: string[] = [];
+    await setup(
+      new FakeProvider({
+        script: [
+          {
+            type: "message",
+            stopReason: "tool_use",
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "q",
+                  name: "AskUserQuestion",
+                  input: {
+                    question: "どちらで進めますか？",
+                    options: ["修正する", "調査する"],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        onRequest: (request) => {
+          requests.push(
+            request.messages
+              .at(-1)!
+              .content.flatMap((b) => (b.type === "text" ? [b.text] : []))
+              .join("\n"),
+          );
+        },
+      }),
+    );
+    render(<App />);
+    await screen.findByText("+ new session");
+    await userEvent.type(screen.getByLabelText("prompt"), "質問して{Enter}");
+    const button = await screen.findByRole("button", { name: "1. 修正する" });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+    expect(
+      await within(screen.getByTestId("transcript")).findByText("修正する"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("pong")).toBeInTheDocument();
+    expect(requests).toEqual(["質問して", "修正する"]);
+    expect(button).toBeDisabled();
+  });
   it("boots, creates a session on first send, streams a reply", async () => {
     render(<App />);
     expect(await screen.findByText("+ new session")).toBeInTheDocument();

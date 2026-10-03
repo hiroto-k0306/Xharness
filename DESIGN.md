@@ -570,10 +570,13 @@ agents: { ... }              # §10
 | UI | React / Zustand | MIT |
 | Markdown・ハイライト | react-markdown / rehype-sanitize / Shiki | MIT |
 | テスト・lint・整形 | Vitest / ESLint / Prettier | MIT |
+| Node代替検索のgitignore解釈 | ignore（7.0.11、ユーザー承認2026-10-03） | MIT |
 | フォント | Silkscreen / JetBrains Mono | OFL(同梱・再配布可) |
 | シェル・バージョン管理 | PowerShell 7 / Git for Windows | MIT / GPL |
 | エディタ | VS Code(任意) | 無料 |
 | アイコン変換 | sharp + png-to-ico(npm) | Apache-2.0 / MIT |
+
+Node代替検索のGlob照合には `node:path.matchesGlob` を使用する（ユーザー承認2026-10-03）。Node 22.20以降ではstable。古いNode 22でのExperimentalWarningと代替案・確認結果は [docs/h4-review-progress.md](docs/h4-review-progress.md) に記録する。Nodeの最低バージョン設定は今回変更しない。
 
 | # | 項目 | 決定 |
 |---|---|---|

@@ -3,6 +3,7 @@ import { readLlmCalls } from "./llm-calls.js";
 import {
   attachmentInfo,
   sessionImageBytes,
+  DEFAULT_IMAGES,
   IMAGE_ERROR,
   type ImageAttachment,
 } from "../../shared/images.js";
@@ -81,6 +82,7 @@ export class SessionController {
   private stopped = false;
   private gitAvailable = true;
   private commands: NonNullable<AppState["commands"]> = [];
+  private imageSettings = { ...DEFAULT_IMAGES };
 
   constructor(private readonly options: ControllerOptions) {
     this.sessions = new SessionStore(options.home);
@@ -126,6 +128,7 @@ export class SessionController {
   }
 
   async init() {
+    this.imageSettings = (await loadMainConfig(this.options.home)).images;
     if (!this.options.fake) await this.options.authentication?.refresh();
     await Promise.all([this.sessions.load(), this.workspaces.load()]);
     this.sessions.fillDefaults({ model: this.model, effort: this.effort });
@@ -181,12 +184,11 @@ export class SessionController {
   }
 
   async state(): Promise<AppState> {
-    const imageSettings = (await loadMainConfig(this.options.home)).images;
     const workspaces = await this.workspaces.summaries();
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
       commands: this.commands,
-      images: imageSettings,
+      images: this.imageSettings,
       authentication: this.options.fake
         ? undefined
         : this.options.authentication?.snapshot(),
@@ -543,6 +545,7 @@ export class SessionController {
     images?: ImageAttachment[],
   ): Promise<CommandResult> {
     const imageSettings = (await loadMainConfig(this.options.home)).images;
+    this.imageSettings = imageSettings;
     if ((images?.length ?? 0) > imageSettings.maxPerMessage)
       return {
         ok: false,

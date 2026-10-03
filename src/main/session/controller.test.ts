@@ -243,6 +243,8 @@ describe("SessionController", () => {
       { type: "permission_request" }
     >;
     expect(req.tool).toBe("Read");
+    // permission_request と state は独立したイベント。後続の状態通知を待つ。
+    await until(() => lastState().state.sessions[0]!.status === "ask");
     expect(lastState().state.sessions[0]!.status).toBe("ask");
     expect(idle(sessionId)).toBe(false);
     await c.handle({

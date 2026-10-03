@@ -27,6 +27,7 @@ export interface Step {
   run(ctx: LoopContext, signal: AbortSignal): Promise<StepOutcome>;
 }
 export interface Receipt {
+  error?: import("../tools/errors.js").ToolFailure;
   input?: unknown;
   output?: string;
   round: number;
@@ -43,6 +44,7 @@ export interface Receipt {
 }
 export type Completion = Extract<ProviderEvent, { type: "message_done" }>;
 export interface PendingCall {
+  errorKind?: import("../tools/errors.js").ErrorKind;
   call: ToolCall;
   tool?: Tool;
   error?: string;
@@ -51,6 +53,11 @@ export interface PendingCall {
   counted?: boolean;
 }
 export interface LoopContext {
+  toolFailures?: Map<
+    string,
+    { kind: import("../tools/errors.js").ErrorKind; count: number }
+  >;
+  failureQuestion?: string;
   contextView?: Message[];
   contextLength?: number;
   route?: Route;
@@ -85,6 +92,7 @@ export type StepHook = (
   signal: AbortSignal,
 ) => Promise<HookResult>;
 export interface LoopOptions {
+  checkpoint?: import("../tools/registry.js").WriteCheckpoint;
   prepareContext?(
     messages: Message[],
     route: Route,

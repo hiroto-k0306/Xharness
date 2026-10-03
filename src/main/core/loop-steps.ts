@@ -3,7 +3,7 @@ import { type ContentBlock } from "./types.js";
 import { type ProviderEvent } from "../providers/provider.js";
 import { messagesForProvider } from "./messages.js";
 import { trimOutput } from "../tools/registry.js";
-import { toolFailure } from "../tools/errors.js";
+import { failure, structuredFailure } from "../tools/errors.js";
 import {
   type LoopContext,
   type LoopOptions,
@@ -32,6 +32,18 @@ function countError(ctx: LoopContext, item: PendingCall) {
   if (item.counted) return;
   item.counted = true;
   ctx.consecutiveErrors = item.result?.isError ? ctx.consecutiveErrors + 1 : 0;
+  if (item.result?.isError) {
+    item.result.error ??= failure(item.errorKind ?? "failed");
+    const errors = (ctx.toolFailures ??= new Map());
+    const previous = errors.get(item.call.name);
+    const kind = item.result.error.kind;
+    const count = previous?.kind === kind ? previous.count + 1 : 1;
+    errors.set(item.call.name, { kind, count });
+    if (count >= 3 && kind !== "aborted" && !ctx.stopCause) {
+      ctx.stopCause = "awaiting_user";
+      ctx.failureQuestion = `${item.call.name}で同じ失敗（${kind}）が3回続いたため停止しました。${item.result.error.message} 環境・権限・入力を確認してから、どう進めるか入力してください。`;
+    }
+  } else ctx.toolFailures?.delete(item.call.name);
   if (ctx.consecutiveErrors >= 5) ctx.stopCause ??= "consecutive_errors";
 }
 export function appendResults(ctx: LoopContext, options: LoopOptions) {
@@ -44,6 +56,9 @@ export function appendResults(ctx: LoopContext, options: LoopOptions) {
           ? "Interrupted by user"
           : (item.error ?? "Tool step failed"),
       isError: true,
+      error: failure(
+        ctx.stopCause === "aborted" ? "aborted" : (item.errorKind ?? "failed"),
+      ),
     };
     countError(ctx, item);
     const injected =
@@ -53,7 +68,21 @@ export function appendResults(ctx: LoopContext, options: LoopOptions) {
     return {
       type: "tool_result",
       toolUseId: item.call.id,
-      content: trimOutput(clean(item.result.content + injected)),
+      content: (item.tool?.boundedOutput ? (text: string) => text : trimOutput)(
+        clean(
+          (item.result.error ? JSON.stringify(item.result.error) + "\n" : "") +
+            (item.result.error &&
+            item.result.content === JSON.stringify(item.result.error)
+              ? ""
+              : item.result.error &&
+                  item.result.content.startsWith(item.result.error.message)
+                ? item.result.content
+                    .slice(item.result.error.message.length)
+                    .trimStart()
+                : item.result.content) +
+            injected,
+        ),
+      ),
       isError: item.result.isError,
     };
   });
@@ -234,12 +263,21 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
           const signature = item.call.name + canonical(item.call.input);
           ctx.repeated = signature === ctx.lastCall ? ctx.repeated + 1 : 1;
           ctx.lastCall = signature;
-          item.error =
-            ctx.repeated > 3
-              ? "Repeated identical tool call; choose another approach"
-              : !item.tool
-                ? "Unknown or unavailable tool"
-                : await item.tool.validate(item.call.input);
+          try {
+            item.error =
+              ctx.repeated > 3
+                ? "Repeated identical tool call; choose another approach"
+                : !item.tool
+                  ? "Unknown or unavailable tool"
+                  : await item.tool.validate(item.call.input);
+          } catch (error) {
+            const detail = signal.aborted
+              ? failure("aborted")
+              : structuredFailure(error);
+            item.error = detail.message;
+            item.errorKind = detail.kind;
+          }
+          if (item.error) item.errorKind ??= "invalid_args";
         }
         return { kind: "next", to: "gate" };
       },
@@ -258,8 +296,13 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
         for (const item of ctx.pending) {
           if (item.error) continue;
           signal.throwIfAborted();
-          item.allowed = await options.permission(item.call, signal);
-          if (!item.allowed) item.error = "Permission denied by user";
+          item.allowed =
+            item.tool?.autoAllow ||
+            (await options.permission(item.call, signal));
+          if (!item.allowed) {
+            item.error = "操作がユーザーに拒否されました。";
+            item.errorKind = "denied";
+          }
         }
         return { kind: "next", to: "act" };
       },
@@ -280,7 +323,12 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
             };
             return;
           }
-          if (item.error) item.result = { content: item.error, isError: true };
+          if (item.error)
+            item.result = {
+              content: item.error,
+              isError: true,
+              error: failure(item.errorKind ?? "invalid_args"),
+            };
           else
             try {
               signal.throwIfAborted();
@@ -288,21 +336,31 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
                 throw new Error("Missing permission");
               const invalid = await item.tool.validate(item.call.input);
               item.result = invalid
-                ? { content: invalid, isError: true }
+                ? {
+                    content: invalid,
+                    isError: true,
+                    error: failure("invalid_args"),
+                  }
                 : await traceOperation(
                     "tool",
                     item.call.name,
                     item.call.input,
-                    () => item.tool!.execute(item.call.input, signal),
+                    () =>
+                      item.tool!.execute(item.call.input, signal, {
+                        redact: options.redact,
+                        checkpoint: options.checkpoint,
+                      }),
                     { callId: item.call.id },
                   );
               if (item.result.stop && !item.result.isError)
                 ctx.stopCause = item.result.stop.reason;
             } catch (error) {
+              const detail = signal.aborted
+                ? failure("aborted")
+                : structuredFailure(error);
               item.result = {
-                content: signal.aborted
-                  ? "Interrupted by user"
-                  : toolFailure(error),
+                content: detail.message,
+                error: detail,
                 isError: true,
               };
             }
@@ -343,8 +401,10 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
         appendResults(ctx, options);
         const notice = ctx.pending.find((item) => item.result?.stop)?.result
           ?.stop;
-        if (notice && !ctx.recorded) {
-          const text = (options.redact ?? ((s: string) => s))(notice.message);
+        if ((notice || ctx.failureQuestion) && !ctx.recorded) {
+          const text = (options.redact ?? ((s: string) => s))(
+            notice?.message ?? ctx.failureQuestion!,
+          );
           ctx.messages.push({
             role: "assistant",
             content: [{ type: "text", text }],
@@ -372,6 +432,7 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
               provider: "tool",
               input: item.call.input,
               output: item.result?.content,
+              error: item.result?.error,
               model: ctx.request?.model ?? options.model,
               tool: item.call.name,
               decision: item.result?.isError ? "error" : "allow",

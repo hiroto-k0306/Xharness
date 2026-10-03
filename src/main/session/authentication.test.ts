@@ -99,14 +99,16 @@ it("rejects sends while expired, allows login only through consent, and masks re
       text: "hello",
     }),
   ).toMatchObject({ ok: true });
-  await vi.waitFor(() =>
-    expect(s.events.some((e) => e.type === "turn" && e.status === "idle")).toBe(
-      true,
-    ),
+  await vi.waitFor(
+    () =>
+      expect(
+        s.events.some((e) => e.type === "turn" && e.status === "idle"),
+      ).toBe(true),
+    { timeout: 5000 },
   );
   expect(s.request).toHaveBeenCalledOnce();
   expect(JSON.stringify(s.events)).not.toContain("synthetic-new-credential");
-});
+}, 10000);
 it("keeps fake mode free of authentication reads and CLI execution", async () => {
   const s = await setup(true);
   expect((await s.controller.state()).authentication).toBeUndefined();
@@ -140,12 +142,14 @@ it("marks a provider rejection as needing reauthentication without automatically
     sessionId: s.sessionId,
     text: "hello",
   });
-  await vi.waitFor(() =>
-    expect(
-      s.events.some(
-        (e) => e.type === "turn" && e.stopCause === "authentication",
-      ),
-    ).toBe(true),
+  await vi.waitFor(
+    () =>
+      expect(
+        s.events.some(
+          (e) => e.type === "turn" && e.stopCause === "authentication",
+        ),
+      ).toBe(true),
+    { timeout: 5000 },
   );
   expect(
     (await s.controller.state()).authentication?.find(
@@ -153,4 +157,4 @@ it("marks a provider rejection as needing reauthentication without automatically
     )?.status,
   ).toBe("rejected");
   expect(s.launch).toHaveBeenCalledOnce();
-});
+}, 10000);

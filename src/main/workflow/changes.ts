@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { resolve, relative } from "node:path";
-import { type ToolRegistry } from "../tools/registry.js";
+import { type Tool, type ToolRegistry } from "../tools/registry.js";
 import { runGit } from "../session/repository.js";
 
 /** Session-local edits also provide a review diff for folders without Git. */
@@ -15,7 +15,11 @@ export class Changes {
         ["Write", "Edit"].includes(name)
           ? {
               ...tool,
-              execute: async (input: unknown, signal: AbortSignal) => {
+              execute: async (
+                input: unknown,
+                signal: AbortSignal,
+                context: Parameters<Tool["execute"]>[2],
+              ) => {
                 const path = resolve(
                   this.cwd,
                   String((input as { path?: unknown }).path),
@@ -29,7 +33,7 @@ export class Changes {
                     this.before.set(path, undefined);
                   }
                 }
-                return tool.execute(input, signal);
+                return tool.execute(input, signal, context);
               },
             }
           : tool,

@@ -31,7 +31,12 @@ function repl(
       const chunk = bytes.toString();
       output += chunk;
       pending += chunk;
-      if (pending.endsWith("❯ ") && commands.length) {
+      if (
+        (pending.endsWith("❯ ") ||
+          pending.endsWith("既定code] ") ||
+          pending.endsWith("確認して復元しますか？ [y/N] ")) &&
+        commands.length
+      ) {
         pending = "";
         child.stdin.write(commands.shift()! + "\n");
       }
@@ -47,6 +52,26 @@ function repl(
     });
   });
 }
+it("handles rewind confirmation locally in the fake REPL and retains original JSONL", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-headless-rewind-"));
+  const output = await repl(home, [
+    "hello",
+    "/undo",
+    "conversation",
+    "y",
+    "/exit",
+  ]);
+  const id = /session ([\w-]+)/.exec(output)![1]!;
+  expect(output).toContain("確認して復元");
+  expect(output).toContain("復元0件、除外0件");
+  const history = await readFile(join(home, "sessions", id + ".jsonl"), "utf8");
+  expect(history).toContain("hello");
+  expect(history).toContain('"rewind":{"keep":0}');
+  const trace = (await readTraceReplay(home, id, (s) => s))!;
+  expect(
+    trace.records.filter((r) => r.kind === "llm" && r.phase === "start"),
+  ).toHaveLength(1);
+});
 it("persists and resumes the fake REPL with compact checkpoints and session mode", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-headless-phase4-"));
   const output = await repl(home, [

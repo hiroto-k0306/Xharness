@@ -154,7 +154,7 @@ describe("HookResult behavior", () => {
     expect(executions()).toBe(0);
     expect(requests[1]!.messages.at(-1)?.content[0]).toMatchObject({
       toolUseId: "read_1",
-      content: "protected file",
+      content: expect.stringContaining("protected file"),
       isError: true,
     });
     expect(result.stopCause).toBe("end_turn");

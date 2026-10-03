@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { type Message } from "../core/types.js";
+import { FileCheckpointStore } from "../checkpoints/store.js";
 import {
   type ProviderName,
   type SessionSummary,
@@ -17,7 +18,9 @@ import {
 } from "../../shared/ipc.js";
 
 /** DESIGN.md §18.4。~/.xharness/ 以下の索引と履歴。electron を使わない。 */
-export type StoredSession = Omit<SessionSummary, "status" | "branch">;
+export type StoredSession = Omit<SessionSummary, "status" | "branch"> & {
+  environment?: import("../tools/environment.js").EnvironmentReport;
+};
 
 let tempSeq = 0;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -263,12 +266,30 @@ export class SessionStore {
     for (const line of raw.split("\n")) {
       if (!line.trim()) continue;
       try {
-        out.push(JSON.parse(line) as Message);
+        const message = JSON.parse(line) as Message;
+        const keep = message.meta?.rewind?.keep;
+        if (keep !== undefined) {
+          if (Number.isSafeInteger(keep) && keep >= 0 && keep <= out.length)
+            out.splice(keep);
+          else {
+            const warning =
+              "巻き戻し位置が現在の会話範囲外または不正なため、履歴を保持しました。";
+            if (!this.index.warnings.includes(warning))
+              this.index.warnings.push(warning);
+          }
+        }
+        out.push(message);
       } catch {
         /* 壊れた行は読み飛ばす */
       }
     }
     return out;
+  }
+  async delete(id: string) {
+    await new FileCheckpointStore(this.home).remove(id);
+    await rm(this.history(id), { force: true });
+    this.sessions = this.sessions.filter((session) => session.id !== id);
+    await this.index.write(this.sessions);
   }
 }
 

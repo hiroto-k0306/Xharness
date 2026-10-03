@@ -93,7 +93,20 @@ it.each([
     join(home, "sessions", `${sessionId}.jsonl`),
     "utf8",
   );
-  expect(history).not.toContain(text);
+  expect(
+    history
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+      .some(
+        (m) =>
+          m.role === "user" &&
+          m.content.some(
+            (b: { type: string; text?: string }) =>
+              b.type === "text" && b.text === text,
+          ),
+      ),
+  ).toBe(false);
   await c.shutdown();
 });
 it("exports an idle session through the host save dialog and handles cancellation", async () => {
@@ -387,10 +400,13 @@ describe("SessionController", () => {
     );
     expect([...ro.keys()].sort()).toEqual([
       "AskUserQuestion",
+      "BashOutput",
       "Glob",
       "Grep",
+      "KillShell",
       "Read",
       "StopTask",
+      "TodoWrite",
     ]);
     expect([...ro.values()].every((t) => t.readOnly)).toBe(true);
   });

@@ -3,7 +3,10 @@ import { projectHookApproval } from "./main/hooks/shell-hooks.js";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import { stat } from "node:fs/promises";
+import { stat, rm } from "node:fs/promises";
+import { FileCheckpointStore } from "./main/checkpoints/store.js";
+import { headlessRewind } from "./main/session/headless-rewind.js";
+import { rewindTurns } from "./shared/rewind.js";
 import { randomUUID } from "node:crypto";
 import {
   SessionStore,
@@ -62,6 +65,8 @@ import { join } from "node:path";
 import { type ReasoningEffort } from "./main/providers/provider.js";
 import { FileAccess, fileTools } from "./main/tools/files.js";
 import { shellSearchTools } from "./main/tools/shell-search.js";
+import { todoTools } from "./main/tools/todos.js";
+import { diagnoseEnvironment } from "./main/tools/environment.js";
 import { webTools } from "./main/tools/web.js";
 import {
   readReceiptReplay,
@@ -209,7 +214,11 @@ export async function headless(args = process.argv.slice(2)) {
   const router = new Router(providers, config?.fallback, config?.aliases);
   router.provider(model);
   const access = new FileAccess(cwd);
-  const tools = new Map([...fileTools(access), ...shellSearchTools(cwd)]);
+  const tools = new Map([
+    ...fileTools(access),
+    ...shellSearchTools(cwd),
+    ...todoTools(),
+  ]);
   // 検索回数の上限は、子エージェントを含むセッション全体で数える(§22.6)
   const searchBudget = {
     used: 0,
@@ -232,12 +241,17 @@ export async function headless(args = process.argv.slice(2)) {
   const secrets = fake ? [] : await readLocalSecrets();
   const clean = (text: string) => redact(text, secrets);
   let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7 and already runs in this working directory, so do not prefix commands with cd or Set-Location. Tool dates use ISO 8601. Respect project instructions.`;
+  const environment = resume?.environment ?? (await diagnoseEnvironment(cwd));
+  if (!resume?.environment)
+    for (const warning of environment.warnings) console.error(warning);
+  system += "\n" + environment.summary;
   system +=
     "\n\n" + clean(await projectMemory(home, cwd, project.context.memoryFiles));
   const workspaces = new WorkspaceStore(home);
   await workspaces.load();
   const workspaceId = resume?.workspaceId ?? (await workspaces.add(cwd));
   let session: StoredSession = resume ?? {
+    environment,
     id: randomUUID().slice(0, 8),
     title: "Headless session",
     cwd,
@@ -250,9 +264,16 @@ export async function headless(args = process.argv.slice(2)) {
     updatedAt: Date.now(),
     providers: [],
   };
+  session = { ...session, environment };
   await sessions.save(session);
   let messages: Message[] = resume ? await sessions.messages(session.id) : [];
   let persisted = messages.length;
+  const fileCheckpoints = new FileCheckpointStore(home);
+  await fileCheckpoints.purge(
+    project.checkpoints?.retentionDays ?? 30,
+    Date.now(),
+    true,
+  );
   let checkpoint: Checkpoint | undefined;
   const checkpointFile = () =>
     new JsonFile<Checkpoint | undefined>(
@@ -346,6 +367,42 @@ export async function headless(args = process.argv.slice(2)) {
         break;
       }
       if (input.trim() === "/exit") break;
+      if (/^\/(?:undo|rewind)(?:\s|$)/.test(input.trim())) {
+        controller = new AbortController();
+        try {
+          const count = rewindTurns(input.trim());
+          if (!count) throw new Error();
+          const scope = await headlessRewind(
+            fileCheckpoints,
+            sessions,
+            session.id,
+            count,
+            (prompt) => rl.question(prompt, { signal: controller!.signal }),
+            (text) => process.stdout.write(text),
+            clean,
+            controller.signal,
+          );
+          if (scope) {
+            messages = await sessions.messages(session.id);
+            persisted = messages.length;
+            access.reads.clear();
+            workflow = undefined;
+            if (scope !== "code") {
+              checkpoint = undefined;
+              await rm(join(home, "context", session.id + ".json"), {
+                force: true,
+              });
+            }
+          }
+        } catch {
+          process.stdout.write(
+            "巻き戻しを完了できませんでした。指定・期限・アクセス権限を確認してください。\n",
+          );
+        } finally {
+          controller = undefined;
+        }
+        continue;
+      }
       if (/^\/(?:phase|review)(?:\s|$)/.test(input.trim())) {
         const [command, phase, extra] = input.trim().split(/\s+/);
         const requested = command === "/review" ? "review" : (phase ?? "");
@@ -479,6 +536,23 @@ export async function headless(args = process.argv.slice(2)) {
         input = expanded;
       }
       controller = new AbortController();
+      let fileCheckpoint;
+      try {
+        await fileCheckpoints.purge(project.checkpoints?.retentionDays ?? 30);
+        fileCheckpoint = await fileCheckpoints.begin(
+          session.id,
+          cwd,
+          messages.length,
+          clean,
+          (message) => process.stdout.write(clean(message) + "\n"),
+        );
+      } catch {
+        controller = undefined;
+        process.stdout.write(
+          "チェックポイントを準備できませんでした。保存先・アクセス権限を確認してください。\n",
+        );
+        continue;
+      }
       let bufferedText = "";
       // MCP の一覧の変化は、モデルにだけ注記で伝える(tools は変えない。§25.4)
       const note = mcpChangeNote(mcp);
@@ -651,6 +725,7 @@ export async function headless(args = process.argv.slice(2)) {
           messages,
           tools,
           redact: clean,
+          checkpoint: fileCheckpoint,
           permission: (call, signal) => ask(call, signal),
           onEvent(event) {
             if (event.type === "text_delta") {

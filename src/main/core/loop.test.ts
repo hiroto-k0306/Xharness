@@ -159,7 +159,7 @@ describe("six-step agent loop", () => {
       type: "tool_result",
       toolUseId: "call_1",
       isError: true,
-      content: "Permission denied by user",
+      content: expect.stringContaining('"kind":"denied"'),
     });
   });
   it("rechecks the precondition after waiting for permission", async () => {
@@ -174,7 +174,7 @@ describe("six-step agent loop", () => {
     const result = await runTurn(options, new AbortController().signal);
     expect(executions()).toBe(0);
     expect(result.messages[2]!.content[0]).toMatchObject({
-      content: "File changed",
+      content: expect.stringContaining('"kind":"invalid_args"'),
       isError: true,
     });
   });
@@ -192,20 +192,23 @@ describe("six-step agent loop", () => {
       {
         type: "tool_result",
         toolUseId: "call_1",
-        content: "Interrupted by user",
+        content: expect.stringContaining('"kind":"aborted"'),
         isError: true,
       },
     ]);
     expect(result.receipts).toHaveLength(2);
   });
-  it("blocks the fourth identical call and stops after five consecutive errors", async () => {
+  it("blocks the fourth identical call and asks the user after three matching failures", async () => {
     const { options, executions } = setup(
       Array.from({ length: 8 }, () => [completion(true)]),
     );
     const result = await runTurn(options, new AbortController().signal);
     expect(executions()).toBe(3);
-    expect(result.stopCause).toBe("consecutive_errors");
-    expect(result.messages.at(-1)?.content[0]).toMatchObject({ isError: true });
+    expect(result.stopCause).toBe("awaiting_user");
+    expect(result.messages.at(-1)?.content[0]).toMatchObject({
+      type: "text",
+      text: expect.stringContaining("3回"),
+    });
   });
   it("retries transient failures but does not guess a missing 429 wait", async () => {
     const failure: ProviderEvent = {
@@ -247,9 +250,13 @@ describe("six-step agent loop", () => {
     const { options, executions } = setup([[event]]);
     options.tools.get("Read")!.readOnly = false;
     const result = await runTurn(options, new AbortController().signal);
-    expect(result.stopCause).toBe("consecutive_errors");
+    expect(result.stopCause).toBe("awaiting_user");
     expect(executions()).toBe(0);
-    expect(result.messages.at(-1)?.content).toHaveLength(6);
+    expect(
+      result.messages
+        .flatMap((m) => m.content)
+        .filter((b) => b.type === "tool_result"),
+    ).toHaveLength(6);
   });
   it("limits max_tokens continuations to two", async () => {
     const limited = {

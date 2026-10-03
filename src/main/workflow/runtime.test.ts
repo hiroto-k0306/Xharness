@@ -13,6 +13,8 @@ import { loadAgentConfig } from "../agents/definitions.js";
 import { WorkflowRuntime } from "./runtime.js";
 import { runGit } from "../session/repository.js";
 import { type PlanItem } from "./plan-validate.js";
+import { FileCheckpointStore } from "../checkpoints/store.js";
+import { type WriteCheckpoint } from "../tools/registry.js";
 
 const call = (name: string, input: unknown): FakeStep => ({
   type: "message",
@@ -26,6 +28,29 @@ const text = (text: string): FakeStep => ({
   type: "message",
   stopReason: "end_turn",
   message: { role: "assistant", content: [{ type: "text", text }] },
+});
+it("TodoWrite does not replace the plan or waive review for real changes", async () => {
+  const s = await setup(
+    [
+      call("TodoWrite", {
+        todos: [{ content: "計画外の進捗", status: "completed" }],
+      }),
+      call("SkipPlan", { reason: "Small fix" }),
+      call("Write", { path: "fix.txt", content: "pending review" }),
+      call("TodoWrite", {
+        todos: [{ content: "完了表示", status: "completed" }],
+      }),
+      call("StopTask", { reason: "review pending" }),
+    ],
+    [],
+  );
+  expect((await s.run()).stopCause).toBe("agent_stopped");
+  expect(s.runtime.state.phase).toBe("implement");
+  expect(s.requests).toHaveLength(5);
+  expect(
+    s.requests.every((r) => r.tools.some((t) => t.name === "TodoWrite")),
+  ).toBe(true);
+  expect(await readFile(join(s.cwd, "fix.txt"), "utf8")).toBe("pending review");
 });
 it.each(["StopTask", "AskUserQuestion"])(
   "%s preserves actual changes and mandatory review without continuing",
@@ -83,7 +108,7 @@ it("allows a no-change proposal to finish after SkipPlan and classifies the next
   expect(s.requests).toHaveLength(2);
   expect(s.runtime.state.phase).toBe("off");
   expect((await s.run()).stopCause).toBe("workflow_complete");
-});
+}, 15000); // Two turns and local change detection compete with the full Windows suite.
 it("stops repeated completion reminders without waiving review for actual changes", async () => {
   const s = await setup(
     [
@@ -279,9 +304,10 @@ async function setup(claude: FakeStep[], codex: FakeStep[], git = false) {
     providers,
     approvals: () => approvals,
     checks: () => checks,
-    run: () =>
+    run: (checkpoint?: WriteCheckpoint) =>
       runtime.run(
         {
+          checkpoint,
           provider: providers[0]!,
           router: new Router(providers),
           model: "claude-opus-5-5",
@@ -306,6 +332,41 @@ async function setup(claude: FakeStep[], codex: FakeStep[], git = false) {
   };
 }
 
+it("child TodoWrite has its own history and never replaces the parent's list", async () => {
+  const s = await setup(
+    [
+      call("TodoWrite", {
+        todos: [{ content: "PARENT TODO", status: "pending" }],
+      }),
+      call("Task", {
+        description: "Investigate",
+        prompt: "Child",
+        agent: "explorer",
+      }),
+      call("TodoWrite", {
+        todos: [{ content: "CHILD TODO", status: "completed" }],
+      }),
+      text("child answer"),
+      text("main answer"),
+    ],
+    [],
+  );
+  const result = await s.run();
+  const child = s.requests.find((r) => r.system.includes("You are explorer"))!;
+  expect(child.tools.some((t) => t.name === "TodoWrite")).toBe(true);
+  expect(
+    result.messages
+      .flatMap((m) => m.content)
+      .filter((b) => b.type === "tool_use" && b.name === "TodoWrite"),
+  ).toHaveLength(1);
+  expect(JSON.stringify(result.messages)).not.toContain("CHILD TODO");
+  const saved = await readFile(
+    join(s.home, "agents", "session1", "sessions", `${child.sessionId}.jsonl`),
+    "utf8",
+  );
+  expect(saved).toContain("CHILD TODO");
+  expect(saved).not.toContain("PARENT TODO");
+});
 it("Task uses a new session, returns only final text and excludes nested Task and writes", async () => {
   const s = await setup(
     [
@@ -446,6 +507,42 @@ it("does not write during planning", async () => {
   await expect(readFile(join(s.cwd, "forbidden.txt"))).rejects.toThrow();
   expect(await readFile(join(s.cwd, "allowed.txt"), "utf8")).toBe("good");
 });
+it.each([false, true])(
+  "checkpoints same-folder workers and excludes worktree workers (isolated=%s)",
+  async (isolated) => {
+    const s = await setup(
+      [
+        call("SubmitPlan", { items: [item("P1")], notes: "One" }),
+        call("RequestReview", { summary: "done" }),
+        text("[]"),
+      ],
+      [
+        call("Write", { path: "P1.txt", content: "done" }),
+        call("ReportDone", {
+          summary: "done",
+          changedFiles: ["P1.txt"],
+          testsRun: ["checked"],
+        }),
+      ],
+      isolated,
+    );
+    s.config.workflow.worktrees = isolated;
+    const store = new FileCheckpointStore(s.home);
+    const hooks = await store.begin(
+      "session1",
+      s.cwd,
+      0,
+      (s) => s,
+      () => undefined,
+    );
+    expect((await s.run(hooks)).stopCause).toBe("workflow_complete");
+    expect(await readFile(join(s.cwd, "P1.txt"), "utf8")).toBe("done");
+    expect((await store.preview("session1", 1)).preview.files).toHaveLength(
+      isolated ? 0 : 1,
+    );
+  },
+);
+
 it("isolates workers in worktrees, merges and tests each item before its dependent starts", async () => {
   const s = await setup(
     [

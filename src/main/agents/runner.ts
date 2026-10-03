@@ -13,6 +13,9 @@ import { ReceiptStore } from "../session/receipts.js";
 import { type AgentDefinition } from "./definitions.js";
 import { MCP_TOOL_NAMES } from "../tools/mcp.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
+import { todoTools } from "../tools/todos.js";
+import { BACKGROUND_TOOLS } from "../tools/background-tools.js";
+import { diagnoseEnvironment } from "../tools/environment.js";
 
 import { loadProjectConfig, projectMemory } from "../config/project.js";
 import { type Checkpoint, estimateTokens } from "../context/compactor.js";
@@ -41,6 +44,7 @@ export interface ChildContext {
   files?: string[];
 }
 export interface ChildOptions {
+  checkpoint?(cwd: string): LoopOptions["checkpoint"];
   onTraceWarning?(message: string): void;
   onTranscript?(
     context: ChildContext,
@@ -156,7 +160,11 @@ export class ChildRunner {
     const access = new FileAccess(cwd);
     // MCP の窓口ツールは、定義に書かなくても子エージェントへ公開する(§25.1)。
     // 読み取り専用の子でも使えるが、ルールで許可されていない呼び出しは毎回確認する
-    for (const name of new Set([...definition.tools, ...MCP_TOOL_NAMES])) {
+    for (const name of new Set([
+      ...definition.tools,
+      ...MCP_TOOL_NAMES,
+      ...BACKGROUND_TOOLS,
+    ])) {
       const tool = available.get(name);
       if (
         !tool ||
@@ -188,12 +196,17 @@ export class ChildRunner {
     }
     for (const [name, tool] of worker?.reportTool ?? []) tools.set(name, tool);
     for (const [name, tool] of lifecycleTools()) tools.set(name, tool);
+    for (const [name, tool] of todoTools()) tools.set(name, tool);
     let sequence = 0;
     const writes: Promise<void>[] = [];
     this.options.onStatus?.(context, choice.model, "running");
     try {
       const project = await loadProjectConfig(this.options.home, cwd);
       const system = `You are ${name}. Work in ${cwd}. You have no parent conversation history. Never launch child agents. ${worker ? "Stay inside your workspace. ReportDone is required." : "Read-only investigation/review. Do not modify files. Return only your final report."}${!worker && tools.has("Bash") ? " " + (await reviewerTestHint(cwd)) : ""}\nProject instructions:\n${clean(await projectMemory(this.options.home, cwd, project.context.memoryFiles))}`;
+      const environment = await diagnoseEnvironment(cwd);
+      for (const message of environment.warnings)
+        this.options.onTraceWarning?.(message);
+      const diagnosedSystem = system + "\n" + environment.summary;
       const hooks = this.options.hooks?.(context, (r) => {
         const write = receipts.append(
           context.id,
@@ -223,6 +236,7 @@ export class ChildRunner {
       let compactionFailed = false;
       const result = await runTurn(
         {
+          checkpoint: this.options.checkpoint?.(cwd),
           provider: this.options.router.provider(choice.model),
           router: this.options.router,
           onFallback: (route) =>
@@ -232,7 +246,7 @@ export class ChildRunner {
           reasoning: definition.effort
             ? { effort: definition.effort }
             : undefined,
-          system,
+          system: diagnosedSystem,
           prepareContext: async (messages, route, signal, loopContext) => {
             const prepared = await prepareProviderHistory(messages, {
               provider: route.provider,
@@ -240,14 +254,14 @@ export class ChildRunner {
               signal,
               checkpoint,
               skipCompaction: compactionFailed,
-              system: loopContext?.system ?? system,
+              system: loopContext?.system ?? diagnosedSystem,
               tools:
                 loopContext?.tools ?? [...tools.values()].map((t) => t.spec),
               limit: route.provider.models().find((m) => m.id === route.model)
                 ?.contextTokens,
               overhead:
                 estimateTokens({
-                  system,
+                  system: diagnosedSystem,
                   tools: [...tools.values()].map((t) => t.spec),
                 }) + 4096,
               threshold: project.context.compactThreshold,
@@ -307,9 +321,10 @@ export class ChildRunner {
                     tool: r.tool,
                     durationMs:
                       Date.parse(r.completedAt) - Date.parse(r.startedAt),
-                    summary: `${r.tool ?? r.model}: ${r.decision}`,
+                    summary: `${r.tool ?? r.model}: ${r.decision}${r.error ? " · " + r.error.kind : ""}`,
                     input: r.input,
                     output: r.output,
+                    error: r.error,
                   },
                 ],
                 clean,

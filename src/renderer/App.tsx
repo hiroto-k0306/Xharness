@@ -4,6 +4,7 @@ import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
 import { PhaseBar } from "./components/PhaseBar.js";
 import { ModelPicker } from "./components/ModelPicker.js";
 import { PlanApproval } from "./components/PlanApproval.js";
+import { RewindApproval } from "./components/RewindApproval.js";
 import { useEffect, useState } from "react";
 import {
   Hero,
@@ -384,6 +385,20 @@ export function App() {
               />
             )
           )}
+          {view?.rewind && current && (
+            <RewindApproval
+              key={view.rewind.requestId}
+              preview={view.rewind.preview}
+              onRespond={(choice) => {
+                void window.harness.command({
+                  type: "rewind_response",
+                  sessionId: current,
+                  requestId: view.rewind!.requestId,
+                  choice,
+                });
+              }}
+            />
+          )}
           {modelOpen && current && (
             <ModelPicker
               models={app.models ?? []}
@@ -438,6 +453,14 @@ export function App() {
             }}
             suggestions={[
               { value: "/stop", description: "LLMに送信せず実行を停止" },
+              {
+                value: "/undo",
+                description: "直近ターンの変更を確認して巻き戻す",
+              },
+              {
+                value: "/rewind",
+                description: "nターン前まで確認して巻き戻す",
+              },
               { value: "/mcp", description: "MCP サーバーの状態と操作" },
               ...(view?.mcp?.prompts ?? []).map((p) => ({
                 value: p.command,

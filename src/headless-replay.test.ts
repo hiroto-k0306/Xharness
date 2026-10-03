@@ -3,7 +3,11 @@ import { promisify } from "node:util";
 import { mkdtemp, mkdir, writeFile, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it as vitestIt } from "vitest";
+
+// Each case starts a TS-enabled Node process; startup competes with the suite.
+const it = (name: string, test: () => Promise<void>) =>
+  vitestIt(name, test, 30000);
 
 const run = promisify(execFile);
 it("exports an offline HTML report without session initialization or source writes", async () => {

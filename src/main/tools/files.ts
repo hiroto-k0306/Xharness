@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir, stat, realpath } from "node:fs/promises";
 import { resolve, dirname, basename } from "node:path";
 import { type Tool, type ToolRegistry } from "./registry.js";
+import { failure } from "./errors.js";
 
 export interface Snapshot {
   hash: string;
@@ -111,6 +112,7 @@ export function fileTools(access: FileAccess): ToolRegistry {
       }
     };
     const tool: Tool = {
+      invalidate: () => access.reads.clear(),
       spec: {
         name,
         description:
@@ -128,10 +130,15 @@ export function fileTools(access: FileAccess): ToolRegistry {
       },
       readOnly: name === "Read",
       validate,
-      async execute(input, signal) {
+      async execute(input, signal, context) {
         signal.throwIfAborted();
         const invalid = await validate(input);
-        if (invalid) return { content: invalid, isError: true };
+        if (invalid)
+          return {
+            content: invalid,
+            isError: true,
+            error: failure("invalid_args"),
+          };
         const args = argumentsObject(input);
         const path = await access.path(stringArg(args, "path"));
         if (name === "Read") {
@@ -162,6 +169,7 @@ export function fileTools(access: FileAccess): ToolRegistry {
           if (first < 0 || original.indexOf(old, first + 1) >= 0)
             return {
               content: "oldString must match exactly once",
+              error: failure("invalid_args"),
               isError: true,
             };
           content =
@@ -171,9 +179,27 @@ export function fileTools(access: FileAccess): ToolRegistry {
         }
         signal.throwIfAborted();
         const changed = await access.check(path);
-        if (changed) return { content: changed, isError: true };
+        if (changed)
+          return {
+            content: changed,
+            isError: true,
+            error: failure("invalid_args"),
+          };
+        await context?.checkpoint?.beforeWrite(path);
+        signal.throwIfAborted();
+        const stale = await access.check(path);
+        if (stale)
+          return {
+            content: stale,
+            isError: true,
+            error: failure("invalid_args"),
+          };
         await mkdir(dirname(path), { recursive: true });
         await writeFile(path, content, "utf8");
+        await context?.checkpoint?.afterWrite(
+          path,
+          Buffer.from(content, "utf8"),
+        );
         // A new Read is required before the next mutation.
         access.reads.delete(path);
         return {

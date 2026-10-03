@@ -19,6 +19,7 @@ import { type McpApprovals } from "../mcp/approvals.js";
 import { type McpServerConfig } from "../mcp/config.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
+import { todoTools } from "../tools/todos.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
 import {
@@ -80,6 +81,11 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  rewindPrompt?: {
+    requestId: string;
+    resolve(choice: import("../../shared/rewind.js").RewindChoice | null): void;
+  };
+  environment?: import("../tools/environment.js").EnvironmentReport;
   hookApproval?: {
     fingerprint: string;
     approve(signal: AbortSignal): Promise<boolean>;
@@ -249,6 +255,7 @@ export function toReceipt(
             : "model_call",
     input: r.input,
     output: r.output,
+    error: r.error,
     tool: r.tool,
     decision: isTool ? (r.decision === "error" ? "deny" : "allow") : undefined,
     durationMs,
@@ -259,7 +266,7 @@ export function toReceipt(
     summary:
       r.provider === "hook"
         ? `hook ${r.timing}:${r.step} → ${r.tool ?? "workflow"} ${r.decision}`
-        : `${r.tool ?? r.model}: ${r.decision}`,
+        : `${r.tool ?? r.model}: ${r.decision}${r.error ? " · " + r.error.kind : ""}`,
   };
 }
 
@@ -283,6 +290,7 @@ export function defaultTools(cwd: string, readOnly: boolean): ToolRegistry {
     ...fileTools(access),
     ...shellSearchTools(cwd),
     ...lifecycleTools(),
+    ...todoTools(),
   ]);
   if (!readOnly) return all;
   // 読み取り専用で開いたセッションは plan 相当: 書き込み系ツールを渡さない(§9.1, §18.2)

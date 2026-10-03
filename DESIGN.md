@@ -2,7 +2,7 @@
 
 Claude (Pro/Max) と GPT (ChatGPT Plus/Pro) のサブスク枠を直接利用する、Claude Code ライクな汎用エージェントハーネス。
 
-- 言語: TypeScript (Node.js 22+)
+- 言語: TypeScript (Node.js 24 LTSを基準、Node 22.20以降も互換確認)
 - 配布形態: Windows デスクトップアプリ (.exe / Electron) — §16, §17
 - 利用形態: 個人利用・ローカル実行
 - ステータス: 設計のみ。実装は別端末で行う
@@ -515,7 +515,7 @@ agents: { ... }              # §10
 
 ### Phase 6 以降(任意)
 - MCP クライアント、フック、git worktree によるサブエージェント隔離、自動アップデート、レシートのリプレイ
-- 初回はレシートの通信なし再生（§23）。MCP は §25 の仕様(2026-10-02 確定)で M1〜M4 に分けて進める。自動アップデートは配布仕様を決めてから後続の単位で進める。Phase 5 のフック・worker 隔離は再実装しない。
+- 初回はレシートの通信なし再生（§23）。MCP は §25 の仕様(2026-10-02 確定)で M1〜M4 に分けて進める。自動アップデートは配布仕様を決めてから後続の単位で進める。汎用エージェント機能の追加（TodoWrite・Bash バックグラウンド・巻き戻しなど）は §26。Phase 5 のフック・worker 隔離は再実装しない。
 
 ---
 
@@ -564,16 +564,21 @@ agents: { ... }              # §10
 
 | 用途 | ツール | ライセンス |
 |---|---|---|
-| 実行環境 | Node.js 22 LTS | MIT |
+| 実行環境 | Node.js 24 LTS（基準24.16.0、2026-10-03ユーザー環境に合わせて更新。22.20以降も互換確認） | MIT |
 | パッケージ管理 | pnpm | MIT |
 | アプリ基盤・ビルド・パッケージ | Electron / electron-vite / electron-builder | MIT |
 | UI | React / Zustand | MIT |
 | Markdown・ハイライト | react-markdown / rehype-sanitize / Shiki | MIT |
 | テスト・lint・整形 | Vitest / ESLint / Prettier | MIT |
+| Node代替検索のgitignore解釈 | ignore（7.0.11、ユーザー承認2026-10-03） | MIT |
 | フォント | Silkscreen / JetBrains Mono | OFL(同梱・再配布可) |
 | シェル・バージョン管理 | PowerShell 7 / Git for Windows | MIT / GPL |
 | エディタ | VS Code(任意) | 無料 |
 | アイコン変換 | sharp + png-to-ico(npm) | Apache-2.0 / MIT |
+
+Node代替検索のGlob照合には `node:path.matchesGlob` を使用する（ユーザー承認2026-10-03）。Node 22.20以降ではstable。古いNode 22でのExperimentalWarningと代替案・確認結果は [docs/h4-review-progress.md](docs/h4-review-progress.md) に記録する。開発環境の基準はユーザー環境のNode 24.16.0へ合わせ、enginesは22.20以降の22系および24.16以降の24系を許可する。型定義は22系を維持して互換範囲を越えるAPI追加を避ける。Electron実行時のNodeはElectron同梱の版であり、システムのNodeとは別に確認する。
+
+Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex同梱／WindowsApps・Store版など）を合わせる。PATHは検証プロセスの中だけで設定し、システム全体の設定は変更しない。実測した環境とH3のJob継承の差は [docs/h3-job-investigation.md](docs/h3-job-investigation.md) に記録する。
 
 | # | 項目 | 決定 |
 |---|---|---|
@@ -1585,3 +1590,88 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 手元確認(2026-10-02、docs/mcp-progress.md): パッケージ後の exe で npx のサーバー(`@modelcontextprotocol/server-everything`)に接続し、再接続・承認の取り消し・セッションやアプリの終了でプロセスツリー(npx の孫まで)が消えること、Haiku が `McpSearch` → `McpCall` で呼べて3回の要求で system / tools が変わらないこと、SDK の試験用 OAuth サーバーでブラウザでの認可・再起動後の再利用・暗号化した保存・ログアウトを確認した。画面の見た目(色・配置・補完候補)も確認した。これを受けて、`/mcp` の表示は最新のものだけ操作でき、古い表示は「過去の状態」として薄く出すようにした。起動の時間切れでのプロセスの後片付けの試験は、Windows でも動く形(プロセス番号で確かめる)にした。未確認: 実際の OAuth 対応サービスでの認可(試験用サーバーのみ)。
 
 今後の課題(2026-10-02 記録): MCP の認可仕様では、動的クライアント登録(RFC 7591)が推奨から任意に下がり(2025-11-25 版)、代わりに Client ID Metadata Document(CIMD: クライアントの情報を https の URL で公開し、その URL をクライアント ID にする方式)が勧められている。XHarness は今、動的クライアント登録だけを使うため、CIMD にしか対応しないサーバーには接続できない。対応するときは、XHarness のクライアント情報を https で公開し(例: GitHub Pages)、SDK の `clientMetadataUrl` に渡す。redirect_uri がループバックのため、ポートの扱いを仕様で確かめてから決める。
+
+
+---
+
+## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4実装済み）
+
+実アプリの試用（docs/bugs/2026-10-02-workflow-loop.md）後のレビューで挙がった不足機能。優先度の高・中・低の順に実装する。各単位は AGENTS.md の作業ルール（1コミット1目的）で小さく区切り、前の優先度の単位を検証してから次へ進む。
+
+**共通の制約**
+- ツールの集合と順序はセッション中に変えない（§24）。新ツールはリリース単位で追加し、全段階・全エージェントに同じ集合で渡す。段階や権限による制限は各ツールの検証で掛ける。
+- 実 API へ通信せず、FakeProvider・テスト用 Provider・一時フォルダで検証する。実通信が要る確認は「手元で実施が必要」として記録する。
+- 失敗の文言は固定の日本語にし、例外の生メッセージ・秘密値は転送しない（§20.6）。
+
+### 26.1 優先度: 高
+
+**H1. TodoWrite（軽量な進捗リスト）**
+- 実装・検証結果は [docs/h1-progress.md](docs/h1-progress.md)。
+- `TodoWrite({todos: [{content, status: "pending"|"in_progress"|"completed"}]})` を全文置換で受け取る。副作用はなく、権限は常に allow。
+- §20 のタスク段階・計画項目（SubmitPlan）とは独立。ワークフローの状態・レビュー要件・差分判定に影響しない。「提案のみ」「小さな多段作業」ではこれだけで進捗を管理できる。
+- 検証: Claude Code に合わせ、件数・文字数の上限は設けない。in_progress は同時に1件までをツール説明で指示し、複数でも拒否せず受け付ける。形式（status の値・content が空でない）の違反だけ修正可能なエラーで返す。リストは会話欄とレシートに表示し、セッション履歴に保存して再開で復元する。子エージェントは自分の分を持ち、親には混ぜない。
+
+**H2. 環境診断とエラーの構造化**
+- 実装・検証結果は [docs/h2-progress.md](docs/h2-progress.md)。
+- 起動時（セッション開始時に1回）に `rg` / `pwsh` / `git` の有無と、作業フォルダの存在・読み書き権限を確認する。結果は画面に警告として出し、system には固定の短い一文だけ加える。system はセッションの最初に固定する（§24）。
+- `rg` が無い場合、Grep / Glob は Node 実装へ自動で切り替える（ツールの名前・引数は変えない。`.gitignore` を尊重し、Grep は既定250件で打ち切る）。`pwsh` が無い場合は Bash の説明に原因を返す。
+- ツールの失敗を `{kind, message}` の固定の種別（`missing_cli` / `not_found` / `denied` / `timeout` / `aborted` / `invalid_args` / `failed`）で扱い、レシートにも種別を残す。
+- 同じツール・同じ種別の失敗が同一ターンで3回続いたら、継続せず AskUserQuestion 相当でユーザーへ取り次ぐ（`workflow_stalled` と同様に、未完了の作業は完了扱いにしない）。
+
+**H3. Bash のバックグラウンド実行**
+- 実装・検証結果は [docs/h3-progress.md](docs/h3-progress.md)。
+- Windowsの起動経路の追加検証と追跡方針（2026-10-03、ユーザー承認）は [docs/h3-job-investigation.md](docs/h3-job-investigation.md)。WindowsApps版pwshでは子がJobを継承しない場合があるため、バックグラウンドの非修飾Start-Processをプロキシ化し、戻り値の子PIDを捕捉して同じJobへ明示登録する。PassThruを内部で有効にし、利用者が指定しなければ戻り値は出力しない。登録失敗時は取得できたハンドルで子の終了を試み、固定エラーで親も終了する。昇格・別ユーザー等によりプロセスアクセス権限がない場合は、子の終了も保証できない。
+- 終了保証はJobに所属したプロセスと、Start-Processプロキシで捕捉した子に限る。直接のProcess.Start、モジュール名付きStart-Process、プロキシの上書き、外部ブローカー経由、登録前に生成されたJob外の子孫は追跡対象外で、終了を保証しない。バックグラウンドでは非修飾Start-Processを使うようBashの説明にも明記する。プロキシは任意コマンドを隔離するセキュリティ境界ではない。
+- `Bash` に `run_in_background: true` を追加する。起動すると `shellId` を返し、待たない。`BashOutput({shellId, wait?, timeoutSec?})`（前回以降の出力と状態。待機は最大60秒）と `KillShell({shellId})` を新設する。
+- 同時実行は5件まで（Claude Code に件数の上限はないが、Windows の資源を守る XHarness 独自の安全弁）。BashOutput が1回に返す出力は30,000文字（Claude Code の `BASH_MAX_OUTPUT_LENGTH` 既定値）で、超過分は先頭と末尾を残して中略し、未取得分は次の BashOutput で続きを返す。保持する出力は1件につき直近1 MB。ターンの終了・停止・セッション終了で管理対象のプロセスツリーごと終了する（MCP の stdio と同じ後片付け。上記の追跡外の起動経路は除く）。次のターンへの持ち越しはしない。
+- 権限は通常の Bash と同じ gate を起動時に通す。BashOutput / KillShell は自分が起動した shellId のみ操作でき、allow。出力は秘密値のマスクを通す。
+- 同時に、通常の Bash の既定タイムアウトを明示し（既定120秒、上限600秒）、時間切れは `timeout` 種別で返す。
+
+**H4. ファイル変更の巻き戻し（チェックポイント）**
+- ターンの最初の書き込み（Edit / Write）の直前に、対象ファイルの変更前の内容を `~/.xharness/checkpoints/<sessionId>/<turn>/` へ保存する（新規作成は「存在しなかった」記録）。リポジトリの外に置き、git の状態には触れない。
+- `/undo` は直近のターン、`/rewind <n>` は n ターン前までの変更を戻す。戻す前に対象ファイルの一覧と、チェックポイント後にユーザー・外部が変更したファイル（内容の不一致）を示し、確認する。不一致のファイルは既定で戻さない。
+- Bash による変更は追跡しない（範囲外）。画面にもその旨を表示する。worktree の worker は worktree ごと破棄できるため対象外。
+- 保存期間は Claude Code の `cleanupPeriodDays` 既定値に合わせて30日（設定 `checkpoints.retentionDays` で変更可）。期限切れとセッション削除の際に削除する。ターン数・容量の上限は設けないが、1ファイル10 MB超は退避せず、そのファイルは巻き戻せないと画面に表示する。
+- 戻す対象の選び方も Claude Code に合わせ、コード・会話・両方から選ぶ（既定はコードのみ。会話を戻すのは履歴の追記に「巻き戻し」を記録し、元の履歴は消さない）。
+- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3以降は未着手。
+
+### 26.2 優先度: 中
+
+**M1. 画像入力と Read の画像対応**
+- Read は png / jpg / gif / webp を画像ブロック（§5）で返す（Claude API の1枚あたり5 MB・長辺8000px の制限に合わせ、超過は縮小せずエラー）。入力欄への貼り付け・ドラッグでも添付できる。
+- 内部形式と各 Provider の変換は対応済みのため、変換の単体テストに画像ケースを足す。画像を扱えないモデルでは添付時に画面で警告する。レシート・レポートでは画像本体を埋め込まず、種別とサイズだけ出す。
+
+**M2. スラッシュコマンドの体系**
+- 組み込み: `/clear`（新しい会話。履歴は残す）・`/resume`（履歴から再開）・`/model`・`/cost`（通信回数と使用量。M3 と連動）・`/init`（AGENTS.md の雛形を作業フォルダへ作成。既存は上書きしない）に、既存の `/mode` `/stop` `/compact` `/mcp` を加えて、入力欄の補完に一覧する。
+- ユーザー定義: `<project>/.xharness/commands/*.md` と `~/.xharness/commands/*.md` を `/<ファイル名>` として展開する（本文が user メッセージになる。`$ARGUMENTS` を置換）。プロジェクト側はワークスペースの信頼（§9）の対象とし、信頼するまで一覧に出さない。
+
+**M3. 通信回数と予算の上限**
+- 設定 `limits: {llmCallsPerTurn: 0, llmCallsPerSession: 0}`（0 = 無効が既定。Claude Code の `--max-turns` / `--max-budget-usd` も既定は無制限で、利用者が指定したときだけ効く方式に合わせる）。進展のない通信の防止は、既定で有効な §20.6 の継続停止と §8 の最大ステップ数（100）が担う。`llmCallsPerTurn` は §8 の最大ステップ数と別に、再試行・圧縮・子を含む実際の通信回数を数える。超えたら `budget_exceeded` で停止し、ユーザーの入力を待つ。
+- UsagePopover に今ターン・セッションの通信回数を出す。枠の残量が少ないときの警告は、取得できているヘッダの範囲で出す（推測しない）。
+
+**M4. 編集の補助**
+- Edit / Write は既存ファイルの改行コード（CRLF / LF）と BOM を保持する。新規ファイルは作業フォルダ内の同種のファイルから推定せず、LF で作る。
+- `MultiEdit({path, edits: [{old, new}]})`: 同一ファイルの複数置換を原子的に適用（1件でも失敗したら全体を書かない）。Edit と同じ権限・チェックポイントを通る。
+- `NotebookEdit` は需要を見て判断する。今回は実装しない。
+
+**M5. AskUserQuestion の選択ボタン**
+- 候補がある質問は、番号入力に加えて画面に選択ボタンを出す。押すと入力欄から同じ文章を送るのと同じ扱い（LLM へは通常の返答）。headless では従来どおり番号入力。
+
+### 26.3 優先度: 低
+
+- **L1. フックのサンプル同梱**: PreToolUse でのブロック、Edit / Write 後の自動フォーマットなどの設定例を docs/examples に追加する（実装変更なし。§19.10 の入り口の範囲）。
+- **L2. git 手順**: コミット・PR 作成の方針を system に足さず、`/commit` などのユーザー定義コマンド（M2）の例として docs/examples に置く。専用ツールは作らない。
+- **L3. 子エージェントの文脈の引き継ぎ**: 返答後の再委託で、前の子の最終結果と質問を Task の prompt に自動で添える補助を検討する。子のセッション自体は再開しない。
+- **L4. 定期実行・イベント待ち（Monitor / cron 相当）**: H3 の BashOutput の待機で足りない運用が出てから設計する。
+
+### 26.4 実装の順序と完了条件
+
+H2 → H1 → H3 → H4 → M3 → M1 → M2 → M4 → M5 → L1〜L3。H2 を先にするのは、他の単位の失敗表示が H2 の種別を使うため。各単位の完了条件は、単体テスト・typecheck・lint・build の成功と、記録（docs/ に進捗ファイルを作り、未確認事項と手元で必要な確認を書く）。
+
+**実装前に確認する未決事項**
+規定値は Claude Code の仕様に合わせて決めた（2026-10-02、ユーザー指示）。ただし値は設計者の知識によるもので、公式ドキュメントでの再確認が済んでいない。実装前に確認し、違えばここを直す。
+1. H4（公式資料確認済み、2026-10-03）: [Claude Code公式チェックポイント資料](https://code.claude.com/docs/en/checkpointing)で保存30日・Bashの変更は追跡しないこと・コード／会話／両方の復元を確認した。現在の同資料は最大100チェックポイントとするが、XHarnessは本節の指定どおりターン数・総容量を制限しない。外部変更の不一致を検出して既定で除外することと1ファイル10 MB上限も独自仕様。
+2. H2（公式資料確認済み、2026-10-02）: [Claude Code公式ツール資料](https://code.claude.com/docs/en/tools-reference#grep-tool-behavior)でGrepの`.gitignore`尊重を確認した。同資料ではGrepの250件上限を確認できず、Globは既定では`.gitignore`を尊重しないと記載されている。XHarnessでは本節の指定どおり、両検索で`.gitignore`を尊重し、Grepを250件で打ち切る独自の規定値として実装する。
+3. M3: 上限は既定で無効（Claude Code と同じ）。
+4. M4: 新規ファイルは LF、既存ファイルは改行コードと BOM を保持（Claude Code の Edit と同じ）。
+5. H3（公式資料確認済み、2026-10-02）: [公式環境変数資料](https://code.claude.com/docs/en/env-vars)で、通常のBashの既定120秒・上限600秒と、出力30,000文字を確認した。XHarnessのバックグラウンドはターン終了までを寿命とし、timeoutSecを明示した場合だけその上限でも終了する。

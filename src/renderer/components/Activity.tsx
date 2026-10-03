@@ -6,6 +6,8 @@ import { Logo } from "./Logo.js";
 import styles from "./Activity.module.css";
 import { buildReceiptReplay, type ReceiptReplay } from "../../shared/replay.js";
 import { ReceiptReplayDialog } from "./ReceiptReplay.js";
+import { TodoList } from "./TodoList.js";
+import { parseTodos } from "../../shared/todos.js";
 type Usage = Partial<
   Record<"claude" | "codex", Extract<UiEvent, { type: "usage" }>>
 >;
@@ -188,6 +190,9 @@ export function Receipts({
             {selected.id} · {selected.summary}
           </b>
           <pre>{JSON.stringify(selected.input ?? {}, null, 2)}</pre>
+          {selected.tool === "TodoWrite" && parseTodos(selected.input) && (
+            <TodoList todos={parseTodos(selected.input)!} />
+          )}
           <pre>{selected.output ?? ""}</pre>
         </div>
       )}

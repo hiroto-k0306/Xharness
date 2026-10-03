@@ -28,6 +28,9 @@ import { compactNow, saveDefaultModel, setMode } from "./settings-commands.js";
 import { SessionStore, WorkspaceStore, type StoredSession } from "./store.js";
 import { itemsFromMessages } from "./transcript.js";
 import { runMcpCommand, runSessionTurn } from "./turn.js";
+import { runRewind } from "./rewind-command.js";
+import { rewindTurns, parseRewindChoice } from "../../shared/rewind.js";
+import { FileCheckpointStore } from "../checkpoints/store.js";
 import {
   finishWorktree,
   RepositoryOpener,
@@ -111,6 +114,12 @@ export class SessionController {
     if (!this.options.fake) await this.options.authentication?.refresh();
     await Promise.all([this.sessions.load(), this.workspaces.load()]);
     this.sessions.fillDefaults({ model: this.model, effort: this.effort });
+    await new FileCheckpointStore(this.options.home).purge(
+      (await loadProjectConfig(this.options.home)).checkpoints?.retentionDays ??
+        30,
+      Date.now(),
+      true,
+    );
     if (this.options.phase4) {
       this.gitAvailable = await this.ctx.repository.available();
       if (!this.gitAvailable)
@@ -149,6 +158,8 @@ export class SessionController {
         );
       });
     if (!rt.loaded) await rt.loading;
+    for (const warning of this.sessions.warnings.splice(0))
+      this.warnings.push(warning);
     return rt;
   }
 
@@ -196,6 +207,37 @@ export class SessionController {
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
       switch (command.type) {
+        case "rewind_response": {
+          const rt = this.runtimes.get(command.sessionId);
+          if (
+            !rt?.rewindPrompt ||
+            rt.rewindPrompt.requestId !== command.requestId
+          )
+            return { ok: false, error: "復元の確認が見つかりません。" };
+          const choice =
+            command.choice === null ? null : parseRewindChoice(command.choice);
+          if (choice === undefined)
+            return { ok: false, error: "復元の指定が不正です。" };
+          rt.rewindPrompt.resolve(choice);
+          return { ok: true };
+        }
+        case "delete_session": {
+          if (
+            !command.confirmed ||
+            !this.sessions.get(command.sessionId) ||
+            (this.runtimes.get(command.sessionId)?.status !== "idle" &&
+              this.runtimes.has(command.sessionId))
+          )
+            return {
+              ok: false,
+              error: "待機中のセッションを確認して削除してください。",
+            };
+          await this.sessions.delete(command.sessionId);
+          this.ctx.dropRuntime(command.sessionId);
+          if (this.current === command.sessionId) this.current = null;
+          await this.emitState();
+          return { ok: true };
+        }
         case "refresh_auth":
           if (!this.options.fake) await this.options.authentication?.refresh();
           await this.emitState();
@@ -498,6 +540,20 @@ export class SessionController {
       return this.setModel(sessionId, model, effort as Effort | undefined);
     }
     const rt = await this.load(sessionId);
+    if (/^\/(?:undo|rewind)(?:\s|$)/.test(command)) {
+      const count = rewindTurns(command);
+      if (!count)
+        return { ok: false, error: "使い方：/undo または /rewind <正の整数>" };
+      if (rt.status !== "idle" || this.otherWriterRunning(session))
+        return {
+          ok: false,
+          error: "書き込み処理の終了後に巻き戻してください。",
+        };
+      rt.status = "running";
+      rt.closing = false;
+      rt.done = runRewind(this.ctx, session, rt, count);
+      return { ok: true, sessionId };
+    }
     if (MCP_COMMAND.test(command)) {
       // /mcp はモデルに送らない。状態の表示は実行中でもできるが、操作は待機中だけ(§25.8)
       if (rt.status !== "idle") {

@@ -852,8 +852,10 @@ export class WorkflowRuntime {
           if (this.interrupted)
             return { kind: "stop", reason: "plan_rejected" };
           if (["complete", "attention"].includes(this.state.phase)) {
+            // 通信失敗・中断などで止まった理由は、完了扱いで上書きしない
+            if (ctx.stopCause) return { kind: "stop", reason: ctx.stopCause };
             // 完了直後は、main が最終報告を書く1ラウンドを許してから止める
-            if (this.finalReport === 1 && !ctx.stopCause) {
+            if (this.finalReport === 1) {
               this.finalReport = 0;
               return custom;
             }

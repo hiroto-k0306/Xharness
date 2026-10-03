@@ -133,6 +133,55 @@ it("lets main write one final report round after the review completes", async ()
   expect(JSON.stringify(result.messages)).toContain("最終報告");
   expect(JSON.stringify(result.messages)).not.toContain("must not send");
 }, 15000);
+it("keeps the failure cause when the final report round fails", async () => {
+  const s = await setup(
+    [
+      call("SkipPlan", { reason: "Small fix" }),
+      call("Write", { path: "fix.txt", content: "fix" }),
+      call("RequestReview", { summary: "Implemented" }),
+      { type: "error", kind: "request" },
+      text("must not send"),
+    ],
+    [text("[]")],
+  );
+  const result = await s.run();
+  expect(s.runtime.state.phase).toBe("complete");
+  expect(result.stopCause).toBe("request");
+}, 15000);
+it("keeps the abort cause when the final report round is aborted", async () => {
+  const s = await setup(
+    [
+      call("SkipPlan", { reason: "Small fix" }),
+      call("Write", { path: "fix.txt", content: "fix" }),
+      call("RequestReview", { summary: "Implemented" }),
+      text("最終報告"),
+    ],
+    [text("[]")],
+  );
+  const controller = new AbortController();
+  let reviewed = false;
+  const result = await s.runtime.run(
+    {
+      provider: s.providers[0]!,
+      router: new Router(s.providers),
+      model: "claude-opus-5-5",
+      system: "Test",
+      messages: [{ role: "user", content: [{ type: "text", text: "fix" }] }],
+      tools: defaultTools(s.cwd, false),
+      permission: async () => true,
+      maxRounds: 15,
+      onEvent: (e) => {
+        if (e.type === "receipt" && e.receipt.tool === "RequestReview")
+          reviewed = true;
+        if (reviewed && e.type === "step" && e.step === "model")
+          controller.abort();
+      },
+    },
+    controller.signal,
+  );
+  expect(s.runtime.state.phase).toBe("complete");
+  expect(result.stopCause).toBe("aborted");
+}, 15000);
 it("stops repeated completion reminders without waiving review for actual changes", async () => {
   const s = await setup(
     [

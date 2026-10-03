@@ -198,7 +198,10 @@ describe("PromptLine", () => {
       />,
     );
     expect(screen.getByRole("textbox", { name: "prompt" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "■ 停止" }));
+    const stop = screen.getByRole("button", { name: "停止" });
+    expect(stop.parentElement?.lastElementChild).toBe(stop);
+    expect(stop).toHaveAttribute("title", "停止（Esc）");
+    fireEvent.click(stop);
     expect(onStop).toHaveBeenCalledOnce();
     expect(onSubmit).not.toHaveBeenCalled();
   });

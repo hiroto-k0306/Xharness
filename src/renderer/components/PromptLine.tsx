@@ -211,11 +211,6 @@ export function PromptLine(p: PromptLineProps) {
       )}
       <span className={styles.cwd}>{p.cwdLabel}</span>
       <span className={styles.gt}>❯</span>
-      {p.running && p.onStop && (
-        <button className={styles.stop} onClick={p.onStop}>
-          ■ 停止
-        </button>
-      )}
       <textarea
         ref={ref}
         className={styles.input}
@@ -318,6 +313,17 @@ export function PromptLine(p: PromptLineProps) {
         >
           ask
         </span>
+      )}
+      {p.running && p.onStop && (
+        <button
+          type="button"
+          className={styles.stop}
+          onClick={p.onStop}
+          aria-label="停止"
+          title="停止（Esc）"
+        >
+          <span aria-hidden="true">■</span>
+        </button>
       )}
     </div>
   );

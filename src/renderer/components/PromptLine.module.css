@@ -75,11 +75,14 @@
 @media (max-width: 900px) {
   .prompt {
     display: grid;
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
     padding: 10px 12px;
   }
   .cwd {
     max-width: 100px;
+  }
+  .attachments {
+    grid-column: 1 / -1;
   }
   .chip {
     grid-column: 1 / -1;
@@ -87,6 +90,14 @@
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .stop {
+    grid-column: 4;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .prompt:has(.attachments:not(:empty)) .stop {
+    grid-row: 2;
   }
 }
 .prompt {
@@ -128,12 +139,17 @@
   color: var(--dim);
 }
 .stop {
-  padding: 6px 12px;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   border: 1px solid var(--err);
-  border-radius: 5px;
+  border-radius: 50%;
   color: var(--text);
   background: var(--claude-shadow);
   font-weight: 700;
+  display: grid;
+  place-items: center;
 }
 .stop:focus-visible {
   outline: 2px solid var(--text);

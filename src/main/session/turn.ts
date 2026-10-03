@@ -1,5 +1,11 @@
 // 1ターン(ユーザーの1発言 → 応答の完了)を実行し、履歴とレシートを保存する。
 import { readFile } from "node:fs/promises";
+import { withSessionCalls } from "./llm-calls.js";
+import {
+  LlmBudgetError,
+  llmStopCause,
+  flushLlmCalls,
+} from "../core/llm-budget.js";
 import { resolve } from "node:path";
 import { loadAgentConfig } from "../agents/definitions.js";
 import { loadMainConfig, resolveModel } from "../config/config.js";
@@ -232,13 +238,58 @@ export async function runSessionTurn(
   rt: Runtime,
   text: string,
 ): Promise<void> {
+  const abort = new AbortController();
+  rt.abort = abort;
+  try {
+    const config = await loadProjectConfig(ctx.options.home);
+    await withSessionCalls(
+      {
+        home: ctx.options.home,
+        id: session.id,
+        limits: config.limits,
+        abort,
+        changed: (calls) => {
+          rt.llmCalls = calls;
+          void ctx.emitState();
+        },
+      },
+      () => runSessionBody(ctx, gate, session, rt, text, abort),
+    );
+  } catch (error) {
+    const stopCause =
+      error instanceof LlmBudgetError ? error.reason : "step_failed";
+    rt.status = "idle";
+    rt.abort = undefined;
+    ctx.options.emit({
+      type: "notice",
+      sessionId: session.id,
+      tone: "warn",
+      message:
+        STOP_NOTICE[stopCause] ?? "通信回数の設定・保存先を確認してください。",
+    });
+    ctx.options.emit({
+      type: "turn",
+      sessionId: session.id,
+      status: "idle",
+      stopCause,
+    });
+  } finally {
+    await ctx.emitState();
+  }
+}
+async function runSessionBody(
+  ctx: ControllerContext,
+  gate: PermissionGate,
+  session: StoredSession,
+  rt: Runtime,
+  text: string,
+  abort: AbortController,
+): Promise<void> {
   const { options } = ctx;
   const { emit } = options;
   const sessionId = session.id;
   const clean = ctx.clean;
   const events = new TurnEvents(ctx, session, rt);
-  const abort = new AbortController();
-  rt.abort = abort;
   if (MCP_PROMPT_COMMAND.test(text.trim())) {
     // MCP のプロンプトは、接続を準備してから展開し、確認後に通常の発言として送る(§25.6)
     let expanded: Awaited<ReturnType<typeof expandMcpPrompt>>;
@@ -465,7 +516,7 @@ export async function runSessionTurn(
     if (!abort.signal.aborted)
       emit({ type: "error", sessionId, message: "内部エラーで停止しました" });
   }
-  await finishTurn(ctx, session, rt, events, stopCause);
+  await finishTurn(ctx, session, rt, events, llmStopCause() ?? stopCause);
 }
 
 /**
@@ -524,6 +575,8 @@ async function finishTurn(
   const { emit } = ctx.options;
   const sessionId = session.id;
   try {
+    await flushLlmCalls();
+    stopCause = llmStopCause() ?? stopCause;
     await Promise.all(events.receiptWrites);
     await ctx.sessions.append(
       sessionId,

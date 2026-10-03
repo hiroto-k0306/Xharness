@@ -129,6 +129,7 @@ export function App() {
         usage={
           <UsagePopover
             usage={s.usage}
+            calls={session?.llmCalls}
             fallback={app.fallback}
             open={usageOpen}
             onToggle={() => setUsageOpen((v) => !v)}

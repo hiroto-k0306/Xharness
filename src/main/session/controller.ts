@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readLlmCalls } from "./llm-calls.js";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isEffort, loadMainConfig, resolveModel } from "../config/config.js";
@@ -146,9 +147,11 @@ export class SessionController {
       rt.loading ??= Promise.all([
         this.sessions.messages(id),
         this.ctx.receipts.read(id),
-      ]).then(([messages, receipts]) => {
+        readLlmCalls(this.options.home, id).catch(() => undefined),
+      ]).then(([messages, receipts, calls]) => {
         if (rt.loaded) return;
         rt.messages = messages;
+        rt.llmCalls = calls;
         rt.persisted = messages.length;
         rt.loaded = true;
         rt.receipts = receipts;
@@ -187,6 +190,7 @@ export class SessionController {
         : this.options.fallback,
       sessions: this.sessions.list().map((s) => ({
         ...s,
+        llmCalls: this.runtimes.get(s.id)?.llmCalls,
         status: this.runtimes.get(s.id)?.status ?? "idle",
         branch:
           s.worktree?.branch ??

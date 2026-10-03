@@ -65,6 +65,51 @@ const idle = (id: string) =>
   events.some(
     (e) => e.type === "turn" && e.sessionId === id && e.status === "idle",
   );
+it("stops before a retry exceeds the cap, preserves history, and keeps the session total after restart", async () => {
+  await writeFile(
+    join(home, "config.yaml"),
+    "limits: {llmCallsPerTurn: 1, llmCallsPerSession: 2}\n",
+  );
+  const c = make([{ type: "rate_limited", retryAfterSec: 0 }]);
+  await c.init();
+  const { sessionId } = (await c.handle({
+    type: "new_session",
+    workspaceId: null,
+  })) as { sessionId: string };
+  await c.handle({ type: "send", sessionId, text: "first" });
+  await until(() => idle(sessionId));
+  expect(
+    events.find((e) => e.type === "turn" && e.status === "idle"),
+  ).toMatchObject({ stopCause: "budget_exceeded" });
+  expect(
+    (await c.state()).sessions.find((s) => s.id === sessionId)?.llmCalls,
+  ).toMatchObject({ turn: 1, session: 1, simulatedSession: 1 });
+  expect(
+    await readFile(join(home, "sessions", sessionId + ".jsonl"), "utf8"),
+  ).toContain("first");
+  events.length = 0;
+  await c.handle({ type: "send", sessionId, text: "second" });
+  await until(() => idle(sessionId));
+  expect(
+    (await c.state()).sessions.find((s) => s.id === sessionId)?.llmCalls,
+  ).toMatchObject({ turn: 1, session: 2 });
+  const resumed = make();
+  await resumed.init();
+  await resumed.handle({ type: "open_session", sessionId });
+  expect(
+    (await resumed.state()).sessions.find((s) => s.id === sessionId)?.llmCalls
+      ?.session,
+  ).toBe(2);
+  events.length = 0;
+  await resumed.handle({ type: "send", sessionId, text: "third" });
+  await until(() => idle(sessionId));
+  expect(
+    events.find((e) => e.type === "turn" && e.status === "idle"),
+  ).toMatchObject({ stopCause: "budget_exceeded" });
+  expect(
+    (await resumed.state()).sessions.find((s) => s.id === sessionId)?.llmCalls,
+  ).toMatchObject({ turn: 0, session: 2 });
+});
 it.each([
   "/stop",
   "一旦停止して",

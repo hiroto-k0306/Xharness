@@ -81,6 +81,7 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  llmCalls?: import("../../shared/llm-calls.js").LlmCalls;
   rewindPrompt?: {
     requestId: string;
     resolve(choice: import("../../shared/rewind.js").RewindChoice | null): void;
@@ -178,6 +179,10 @@ export interface ControllerContext {
 }
 
 export const STOP_NOTICE: Record<string, string> = {
+  budget_exceeded:
+    "通信回数の上限に達したため停止しました。上限の設定を確認してから新しい指示を入力してください。",
+  budget_storage_failed:
+    "通信回数を保存・読み込みできないため停止しました。保存先を確認してください。",
   agent_stopped:
     "エージェントの要求で停止しました。再開する場合は新しい指示を入力してください。",
   awaiting_user: "ユーザーの返答待ちです。入力欄から回答してください。",

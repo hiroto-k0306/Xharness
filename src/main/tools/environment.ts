@@ -1,7 +1,6 @@
-import { access, stat, readdir, open, rm } from "node:fs/promises";
+import { access, stat, readdir } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join, delimiter, isAbsolute } from "node:path";
-import { randomUUID } from "node:crypto";
 
 export interface EnvironmentReport {
   cli: Record<"rg" | "pwsh" | "git", boolean>;
@@ -48,22 +47,12 @@ export async function diagnoseEnvironment(
     } catch {
       /* Report below. */
     }
-    const probe = join(cwd, `.xharness-probe-${randomUUID()}`);
-    let created = false;
     try {
-      const file = await open(probe, "wx");
-      created = true;
-      await file.close();
+      // Non-mutating permission hint. Actual writes still handle ACL/volume errors.
+      await access(cwd, constants.W_OK);
       workspace.writable = true;
     } catch {
       /* Report below. */
-    } finally {
-      if (created)
-        try {
-          await rm(probe);
-        } catch {
-          workspace.writable = false;
-        }
     }
   }
   const warnings = [

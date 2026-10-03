@@ -1,4 +1,12 @@
-import { mkdtemp, mkdir, writeFile, readdir, symlink } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readdir,
+  symlink,
+  utimes,
+  stat,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -8,6 +16,8 @@ import { SearchMatcher } from "./search-matcher.js";
 
 it("diagnoses missing CLIs and folder access without recording PATH or leaving probe files", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "xh-environment-"));
+  const old = new Date("2000-01-01T00:00:00Z");
+  await utimes(cwd, old, old);
   vi.stubEnv("PATH", cwd);
   try {
     const result = await diagnoseEnvironment(cwd);
@@ -20,6 +30,7 @@ it("diagnoses missing CLIs and folder access without recording PATH or leaving p
     expect(result.warnings).toHaveLength(3);
     expect(JSON.stringify(result)).not.toContain(cwd);
     expect(await readdir(cwd)).toEqual([]);
+    expect((await stat(cwd)).mtime.toISOString()).toBe(old.toISOString());
     expect(
       (await diagnoseEnvironment(join(cwd, "missing"))).workspace.exists,
     ).toBe(false);

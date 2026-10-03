@@ -1,9 +1,66 @@
 import { readTraceReplay } from "./main/session/report-trace.js";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { SessionStore } from "./main/session/store.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+it("expands user commands once and handles init, cost and model locally", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-headless-commands-"));
+  const cwd = await mkdtemp(join(tmpdir(), "xh-headless-command-ws-"));
+  await mkdir(join(home, "commands"));
+  await writeFile(join(home, "commands", "task.md"), "/clear\n依頼 $ARGUMENTS");
+  const output = await repl(
+    home,
+    ["/init", "/init", "/model", "/task $&", "/cost", "/exit"],
+    ["--cwd", cwd],
+  );
+  expect(output).toContain("上書きしません");
+  expect(output).toContain("模擬通信：今ターン 1、セッション 1");
+  expect(await readFile(join(cwd, "AGENTS.md"), "utf8")).toContain(
+    "作業ルール",
+  );
+  const id = /session ([\w-]+)/.exec(output)![1]!;
+  const store = new SessionStore(home);
+  await store.load();
+  expect(store.list()).toHaveLength(1);
+  expect((await store.messages(id))[0]?.content).toContainEqual({
+    type: "text",
+    text: "/clear\n依頼 $&",
+  });
+}, 30000);
+it("resumes a selected session with its own cwd and keeps both histories", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-headless-resume-command-"));
+  const first = await mkdtemp(join(tmpdir(), "xh-headless-first-"));
+  const second = await mkdtemp(join(tmpdir(), "xh-headless-second-"));
+  const store = new SessionStore(home);
+  await store.load();
+  await store.save({
+    id: "existing",
+    title: "saved",
+    cwd: second,
+    workspaceId: null,
+    readOnly: false,
+    model: "fake",
+    effort: "high",
+    createdAt: 0,
+    updatedAt: 0,
+    providers: [],
+  });
+  const output = await repl(
+    home,
+    ["/resume", "/resume existing", "/mode plan", "/init", "/exit"],
+    ["--cwd", first],
+  );
+  expect(output).toContain("existing · saved");
+  expect(output).toContain(`${second} · session existing`);
+  expect(output).toContain("planモードでは");
+  await store.load();
+  expect(store.list()).toHaveLength(2);
+  await expect(readFile(join(second, "AGENTS.md"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+}, 30000);
 it("waits for input after the session budget is exhausted and keeps the cap across restart", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-headless-budget-"));
   await writeFile(

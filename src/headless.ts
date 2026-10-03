@@ -1,5 +1,16 @@
 import { withSessionTrace } from "./main/core/trace.js";
-import { withSessionCalls } from "./main/session/llm-calls.js";
+import { readLlmCalls, withSessionCalls } from "./main/session/llm-calls.js";
+import {
+  costSummary,
+  expandCommand,
+  initAgents,
+  userCommands,
+} from "./main/session/slash-commands.js";
+import { reservedCommand } from "./shared/commands.js";
+import { ReceiptStore } from "./main/session/receipts.js";
+import { pad, toReceipt } from "./main/session/context.js";
+import { type Receipt } from "./shared/ipc.js";
+import { loadModelCatalog } from "./main/config/model-catalog.js";
 import { LlmBudgetError } from "./main/core/llm-budget.js";
 import { projectHookApproval } from "./main/hooks/shell-hooks.js";
 import { createInterface } from "node:readline/promises";
@@ -298,6 +309,15 @@ export async function headless(args = process.argv.slice(2)) {
   let controller: AbortController | undefined;
   let workflow: WorkflowRuntime | undefined;
   let closed = false;
+  let resumeNext: string | undefined;
+  const receiptStore = new ReceiptStore(home);
+  let receiptSeq = Math.max(
+    0,
+    ...(await receiptStore.read(session.id)).map(
+      (r) => Number(r.id.slice(1)) || 0,
+    ),
+  );
+  const childReceipts: Receipt[] = [];
   const interrupt = () => {
     if (controller) controller.abort();
     else {
@@ -369,6 +389,46 @@ export async function headless(args = process.argv.slice(2)) {
         break;
       }
       if (input.trim() === "/exit") break;
+      if (/^\/resume(?:\s|$)/.test(input.trim())) {
+        const [, id, extra] = input.trim().split(/\s+/);
+        if (!id)
+          process.stdout.write(
+            "再開する会話（/resume <sessionId>）：\n" +
+              clean(
+                sessions
+                  .list()
+                  .map((s) => `${s.id} · ${s.title}`)
+                  .join("\n"),
+              ) +
+              "\n",
+          );
+        else if (extra || !sessions.get(id))
+          process.stdout.write("会話が見つかりません。\n");
+        else {
+          resumeNext = id;
+          break;
+        }
+        continue;
+      }
+      if (input.trim() === "/cost") {
+        process.stdout.write(
+          costSummary(
+            await readLlmCalls(home, session.id),
+            await new ReceiptStore(home).read(session.id),
+          ) + "\n",
+        );
+        continue;
+      }
+      if (input.trim() === "/init") {
+        const result = await initAgents(
+          cwd,
+          session.readOnly || session.permissionMode === "plan",
+        );
+        process.stdout.write(
+          result.ok ? "AGENTS.mdの雛形を作成しました。\n" : result.error + "\n",
+        );
+        continue;
+      }
       if (/^\/(?:undo|rewind)(?:\s|$)/.test(input.trim())) {
         controller = new AbortController();
         try {
@@ -427,6 +487,9 @@ export async function headless(args = process.argv.slice(2)) {
         session = {
           ...session,
           id: randomUUID().slice(0, 8),
+          title: "Headless session",
+          model,
+          effort,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
@@ -499,6 +562,17 @@ export async function headless(args = process.argv.slice(2)) {
       }
       if (/^\/model(?:\s|$)/.test(input.trim())) {
         const [, spec, level, extra] = input.trim().split(/\s+/);
+        if (!spec) {
+          process.stdout.write(
+            `Model: ${model} · ${effort}\n/model <provider:model> [effort]\n` +
+              loadModelCatalog()
+                .filter((m) => m.enabled)
+                .map((m) => m.id)
+                .join("\n") +
+              "\n",
+          );
+          continue;
+        }
         const choice = spec && resolveModel(spec, config?.aliases);
         if (!choice || extra || (level !== undefined && !isEffort(level))) {
           process.stdout.write("Usage: /model provider:model [effort]\n");
@@ -537,6 +611,7 @@ export async function headless(args = process.argv.slice(2)) {
           );
         continue;
       }
+      let mcpExpanded = false;
       if (MCP_PROMPT_COMMAND.test(input.trim())) {
         // MCP のプロンプト(§25.6): 展開した内容を見せ、y で通常の発言として送る
         const parsed = parseMcpPrompt(mcp, input);
@@ -559,6 +634,39 @@ export async function headless(args = process.argv.slice(2)) {
         );
         if (ok.trim().toLowerCase() !== "y") continue;
         input = expanded;
+        mcpExpanded = true;
+      }
+      const customName = mcpExpanded
+        ? undefined
+        : /^\/([^\s]+)/.exec(input.trim())?.[1];
+      if (customName && !reservedCommand(customName)) {
+        const expanded = expandCommand(
+          input,
+          await userCommands(
+            home,
+            cwd,
+            await new WorkspaceTrust(home).isTrusted(cwd),
+          ),
+        );
+        if (expanded === undefined) {
+          process.stdout.write(
+            "コマンドが見つからないか、プロジェクトが未信頼です。\n",
+          );
+          continue;
+        }
+        input = expanded;
+      } else if (
+        customName &&
+        ["clear", "resume", "cost", "init", "stop", "compact", "exit"].includes(
+          customName,
+        )
+      ) {
+        process.stdout.write(
+          customName === "stop"
+            ? "現在は実行していません。実行中はCtrl+Cで停止できます。\n"
+            : "コマンドの引数を確認してください。\n",
+        );
+        continue;
       }
       controller = new AbortController();
       let fileCheckpoint;
@@ -691,6 +799,13 @@ export async function headless(args = process.argv.slice(2)) {
           ),
           onStatus: (context, model, status) =>
             process.stdout.write(`\n${context.name} · ${model} · ${status}\n`),
+          onEvent: (context, event) => {
+            if (event.type === "receipt")
+              childReceipts.push({
+                ...toReceipt(event.receipt, session.id, pad(++receiptSeq)),
+                agentId: context.id,
+              });
+          },
           redact: clean,
           onTraceWarning: (message) => process.stderr.write(message + "\n"),
           onPhase: (state) =>
@@ -792,6 +907,16 @@ export async function headless(args = process.argv.slice(2)) {
         },
       );
       messages = result.messages;
+      await receiptStore.append(
+        session.id,
+        [
+          ...childReceipts.splice(0),
+          ...result.receipts.map((r) =>
+            toReceipt(r, session.id, pad(++receiptSeq)),
+          ),
+        ],
+        clean,
+      );
       await sessions.append(session.id, messages.slice(persisted), clean);
       persisted = messages.length;
       session = { ...session, model, effort, updatedAt: Date.now() };
@@ -807,6 +932,14 @@ export async function headless(args = process.argv.slice(2)) {
     await mcp?.close();
     rl.close();
     process.removeListener("SIGINT", interrupt);
+  }
+  if (resumeNext) {
+    const next = args.filter(
+      (_, i) =>
+        !["--resume", "--cwd", "--model", "--effort"].includes(args[i]!) &&
+        !["--resume", "--cwd", "--model", "--effort"].includes(args[i - 1]!),
+    );
+    await headless([...next, "--resume", resumeNext]);
   }
 }
 if (

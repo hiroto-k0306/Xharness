@@ -4,17 +4,17 @@ PR #9（codex/transcript-collapse-agents-bar）と PR #10（codex/notice-newline
 
 ## 入った変更
 
-| 内容 | 主な場所 |
-|---|---|
-| 応答の文字は空白までためて送るが、ツール呼び出しの前にためた分を送り切る（日本語の応答がツールカードの前後で途切れていた） | `src/main/session/turn-events.ts` |
-| ツールカードを標準で閉じた1行表示にし、クリックで入力の全文を開閉（Bash はコマンド、ほかは整形 JSON、4000文字で省略） | `src/shared/summary.ts`、`src/renderer/components/Transcript.tsx` |
-| 右の Agents 列をなくし、Hero の `▸ overview` の右側に横並びで表示 | `src/renderer/components/AgentsPanel.tsx`、`Activity.tsx`、`App.tsx` |
-| 自動追従のときも会話欄は main のまま。STEP 表示と LoopFlow だけを動いているエージェントに追従。手で選んだエージェントに出力がなければ案内文を出す | `src/renderer/App.tsx` |
-| Claude の出力上限（`max_tokens`）で閉じていないブロックが残っても protocol エラーにせず、text だけ残して tool_use・thinking を捨て、既存の「Continue.」で続ける。既定 `max_tokens` を 4096 → 32000 | `src/main/providers/claude/stream.ts`、`convert.ts` |
-| ワークフロー完了（または往復上限）後に、main が最終報告を書く1ラウンドを与えてから止める。報告ラウンドが通信失敗・中断した場合はその理由を維持する。チャットに項目一覧つきの完了通知を出す | `src/main/workflow/runtime.ts`、`src/main/session/workflow-factory.ts` |
-| 画像入力の「未確認」表示をやめ、`imageInput: false` のモデルだけ警告する | `src/renderer/components/PromptLine.tsx` |
-| 会話欄の添付画像をクリックで拡大。Esc・背景・閉じるボタンで閉じる。開いている間はフォーカスを閉じるボタンにとどめ、キーを背後のショートカット（承認の y / a / n、Esc 中断）へ伝えない。閉じると元の画像ボタンへフォーカスを戻す | `src/renderer/components/Transcript.tsx` |
-| 複数行の通知（完了通知の項目一覧）の改行を保持する | `src/renderer/components/Transcript.module.css` |
+| 内容                                                                                                                                                                                                                            | 主な場所                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 応答の文字は空白までためて送るが、ツール呼び出しの前にためた分を送り切る（日本語の応答がツールカードの前後で途切れていた）                                                                                                      | `src/main/session/turn-events.ts`                                      |
+| ツールカードを標準で閉じた1行表示にし、クリックで入力の全文を開閉（Bash はコマンド、ほかは整形 JSON、4000文字で省略）                                                                                                           | `src/shared/summary.ts`、`src/renderer/components/Transcript.tsx`      |
+| 右の Agents 列をなくし、Hero の `▸ overview` の右側に横並びで表示                                                                                                                                                               | `src/renderer/components/AgentsPanel.tsx`、`Activity.tsx`、`App.tsx`   |
+| 自動追従のときも会話欄は main のまま。STEP 表示と LoopFlow だけを動いているエージェントに追従。手で選んだエージェントに出力がなければ案内文を出す                                                                               | `src/renderer/App.tsx`                                                 |
+| Claude の出力上限（`max_tokens`）で閉じていないブロックが残っても protocol エラーにせず、text だけ残して tool_use・thinking を捨て、既存の「Continue.」で続ける。既定 `max_tokens` を 4096 → 32000                              | `src/main/providers/claude/stream.ts`、`convert.ts`                    |
+| ワークフロー完了（または往復上限）後に、main が最終報告を書く1ラウンドを与えてから止める。報告ラウンドが通信失敗・中断した場合はその理由を維持する。チャットに項目一覧つきの完了通知を出す                                      | `src/main/workflow/runtime.ts`、`src/main/session/workflow-factory.ts` |
+| 画像入力の「未確認」表示をやめ、`imageInput: false` のモデルだけ警告する                                                                                                                                                        | `src/renderer/components/PromptLine.tsx`                               |
+| 会話欄の添付画像をクリックで拡大。Esc・背景・閉じるボタンで閉じる。開いている間はフォーカスを閉じるボタンにとどめ、キーを背後のショートカット（承認の y / a / n、Esc 中断）へ伝えない。閉じると元の画像ボタンへフォーカスを戻す | `src/renderer/components/Transcript.tsx`                               |
+| 複数行の通知（完了通知の項目一覧）の改行を保持する                                                                                                                                                                              | `src/renderer/components/Transcript.module.css`                        |
 
 ### 「Claude protocol failed」の原因
 

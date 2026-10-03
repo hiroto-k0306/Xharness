@@ -1594,7 +1594,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 
 ---
 
-## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4・M3・M1・M2実装済み）
+## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4・M3・M1・M2・M4実装済み）
 
 実アプリの試用（docs/bugs/2026-10-02-workflow-loop.md）後のレビューで挙がった不足機能。優先度の高・中・低の順に実装する。各単位は AGENTS.md の作業ルール（1コミット1目的）で小さく区切り、前の優先度の単位を検証してから次へ進む。
 
@@ -1633,7 +1633,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Bash による変更は追跡しない（範囲外）。画面にもその旨を表示する。worktree の worker は worktree ごと破棄できるため対象外。
 - 保存期間は Claude Code の `cleanupPeriodDays` 既定値に合わせて30日（設定 `checkpoints.retentionDays` で変更可）。期限切れとセッション削除の際に削除する。ターン数・容量の上限は設けないが、1ファイル10 MB超は退避せず、そのファイルは巻き戻せないと画面に表示する。
 - 戻す対象の選び方も Claude Code に合わせ、コード・会話・両方から選ぶ（既定はコードのみ。会話を戻すのは履歴の追記に「巻き戻し」を記録し、元の履歴は消さない）。
-- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)、M1は [docs/m1-progress.md](docs/m1-progress.md)、M2は [docs/m2-progress.md](docs/m2-progress.md)。M4・M5は未着手。
+- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)、M1は [docs/m1-progress.md](docs/m1-progress.md)、M2は [docs/m2-progress.md](docs/m2-progress.md)、M4は [docs/m4-progress.md](docs/m4-progress.md)。M5は未着手。
 
 ### 26.2 優先度: 中
 
@@ -1656,6 +1656,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Edit / Write は既存ファイルの改行コード（CRLF / LF）と BOM を保持する。新規ファイルは作業フォルダ内の同種のファイルから推定せず、LF で作る。
 - `MultiEdit({path, edits: [{old, new}]})`: 同一ファイルの複数置換を原子的に適用（1件でも失敗したら全体を書かない）。Edit と同じ権限・チェックポイントを通る。
 - `NotebookEdit` は需要を見て判断する。今回は実装しない。
+- 実装済み（2026-10-03）。UTF-8 BOMを保持し、既存ファイルの先頭にある改行へ置換入力を合わせる。混在ファイルのEdit／MultiEditは未編集部分の改行を変えない。Writeは先頭の改行へ統一する。改行がない既存ファイルと新規ファイルはLFを使う。MultiEditは指定順に置換し、各oldが直前の結果に1回だけ一致することを確認する。全件の成功後、同じフォルダの一時ファイルからrenameする。Editの権限ルールもMultiEditに適用し、plan・子の対象ファイル制限・チェックポイント・差分・レビューへ接続した。詳細は [docs/m4-progress.md](docs/m4-progress.md)。
 
 **M5. AskUserQuestion の選択ボタン**
 - 候補がある質問は、番号入力に加えて画面に選択ボタンを出す。押すと入力欄から同じ文章を送るのと同じ扱い（LLM へは通常の返答）。headless では従来どおり番号入力。
@@ -1676,5 +1677,5 @@ H2 → H1 → H3 → H4 → M3 → M1 → M2 → M4 → M5 → L1〜L3。H2 を�
 1. H4（公式資料確認済み、2026-10-03）: [Claude Code公式チェックポイント資料](https://code.claude.com/docs/en/checkpointing)で保存30日・Bashの変更は追跡しないこと・コード／会話／両方の復元を確認した。現在の同資料は最大100チェックポイントとするが、XHarnessは本節の指定どおりターン数・総容量を制限しない。外部変更の不一致を検出して既定で除外することと1ファイル10 MB上限も独自仕様。
 2. H2（公式資料確認済み、2026-10-02）: [Claude Code公式ツール資料](https://code.claude.com/docs/en/tools-reference#grep-tool-behavior)でGrepの`.gitignore`尊重を確認した。同資料ではGrepの250件上限を確認できず、Globは既定では`.gitignore`を尊重しないと記載されている。XHarnessでは本節の指定どおり、両検索で`.gitignore`を尊重し、Grepを250件で打ち切る独自の規定値として実装する。
 3. M3（公式資料確認済み、2026-10-03）: [Claude Code公式CLI資料](https://code.claude.com/docs/en/cli-reference)で `--max-turns` の既定が無制限、`--max-budget-usd` が指定時に上限を設け子エージェントの使用額を含むことを確認した。XHarnessは本節の指定どおり通信の試行回数を上限とし、金額への換算は行わない。
-4. M4: 新規ファイルは LF、既存ファイルは改行コードと BOM を保持（Claude Code の Edit と同じ）。
+4. M4（公式資料確認、2026-10-03）: [公式ツール資料](https://code.claude.com/docs/en/tools-reference#edit-tool-behavior)では改行・BOM保持の完全な保証を確認できなかった。[公式変更履歴](https://code.claude.com/docs/en/changelog#2-1-89)にはWindowsのEdit/WriteでCRLFが二重化する不具合の修正がある。XHarnessは本節の指定どおり、新規LF・既存の改行とUTF-8 BOM保持を実装する。Claude Codeとの完全な一致とは断定しない。
 5. H3（公式資料確認済み、2026-10-02）: [公式環境変数資料](https://code.claude.com/docs/en/env-vars)で、通常のBashの既定120秒・上限600秒と、出力30,000文字を確認した。XHarnessのバックグラウンドはターン終了までを寿命とし、timeoutSecを明示した場合だけその上限でも終了する。

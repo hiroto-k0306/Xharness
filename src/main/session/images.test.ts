@@ -11,6 +11,31 @@ import { exportExecutionReport } from "./report.js";
 import { toClaudeRequest } from "../providers/claude/convert.js";
 import { toCodexInput } from "../providers/codex/convert.js";
 import { itemsFromMessages } from "./transcript.js";
+it("rejects a sixth attachment without provider calls", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-image-limit-"));
+  const requests: ProviderRequest[] = [];
+  const c = new SessionController({
+    home,
+    model: "fake",
+    provider: new FakeProvider({ onRequest: (r) => requests.push(r) }),
+    fake: true,
+    version: "test",
+    emit: () => {},
+    host: { pickFolder: async () => undefined },
+  });
+  await c.init();
+  const result = await c.handle({ type: "new_session", workspaceId: null });
+  expect(
+    await c.handle({
+      type: "send",
+      sessionId: result.ok ? result.sessionId! : "",
+      text: "six",
+      images: Array(6).fill(image),
+    }),
+  ).toMatchObject({ ok: false, error: "画像の添付は1メッセージ5枚までです。" });
+  expect(requests).toHaveLength(0);
+  await c.shutdown();
+});
 it("preserves attachment bytes for providers and resume, while receipts/traces/HTML only contain metadata", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-image-session-"));
   const requests: ProviderRequest[] = [],

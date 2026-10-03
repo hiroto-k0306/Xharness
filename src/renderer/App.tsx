@@ -1,4 +1,5 @@
 import { STEP_NODES } from "../shared/ipc.js";
+import { DEFAULT_IMAGES } from "../shared/images.js";
 import { builtinCommands } from "../shared/commands.js";
 import { AgentsPanel } from "./components/AgentsPanel.js";
 import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
@@ -443,7 +444,16 @@ export function App() {
               }}
             />
           )}
+          {(session?.imageBytes ?? 0) >
+            (app.images?.warnSessionBytes ??
+              DEFAULT_IMAGES.warnSessionBytes) && (
+            <div role="status">
+              セッションの画像合計が警告値を超えています。再送する履歴を減らすには
+              /compact を実行してください（保存済み画像は残ります）。
+            </div>
+          )}
           <PromptLine
+            maxImages={app.images?.maxPerMessage}
             sessionId={current}
             imageInput={app.models?.find((m) => m.id === model)?.imageInput}
             onStop={s.abort}

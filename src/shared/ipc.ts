@@ -61,6 +61,7 @@ export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
   llmCalls?: import("./llm-calls.js").LlmCalls;
+  imageBytes?: number;
   worktree?: { path: string; branch: string; baseBranch: string };
   permissionMode?: "default" | "acceptEdits" | "plan";
   id: string;
@@ -89,6 +90,7 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  images?: typeof import("./images.js").DEFAULT_IMAGES;
   commands?: import("./commands.js").CommandSuggestion[];
   authentication?: AuthenticationView[];
   models?: {

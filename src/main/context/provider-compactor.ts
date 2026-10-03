@@ -1,4 +1,5 @@
 import { traceOperation } from "../core/trace.js";
+import { imageMetadata } from "../../shared/images.js";
 import { type Message, type ToolSpec } from "../core/types.js";
 import { type Provider } from "../providers/provider.js";
 import {
@@ -86,7 +87,7 @@ async function compactNow(
   options.signal.throwIfAborted();
   const starts = messages.flatMap((m, i) =>
     m.role === "user" &&
-    m.content.some((b) => b.type === "text") &&
+    m.content.some((b) => b.type === "text" || b.type === "image") &&
     !m.content.some((b) => b.type === "tool_result")
       ? [i]
       : [],
@@ -141,6 +142,7 @@ async function compactNow(
                           b.type !== "reasoning" && b.type !== "compaction",
                       ),
                     })),
+                    (_, v) => imageMetadata(v),
                   ),
                 },
               ],

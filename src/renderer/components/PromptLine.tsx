@@ -5,10 +5,12 @@ import {
   imageInfo,
   MAX_IMAGE_BYTES,
   IMAGE_ERROR,
+  DEFAULT_IMAGES,
   type ImageAttachment,
 } from "../../shared/images.js";
 
 export interface PromptLineProps {
+  maxImages?: number;
   sessionId?: string | null;
   imageInput?: boolean;
   onStop?(): void;
@@ -75,6 +77,16 @@ export function PromptLine(p: PromptLineProps) {
     const generation = attachmentGeneration.current;
     setReading(true);
     setImageError("");
+    if (
+      images.length + files.length >
+      (p.maxImages ?? DEFAULT_IMAGES.maxPerMessage)
+    ) {
+      setReading(false);
+      setImageError(
+        `画像の添付は1メッセージ${p.maxImages ?? DEFAULT_IMAGES.maxPerMessage}枚までです。`,
+      );
+      return;
+    }
     try {
       const added = await Promise.all(
         files.map(
@@ -106,7 +118,12 @@ export function PromptLine(p: PromptLineProps) {
         ),
       );
       if (generation === attachmentGeneration.current)
-        setImages((now) => [...now, ...added]);
+        setImages((now) =>
+          [...now, ...added].slice(
+            0,
+            p.maxImages ?? DEFAULT_IMAGES.maxPerMessage,
+          ),
+        );
     } catch {
       if (generation === attachmentGeneration.current)
         setImageError(IMAGE_ERROR);

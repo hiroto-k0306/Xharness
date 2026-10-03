@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import image from "../../test/fixtures/images/pixel.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -22,10 +23,11 @@ const readTool: Tool = {
 };
 let controller: SessionController;
 
-async function setup(provider = new FakeProvider()) {
+async function setup(provider = new FakeProvider(), config?: string) {
   // テストごとに独立した配線にする(前のテストの遅れたイベントを混ぜない)
   const bus: { listener?: (e: UiEvent) => void } = {};
   const home = await mkdtemp(join(tmpdir(), "xh-app-"));
+  if (config) await writeFile(join(home, "config.yaml"), config);
   const folder = await mkdtemp(join(tmpdir(), "xh-folder-"));
   controller = new SessionController({
     provider,
@@ -70,6 +72,31 @@ async function setup(provider = new FakeProvider()) {
 beforeEach(() => setup());
 
 describe("App wired to the real SessionController", () => {
+  it("warns when saved session images exceed the configured threshold without blocking", async () => {
+    await setup(
+      new FakeProvider(),
+      "images: {maxPerMessage: 2, warnSessionBytes: 1}",
+    );
+    render(<App />);
+    await screen.findByText("+ new session");
+    await userEvent.type(screen.getByLabelText("prompt"), "hello{Enter}");
+    await screen.findByText("pong");
+    await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
+    await act(async () => {
+      expect(
+        await window.harness.command({
+          type: "send",
+          sessionId: useStore.getState().app!.currentSessionId!,
+          text: "",
+          images: [image],
+        }),
+      ).toMatchObject({ ok: true });
+    });
+    expect(
+      await screen.findByText(/セッションの画像合計が警告値/),
+    ).toHaveTextContent("/compact");
+    await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
+  });
   it("answers AskUserQuestion through the normal send command and provider history", async () => {
     const requests: string[] = [];
     await setup(

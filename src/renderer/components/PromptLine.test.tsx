@@ -29,6 +29,19 @@ it("clears the attachment draft when switching sessions", async () => {
   );
   expect(screen.queryByAltText("添付画像 1")).toBeNull();
 });
+it("refuses the sixth attachment and keeps the first five", async () => {
+  render(<PromptLine {...props} onSubmit={() => {}} />);
+  const textbox = screen.getByRole("textbox");
+  fireEvent.paste(textbox, {
+    clipboardData: { files: Array.from({ length: 5 }, () => file()) },
+  });
+  await screen.findByAltText("添付画像 5");
+  fireEvent.paste(textbox, { clipboardData: { files: [file()] } });
+  expect(
+    await screen.findByText("画像の添付は1メッセージ5枚までです。"),
+  ).toBeInTheDocument();
+  expect(screen.queryByAltText("添付画像 6")).toBeNull();
+});
 it("pastes an image, warns for a text-only model, submits unchanged bytes and restores rejected attachments", async () => {
   const onSubmit = vi.fn().mockResolvedValue(false);
   render(<PromptLine {...props} imageInput={false} onSubmit={onSubmit} />);

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readLlmCalls } from "./llm-calls.js";
 import {
   attachmentInfo,
+  sessionImageBytes,
   IMAGE_ERROR,
   type ImageAttachment,
 } from "../../shared/images.js";
@@ -180,10 +181,12 @@ export class SessionController {
   }
 
   async state(): Promise<AppState> {
+    const imageSettings = (await loadMainConfig(this.options.home)).images;
     const workspaces = await this.workspaces.summaries();
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
       commands: this.commands,
+      images: imageSettings,
       authentication: this.options.fake
         ? undefined
         : this.options.authentication?.snapshot(),
@@ -206,6 +209,7 @@ export class SessionController {
       sessions: this.sessions.list().map((s) => ({
         ...s,
         llmCalls: this.runtimes.get(s.id)?.llmCalls,
+        imageBytes: sessionImageBytes(this.runtimes.get(s.id)?.messages),
         status: this.runtimes.get(s.id)?.status ?? "idle",
         branch:
           s.worktree?.branch ??
@@ -538,6 +542,12 @@ export class SessionController {
     text: string,
     images?: ImageAttachment[],
   ): Promise<CommandResult> {
+    const imageSettings = (await loadMainConfig(this.options.home)).images;
+    if ((images?.length ?? 0) > imageSettings.maxPerMessage)
+      return {
+        ok: false,
+        error: `画像の添付は1メッセージ${imageSettings.maxPerMessage}枚までです。`,
+      };
     try {
       images?.forEach(attachmentInfo);
     } catch {

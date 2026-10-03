@@ -1,4 +1,17 @@
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+export const DEFAULT_IMAGES = { maxPerMessage: 5, warnSessionBytes: 20971520 };
+export function sessionImageBytes(value: unknown): number {
+  if (Array.isArray(value))
+    return value.reduce((n, v) => n + sessionImageBytes(v), 0);
+  if (!value || typeof value !== "object") return 0;
+  const v = value as Record<string, unknown>;
+  if (v.type === "image" && typeof v.data === "string")
+    return (
+      Math.floor((v.data.length * 3) / 4) -
+      (v.data.endsWith("==") ? 2 : v.data.endsWith("=") ? 1 : 0)
+    );
+  return Object.values(v).reduce<number>((n, v) => n + sessionImageBytes(v), 0);
+}
 export const IMAGE_ERROR =
   "画像はPNG・JPEG・GIF・WebP、1枚5 MB以下、長辺8000px以下で指定してください。";
 export interface ImageAttachment {

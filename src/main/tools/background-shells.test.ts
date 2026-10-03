@@ -177,6 +177,22 @@ it("reports timeout, failed exit and abort, cancels waiting and validates argume
   }
 });
 const hasPwsh = await cliAvailable("pwsh");
+it("drains omitted older output before newly appended output and preserves UTF-8", () => {
+  const output = new BackgroundOutput();
+  output.append("A".repeat(80000));
+  output.read();
+  output.append("NEW");
+  while (output.pending > 3) expect(output.read().output).not.toContain("NEW");
+  expect(output.read().output).toBe("NEW");
+  const unicode = new BackgroundOutput();
+  unicode.append("😀あ".repeat(200000));
+  let result = "";
+  while (unicode.pending) result += unicode.read().output;
+  expect(result).not.toContain("�");
+  expect(result).not.toMatch(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u,
+  );
+});
 it
   .skipIf(!hasPwsh)
   .each(["StopTask", "AskUserQuestion", "hook_error", "abort"])(

@@ -1,0 +1,39 @@
+# 会話欄の改善と出力上限の修正（2026-10-03）
+
+PR #9（codex/transcript-collapse-agents-bar）と PR #10（codex/notice-newline-zoom-focus）の記録。ユーザー要望に基づく。仕様は DESIGN.md §16・§19.6・STEP 2 の失敗表・§20.3・M1 に反映済み。
+
+## 入った変更
+
+| 内容                                                                                                                                                                                                                            | 主な場所                                                               |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| 応答の文字は空白までためて送るが、ツール呼び出しの前にためた分を送り切る（日本語の応答がツールカードの前後で途切れていた）                                                                                                      | `src/main/session/turn-events.ts`                                      |
+| ツールカードを標準で閉じた1行表示にし、クリックで入力の全文を開閉（Bash はコマンド、ほかは整形 JSON、4000文字で省略）                                                                                                           | `src/shared/summary.ts`、`src/renderer/components/Transcript.tsx`      |
+| 右の Agents 列をなくし、Hero の `▸ overview` の右側に横並びで表示                                                                                                                                                               | `src/renderer/components/AgentsPanel.tsx`、`Activity.tsx`、`App.tsx`   |
+| 自動追従のときも会話欄は main のまま。STEP 表示と LoopFlow だけを動いているエージェントに追従。手で選んだエージェントに出力がなければ案内文を出す                                                                               | `src/renderer/App.tsx`                                                 |
+| Claude の出力上限（`max_tokens`）で閉じていないブロックが残っても protocol エラーにせず、text だけ残して tool_use・thinking を捨て、既存の「Continue.」で続ける。既定 `max_tokens` を 4096 → 32000                              | `src/main/providers/claude/stream.ts`、`convert.ts`                    |
+| ワークフロー完了（または往復上限）後に、main が最終報告を書く1ラウンドを与えてから止める。報告ラウンドが通信失敗・中断した場合はその理由を維持する。チャットに項目一覧つきの完了通知を出す                                      | `src/main/workflow/runtime.ts`、`src/main/session/workflow-factory.ts` |
+| 画像入力の「未確認」表示をやめ、`imageInput: false` のモデルだけ警告する                                                                                                                                                        | `src/renderer/components/PromptLine.tsx`                               |
+| 会話欄の添付画像をクリックで拡大。Esc・背景・閉じるボタンで閉じる。開いている間はフォーカスを閉じるボタンにとどめ、キーを背後のショートカット（承認の y / a / n、Esc 中断）へ伝えない。閉じると元の画像ボタンへフォーカスを戻す | `src/renderer/components/Transcript.tsx`                               |
+| 複数行の通知（完了通知の項目一覧）の改行を保持する                                                                                                                                                                              | `src/renderer/components/Transcript.module.css`                        |
+
+### 「Claude protocol failed」の原因
+
+実アプリのトレース（`~/.xharness/traces/`、2026-10-03T20:05:35Z と 20:25:27Z）で確認した。Opus 5.5 の応答が `max_tokens: 4096`（うち thinking 1282）で打ち切られ、tool_use（SubmitPlan / 長い編集）の `content_block_stop` が来ないまま `message_delta`（`stop_reason: max_tokens`）が届いた。デコーダがこれを不正な順序として例外にし、adapter が `Claude protocol failed`（画面: 応答を解釈できませんでした）にしていた。再現用 fixture: `test/fixtures/claude/max-tokens-truncated-tool-use.json`。
+
+## 残っている改善点（レビューの should、未対応）
+
+- **拡大表示中に、別の部品がプログラムでフォーカスを移した場合**: 例えば実行中に画像を開いたまま実行が終わると、PromptLine が `textarea.focus()` を呼び、フォーカスが開いたままの拡大表示の背後へ移る。キーの伝播は止めているが、入力欄への文字入力（既定動作）は止まらないため、背後の入力欄に文字が入りうる。対策: 拡大表示中は背景を `inert` にするか、フォーカスが外へ出たら拡大表示へ引き戻す。実行中→待機への遷移を含む結合テストを足す。
+
+## 未確認・未実測
+
+- `max_tokens` で切れたあとの続行を、実 API では試していない（fixture と FakeProvider のみ）。特に、tool_use を捨てた結果 thinking だけが残った assistant メッセージを、次の要求で実 API が受け付けるかは未実測。
+- 実画面での見た目（ツールカード、Agents の横並び、完了通知、拡大表示）は未確認。
+- 作業中に動いていたアプリは修正前のビルドだったため、途中でも同じ protocol エラーが一度起きた（20:25:27Z）。新しいビルドでの再発有無は未確認。
+
+## 確認環境と結果
+
+- Windows、Node 24.16.0、pwsh 7.6.6（WindowsApps / Store 版: `C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\pwsh.exe`）
+- `pnpm typecheck` / `pnpm lint` / `pnpm build`: 成功
+- `vitest run --maxWorkers=4`: 133 ファイル / 1018 件成功・1 件スキップ（PR #10 時点）
+- 既定の並列数で全体を回すと、負荷によるタイムアウトが毎回 1〜4 件出る（失敗するテストは毎回異なり、単独や `--maxWorkers=4` では成功）。今回の変更とは無関係。
+- 編集ツールでファイル名の大文字小文字が変わることがあった（`Transcript.tsx` → `transcript.tsx`）。元に戻し、git の登録名と全ファイルが一致することを確認した。

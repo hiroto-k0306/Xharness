@@ -1,6 +1,7 @@
 // SessionController と、それを分割した各モジュールが共有する型と小さな関数。
 // electron を import しない。
 import { stat } from "node:fs/promises";
+import { traceJson } from "../core/trace.js";
 import { type Authentication } from "../auth/authentication.js";
 import { join } from "node:path";
 import { type MainConfig, type WebSettings } from "../config/config.js";
@@ -228,7 +229,7 @@ export function safeInput(
   clean: (s: string) => string,
 ): unknown {
   try {
-    return JSON.parse(clean(JSON.stringify(input) ?? "null"));
+    return JSON.parse(traceJson(input, clean));
   } catch {
     return clean(String(input));
   }

@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { readLlmCalls } from "./llm-calls.js";
+import {
+  attachmentInfo,
+  IMAGE_ERROR,
+  type ImageAttachment,
+} from "../../shared/images.js";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isEffort, loadMainConfig, resolveModel } from "../config/config.js";
@@ -179,6 +184,7 @@ export class SessionController {
           id: m.id,
           provider: m.provider,
           label: (m as typeof m & { displayName?: string }).displayName ?? m.id,
+          imageInput: m.imageInput,
           efforts: Object.keys(m.efforts ?? {}) as Effort[],
           defaultEffort: m.defaultEffort,
         })),
@@ -345,7 +351,7 @@ export class SessionController {
           return { ok: true };
         }
         case "send":
-          return this.send(command.sessionId, command.text);
+          return this.send(command.sessionId, command.text, command.images);
         case "abort": {
           const rt = this.runtimes.get(command.sessionId);
           if (rt) this.release(rt);
@@ -492,7 +498,21 @@ export class SessionController {
     });
   }
 
-  private async send(sessionId: string, text: string): Promise<CommandResult> {
+  private async send(
+    sessionId: string,
+    text: string,
+    images?: ImageAttachment[],
+  ): Promise<CommandResult> {
+    try {
+      images?.forEach(attachmentInfo);
+    } catch {
+      return { ok: false, error: IMAGE_ERROR };
+    }
+    if (images?.length && text.trim().startsWith("/"))
+      return {
+        ok: false,
+        error: "画像は通常のメッセージと一緒に送信してください。",
+      };
     if (
       /^(?:\/stop|(?:一旦)?(?:停止|中断)(?:して)?|止めて)[。！!]?$/u.test(
         text.trim(),
@@ -620,9 +640,14 @@ export class SessionController {
       return { ok: false, error: "Working directory not found" };
     }
     rt.closing = false;
-    rt.done = runSessionTurn(this.ctx, this.gate, session, rt, text).catch(
-      () => undefined,
-    );
+    rt.done = runSessionTurn(
+      this.ctx,
+      this.gate,
+      session,
+      rt,
+      text,
+      images,
+    ).catch(() => undefined);
     return { ok: true, sessionId };
   }
 

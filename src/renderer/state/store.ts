@@ -127,6 +127,7 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
           kind: "user",
           id: e.messageId,
           text: e.text,
+          ...(e.images?.length ? { images: e.images } : {}),
         }),
       );
     case "turn": {
@@ -362,7 +363,10 @@ interface UiStore extends EventState {
   toggleGroup(id: string): void;
   start(): () => void;
   /** 受け付けられたら true。断られたら false(入力欄は文を戻す) */
-  send(text: string): Promise<boolean>;
+  send(
+    text: string,
+    images?: import("../../shared/images.js").ImageAttachment[],
+  ): Promise<boolean>;
   abort(): void;
   respond(decision: PermissionDecision): void;
   newSession(
@@ -400,9 +404,9 @@ export const useStore = create<UiStore>()((set, get) => ({
     void window.harness.command({ type: "ready" });
     return off;
   },
-  async send(text) {
+  async send(text, images) {
     const trimmed = text.trim();
-    if (!trimmed) return false;
+    if (!trimmed && !images?.length) return false;
     let id = get().app?.currentSessionId ?? null;
     if (!id) {
       const created = await window.harness.command({
@@ -421,6 +425,7 @@ export const useStore = create<UiStore>()((set, get) => ({
       type: "send",
       sessionId,
       text: trimmed,
+      ...(images?.length ? { images } : {}),
     });
     if (!result.ok && !REPORTED_ERRORS.includes(result.error))
       get().apply({ type: "error", sessionId, message: result.error });

@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type Receipt } from "../../shared/ipc.js";
+import { traceJson } from "../core/trace.js";
 export class ReceiptStore {
   private chains = new Map<string, Promise<void>>();
   constructor(private readonly home: string) {}
@@ -32,8 +33,7 @@ export class ReceiptStore {
   ) {
     if (!receipts.length) return;
     const path = this.path(id);
-    const text =
-      receipts.map((r) => clean(JSON.stringify(r))).join("\n") + "\n";
+    const text = receipts.map((r) => traceJson(r, clean)).join("\n") + "\n";
     const job = (this.chains.get(id) ?? Promise.resolve()).then(async () => {
       await mkdir(join(this.home, "receipts"), { recursive: true });
       await appendFile(path, text);

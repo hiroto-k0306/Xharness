@@ -121,7 +121,7 @@ function blocksView(content: unknown, role: unknown): string {
         case "compaction":
           return "<p class=meta>圧縮済みの会話を含みます。</p>";
         case "image":
-          return "<p class=meta>画像が含まれています（本文は詳細欄）。</p>";
+          return `<p class=meta>画像：${escape(string(b.mediaType))} · ${escape(String(b.bytes ?? "不明"))} bytes（本体は記録しません）</p>`;
         default:
           return "<p class=meta>簡易表示に対応していないブロックです。詳細JSONで確認できます。</p>";
       }

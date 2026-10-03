@@ -81,6 +81,7 @@ async function beginTurn(
   rt: Runtime,
   text: string,
   note?: string,
+  images?: import("../../shared/images.js").ImageAttachment[],
 ): Promise<StoredSession> {
   const { emit } = ctx.options;
   const sessionId = session.id;
@@ -89,7 +90,10 @@ async function beginTurn(
   rt.messages.push({
     role: "user",
     content: [
-      { type: "text", text: ctx.clean(text) },
+      ...(text.trim()
+        ? [{ type: "text" as const, text: ctx.clean(text) }]
+        : []),
+      ...(images ?? []).map((image) => ({ type: "image" as const, ...image })),
       ...(note ? [{ type: "text" as const, text: ctx.clean(note) }] : []),
     ],
   });
@@ -109,6 +113,7 @@ async function beginTurn(
     sessionId,
     messageId: `${sessionId}-u${rt.messages.length}`,
     text: ctx.clean(text),
+    ...(images?.length ? { images } : {}),
   });
   emit({ type: "turn", sessionId, status: "running" });
   await ctx.emitState();
@@ -237,6 +242,7 @@ export async function runSessionTurn(
   session: StoredSession,
   rt: Runtime,
   text: string,
+  images?: import("../../shared/images.js").ImageAttachment[],
 ): Promise<void> {
   const abort = new AbortController();
   rt.abort = abort;
@@ -253,7 +259,7 @@ export async function runSessionTurn(
           void ctx.emitState();
         },
       },
-      () => runSessionBody(ctx, gate, session, rt, text, abort),
+      () => runSessionBody(ctx, gate, session, rt, text, abort, images),
     );
   } catch (error) {
     const stopCause =
@@ -284,6 +290,7 @@ async function runSessionBody(
   rt: Runtime,
   text: string,
   abort: AbortController,
+  images?: import("../../shared/images.js").ImageAttachment[],
 ): Promise<void> {
   const { options } = ctx;
   const { emit } = options;
@@ -322,7 +329,14 @@ async function runSessionBody(
     }
     text = expanded.text;
   }
-  session = await beginTurn(ctx, session, rt, text, mcpChangeNote(rt.mcp));
+  session = await beginTurn(
+    ctx,
+    session,
+    rt,
+    text,
+    mcpChangeNote(rt.mcp),
+    images,
+  );
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);

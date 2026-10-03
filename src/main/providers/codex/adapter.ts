@@ -14,11 +14,12 @@ import {
   type ProviderEvent,
   type ProviderRequest,
 } from "../provider.js";
-import { toCodexRequest } from "./convert.js";
+import { toCodexRequest, type ToolImageMode } from "./convert.js";
 import { decodeCodexStream } from "./stream.js";
 import { codexRetryAfter, codexUsage } from "./usage.js";
 
 export interface CodexAdapterOptions {
+  toolImageMode?: () => Promise<ToolImageMode>;
   fetcher?: typeof fetch;
   getCredentials?: () => Promise<CodexCredentials>;
   catalog?: CatalogModel[];
@@ -54,7 +55,8 @@ export class CodexAdapter implements Provider {
       "request";
     try {
       signal.throwIfAborted();
-      const body = JSON.stringify(toCodexRequest(request, this.catalog));
+      const mode = (await this.options.toolImageMode?.()) ?? "output";
+      const body = JSON.stringify(toCodexRequest(request, this.catalog, mode));
       captureTraceResponse({ requestBody: body });
       stage = "authentication";
       const auth = await (

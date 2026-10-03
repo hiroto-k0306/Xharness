@@ -7,6 +7,38 @@ import {
 import { type ProviderRequest } from "../provider.js";
 
 type NativeItem = Record<string, unknown>;
+export type ToolImageMode = "output" | "user_message";
+export function toolResultItems(
+  block: Extract<ContentBlock, { type: "tool_result" }>,
+  mode: ToolImageMode,
+): NativeItem[] {
+  const images = Array.isArray(block.content)
+    ? block.content.filter((b) => b.type === "image")
+    : [];
+  const content =
+    mode === "user_message" && images.length && Array.isArray(block.content)
+      ? block.content.filter((b) => b.type !== "image")
+      : block.content;
+  return [
+    {
+      type: "function_call_output",
+      call_id: codexCallId(block.toolUseId),
+      output: resultText(content),
+    },
+    ...(mode === "user_message" && images.length
+      ? [
+          {
+            type: "message",
+            role: "user",
+            content: images.map((b) => ({
+              type: "input_image",
+              image_url: `data:${b.mediaType};base64,${b.data}`,
+            })),
+          },
+        ]
+      : []),
+  ];
+}
 export function codexCallId(id: string): string {
   return id.startsWith("call_")
     ? id
@@ -33,7 +65,10 @@ function resultText(content: string | ContentBlock[]): string | NativeItem[] {
     .join("\n");
 }
 
-export function toCodexInput(messages: readonly Message[]): NativeItem[] {
+export function toCodexInput(
+  messages: readonly Message[],
+  mode: ToolImageMode = "output",
+): NativeItem[] {
   const input: NativeItem[] = [];
   for (const message of messages) {
     let content: NativeItem[] = [];
@@ -69,11 +104,7 @@ export function toCodexInput(messages: readonly Message[]): NativeItem[] {
           break;
         case "tool_result":
           flush();
-          input.push({
-            type: "function_call_output",
-            call_id: codexCallId(block.toolUseId),
-            output: resultText(block.content),
-          });
+          input.push(...toolResultItems(block, mode));
           break;
         case "reasoning":
           if (block.provider !== "codex") break;
@@ -97,6 +128,7 @@ export function toCodexInput(messages: readonly Message[]): NativeItem[] {
 export function toCodexRequest(
   request: ProviderRequest,
   catalog: readonly CatalogModel[],
+  mode: ToolImageMode = "output",
 ) {
   const model = catalog.find(
     (m) => m.provider === "codex" && m.id === request.model && m.enabled,
@@ -106,7 +138,7 @@ export function toCodexRequest(
   return {
     model: request.model,
     instructions: request.system,
-    input: toCodexInput(request.messages),
+    input: toCodexInput(request.messages, mode),
     tools: [
       ...request.tools.map((t) => ({
         type: "function",

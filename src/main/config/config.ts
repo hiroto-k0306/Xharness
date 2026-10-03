@@ -155,6 +155,7 @@ export function mcpSettings(
 }
 
 export interface MainConfig {
+  providers: { codex: { toolImageMode: "output" | "user_message" } };
   web: WebSettings;
   mcp: McpSettings;
   fallback?: Partial<Record<ProviderId, string>>;
@@ -249,6 +250,14 @@ export async function loadMainConfig(
   }
   const web = webSettings(root.web, warnings);
   const mcp = mcpSettings(root.mcp, warnings);
+  const mode = (
+    root.providers as { codex?: { toolImageMode?: unknown } } | undefined
+  )?.codex?.toolImageMode;
+  if (mode !== undefined && mode !== "output" && mode !== "user_message")
+    warnings.push("config.yaml の providers.codex.toolImageMode が不正です");
+  const providers: MainConfig["providers"] = {
+    codex: { toolImageMode: mode === "user_message" ? mode : "output" },
+  };
   return {
     choice: { ...resolved, effort },
     aliases,
@@ -256,6 +265,7 @@ export async function loadMainConfig(
     fallback,
     web,
     mcp,
+    providers,
   };
 }
 
@@ -298,6 +308,7 @@ export async function resolveStartup(opts: {
     fallback: cfg.fallback,
     web: cfg.web,
     mcp: cfg.mcp,
+    providers: cfg.providers,
   };
 }
 

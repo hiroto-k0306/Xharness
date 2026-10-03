@@ -1638,6 +1638,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 ### 26.2 優先度: 中
 
 **M1. 画像入力と Read の画像対応**
+- Codexの画像入りfunction_call_outputは実通信未確認。§0のテキスト結果の往復は画像配列の受理を裏付けない。設定 `providers.codex.toolImageMode: output | user_message`（既定output）で、画像だけを後続userメッセージへ分離する退路を用意する。両方式とも変換テストのみ確認済み。確認手順は [docs/m-codex-image-local-check.md](docs/m-codex-image-local-check.md)。
 - Read は png / jpg / gif / webp を画像ブロック（§5）で返す（XHarnessは1枚あたり5 MB・長辺8000pxを上限とし、超過は縮小せずエラー。2026-10-03の公式Vision資料では直接のClaude APIはbase64換算10 MBで、設計時の5 MBとは異なるが、XHarnessの上限は維持する）。入力欄への貼り付け・ドラッグでも添付できる。
 - 内部形式と各 Provider の変換は対応済みのため、変換の単体テストに画像ケースを足す。画像を扱えないモデルでは添付時に画面で警告する。レシート・レポートでは画像本体を埋め込まず、種別とサイズだけ出す。
 - 実装済み（2026-10-03）。Readの画像結果を文字列に切り詰めず、ToolOutputからtool_resultの画像ブロックへ接続した。Codexのfunction_call_outputも画像配列に対応する。入力欄はプレビュー・削除・画像のみの送信・送信拒否時の復元に対応する。カタログの `imageInput: false` は非対応、未指定は未確認として警告する。未実測のモデルに対応済みとは記載しない。保存会話は画像本体を保持し、レシート・トレース・HTMLは形式とバイト数だけ記録する。詳細は [docs/m1-progress.md](docs/m1-progress.md)。

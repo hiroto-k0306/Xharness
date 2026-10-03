@@ -6,3 +6,9 @@
 
 - Read / Edit / MultiEdit / 既存Writeでバイト列をfatal UTF-8デコードし、NUL・UTF-16 BOM・不正UTF-8を固定のinvalid_argsメッセージで拒否する。Readの記録を作る前、変更の準備前に検査し、実行時の読み直しでも検査する。画像Readと新規Writeの経路は保持する。
 - CP932の「日本語」、UTF-16LE/BE、NUL入り、不正UTF-8の各バイト列で4ツールの拒否と全バイト不変を検証する。UTF-8 BOMあり/なし、CRLF/LFも確認する。
+
+## 2. Codex画像結果の未確認事項と退路
+
+- phase0-findings.mdのCodex表（function_call / function_call_outputの往復、x3-tool-1/2）はテキスト結果の実測。phase0-codex-source.mdも画像入りoutputの実測記録はなく、実通信は未確認。現状方式と退路のいずれもバックエンドで受理されるとは断定しない。
+- 画像入りの結果をtoolResultItemsへ集約。ユーザーconfig.yamlの `providers.codex.toolImageMode` をAdapterの送信準備時に読み、既定outputまたは画像だけ後続user_messageへ分離する。不正値はoutputへ戻して設定の警告を残す。テキスト結果とcall_idを保持し、内部会話は変更しない。
+- 実通信の手順は [m-codex-image-local-check.md](m-codex-image-local-check.md)。今回実通信なし。

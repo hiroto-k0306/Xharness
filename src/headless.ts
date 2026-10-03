@@ -223,7 +223,13 @@ export async function headless(args = process.argv.slice(2)) {
           ),
         }),
       ]
-    : [new ClaudeAdapter(), new CodexAdapter()];
+    : [
+        new ClaudeAdapter(),
+        new CodexAdapter({
+          toolImageMode: async () =>
+            (await loadMainConfig(home)).providers.codex.toolImageMode,
+        }),
+      ];
   const router = new Router(providers, config?.fallback, config?.aliases);
   router.provider(model);
   const access = new FileAccess(cwd);

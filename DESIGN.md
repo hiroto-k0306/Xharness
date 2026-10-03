@@ -681,6 +681,7 @@ Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex�
 - **AgentsPanel は Hero の ▸ overview ボタンの右側に横並びで置く**(ユーザー要望 2026-10-03。右の Agents 列はなくし、会話欄を右端まで広げる)。自動追従 / main · {model} · {状態} / エージェントごとの {name} · {model} · {状態}(branch があれば ` · {branch}`。STEP は title 属性)の小さなボタンと、未起動の項目の {id} · 起動待ち ラベルを並べ、はみ出したら横スクロールする。Hero を開いていても閉じていても、この行に出る。Hero が無いとき(Phase 4 前)は StepTabs の上に単独で出す。エージェントがいなければ何も出さない
 - **ツールカード**(ユーザー要望 2026-10-03)は標準で閉じた 1 行表示にし、クリックすると入力の全文(Bash はコマンド、ほかは整形した JSON。4000 文字で省略)を開閉できる
 - **応答の文字の送り方**(ユーザー要望 2026-10-03): 応答の文字は空白までためてから画面へ送る。ただしツール呼び出しの前には、ためた分を送り切る
+- **添付画像の拡大**(ユーザー要望 2026-10-03): 会話欄の自分が貼った画像はクリックで画面全体に拡大し、Esc・背景・閉じるボタンで閉じる(この Esc は実行の中断に使わない)。画像入力の警告は、カタログで imageInput: false のモデルだけに出す
 
 ### 16.4 core → UI のイベント
 
@@ -961,7 +962,7 @@ interface SessionWorkspace {
   | 429 で待ち時間が長い | fallback 先のモデルへ切り替え → STEP 1 から(reasoning を除去するため) |
   | ネットワーク・5xx | 指数バックオフで 3 回までやり直す → それでも駄目なら停止 |
   | 認証エラー | トークン更新を1回試す(§14)→ 駄目なら停止して再ログインを案内 |
-  | `max_tokens` で途中終了 | 「続けて」と送ってもう1周(1ターンにつき 2 回まで) |
+  | `max_tokens` で途中終了 | 「続けて」と送ってもう1周(1ターンにつき 2 回まで)。閉じていないブロックは、text だけ残し、tool_use・thinking は捨てる(2026-10-03。実 API で opus が SubmitPlan の途中で切れ、protocol エラーになったため)。Claude の既定 `max_tokens` は 32000 |
   | `refusal` | 停止してユーザーに表示する |
 
 #### STEP 3: tool_use(検証)
@@ -1011,7 +1012,7 @@ interface SessionWorkspace {
 
 - サブエージェントも**同じ 6 STEP のループ**で動く。STEP の定義は共通
 - 親が STEP 5 で Task を実行している間、子は自分の STEP 1〜6 を回る
-- 画面: StepTabs と LoopFlow は「今見ているエージェント」の STEP を表示する。AgentsPanel(Hero の overview 行の右側の横並びバー。ユーザー要望 2026-10-03)でエージェントを選ぶと切り替わる。既定は「いちばん最近動いたエージェント」に自動で追従する
+- 画面: StepTabs と LoopFlow は「今見ているエージェント」の STEP を表示する。AgentsPanel(Hero の overview 行の右側の横並びバー。ユーザー要望 2026-10-03)でエージェントを選ぶと切り替わる。既定は「いちばん最近動いたエージェント」に自動で追従する。自動追従のとき、会話欄は main のままにし、STEP 表示だけを追従させる。手で選んだエージェントに出力がまだなければ、その旨を表示する(ユーザー要望 2026-10-03)
 - 子が ask になったら、親ではなく子の STEP 4 が光る(`--warn`)
 
 ### 19.7 UI への反映
@@ -1142,7 +1143,7 @@ workflow:
 |---|---|---|
 | `SubmitPlan({ items: PlanItem[], notes })` | plan | 計画を提出する。各項目に担当モデル・依存関係・触るファイルを含める(§21.2)。承認されると implement へ |
 | `UpdatePlan({ itemIndex, status })` | implement | 項目の進み具合を更新する(`2 / 3 項目`) |
-| `RequestReview({ summary })` | implement | 実装完了を申告する。ハーネスが差分を集めて reviewer を起動する |
+| `RequestReview({ summary })` | implement | 実装完了を申告する。ハーネスが差分を集めて reviewer を起動する。完了(または往復上限)なら、main に最終報告を書く 1 ラウンドだけ与えてから止め、チャットには項目一覧つきの完了通知を出す(ユーザー要望 2026-10-03) |
 | `SkipPlan({ reason })` | plan | 計画を省略して implement へ |
 
 ### 20.4 レビュー段階の流れ
@@ -1651,7 +1652,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Codexの画像入りfunction_call_outputは実通信未確認。[docs/phase0-findings.md](docs/phase0-findings.md)のテキスト結果の往復は画像配列の受理を裏付けない。設定 `providers.codex.toolImageMode: output | user_message`（既定output）で、画像だけを後続userメッセージへ分離する退路を用意する。両方式とも変換テストのみ確認済み。確認手順は [docs/m-codex-image-local-check.md](docs/m-codex-image-local-check.md)。
 - Read は png / jpg / gif / webp を画像ブロック（§5）で返す（XHarnessは1枚あたり5 MB・長辺8000pxを上限とし、超過は縮小せずエラー。2026-10-03の公式Vision資料では直接のClaude APIはbase64換算10 MBで、設計時の5 MBとは異なるが、XHarnessの上限は維持する）。入力欄への貼り付け・ドラッグでも添付できる。
 - 内部形式と各 Provider の変換は対応済みのため、変換の単体テストに画像ケースを足す。画像を扱えないモデルでは添付時に画面で警告する。レシート・レポートでは画像本体を埋め込まず、種別とサイズだけ出す。
-- 実装済み（2026-10-03）。Readの画像結果を文字列に切り詰めず、ToolOutputからtool_resultの画像ブロックへ接続した。Codexのfunction_call_outputへの画像配列の変換を実装したが、実通信は未確認。入力欄はプレビュー・削除・画像のみの送信・送信拒否時の復元に対応する。カタログの `imageInput: false` は非対応、未指定は未確認として警告する。未実測のモデルに対応済みとは記載しない。保存会話は画像本体を保持し、レシート・トレース・HTMLは形式とバイト数だけ記録する。詳細は [docs/m1-progress.md](docs/m1-progress.md)。
+- 実装済み（2026-10-03）。Readの画像結果を文字列に切り詰めず、ToolOutputからtool_resultの画像ブロックへ接続した。Codexのfunction_call_outputへの画像配列の変換を実装したが、実通信は未確認。入力欄はプレビュー・削除・画像のみの送信・送信拒否時の復元に対応する。カタログの `imageInput: false` は非対応として警告する。未指定のモデルは警告しない(2026-10-03、ユーザーが画像入力を確認したため「未確認」の表示をやめた)。未実測のモデルに対応済みとは記載しない。保存会話は画像本体を保持し、レシート・トレース・HTMLは形式とバイト数だけ記録する。詳細は [docs/m1-progress.md](docs/m1-progress.md)。
 
 **M2. スラッシュコマンドの体系**
 - 組み込み: `/clear`（新しい会話。履歴は残す）・`/resume`（履歴から再開）・`/model`・`/cost`（通信回数と使用量。M3 と連動）・`/init`（AGENTS.md の雛形を作業フォルダへ作成。既存は上書きしない）に、既存の `/mode` `/stop` `/compact` `/mcp` を加えて、入力欄の補完に一覧する。

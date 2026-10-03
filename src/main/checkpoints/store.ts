@@ -356,7 +356,21 @@ export class FileCheckpointStore {
             if (digest(bytes) !== entry.before)
               throw new Error("退避ファイルが変更されています。");
             await mkdir(dirname(entry.path), { recursive: true });
-            await writeFile(entry.path, bytes);
+            const temporary =
+              entry.path + ".xharness-restore-" + randomUUID() + ".tmp";
+            try {
+              await writeFile(temporary, bytes, { flag: "wx" });
+              // Recheck after writing the temporary file, before replacement.
+              if (
+                signal.aborted ||
+                (await new FileAccess(".").path(entry.path)) !== entry.path ||
+                (await fingerprint(entry.path)) !== entry.observed
+              )
+                throw new Error("復元対象が変わりました。");
+              await rename(temporary, entry.path);
+            } finally {
+              await rm(temporary, { force: true });
+            }
           }
           restored.push(entry.path);
         } catch {

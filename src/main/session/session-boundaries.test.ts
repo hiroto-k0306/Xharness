@@ -9,6 +9,7 @@ import { SessionStore } from "./store.js";
 import { Repository } from "./repository.js";
 import { FileCheckpointStore } from "../checkpoints/store.js";
 import { JsonFile } from "./store.js";
+import { type UiEvent } from "../../shared/ipc.js";
 
 beforeEach(() =>
   vi.stubGlobal(
@@ -21,6 +22,7 @@ beforeEach(() =>
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 function deferred() {
   let resolve!: () => void;
@@ -34,6 +36,7 @@ async function fixture(worktree = false) {
   const root = join(home, "workspace");
   await mkdir(root);
   const onRequest = vi.fn();
+  const events: UiEvent[] = [];
   const options = {
     home,
     model: "fake",
@@ -53,7 +56,7 @@ async function fixture(worktree = false) {
       ],
     }),
     host: { pickFolder: async () => root },
-    emit: () => {},
+    emit: (e: UiEvent) => events.push(e),
     createTools: () => new Map(),
   };
   const first = new SessionController(options);
@@ -80,7 +83,7 @@ async function fixture(worktree = false) {
   await first.shutdown();
   const controller = new SessionController(options);
   await controller.init();
-  return { home, root, id, controller, onRequest, store };
+  return { home, root, id, controller, onRequest, store, events };
 }
 it("reserves send preparation before history I/O so worktree removal cannot start", async () => {
   const c = await fixture(true);
@@ -252,5 +255,91 @@ it("drains earlier saves and fences late history/save writes without resurrectin
   await expect(
     readFile(join(c.home, "sessions", `${c.id}.jsonl`)),
   ).rejects.toMatchObject({ code: "ENOENT" });
+  await c.controller.shutdown();
+});
+
+it("rechecks the root when a different session starts worktree removal during history I/O", async () => {
+  const c = await fixture(true);
+  const parent = await c.controller.handle({
+    type: "new_session",
+    workspaceId: c.store.get(c.id)!.workspaceId,
+  });
+  if (!parent.ok || !parent.sessionId) throw new Error("fixture failed");
+  await c.controller.handle({
+    type: "close_session",
+    sessionId: parent.sessionId,
+  });
+  const reading = deferred(),
+    historyRelease = deferred(),
+    removing = deferred(),
+    removeRelease = deferred();
+  vi.spyOn(SessionStore.prototype, "messages").mockImplementationOnce(
+    async () => {
+      reading.resolve();
+      await historyRelease.promise;
+      return [];
+    },
+  );
+  vi.spyOn(Repository.prototype, "finish").mockImplementationOnce(async () => {
+    removing.resolve();
+    await removeRelease.promise;
+  });
+  const send = c.controller.handle({
+    type: "send",
+    sessionId: parent.sessionId,
+    text: "offline",
+  });
+  await reading.promise;
+  const remove = c.controller.handle({
+    type: "finish_worktree",
+    sessionId: c.id,
+    action: "remove",
+    confirmed: true,
+  });
+  await removing.promise;
+  historyRelease.resolve();
+  expect(await send).toMatchObject({
+    ok: false,
+    error: "Workspace writer busy",
+  });
+  expect(c.onRequest).not.toHaveBeenCalled();
+  removeRelease.resolve();
+  await remove;
+  await c.controller.shutdown();
+});
+
+it("keeps due scheduled work pending while send preparation holds the shared reservation", async () => {
+  const c = await fixture();
+  vi.useFakeTimers();
+  expect(
+    await c.controller.handle({
+      type: "send",
+      sessionId: c.id,
+      text: "/schedule after 1 queued",
+    }),
+  ).toMatchObject({ ok: true });
+  const entered = deferred(),
+    release = deferred();
+  vi.spyOn(SessionStore.prototype, "messages").mockImplementationOnce(
+    async () => {
+      entered.resolve();
+      await release.promise;
+      return [];
+    },
+  );
+  const send = c.controller.handle({
+    type: "send",
+    sessionId: c.id,
+    text: "offline",
+  });
+  await entered.promise;
+  await vi.advanceTimersByTimeAsync(1100);
+  expect(c.onRequest).not.toHaveBeenCalled();
+  expect(JSON.stringify(c.events)).not.toContain("送信を開始できなかった");
+  release.resolve();
+  await send;
+  await vi.waitFor(() => expect(c.onRequest).toHaveBeenCalledTimes(2), {
+    timeout: 10000,
+  });
   await c.controller.shutdown();
 });

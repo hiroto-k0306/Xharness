@@ -89,7 +89,9 @@ export class SessionController {
   constructor(private readonly options: ControllerOptions) {
     this.schedules = new SessionSchedules({
       now: () => Date.now(),
-      busy: (id) => (this.runtimes.get(id)?.status ?? "idle") !== "idle",
+      busy: (id) =>
+        this.ctx.sessionBusy.has(id) ||
+        (this.runtimes.get(id)?.status ?? "idle") !== "idle",
       send: (id, text, signal) => this.send(id, text, undefined, signal),
       notice: (sessionId, message) =>
         this.options.emit({
@@ -762,6 +764,10 @@ export class SessionController {
       return this.setModel(sessionId, model, effort as Effort | undefined);
     }
     const rt = await this.load(sessionId);
+    // Another session's worktree operation can claim the root while history
+    // loads. Our own session reservation prevents same-session deletion.
+    if (root && this.ctx.worktreeBusy.has(root))
+      return { ok: false, error: "Workspace writer busy" };
     if (/^\/(?:undo|rewind)(?:\s|$)/.test(command)) {
       const count = rewindTurns(command);
       if (!count)

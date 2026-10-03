@@ -6,6 +6,7 @@ import {
   relative,
   resolve,
   matchesGlob,
+  isAbsolute,
 } from "node:path";
 import ignore, { type Ignore } from "ignore";
 import { ToolExecutionError } from "./errors.js";
@@ -62,6 +63,8 @@ export async function nodeSearch(
   const ancestors: string[] = [];
   let ancestor = dirname(target);
   while (true) {
+    const rel = relative(base, ancestor);
+    if (rel.startsWith("..") || isAbsolute(rel)) break;
     ancestors.unshift(ancestor);
     if (ancestor === base || dirname(ancestor) === ancestor) break;
     ancestor = dirname(ancestor);

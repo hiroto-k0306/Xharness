@@ -1,11 +1,12 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { resolve, join, sep } from "node:path";
 import { spawnSync } from "node:child_process";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FileAccess, fileTools } from "./files.js";
 import { shellSearchTools } from "./shell-search.js";
 import { trimOutput } from "./registry.js";
 import { redact } from "../core/redact.js";
+import { cliAvailable } from "./environment.js";
 
 let directory: string;
 const testRoot = resolve("spike/.out");
@@ -100,6 +101,7 @@ describe("file tools", () => {
 // PowerShell 7 が無い環境(Linux のクラウドなど)では PowerShell 依存の試験を飛ばす。
 const hasPowerShell =
   spawnSync("pwsh", ["-NoProfile", "-Command", "1"]).status === 0;
+const hasRg = await cliAvailable("rg");
 describe("PowerShell and ripgrep tools", () => {
   it("finds files/content and treats no matches as success", async () => {
     await writeFile(join(directory, "a.txt"), "needle\n");
@@ -119,6 +121,37 @@ describe("PowerShell and ripgrep tools", () => {
     expect(
       (await tools.get("Grep")!.execute({ pattern: "[" }, signal())).isError,
     ).toBe(true);
+  });
+  it.skipIf(!hasRg)("runs ripgrep when available", async () => {
+    await writeFile(join(directory, "a.txt"), "needle");
+    const result = JSON.parse(
+      (
+        await shellSearchTools(directory)
+          .get("Glob")!
+          .execute({ pattern: "*.txt" }, signal())
+      ).content,
+    );
+    expect(result.engine).not.toBe("node");
+    expect(result.output).toContain("a.txt");
+  });
+  it("runs the Node fallback in a workspace under an ignored parent", async () => {
+    await writeFile(join(directory, "a.txt"), "needle");
+    vi.stubEnv("PATH", directory);
+    try {
+      const tools = shellSearchTools(directory);
+      for (const [name, pattern] of [
+        ["Glob", "*.txt"],
+        ["Grep", "needle"],
+      ]) {
+        const result = JSON.parse(
+          (await tools.get(name!)!.execute({ pattern }, signal())).content,
+        );
+        expect(result.engine).toBe("node");
+        expect(result.output).toContain("a.txt");
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
   it.skipIf(!hasPowerShell)(
     "executes PowerShell and bounds timeout values",

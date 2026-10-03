@@ -1,4 +1,6 @@
 import { STEP_NODES } from "../shared/ipc.js";
+import { DEFAULT_IMAGES } from "../shared/images.js";
+import { builtinCommands } from "../shared/commands.js";
 import { AgentsPanel } from "./components/AgentsPanel.js";
 import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
 import { PhaseBar } from "./components/PhaseBar.js";
@@ -129,6 +131,7 @@ export function App() {
         usage={
           <UsagePopover
             usage={s.usage}
+            calls={session?.llmCalls}
             fallback={app.fallback}
             open={usageOpen}
             onToggle={() => setUsageOpen((v) => !v)}
@@ -319,10 +322,15 @@ export function App() {
           <div className={styles.agentArea}>
             <div className={styles.middle} data-pane={pane}>
               <Transcript
+                key={`${current}:${agentId}`}
                 items={activeView?.items ?? []}
                 running={!!view?.running}
                 model={model}
                 onCommand={(text) => void s.send(text)}
+                blocked={
+                  waiting || !!view?.rewind || session?.status !== "idle"
+                }
+                onReply={agent ? undefined : s.send}
               />
               {app.phase4 && (
                 <LoopFlow view={activeView} model={agent?.model ?? model} />
@@ -436,7 +444,18 @@ export function App() {
               }}
             />
           )}
+          {(session?.imageBytes ?? 0) >
+            (app.images?.warnSessionBytes ??
+              DEFAULT_IMAGES.warnSessionBytes) && (
+            <div role="status">
+              セッションの画像合計が警告値を超えています。再送する履歴を減らすには
+              /compact を実行してください（保存済み画像は残ります）。
+            </div>
+          )}
           <PromptLine
+            maxImages={app.images?.maxPerMessage}
+            sessionId={current}
+            imageInput={app.models?.find((m) => m.id === model)?.imageInput}
             onStop={s.abort}
             onModel={() => setModelOpen((v) => !v)}
             mode={
@@ -452,16 +471,8 @@ export function App() {
                 });
             }}
             suggestions={[
-              { value: "/stop", description: "LLMに送信せず実行を停止" },
-              {
-                value: "/undo",
-                description: "直近ターンの変更を確認して巻き戻す",
-              },
-              {
-                value: "/rewind",
-                description: "nターン前まで確認して巻き戻す",
-              },
-              { value: "/mcp", description: "MCP サーバーの状態と操作" },
+              ...builtinCommands.filter((c) => c.value !== "/exit"),
+              ...(app.commands ?? []),
               ...(view?.mcp?.prompts ?? []).map((p) => ({
                 value: p.command,
                 args: p.arguments
@@ -477,7 +488,7 @@ export function App() {
             modelColor={
               providerOf(model) === "codex" ? "var(--codex)" : "var(--claude)"
             }
-            onSubmit={(text) => s.send(text)}
+            onSubmit={(text, images) => s.send(text, images)}
           />
         </main>
       </div>

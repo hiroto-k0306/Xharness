@@ -12,7 +12,7 @@ export class Changes {
     return new Map(
       [...tools].map(([name, tool]) => [
         name,
-        ["Write", "Edit"].includes(name)
+        ["Write", "Edit", "MultiEdit"].includes(name)
           ? {
               ...tool,
               execute: async (

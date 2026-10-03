@@ -1,4 +1,5 @@
 import { traceStream, captureTraceResponse } from "../../core/trace.js";
+import { reserveLlmCall } from "../../core/llm-budget.js";
 import { randomUUID } from "node:crypto";
 import {
   readCodexCredentials,
@@ -13,11 +14,12 @@ import {
   type ProviderEvent,
   type ProviderRequest,
 } from "../provider.js";
-import { toCodexRequest } from "./convert.js";
+import { toCodexRequest, type ToolImageMode } from "./convert.js";
 import { decodeCodexStream } from "./stream.js";
 import { codexRetryAfter, codexUsage } from "./usage.js";
 
 export interface CodexAdapterOptions {
+  toolImageMode?: () => Promise<ToolImageMode>;
   fetcher?: typeof fetch;
   getCredentials?: () => Promise<CodexCredentials>;
   catalog?: CatalogModel[];
@@ -53,7 +55,8 @@ export class CodexAdapter implements Provider {
       "request";
     try {
       signal.throwIfAborted();
-      const body = JSON.stringify(toCodexRequest(request, this.catalog));
+      const mode = (await this.options.toolImageMode?.()) ?? "output";
+      const body = JSON.stringify(toCodexRequest(request, this.catalog, mode));
       captureTraceResponse({ requestBody: body });
       stage = "authentication";
       const auth = await (
@@ -61,6 +64,7 @@ export class CodexAdapter implements Provider {
       )();
       signal.throwIfAborted();
       stage = "transport";
+      reserveLlmCall(signal);
       captureTraceResponse({ requestDispatched: true });
       const id = request.sessionId ?? this.threadId;
       const response = await (this.options.fetcher ?? fetch)(

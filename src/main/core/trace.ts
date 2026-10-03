@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { imageMetadata } from "../../shared/images.js";
 import { createTraceStorage, type TraceStorageOptions } from "./trace-store.js";
 
 export interface TraceRecord {
@@ -24,6 +25,8 @@ export interface TraceRecord {
 export function traceJson(value: unknown, clean: (s: string) => string) {
   return clean(
     JSON.stringify(value, (key, v: unknown) => {
+      const image = imageMetadata(v);
+      if (image !== v) return image;
       if (
         /^(authorization|chatgpt-account-id|account_?id|access_?token|refresh_?token|password|secret|signature|encrypted_content|opaque)$/i.test(
           key,

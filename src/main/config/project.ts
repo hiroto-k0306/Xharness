@@ -13,6 +13,7 @@ import { localRulesPath } from "./trust.js";
 import { randomUUID } from "node:crypto";
 import { FileAccess } from "../tools/files.js";
 export interface ProjectConfig {
+  limits: import("../../shared/llm-calls.js").LlmLimits;
   checkpoints?: { retentionDays: number };
   permissions: PermissionConfig;
   context: { compactThreshold: number; memoryFiles: string[] };
@@ -52,11 +53,25 @@ export async function loadProjectConfig(
     : {};
   const local = cwd ? await document(await localRulesPath(home, cwd)) : {};
   const result: ProjectConfig = {
+    limits: { llmCallsPerTurn: 0, llmCallsPerSession: 0 },
     checkpoints: { retentionDays: 30 },
     permissions: { mode: "default", rules: [] },
     context: { compactThreshold: 0.8, memoryFiles: ["AGENTS.md", "CLAUDE.md"] },
   };
   const held: { rules: Rule[]; mode?: PermissionMode } = { rules: [] };
+  const limits = user.limits as Record<string, unknown> | undefined;
+  if (
+    limits !== undefined &&
+    (!limits || typeof limits !== "object" || Array.isArray(limits))
+  )
+    throw new Error("通信回数の上限は0以上の整数で指定してください。");
+  for (const key of ["llmCallsPerTurn", "llmCallsPerSession"] as const) {
+    const value = limits?.[key];
+    if (value === undefined) continue;
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
+      throw new Error("通信回数の上限は0以上の整数で指定してください。");
+    result.limits[key] = value;
+  }
   const retentionDays = (
     user.checkpoints as { retentionDays?: unknown } | undefined
   )?.retentionDays;

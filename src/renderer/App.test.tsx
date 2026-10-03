@@ -1,12 +1,14 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import image from "../../test/fixtures/images/pixel.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { FakeProvider } from "../main/providers/fake/fake-provider.js";
 import { SessionController } from "../main/session/controller.js";
 import { type Tool } from "../main/tools/registry.js";
+import { lifecycleTools } from "../main/tools/lifecycle.js";
 import { parseCommand, type HarnessApi, type UiEvent } from "../shared/ipc.js";
 import { App } from "./App.js";
 import { useStore } from "./state/store.js";
@@ -21,13 +23,14 @@ const readTool: Tool = {
 };
 let controller: SessionController;
 
-beforeEach(async () => {
+async function setup(provider = new FakeProvider(), config?: string) {
   // テストごとに独立した配線にする(前のテストの遅れたイベントを混ぜない)
   const bus: { listener?: (e: UiEvent) => void } = {};
   const home = await mkdtemp(join(tmpdir(), "xh-app-"));
+  if (config) await writeFile(join(home, "config.yaml"), config);
   const folder = await mkdtemp(join(tmpdir(), "xh-folder-"));
   controller = new SessionController({
-    provider: new FakeProvider(),
+    provider,
     model: "fake",
     home,
     fake: true,
@@ -38,7 +41,7 @@ beforeEach(async () => {
     emit: (e) => {
       setTimeout(() => act(() => bus.listener?.(e)), 0);
     },
-    createTools: () => new Map([["Read", readTool]]),
+    createTools: () => new Map([...lifecycleTools(), ["Read", readTool]]),
   });
   await controller.init();
   const api: HarnessApi = {
@@ -65,9 +68,82 @@ beforeEach(async () => {
       pickerOpen: false,
     },
   });
-});
+}
+beforeEach(() => setup());
 
 describe("App wired to the real SessionController", () => {
+  it("warns when saved session images exceed the configured threshold without blocking", async () => {
+    await setup(
+      new FakeProvider(),
+      "images: {maxPerMessage: 2, warnSessionBytes: 1}",
+    );
+    render(<App />);
+    await screen.findByText("+ new session");
+    await userEvent.type(screen.getByLabelText("prompt"), "hello{Enter}");
+    await screen.findByText("pong");
+    await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
+    await act(async () => {
+      expect(
+        await window.harness.command({
+          type: "send",
+          sessionId: useStore.getState().app!.currentSessionId!,
+          text: "",
+          images: [image],
+        }),
+      ).toMatchObject({ ok: true });
+    });
+    expect(
+      await screen.findByText(/セッションの画像合計が警告値/),
+    ).toHaveTextContent("/compact");
+    await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
+  });
+  it("answers AskUserQuestion through the normal send command and provider history", async () => {
+    const requests: string[] = [];
+    await setup(
+      new FakeProvider({
+        script: [
+          {
+            type: "message",
+            stopReason: "tool_use",
+            message: {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use",
+                  id: "q",
+                  name: "AskUserQuestion",
+                  input: {
+                    question: "どちらで進めますか？",
+                    options: ["修正する", "調査する"],
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        onRequest: (request) => {
+          requests.push(
+            request.messages
+              .at(-1)!
+              .content.flatMap((b) => (b.type === "text" ? [b.text] : []))
+              .join("\n"),
+          );
+        },
+      }),
+    );
+    render(<App />);
+    await screen.findByText("+ new session");
+    await userEvent.type(screen.getByLabelText("prompt"), "質問して{Enter}");
+    const button = await screen.findByRole("button", { name: "1. 修正する" });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+    expect(
+      await within(screen.getByTestId("transcript")).findByText("修正する"),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("pong")).toBeInTheDocument();
+    expect(requests).toEqual(["質問して", "修正する"]);
+    expect(button).toBeDisabled();
+  });
   it("boots, creates a session on first send, streams a reply", async () => {
     render(<App />);
     expect(await screen.findByText("+ new session")).toBeInTheDocument();

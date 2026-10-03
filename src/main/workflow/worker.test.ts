@@ -40,11 +40,15 @@ it("keeps a real merge conflict and worker branch for main, instead of overwriti
   await git(["init", "-b", "session"]);
   await writeFile(join(home, "shared.txt"), "base\n");
   await commit("base");
+  let workerNewline = "\n";
   const provider = new FakeProvider({
     provider: "codex",
     script: [
       call("Read", { path: "shared.txt" }),
-      call("Write", { path: "shared.txt", content: "worker\n" }),
+      call("MultiEdit", {
+        path: "shared.txt",
+        edits: [{ old: "base", new: "worker" }],
+      }),
       call("ReportDone", {
         summary: "done",
         changedFiles: ["shared.txt"],
@@ -61,7 +65,12 @@ it("keeps a real merge conflict and worker branch for main, instead of overwriti
       router: new Router([provider]),
       createTools: (cwd: string) => defaultTools(cwd, false),
     },
-    permission: async (call) => {
+    permission: async (call, context) => {
+      if (call.name === "Read")
+        workerNewline =
+          /\r?\n/.exec(
+            await readFile(join(context.cwd, "shared.txt"), "utf8"),
+          )?.[0] ?? "\n";
       if (call.name === "ReportDone") {
         await writeFile(join(home, "shared.txt"), "main\n");
         await commit("main change");
@@ -104,7 +113,7 @@ it("keeps a real merge conflict and worker branch for main, instead of overwriti
       join(state, "worktrees", "conflict", "conflict-w1", "shared.txt"),
       "utf8",
     ),
-  ).toBe("worker\n");
+  ).toBe(`worker${workerNewline}`);
   expect(await git(["branch", "--list", "xh/conflict-w1"])).toContain(
     "xh/conflict-w1",
   );

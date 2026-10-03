@@ -1,4 +1,5 @@
 import { beginTrace, withTraceFields } from "./trace.js";
+import { llmStopCause } from "./llm-budget.js";
 import { hookSnapshot, type HookResult } from "../hooks/step-hooks.js";
 import { createSteps } from "./loop-steps.js";
 import {
@@ -283,6 +284,6 @@ async function runTracedTurn(options: LoopOptions, signal: AbortSignal) {
   return {
     messages: ctx.messages,
     receipts: ctx.receipts,
-    stopCause: ctx.stopCause ?? "round_limit",
+    stopCause: llmStopCause() ?? ctx.stopCause ?? "round_limit",
   };
 }

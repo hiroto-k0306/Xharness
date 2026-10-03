@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, safeStorage, shell } from "electron";
 import { homedir } from "node:os";
+import { loadMainConfig } from "./config/config.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStartupArgs, resolveStartup } from "./config/config.js";
@@ -109,7 +110,13 @@ async function start() {
             : join(app.getAppPath(), "test/fixtures/codex"),
         }),
       ]
-    : [new ClaudeAdapter(), new CodexAdapter()];
+    : [
+        new ClaudeAdapter(),
+        new CodexAdapter({
+          toolImageMode: async () =>
+            (await loadMainConfig(home)).providers.codex.toolImageMode,
+        }),
+      ];
   const secrets = fake ? [] : await readLocalSecrets();
   const authentication = fake
     ? undefined

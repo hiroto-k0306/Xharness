@@ -1,4 +1,5 @@
 import { traceStream } from "../../core/trace.js";
+import { reserveLlmCall } from "../../core/llm-budget.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -188,6 +189,7 @@ export class FakeProvider implements Provider {
     request: ProviderRequest,
     signal: AbortSignal,
   ): AsyncGenerator<ProviderEvent> {
+    reserveLlmCall(signal, true);
     this.options.onRequest?.(structuredClone(request));
     const step = this.script.shift() ?? routeFake(request, this.id);
     try {

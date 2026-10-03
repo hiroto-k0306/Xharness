@@ -6,6 +6,7 @@ import {
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ReceiptReplay } from "../../shared/replay.js";
+import { imageMetadata } from "../../shared/images.js";
 import { readReceiptReplay } from "./replay.js";
 import {
   initialRequest,
@@ -31,6 +32,8 @@ const LIMIT = 32_000_000;
 function sanitize(value: unknown, clean: (text: string) => string): string {
   return clean(
     JSON.stringify(value, (key, v: unknown) => {
+      const image = imageMetadata(v);
+      if (image !== v) return image;
       if (
         /^(?:authorization|chatgpt-account-id|account_?id|access_?token|refresh_?token|password|secret|signature|encrypted_content|opaque)$/i.test(
           key,

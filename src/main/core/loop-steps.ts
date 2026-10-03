@@ -1,4 +1,5 @@
 import { traceOperation } from "./trace.js";
+import { imageMetadata } from "../../shared/images.js";
 import { type ContentBlock } from "./types.js";
 import { type ProviderEvent } from "../providers/provider.js";
 import { messagesForProvider } from "./messages.js";
@@ -68,21 +69,31 @@ export function appendResults(ctx: LoopContext, options: LoopOptions) {
     return {
       type: "tool_result",
       toolUseId: item.call.id,
-      content: (item.tool?.boundedOutput ? (text: string) => text : trimOutput)(
-        clean(
-          (item.result.error ? JSON.stringify(item.result.error) + "\n" : "") +
-            (item.result.error &&
-            item.result.content === JSON.stringify(item.result.error)
-              ? ""
-              : item.result.error &&
-                  item.result.content.startsWith(item.result.error.message)
-                ? item.result.content
-                    .slice(item.result.error.message.length)
-                    .trimStart()
-                : item.result.content) +
-            injected,
-        ),
-      ),
+      content:
+        item.result.blocks?.length && !item.result.isError
+          ? [
+              { type: "text", text: clean(item.result.content + injected) },
+              ...item.result.blocks,
+            ]
+          : (item.tool?.boundedOutput ? (text: string) => text : trimOutput)(
+              clean(
+                (item.result.error
+                  ? JSON.stringify(item.result.error) + "\n"
+                  : "") +
+                  (item.result.error &&
+                  item.result.content === JSON.stringify(item.result.error)
+                    ? ""
+                    : item.result.error &&
+                        item.result.content.startsWith(
+                          item.result.error.message,
+                        )
+                      ? item.result.content
+                          .slice(item.result.error.message.length)
+                          .trimStart()
+                      : item.result.content) +
+                  injected,
+              ),
+            ),
       isError: item.result.isError,
     };
   });
@@ -422,9 +433,17 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
               startedAt: ctx.startedAt,
               completedAt,
               usage: ctx.completion?.usage,
-              input: ctx.request,
+              input: ctx.request
+                ? JSON.parse(
+                    JSON.stringify(ctx.request, (_key, value) =>
+                      imageMetadata(value),
+                    ),
+                  )
+                : undefined,
               output: ctx.completion
-                ? JSON.stringify(ctx.completion.message)
+                ? JSON.stringify(ctx.completion.message, (_key, value) =>
+                    imageMetadata(value),
+                  )
                 : undefined,
             },
             ...ctx.pending.map((item) => ({

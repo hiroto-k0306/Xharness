@@ -1,8 +1,22 @@
-import { createHash } from "node:crypto";
-import { readFile, writeFile, mkdir, stat, realpath } from "node:fs/promises";
-import { resolve, dirname, basename } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  readFile,
+  writeFile,
+  mkdir,
+  stat,
+  realpath,
+  rename,
+  rm,
+} from "node:fs/promises";
+import { resolve, dirname, basename, extname } from "node:path";
+import {
+  imageInfo,
+  MAX_IMAGE_BYTES,
+  IMAGE_ERROR,
+} from "../../shared/images.js";
 import { type Tool, type ToolRegistry } from "./registry.js";
 import { failure } from "./errors.js";
+import { textFormat, decodeText, UTF8_ERROR } from "./text-format.js";
 
 export interface Snapshot {
   hash: string;
@@ -75,36 +89,79 @@ export function stringArg(args: Args, key: string): string {
   if (typeof args[key] !== "string") throw new Error(`Invalid ${key}`);
   return args[key];
 }
+function editArguments(args: Args): { old: string; new: string }[] {
+  if (!Array.isArray(args.edits) || !args.edits.length)
+    throw new Error("edits is empty");
+  return args.edits.map((value: unknown) => {
+    const edit = argumentsObject(value);
+    if (Object.keys(edit).some((key) => !["old", "new"].includes(key)))
+      throw new Error("Unknown edit argument");
+    const old = stringArg(edit, "old");
+    if (!old) throw new Error("old is empty");
+    return { old, new: stringArg(edit, "new") };
+  });
+}
 export function fileTools(access: FileAccess): ToolRegistry {
   const tools: ToolRegistry = new Map();
-  for (const name of ["Read", "Write", "Edit"] as const) {
+  for (const name of ["Read", "Write", "Edit", "MultiEdit"] as const) {
     const properties =
       name === "Read"
         ? { path: { type: "string" } }
         : name === "Write"
           ? { path: { type: "string" }, content: { type: "string" } }
-          : {
-              path: { type: "string" },
-              oldString: { type: "string" },
-              newString: { type: "string" },
-            };
+          : name === "MultiEdit"
+            ? {
+                path: { type: "string" },
+                edits: {
+                  type: "array",
+                  minItems: 1,
+                  items: {
+                    type: "object",
+                    properties: {
+                      old: { type: "string", minLength: 1 },
+                      new: { type: "string" },
+                    },
+                    required: ["old", "new"],
+                    additionalProperties: false,
+                  },
+                },
+              }
+            : {
+                path: { type: "string" },
+                oldString: { type: "string" },
+                newString: { type: "string" },
+              };
     const required =
       name === "Read"
         ? ["path"]
         : name === "Write"
           ? ["path", "content"]
-          : ["path", "oldString", "newString"];
+          : name === "MultiEdit"
+            ? ["path", "edits"]
+            : ["path", "oldString", "newString"];
     const validate = async (input: unknown) => {
       try {
         const args = argumentsObject(input);
         if (Object.keys(args).some((k) => !required.includes(k)))
           return "Unknown argument";
-        for (const key of required) stringArg(args, key);
+        for (const key of required) if (key !== "edits") stringArg(args, key);
+        if (name === "MultiEdit") editArguments(args);
         if (!stringArg(args, "path").trim()) return "Path is empty";
         if (name === "Edit" && !stringArg(args, "oldString"))
           return "oldString is empty";
         const path = await access.path(stringArg(args, "path"));
-        if (name === "Edit" && !access.reads.has(path))
+        if (name !== "Read" || !/\.(png|jpe?g|gif|webp)$/i.test(path)) {
+          try {
+            if (decodeText(await readFile(path)) === undefined)
+              return UTF8_ERROR;
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+        }
+        if (
+          (name === "Edit" || name === "MultiEdit") &&
+          !access.reads.has(path)
+        )
           return "Read the existing file before editing";
         if (name !== "Read") return await access.check(path);
       } catch {
@@ -117,10 +174,12 @@ export function fileTools(access: FileAccess): ToolRegistry {
         name,
         description:
           name === "Read"
-            ? "Read a UTF-8 file before editing it"
+            ? "Read a UTF-8 file or PNG/JPEG/GIF/WebP image (max 5 MB, 8000px; no resizing) before editing it"
             : name === "Write"
-              ? "Write a UTF-8 file; existing files require Read first"
-              : "Replace exactly one occurrence in a previously read file",
+              ? "Write a UTF-8 file; existing files require Read first. Preserve newline/BOM; newline-free existing files keep input newlines. New .bat/.cmd use CRLF; other new files use LF"
+              : name === "MultiEdit"
+                ? "Apply ordered edits to one previously read UTF-8 file atomically; each old must match exactly once in the result of preceding edits. Preserve newline/BOM; no write if any edit fails"
+                : "Replace exactly one occurrence in a previously read UTF-8 file, preserving newline/BOM",
         inputSchema: {
           type: "object",
           properties,
@@ -137,13 +196,50 @@ export function fileTools(access: FileAccess): ToolRegistry {
           return {
             content: invalid,
             isError: true,
-            error: failure("invalid_args"),
+            error:
+              invalid === UTF8_ERROR
+                ? { kind: "invalid_args", message: UTF8_ERROR }
+                : failure("invalid_args"),
           };
         const args = argumentsObject(input);
         const path = await access.path(stringArg(args, "path"));
         if (name === "Read") {
+          const image = /\.(png|jpe?g|gif|webp)$/i.test(extname(path));
+          if (image && (await stat(path)).size > MAX_IMAGE_BYTES)
+            return {
+              content: IMAGE_ERROR,
+              isError: true,
+              error: { kind: "invalid_args", message: IMAGE_ERROR },
+            };
           const bytes = await readFile(path);
-          const content = bytes.toString("utf8");
+          if (image) {
+            try {
+              const info = imageInfo(bytes);
+              return {
+                content: JSON.stringify(info),
+                blocks: [
+                  {
+                    type: "image",
+                    mediaType: info.mediaType,
+                    data: bytes.toString("base64"),
+                  },
+                ],
+              };
+            } catch {
+              return {
+                content: IMAGE_ERROR,
+                isError: true,
+                error: { kind: "invalid_args", message: IMAGE_ERROR },
+              };
+            }
+          }
+          const content = decodeText(bytes);
+          if (content === undefined)
+            return {
+              content: UTF8_ERROR,
+              isError: true,
+              error: { kind: "invalid_args", message: UTF8_ERROR },
+            };
           const info = await stat(path);
           const snapshot = {
             hash: createHash("sha256").update(bytes).digest("hex"),
@@ -158,25 +254,53 @@ export function fileTools(access: FileAccess): ToolRegistry {
             }),
           };
         }
-        let content = stringArg(
-          args,
-          name === "Write" ? "content" : "newString",
-        );
-        if (name === "Edit") {
-          const original = await readFile(path, "utf8");
-          const old = stringArg(args, "oldString");
-          const first = original.indexOf(old);
-          if (first < 0 || original.indexOf(old, first + 1) >= 0)
+        let content =
+          name === "MultiEdit"
+            ? ""
+            : stringArg(args, name === "Write" ? "content" : "newString");
+        let original: string | undefined;
+        try {
+          original = decodeText(await readFile(path));
+          if (original === undefined)
             return {
-              content: "oldString must match exactly once",
-              error: failure("invalid_args"),
+              content: UTF8_ERROR,
               isError: true,
+              error: { kind: "invalid_args", message: UTF8_ERROR },
             };
-          content =
-            original.slice(0, first) +
-            content +
-            original.slice(first + old.length);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         }
+        const format = textFormat(original, path);
+        if (name === "Edit" || name === "MultiEdit") {
+          let body = format.body!;
+          const edits =
+            name === "MultiEdit"
+              ? editArguments(args)
+              : [{ old: stringArg(args, "oldString"), new: content }];
+          for (const [index, edit] of edits.entries()) {
+            const old = format.normalize(edit.old.replace(/^\ufeff/, ""));
+            if (!old)
+              return {
+                content: "oldString must contain text other than BOM",
+                isError: true,
+                error: failure("invalid_args"),
+              };
+            const first = body.indexOf(old);
+            if (first < 0 || body.indexOf(old, first + 1) >= 0)
+              return {
+                content: `Edit ${index + 1}: oldString must match exactly once${format.mixed ? "\nCRLFとLFが混在しています。oldStringを1行ずつに分けるか、行をまたがない範囲で指定してください。" : ""}`,
+                error: failure("invalid_args"),
+                isError: true,
+              };
+            body =
+              body.slice(0, first) +
+              format.normalize(
+                first === 0 ? edit.new.replace(/^\ufeff/, "") : edit.new,
+              ) +
+              body.slice(first + old.length);
+          }
+          content = format.wrap(body);
+        } else content = format.write(content);
         signal.throwIfAborted();
         const changed = await access.check(path);
         if (changed)
@@ -195,7 +319,30 @@ export function fileTools(access: FileAccess): ToolRegistry {
             error: failure("invalid_args"),
           };
         await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, content, "utf8");
+        if (name === "MultiEdit") {
+          const temp = resolve(
+            dirname(path),
+            `.xharness-edit-${randomUUID()}.tmp`,
+          );
+          try {
+            await writeFile(temp, content, {
+              encoding: "utf8",
+              flag: "wx",
+              mode: (await stat(path)).mode,
+            });
+            signal.throwIfAborted();
+            const changed = await access.check(path);
+            if (changed)
+              return {
+                content: changed,
+                isError: true,
+                error: failure("invalid_args"),
+              };
+            await rename(temp, path);
+          } finally {
+            await rm(temp, { force: true });
+          }
+        } else await writeFile(path, content, "utf8");
         await context?.checkpoint?.afterWrite(
           path,
           Buffer.from(content, "utf8"),

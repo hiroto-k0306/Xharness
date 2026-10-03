@@ -1,4 +1,5 @@
 import { type Message } from "../core/types.js";
+import { imageMetadata } from "../../shared/images.js";
 export interface Checkpoint {
   covered: number;
   summary: string;
@@ -12,7 +13,7 @@ export function estimateTokens(value: unknown): number {
 function ordinaryUser(message: Message) {
   return (
     message.role === "user" &&
-    message.content.some((b) => b.type === "text") &&
+    message.content.some((b) => b.type === "text" || b.type === "image") &&
     !message.content.some((b) => b.type === "tool_result")
   );
 }
@@ -64,7 +65,7 @@ export function compactHistory(
         lines.push(`tool ${b.name}: ${JSON.stringify(b.input).slice(0, 400)}`);
       if (b.type === "tool_result")
         lines.push(
-          `untrusted tool result ${b.toolUseId}: ${JSON.stringify(b.content).slice(0, 300)}`,
+          `untrusted tool result ${b.toolUseId}: ${JSON.stringify(b.content, (_, v) => imageMetadata(v)).slice(0, 300)}`,
         );
     }
   const full = lines.join("\n");

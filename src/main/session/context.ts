@@ -1,6 +1,7 @@
 // SessionController と、それを分割した各モジュールが共有する型と小さな関数。
 // electron を import しない。
 import { stat } from "node:fs/promises";
+import { traceJson } from "../core/trace.js";
 import { type Authentication } from "../auth/authentication.js";
 import { join } from "node:path";
 import { type MainConfig, type WebSettings } from "../config/config.js";
@@ -81,6 +82,7 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  llmCalls?: import("../../shared/llm-calls.js").LlmCalls;
   rewindPrompt?: {
     requestId: string;
     resolve(choice: import("../../shared/rewind.js").RewindChoice | null): void;
@@ -172,12 +174,17 @@ export interface ControllerContext {
   dropRuntime(id: string): void;
   load(id: string): Promise<Runtime>;
   emitState(): Promise<void>;
+  refreshCommands?(): Promise<void>;
   record(rt: Runtime, receipt: Receipt): Promise<void>;
   /** セッションが属するワークスペースのルート(指定なしなら undefined) */
   workspaceRoot(session: StoredSession): string | undefined;
 }
 
 export const STOP_NOTICE: Record<string, string> = {
+  budget_exceeded:
+    "通信回数の上限に達したため停止しました。上限の設定を確認してから新しい指示を入力してください。",
+  budget_storage_failed:
+    "通信回数を保存・読み込みできないため停止しました。保存先を確認してください。",
   agent_stopped:
     "エージェントの要求で停止しました。再開する場合は新しい指示を入力してください。",
   awaiting_user: "ユーザーの返答待ちです。入力欄から回答してください。",
@@ -223,7 +230,7 @@ export function safeInput(
   clean: (s: string) => string,
 ): unknown {
   try {
-    return JSON.parse(clean(JSON.stringify(input) ?? "null"));
+    return JSON.parse(traceJson(input, clean));
   } catch {
     return clean(String(input));
   }

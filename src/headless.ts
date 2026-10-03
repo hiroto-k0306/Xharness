@@ -1,4 +1,17 @@
 import { withSessionTrace } from "./main/core/trace.js";
+import { readLlmCalls, withSessionCalls } from "./main/session/llm-calls.js";
+import {
+  costSummary,
+  expandCommand,
+  initAgents,
+  userCommands,
+} from "./main/session/slash-commands.js";
+import { reservedCommand } from "./shared/commands.js";
+import { ReceiptStore } from "./main/session/receipts.js";
+import { pad, toReceipt } from "./main/session/context.js";
+import { type Receipt } from "./shared/ipc.js";
+import { loadModelCatalog } from "./main/config/model-catalog.js";
+import { LlmBudgetError } from "./main/core/llm-budget.js";
 import { projectHookApproval } from "./main/hooks/shell-hooks.js";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -210,7 +223,13 @@ export async function headless(args = process.argv.slice(2)) {
           ),
         }),
       ]
-    : [new ClaudeAdapter(), new CodexAdapter()];
+    : [
+        new ClaudeAdapter(),
+        new CodexAdapter({
+          toolImageMode: async () =>
+            (await loadMainConfig(home)).providers.codex.toolImageMode,
+        }),
+      ];
   const router = new Router(providers, config?.fallback, config?.aliases);
   router.provider(model);
   const access = new FileAccess(cwd);
@@ -296,6 +315,15 @@ export async function headless(args = process.argv.slice(2)) {
   let controller: AbortController | undefined;
   let workflow: WorkflowRuntime | undefined;
   let closed = false;
+  let resumeNext: string | undefined;
+  const receiptStore = new ReceiptStore(home);
+  let receiptSeq = Math.max(
+    0,
+    ...(await receiptStore.read(session.id)).map(
+      (r) => Number(r.id.slice(1)) || 0,
+    ),
+  );
+  const childReceipts: Receipt[] = [];
   const interrupt = () => {
     if (controller) controller.abort();
     else {
@@ -367,6 +395,46 @@ export async function headless(args = process.argv.slice(2)) {
         break;
       }
       if (input.trim() === "/exit") break;
+      if (/^\/resume(?:\s|$)/.test(input.trim())) {
+        const [, id, extra] = input.trim().split(/\s+/);
+        if (!id)
+          process.stdout.write(
+            "再開する会話（/resume <sessionId>）：\n" +
+              clean(
+                sessions
+                  .list()
+                  .map((s) => `${s.id} · ${s.title}`)
+                  .join("\n"),
+              ) +
+              "\n",
+          );
+        else if (extra || !sessions.get(id))
+          process.stdout.write("会話が見つかりません。\n");
+        else {
+          resumeNext = id;
+          break;
+        }
+        continue;
+      }
+      if (input.trim() === "/cost") {
+        process.stdout.write(
+          costSummary(
+            await readLlmCalls(home, session.id),
+            await new ReceiptStore(home).read(session.id),
+          ) + "\n",
+        );
+        continue;
+      }
+      if (input.trim() === "/init") {
+        const result = await initAgents(
+          cwd,
+          session.readOnly || session.permissionMode === "plan",
+        );
+        process.stdout.write(
+          result.ok ? "AGENTS.mdの雛形を作成しました。\n" : result.error + "\n",
+        );
+        continue;
+      }
       if (/^\/(?:undo|rewind)(?:\s|$)/.test(input.trim())) {
         controller = new AbortController();
         try {
@@ -425,6 +493,9 @@ export async function headless(args = process.argv.slice(2)) {
         session = {
           ...session,
           id: randomUUID().slice(0, 8),
+          title: "Headless session",
+          model,
+          effort,
           createdAt: Date.now(),
           updatedAt: Date.now(),
         };
@@ -434,30 +505,53 @@ export async function headless(args = process.argv.slice(2)) {
         continue;
       }
       if (input.trim() === "/compact") {
-        const prepared = await withSessionTrace(
-          home,
-          session.id,
-          clean,
-          () =>
-            prepareProviderHistory(messages, {
-              provider: router.provider(model!),
-              model: model!,
-              system,
-              tools: [...tools.values()].map((t) => t.spec),
-              signal: AbortSignal.timeout(60000),
-              checkpoint,
-              force: true,
-              threshold: project.context.compactThreshold,
-            }),
-          { onWarning: (message) => process.stderr.write(message + "\n") },
-        );
-        checkpoint = prepared.checkpoint;
-        if (checkpoint) await checkpointFile().write(checkpoint);
-        process.stdout.write(
-          prepared.compacted
-            ? "History compacted; original retained\n"
-            : "No older history to compact\n",
-        );
+        const compactAbort = new AbortController();
+        try {
+          const prepared = await withSessionCalls(
+            {
+              home,
+              id: session.id,
+              limits: project.limits,
+              abort: compactAbort,
+            },
+            async (budget) => {
+              const value = await withSessionTrace(
+                home,
+                session.id,
+                clean,
+                () =>
+                  prepareProviderHistory(messages, {
+                    provider: router.provider(model!),
+                    model: model!,
+                    system,
+                    tools: [...tools.values()].map((t) => t.spec),
+                    signal: AbortSignal.any([
+                      compactAbort.signal,
+                      AbortSignal.timeout(60000),
+                    ]),
+                    checkpoint,
+                    force: true,
+                    threshold: project.context.compactThreshold,
+                  }),
+                {
+                  onWarning: (message) => process.stderr.write(message + "\n"),
+                },
+              );
+              if (budget.stopCause) throw new LlmBudgetError(budget.stopCause);
+              return value;
+            },
+          );
+          checkpoint = prepared.checkpoint;
+          if (checkpoint) await checkpointFile().write(checkpoint);
+          process.stdout.write(
+            prepared.compacted
+              ? "History compacted; original retained\n"
+              : "No older history to compact\n",
+          );
+        } catch (error) {
+          if (!(error instanceof LlmBudgetError)) throw error;
+          process.stdout.write(`[stopped: ${error.reason}]\n`);
+        }
         continue;
       }
       if (/^\/mode(?:\s|$)/.test(input.trim())) {
@@ -474,6 +568,17 @@ export async function headless(args = process.argv.slice(2)) {
       }
       if (/^\/model(?:\s|$)/.test(input.trim())) {
         const [, spec, level, extra] = input.trim().split(/\s+/);
+        if (!spec) {
+          process.stdout.write(
+            `Model: ${model} · ${effort}\n/model <provider:model> [effort]\n` +
+              loadModelCatalog()
+                .filter((m) => m.enabled)
+                .map((m) => m.id)
+                .join("\n") +
+              "\n",
+          );
+          continue;
+        }
         const choice = spec && resolveModel(spec, config?.aliases);
         if (!choice || extra || (level !== undefined && !isEffort(level))) {
           process.stdout.write("Usage: /model provider:model [effort]\n");
@@ -512,6 +617,7 @@ export async function headless(args = process.argv.slice(2)) {
           );
         continue;
       }
+      let mcpExpanded = false;
       if (MCP_PROMPT_COMMAND.test(input.trim())) {
         // MCP のプロンプト(§25.6): 展開した内容を見せ、y で通常の発言として送る
         const parsed = parseMcpPrompt(mcp, input);
@@ -534,6 +640,39 @@ export async function headless(args = process.argv.slice(2)) {
         );
         if (ok.trim().toLowerCase() !== "y") continue;
         input = expanded;
+        mcpExpanded = true;
+      }
+      const customName = mcpExpanded
+        ? undefined
+        : /^\/([^\s]+)/.exec(input.trim())?.[1];
+      if (customName && !reservedCommand(customName)) {
+        const expanded = expandCommand(
+          input,
+          await userCommands(
+            home,
+            cwd,
+            await new WorkspaceTrust(home).isTrusted(cwd),
+          ),
+        );
+        if (expanded === undefined) {
+          process.stdout.write(
+            "コマンドが見つからないか、プロジェクトが未信頼です。\n",
+          );
+          continue;
+        }
+        input = expanded;
+      } else if (
+        customName &&
+        ["clear", "resume", "cost", "init", "stop", "compact", "exit"].includes(
+          customName,
+        )
+      ) {
+        process.stdout.write(
+          customName === "stop"
+            ? "現在は実行していません。実行中はCtrl+Cで停止できます。\n"
+            : "コマンドの引数を確認してください。\n",
+        );
+        continue;
       }
       controller = new AbortController();
       let fileCheckpoint;
@@ -666,6 +805,13 @@ export async function headless(args = process.argv.slice(2)) {
           ),
           onStatus: (context, model, status) =>
             process.stdout.write(`\n${context.name} · ${model} · ${status}\n`),
+          onEvent: (context, event) => {
+            if (event.type === "receipt")
+              childReceipts.push({
+                ...toReceipt(event.receipt, session.id, pad(++receiptSeq)),
+                agentId: context.id,
+              });
+          },
           redact: clean,
           onTraceWarning: (message) => process.stderr.write(message + "\n"),
           onPhase: (state) =>
@@ -675,88 +821,108 @@ export async function headless(args = process.argv.slice(2)) {
         });
       }
       let compactionFailure: string | undefined;
-      const result = await workflow.run(
-        {
-          provider: router.provider(model),
-          sessionId: session.id,
-          async prepareContext(history, route, _signal, context) {
-            const prepared = await prepareProviderHistory(history, {
-              provider: route.provider,
-              model: route.model,
-              signal: _signal,
-              system: context?.system ?? system,
-              tools: context?.tools ?? [...tools.values()].map((t) => t.spec),
-              checkpoint,
-              skipCompaction: !!compactionFailure,
-              limit: route.provider.models().find((m) => m.id === route.model)
-                ?.contextTokens,
-              threshold: project.context.compactThreshold,
-              overhead:
-                estimateTokens({
+      const turnAbort = controller;
+      const result = await withSessionCalls(
+        { home, id: session.id, limits: project.limits, abort: controller },
+        async (budget) => {
+          const value = await workflow!.run(
+            {
+              provider: router.provider(model!),
+              sessionId: session.id,
+              async prepareContext(history, route, _signal, context) {
+                const prepared = await prepareProviderHistory(history, {
+                  provider: route.provider,
+                  model: route.model,
+                  signal: _signal,
                   system: context?.system ?? system,
                   tools:
                     context?.tools ?? [...tools.values()].map((t) => t.spec),
-                }) + 4096,
-            });
-            if (prepared.compacted && prepared.checkpoint) {
-              checkpoint = prepared.checkpoint;
-              await checkpointFile().write(checkpoint);
-            }
-            if (prepared.failure && !compactionFailure) {
-              compactionFailure = prepared.failure;
-              process.stdout.write(
-                `\nAuto-compaction skipped (${route.model}): ${clean(prepared.failure)}\n`,
-              );
-            }
-            return {
-              messages: prepared.messages,
-              ...(!prepared.fits ? { stop: "context_overflow" } : {}),
-            };
-          },
-          router,
-          current: () => ({ model: model!, reasoning: { effort } }),
-          onFallback: (route) => {
-            model = route.model;
-            process.stdout.write(`\n↻ fallback: ${model}\n`);
-          },
-          reasoning: { effort },
-          model,
-          system,
-          messages,
-          tools,
-          redact: clean,
-          checkpoint: fileCheckpoint,
-          permission: (call, signal) => ask(call, signal),
-          onEvent(event) {
-            if (event.type === "text_delta") {
-              bufferedText += event.text;
-              const boundary = Math.max(
-                bufferedText.lastIndexOf(" "),
-                bufferedText.lastIndexOf("\n"),
-                bufferedText.lastIndexOf("\t"),
-              );
-              if (boundary >= 0) {
-                process.stdout.write(
-                  clean(bufferedText.slice(0, boundary + 1)),
-                );
-                bufferedText = bufferedText.slice(boundary + 1);
-              }
-            } else if (event.type === "message_done") {
-              process.stdout.write(clean(bufferedText));
-              bufferedText = "";
-            } else if (event.type === "step")
-              process.stdout.write(`\n[${event.round} ${event.step}] `);
-            else if (event.type === "error")
-              process.stdout.write(clean(event.error.message));
-            else if (event.type === "rate_limited")
-              process.stdout.write(
-                `Rate limited; wait ${event.retryAfterSec ?? "unknown"} seconds`,
-              );
-          },
+                  checkpoint,
+                  skipCompaction: !!compactionFailure,
+                  limit: route.provider
+                    .models()
+                    .find((m) => m.id === route.model)?.contextTokens,
+                  threshold: project.context.compactThreshold,
+                  overhead:
+                    estimateTokens({
+                      system: context?.system ?? system,
+                      tools:
+                        context?.tools ??
+                        [...tools.values()].map((t) => t.spec),
+                    }) + 4096,
+                });
+                if (prepared.compacted && prepared.checkpoint) {
+                  checkpoint = prepared.checkpoint;
+                  await checkpointFile().write(checkpoint);
+                }
+                if (prepared.failure && !compactionFailure) {
+                  compactionFailure = prepared.failure;
+                  process.stdout.write(
+                    `\nAuto-compaction skipped (${route.model}): ${clean(prepared.failure)}\n`,
+                  );
+                }
+                return {
+                  messages: prepared.messages,
+                  ...(!prepared.fits ? { stop: "context_overflow" } : {}),
+                };
+              },
+              router,
+              current: () => ({ model: model!, reasoning: { effort } }),
+              onFallback: (route) => {
+                model = route.model;
+                process.stdout.write(`\n↻ fallback: ${model}\n`);
+              },
+              reasoning: { effort },
+              model: model!,
+              system,
+              messages,
+              tools,
+              redact: clean,
+              checkpoint: fileCheckpoint,
+              permission: (call, signal) => ask(call, signal),
+              onEvent(event) {
+                if (event.type === "text_delta") {
+                  bufferedText += event.text;
+                  const boundary = Math.max(
+                    bufferedText.lastIndexOf(" "),
+                    bufferedText.lastIndexOf("\n"),
+                    bufferedText.lastIndexOf("\t"),
+                  );
+                  if (boundary >= 0) {
+                    process.stdout.write(
+                      clean(bufferedText.slice(0, boundary + 1)),
+                    );
+                    bufferedText = bufferedText.slice(boundary + 1);
+                  }
+                } else if (event.type === "message_done") {
+                  process.stdout.write(clean(bufferedText));
+                  bufferedText = "";
+                } else if (event.type === "step")
+                  process.stdout.write(`\n[${event.round} ${event.step}] `);
+                else if (event.type === "error")
+                  process.stdout.write(clean(event.error.message));
+                else if (event.type === "rate_limited")
+                  process.stdout.write(
+                    `Rate limited; wait ${event.retryAfterSec ?? "unknown"} seconds`,
+                  );
+              },
+            },
+            turnAbort.signal,
+          );
+          return { ...value, stopCause: budget.stopCause ?? value.stopCause };
         },
-        controller.signal,
       );
       messages = result.messages;
+      await receiptStore.append(
+        session.id,
+        [
+          ...childReceipts.splice(0),
+          ...result.receipts.map((r) =>
+            toReceipt(r, session.id, pad(++receiptSeq)),
+          ),
+        ],
+        clean,
+      );
       await sessions.append(session.id, messages.slice(persisted), clean);
       persisted = messages.length;
       session = { ...session, model, effort, updatedAt: Date.now() };
@@ -772,6 +938,14 @@ export async function headless(args = process.argv.slice(2)) {
     await mcp?.close();
     rl.close();
     process.removeListener("SIGINT", interrupt);
+  }
+  if (resumeNext) {
+    const next = args.filter(
+      (_, i) =>
+        !["--resume", "--cwd", "--model", "--effort"].includes(args[i]!) &&
+        !["--resume", "--cwd", "--model", "--effort"].includes(args[i - 1]!),
+    );
+    await headless([...next, "--resume", resumeNext]);
   }
 }
 if (

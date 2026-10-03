@@ -6,6 +6,7 @@ import { type ProviderId } from "../core/types.js";
 import { type ReasoningEffort } from "../providers/provider.js";
 
 export interface CatalogModel {
+  imageInput?: boolean;
   provider: ProviderId;
   id: string;
   enabled: boolean;

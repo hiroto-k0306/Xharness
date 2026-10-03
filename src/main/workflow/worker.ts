@@ -131,7 +131,7 @@ export class WorkerExecutor {
       {
         model: item.assignee.model,
         effort: item.assignee.effort,
-        tools: ["Read", "Write", "Edit", "Bash", "Grep", "Glob"],
+        tools: ["Read", "Write", "Edit", "MultiEdit", "Bash", "Grep", "Glob"],
       },
       `Plan item ${item.id}: ${item.title}\nInstructions: ${item.instructions}\nAllowed files: ${JSON.stringify(item.files)}\nAcceptance: ${item.acceptance}\nReturn ReportDone with summary, changedFiles and testsRun.`,
       cwd,

@@ -1,5 +1,11 @@
 // 1ターン(ユーザーの1発言 → 応答の完了)を実行し、履歴とレシートを保存する。
 import { readFile } from "node:fs/promises";
+import { withSessionCalls } from "./llm-calls.js";
+import {
+  LlmBudgetError,
+  llmStopCause,
+  flushLlmCalls,
+} from "../core/llm-budget.js";
 import { resolve } from "node:path";
 import { loadAgentConfig } from "../agents/definitions.js";
 import { loadMainConfig, resolveModel } from "../config/config.js";
@@ -9,6 +15,7 @@ import {
   type ProjectConfig,
 } from "../config/project.js";
 import { estimateTokens } from "../context/compactor.js";
+import { hasProjectCommands } from "./slash-commands.js";
 import { prepareProviderHistory } from "../context/provider-compactor.js";
 import { Router } from "../core/router.js";
 import { webTools } from "../tools/web.js";
@@ -75,6 +82,7 @@ async function beginTurn(
   rt: Runtime,
   text: string,
   note?: string,
+  images?: import("../../shared/images.js").ImageAttachment[],
 ): Promise<StoredSession> {
   const { emit } = ctx.options;
   const sessionId = session.id;
@@ -83,7 +91,10 @@ async function beginTurn(
   rt.messages.push({
     role: "user",
     content: [
-      { type: "text", text: ctx.clean(text) },
+      ...(text.trim()
+        ? [{ type: "text" as const, text: ctx.clean(text) }]
+        : []),
+      ...(images ?? []).map((image) => ({ type: "image" as const, ...image })),
       ...(note ? [{ type: "text" as const, text: ctx.clean(note) }] : []),
     ],
   });
@@ -103,8 +114,10 @@ async function beginTurn(
     sessionId,
     messageId: `${sessionId}-u${rt.messages.length}`,
     text: ctx.clean(text),
+    ...(images?.length ? { images } : {}),
   });
   emit({ type: "turn", sessionId, status: "running" });
+  await ctx.refreshCommands?.();
   await ctx.emitState();
   return session;
 }
@@ -128,13 +141,23 @@ async function loadTrustedConfig(
   let config = await loadProjectConfig(home, root, {
     trusted: await trusted(),
   });
-  if (!root || !config.untrusted || rt.trustDeclined) return config;
+  if (
+    !root ||
+    rt.trustDeclined ||
+    (await trusted()) ||
+    (!config.untrusted && !(await hasProjectCommands(session.cwd)))
+  )
+    return config;
   const decision = await gate.request({
     session,
     rt,
     call: {
       name: "ProjectSettings",
-      input: { workspace: root, ...config.untrusted },
+      input: {
+        workspace: root,
+        ...config.untrusted,
+        commands: "プロジェクトのユーザー定義コマンドも有効にします",
+      },
     },
     signal,
     forceAsk: true,
@@ -153,6 +176,8 @@ async function loadTrustedConfig(
     });
     return config;
   }
+  await ctx.refreshCommands?.();
+  await ctx.emitState();
   const heldMode = config.untrusted?.mode;
   config = await loadProjectConfig(home, root, { trusted: true });
   // 信頼前に作ったセッションは既定モードのまま保存されている。保留していたモードを反映する
@@ -231,14 +256,61 @@ export async function runSessionTurn(
   session: StoredSession,
   rt: Runtime,
   text: string,
+  images?: import("../../shared/images.js").ImageAttachment[],
+): Promise<void> {
+  const abort = new AbortController();
+  rt.abort = abort;
+  try {
+    const config = await loadProjectConfig(ctx.options.home);
+    await withSessionCalls(
+      {
+        home: ctx.options.home,
+        id: session.id,
+        limits: config.limits,
+        abort,
+        changed: (calls) => {
+          rt.llmCalls = calls;
+          void ctx.emitState();
+        },
+      },
+      () => runSessionBody(ctx, gate, session, rt, text, abort, images),
+    );
+  } catch (error) {
+    const stopCause =
+      error instanceof LlmBudgetError ? error.reason : "step_failed";
+    rt.status = "idle";
+    rt.abort = undefined;
+    ctx.options.emit({
+      type: "notice",
+      sessionId: session.id,
+      tone: "warn",
+      message:
+        STOP_NOTICE[stopCause] ?? "通信回数の設定・保存先を確認してください。",
+    });
+    ctx.options.emit({
+      type: "turn",
+      sessionId: session.id,
+      status: "idle",
+      stopCause,
+    });
+  } finally {
+    await ctx.emitState();
+  }
+}
+async function runSessionBody(
+  ctx: ControllerContext,
+  gate: PermissionGate,
+  session: StoredSession,
+  rt: Runtime,
+  text: string,
+  abort: AbortController,
+  images?: import("../../shared/images.js").ImageAttachment[],
 ): Promise<void> {
   const { options } = ctx;
   const { emit } = options;
   const sessionId = session.id;
   const clean = ctx.clean;
   const events = new TurnEvents(ctx, session, rt);
-  const abort = new AbortController();
-  rt.abort = abort;
   if (MCP_PROMPT_COMMAND.test(text.trim())) {
     // MCP のプロンプトは、接続を準備してから展開し、確認後に通常の発言として送る(§25.6)
     let expanded: Awaited<ReturnType<typeof expandMcpPrompt>>;
@@ -271,7 +343,14 @@ export async function runSessionTurn(
     }
     text = expanded.text;
   }
-  session = await beginTurn(ctx, session, rt, text, mcpChangeNote(rt.mcp));
+  session = await beginTurn(
+    ctx,
+    session,
+    rt,
+    text,
+    mcpChangeNote(rt.mcp),
+    images,
+  );
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);
@@ -465,7 +544,7 @@ export async function runSessionTurn(
     if (!abort.signal.aborted)
       emit({ type: "error", sessionId, message: "内部エラーで停止しました" });
   }
-  await finishTurn(ctx, session, rt, events, stopCause);
+  await finishTurn(ctx, session, rt, events, llmStopCause() ?? stopCause);
 }
 
 /**
@@ -524,6 +603,8 @@ async function finishTurn(
   const { emit } = ctx.options;
   const sessionId = session.id;
   try {
+    await flushLlmCalls();
+    stopCause = llmStopCause() ?? stopCause;
     await Promise.all(events.receiptWrites);
     await ctx.sessions.append(
       sessionId,

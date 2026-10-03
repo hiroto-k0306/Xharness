@@ -242,15 +242,21 @@ export class SessionStore {
   ) {
     if (!messages.length) return;
     await mkdir(join(this.home, "sessions"), { recursive: true });
+    const block = (
+      b: import("../core/types.js").ContentBlock,
+    ): import("../core/types.js").ContentBlock => {
+      if (b.type === "reasoning" || b.type === "image") return b;
+      if (b.type === "tool_result" && Array.isArray(b.content))
+        return { ...b, content: b.content.map(block) };
+      return JSON.parse(
+        redactText(JSON.stringify(b)),
+      ) as import("../core/types.js").ContentBlock;
+    };
     const lines = messages.map((m) =>
       JSON.stringify({
         ...m,
-        // reasoning(署名つき thinking など)は不透明なので書き換えない。
-        content: m.content.map((b) =>
-          b.type === "reasoning"
-            ? b
-            : JSON.parse(redactText(JSON.stringify(b))),
-        ),
+        // reasoningと画像本体は不透明。入れ子の画像もバイト列を保持する。
+        content: m.content.map(block),
       }),
     );
     await appendFile(this.history(id), lines.join("\n") + "\n", "utf8");
@@ -288,6 +294,9 @@ export class SessionStore {
   async delete(id: string) {
     await new FileCheckpointStore(this.home).remove(id);
     await rm(this.history(id), { force: true });
+    await rm(this.history(id).replace(/\.jsonl$/, ".llm-calls.json"), {
+      force: true,
+    });
     this.sessions = this.sessions.filter((session) => session.id !== id);
     await this.index.write(this.sessions);
   }

@@ -9,7 +9,7 @@ export async function childNeedsAsk(
 ): Promise<boolean> {
   if (!context.files) return false;
   if (call.name === "Bash") return true;
-  if (!["Write", "Edit"].includes(call.name)) return false;
+  if (!["Write", "Edit", "MultiEdit"].includes(call.name)) return false;
   const access = new FileAccess(context.cwd);
   const path = await access.path(
     String((call.input as { path?: unknown }).path),

@@ -3,6 +3,7 @@ import { type TranscriptItem } from "../../shared/ipc.js";
 import { Logo } from "./Logo.js";
 import { McpStatus } from "./McpStatus.js";
 import { TodoList } from "./TodoList.js";
+import { QuestionChoices } from "./QuestionChoices.js";
 import styles from "./Transcript.module.css";
 
 const STATUS = {
@@ -18,6 +19,8 @@ export interface TranscriptProps {
   model: string;
   /** /mcp の表示のボタンから送るコマンド */
   onCommand?(text: string): void;
+  blocked?: boolean;
+  onReply?(text: string): Promise<boolean>;
 }
 
 /** モデル出力は文字列としてだけ描画する(React が escape する)。HTML / Markdown は解釈しない。 */
@@ -26,6 +29,8 @@ export function Transcript({
   running,
   model,
   onCommand,
+  blocked = false,
+  onReply,
 }: TranscriptProps) {
   const end = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -33,6 +38,11 @@ export function Transcript({
   }, [items]);
   // /mcp の表示は最新のものだけ操作できる(古い表示はその時点の状態)
   const latestMcp = items.findLast((i) => i.kind === "mcp")?.id;
+  const latestQuestion = items.findLast(
+    (i) =>
+      i.kind === "user" ||
+      (i.kind === "tool" && ["AskUserQuestion", "StopTask"].includes(i.tool)),
+  )?.id;
   if (!items.length)
     return (
       <div className={styles.pane} data-testid="transcript">
@@ -64,6 +74,19 @@ export function Transcript({
           const st = STATUS[item.status];
           if (item.tool === "TodoWrite" && item.status === "ok" && item.todos)
             return <TodoList key={item.id} todos={item.todos} />;
+          if (
+            item.tool === "AskUserQuestion" &&
+            item.status === "ok" &&
+            item.question
+          )
+            return (
+              <QuestionChoices
+                key={item.id}
+                question={item.question}
+                disabled={running || blocked || item.id !== latestQuestion}
+                onReply={onReply}
+              />
+            );
           return (
             <div
               key={item.id}
@@ -121,6 +144,15 @@ export function Transcript({
               )}
             </div>
             <div className={styles.bubble}>{item.text}</div>
+            {item.kind === "user" &&
+              item.images?.map((image, i) => (
+                <img
+                  key={i}
+                  alt={`添付画像 ${i + 1}`}
+                  src={`data:${image.mediaType};base64,${image.data}`}
+                  style={{ maxWidth: 240, maxHeight: 180 }}
+                />
+              ))}
           </div>
         );
       })}

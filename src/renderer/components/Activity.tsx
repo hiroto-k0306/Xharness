@@ -200,12 +200,14 @@ export function Receipts({
   );
 }
 export function UsagePopover({
+  calls,
   usage = {},
   fallback,
   open,
   onToggle,
   onClose,
 }: {
+  calls?: import("../../shared/llm-calls.js").LlmCalls;
   usage?: Usage;
   fallback?: AppState["fallback"];
   open: boolean;
@@ -276,6 +278,28 @@ export function UsagePopover({
       </button>
       {open && (
         <div className={styles.pop} role="dialog" aria-label="usage">
+          <section>
+            <b>通信回数</b>
+            <div>
+              今ターン:{" "}
+              {calls
+                ? `${calls.turn} / ${calls.llmCallsPerTurn || "無制限"}`
+                : "未計測"}
+            </div>
+            <div>
+              セッション:{" "}
+              {calls
+                ? `${calls.session} / ${calls.llmCallsPerSession || "無制限"}`
+                : "未計測"}
+            </div>
+            {!!calls?.simulatedSession && (
+              <small>
+                うち模擬: 今ターン {calls.simulatedTurn} / セッション{" "}
+                {calls.simulatedSession}
+              </small>
+            )}
+            <small>計測導入後の試行数（子・再試行・圧縮を含む）</small>
+          </section>
           {(["claude", "codex"] as const).map((provider) => (
             <section key={provider}>
               <b>{provider}</b>

@@ -39,6 +39,40 @@
   overflow-wrap: anywhere;
   min-width: 0;
 }
+.question {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--warn);
+  border-radius: 3px;
+  background: var(--panel);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+.choices button {
+  padding: 8px 12px;
+  border: 1px solid var(--warn);
+  border-radius: 3px;
+  color: var(--text);
+  background: var(--panel);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  cursor: pointer;
+}
+.choices button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.choices button:focus-visible {
+  outline: 2px solid var(--warn);
+  outline-offset: 2px;
+}
 .ok {
   flex-shrink: 0;
   color: var(--code);

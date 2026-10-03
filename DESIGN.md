@@ -1594,7 +1594,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 
 ---
 
-## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4実装済み）
+## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4・M3・M1・M2・M4・M5実装済み）
 
 実アプリの試用（docs/bugs/2026-10-02-workflow-loop.md）後のレビューで挙がった不足機能。優先度の高・中・低の順に実装する。各単位は AGENTS.md の作業ルール（1コミット1目的）で小さく区切り、前の優先度の単位を検証してから次へ進む。
 
@@ -1633,29 +1633,37 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Bash による変更は追跡しない（範囲外）。画面にもその旨を表示する。worktree の worker は worktree ごと破棄できるため対象外。
 - 保存期間は Claude Code の `cleanupPeriodDays` 既定値に合わせて30日（設定 `checkpoints.retentionDays` で変更可）。期限切れとセッション削除の際に削除する。ターン数・容量の上限は設けないが、1ファイル10 MB超は退避せず、そのファイルは巻き戻せないと画面に表示する。
 - 戻す対象の選び方も Claude Code に合わせ、コード・会話・両方から選ぶ（既定はコードのみ。会話を戻すのは履歴の追記に「巻き戻し」を記録し、元の履歴は消さない）。
-- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3以降は未着手。
+- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)、M1は [docs/m1-progress.md](docs/m1-progress.md)、M2は [docs/m2-progress.md](docs/m2-progress.md)、M4は [docs/m4-progress.md](docs/m4-progress.md)、M5は [docs/m5-progress.md](docs/m5-progress.md)。
 
 ### 26.2 優先度: 中
 
 **M1. 画像入力と Read の画像対応**
-- Read は png / jpg / gif / webp を画像ブロック（§5）で返す（Claude API の1枚あたり5 MB・長辺8000px の制限に合わせ、超過は縮小せずエラー）。入力欄への貼り付け・ドラッグでも添付できる。
+- 画像の省略は§24の圧縮境界でのみ行う。圧縮で置き換わる範囲は要約のみを再送し、元の保存履歴は画像本体を保持する。圧縮前や未圧縮の末尾の接頭辞は変更しない。設定 `images: {maxPerMessage: 5, warnSessionBytes: 20971520}`。添付は最大5枚、保存会話中の画像合計20 MB超で画面に /compact を促す警告を表示し、強制しない。値はユーザー設定で変更できる。圧縮しても保存画像の合計は減らない。
+- Codexの画像入りfunction_call_outputは実通信未確認。[docs/phase0-findings.md](docs/phase0-findings.md)のテキスト結果の往復は画像配列の受理を裏付けない。設定 `providers.codex.toolImageMode: output | user_message`（既定output）で、画像だけを後続userメッセージへ分離する退路を用意する。両方式とも変換テストのみ確認済み。確認手順は [docs/m-codex-image-local-check.md](docs/m-codex-image-local-check.md)。
+- Read は png / jpg / gif / webp を画像ブロック（§5）で返す（XHarnessは1枚あたり5 MB・長辺8000pxを上限とし、超過は縮小せずエラー。2026-10-03の公式Vision資料では直接のClaude APIはbase64換算10 MBで、設計時の5 MBとは異なるが、XHarnessの上限は維持する）。入力欄への貼り付け・ドラッグでも添付できる。
 - 内部形式と各 Provider の変換は対応済みのため、変換の単体テストに画像ケースを足す。画像を扱えないモデルでは添付時に画面で警告する。レシート・レポートでは画像本体を埋め込まず、種別とサイズだけ出す。
+- 実装済み（2026-10-03）。Readの画像結果を文字列に切り詰めず、ToolOutputからtool_resultの画像ブロックへ接続した。Codexのfunction_call_outputへの画像配列の変換を実装したが、実通信は未確認。入力欄はプレビュー・削除・画像のみの送信・送信拒否時の復元に対応する。カタログの `imageInput: false` は非対応、未指定は未確認として警告する。未実測のモデルに対応済みとは記載しない。保存会話は画像本体を保持し、レシート・トレース・HTMLは形式とバイト数だけ記録する。詳細は [docs/m1-progress.md](docs/m1-progress.md)。
 
 **M2. スラッシュコマンドの体系**
 - 組み込み: `/clear`（新しい会話。履歴は残す）・`/resume`（履歴から再開）・`/model`・`/cost`（通信回数と使用量。M3 と連動）・`/init`（AGENTS.md の雛形を作業フォルダへ作成。既存は上書きしない）に、既存の `/mode` `/stop` `/compact` `/mcp` を加えて、入力欄の補完に一覧する。
 - ユーザー定義: `<project>/.xharness/commands/*.md` と `~/.xharness/commands/*.md` を `/<ファイル名>` として展開する（本文が user メッセージになる。`$ARGUMENTS` を置換）。プロジェクト側はワークスペースの信頼（§9）の対象とし、信頼するまで一覧に出さない。
+- 実装済み（2026-10-03）。`/resume`と`/model`は引数なしで一覧、引数ありで選択する。`/cost`はM3の実通信／模擬通信の回数と、親・子の取得済みレシートのトークン合計を表示する。金額・未取得使用量は推測しない。`/init`は排他的な新規作成で既存のAGENTS.mdを保持し、読み取り専用・planでは作成しない。同名の定義は信頼済みプロジェクトがユーザー定義より優先し、組み込み・MCP名は上書きしない。展開は1回だけで、本文をコマンドとして再解釈しない。信頼確認は通常の送信時に既存のワークスペース確認で行う。headlessの信頼は既存の保存済み承認を使う。詳細は [docs/m2-progress.md](docs/m2-progress.md)。
 
 **M3. 通信回数と予算の上限**
 - 設定 `limits: {llmCallsPerTurn: 0, llmCallsPerSession: 0}`（0 = 無効が既定。Claude Code の `--max-turns` / `--max-budget-usd` も既定は無制限で、利用者が指定したときだけ効く方式に合わせる）。進展のない通信の防止は、既定で有効な §20.6 の継続停止と §8 の最大ステップ数（100）が担う。`llmCallsPerTurn` は §8 の最大ステップ数と別に、再試行・圧縮・子を含む実際の通信回数を数える。超えたら `budget_exceeded` で停止し、ユーザーの入力を待つ。
 - UsagePopover に今ターン・セッションの通信回数を出す。枠の残量が少ないときの警告は、取得できているヘッダの範囲で出す（推測しない）。
+- 実装済み（2026-10-03）。上限はユーザーの `~/.xharness/config.yaml` から読み、リポジトリの設定では変更しない。送信直前に数え、許可した最後の通信は完了できる。次の送信を拒否した時点で親・子を停止する。セッションの累計は会話の巻き戻しやアプリの再起動でも減らない。FakeProviderの模擬通信は別の内訳を表示する。詳細と検証結果は [docs/m3-progress.md](docs/m3-progress.md)。
 
 **M4. 編集の補助**
-- Edit / Write は既存ファイルの改行コード（CRLF / LF）と BOM を保持する。新規ファイルは作業フォルダ内の同種のファイルから推定せず、LF で作る。
+- レビュー修正（2026-10-03）：Read・Edit・MultiEdit・既存Writeはfatal UTF-8検査を行い、UTF-16・NUL入り・不正UTF-8を変更せず拒否する。Readも拒否し、文字化けした日本語を元に編集する事故を避ける。画像Read・新規Writeは従来の経路を使用する。
+- Edit / Write は既存ファイルの最初の改行コード（CRLF / LF）と BOM を保持する。既存ファイルに改行がない場合のWriteは入力の改行を変換しない。新規ファイルは同種のファイルから推定せずLF、ただし `.bat` / `.cmd` はCRLFで作る。
 - `MultiEdit({path, edits: [{old, new}]})`: 同一ファイルの複数置換を原子的に適用（1件でも失敗したら全体を書かない）。Edit と同じ権限・チェックポイントを通る。
 - `NotebookEdit` は需要を見て判断する。今回は実装しない。
+- 実装済み（2026-10-03）。UTF-8 BOMを保持し、既存ファイルの先頭にある改行へ置換入力を合わせる。混在ファイルのEdit／MultiEditは未編集部分の改行を変えない。Writeは先頭の改行へ統一する。レビュー後は、改行がない既存ファイルへのWriteは入力の改行を保持する。新規ファイルはLF、.bat/.cmdはCRLFを使う。MultiEditは指定順に置換し、各oldが直前の結果に1回だけ一致することを確認する。全件の成功後、同じフォルダの一時ファイルからrenameする。Editの権限ルールもMultiEditに適用し、plan・子の対象ファイル制限・チェックポイント・差分・レビューへ接続した。詳細は [docs/m4-progress.md](docs/m4-progress.md)。
 
 **M5. AskUserQuestion の選択ボタン**
 - 候補がある質問は、番号入力に加えて画面に選択ボタンを出す。押すと入力欄から同じ文章を送るのと同じ扱い（LLM へは通常の返答）。headless では従来どおり番号入力。
+- 実装済み（2026-10-03）。成功したAskUserQuestionの質問・2〜5件の候補を通常の会話欄に表示し、候補の本文を入力欄と同じsend経路で送る。保存会話から再開した場合も表示する。最新の未回答の質問だけ操作でき、実行中・承認待ち・巻き戻し待ち・送信中・回答済みでは無効にする。失敗した送信は再選択できる。子の履歴では親へ誤送信しないよう選択を無効にし、子のセッション自体を再開しない既存仕様を保つ。詳細は [docs/m5-progress.md](docs/m5-progress.md)。
 
 ### 26.3 優先度: 低
 
@@ -1672,6 +1680,6 @@ H2 → H1 → H3 → H4 → M3 → M1 → M2 → M4 → M5 → L1〜L3。H2 を�
 規定値は Claude Code の仕様に合わせて決めた（2026-10-02、ユーザー指示）。ただし値は設計者の知識によるもので、公式ドキュメントでの再確認が済んでいない。実装前に確認し、違えばここを直す。
 1. H4（公式資料確認済み、2026-10-03）: [Claude Code公式チェックポイント資料](https://code.claude.com/docs/en/checkpointing)で保存30日・Bashの変更は追跡しないこと・コード／会話／両方の復元を確認した。現在の同資料は最大100チェックポイントとするが、XHarnessは本節の指定どおりターン数・総容量を制限しない。外部変更の不一致を検出して既定で除外することと1ファイル10 MB上限も独自仕様。
 2. H2（公式資料確認済み、2026-10-02）: [Claude Code公式ツール資料](https://code.claude.com/docs/en/tools-reference#grep-tool-behavior)でGrepの`.gitignore`尊重を確認した。同資料ではGrepの250件上限を確認できず、Globは既定では`.gitignore`を尊重しないと記載されている。XHarnessでは本節の指定どおり、両検索で`.gitignore`を尊重し、Grepを250件で打ち切る独自の規定値として実装する。
-3. M3: 上限は既定で無効（Claude Code と同じ）。
-4. M4: 新規ファイルは LF、既存ファイルは改行コードと BOM を保持（Claude Code の Edit と同じ）。
+3. M3（公式資料確認済み、2026-10-03）: [Claude Code公式CLI資料](https://code.claude.com/docs/en/cli-reference)で `--max-turns` の既定が無制限、`--max-budget-usd` が指定時に上限を設け子エージェントの使用額を含むことを確認した。XHarnessは本節の指定どおり通信の試行回数を上限とし、金額への換算は行わない。
+4. M4（公式資料確認、2026-10-03）: [公式ツール資料](https://code.claude.com/docs/en/tools-reference#edit-tool-behavior)では改行・BOM保持の完全な保証を確認できなかった。[公式変更履歴](https://code.claude.com/docs/en/changelog#2-1-89)にはWindowsのEdit/WriteでCRLFが二重化する不具合の修正がある。XHarnessは本節の指定どおり、新規LF・既存の改行とUTF-8 BOM保持を実装する。Claude Codeとの完全な一致とは断定しない。
 5. H3（公式資料確認済み、2026-10-02）: [公式環境変数資料](https://code.claude.com/docs/en/env-vars)で、通常のBashの既定120秒・上限600秒と、出力30,000文字を確認した。XHarnessのバックグラウンドはターン終了までを寿命とし、timeoutSecを明示した場合だけその上限でも終了する。

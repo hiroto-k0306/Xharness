@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./PromptLine.module.css";
+import {
+  attachmentInfo,
+  imageInfo,
+  MAX_IMAGE_BYTES,
+  IMAGE_ERROR,
+  DEFAULT_IMAGES,
+  type ImageAttachment,
+} from "../../shared/images.js";
 
 export interface PromptLineProps {
+  maxImages?: number;
+  sessionId?: string | null;
+  imageInput?: boolean;
   onStop?(): void;
   onModel?(): void;
   mode?: "default" | "acceptEdits" | "plan";
@@ -14,7 +25,10 @@ export interface PromptLineProps {
   modelLabel: string;
   modelColor: string;
   /** false を返したら(送信を断られたら)、入力欄が空のままなら文を戻す */
-  onSubmit(text: string): void | boolean | Promise<boolean | void>;
+  onSubmit(
+    text: string,
+    images?: ImageAttachment[],
+  ): void | boolean | Promise<boolean | void>;
   /** `/` で始まる入力の補完候補(/mcp と MCP のプロンプト。§25.8) */
   suggestions?: Suggestion[];
 }
@@ -43,8 +57,80 @@ export function matchSuggestions(
 export function PromptLine(p: PromptLineProps) {
   const [text, setText] = useState("");
   const [selected, setSelected] = useState(0);
+  const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [imageError, setImageError] = useState("");
+  const [reading, setReading] = useState(false);
+  const sending = useRef(false);
+  const attachmentGeneration = useRef(0);
   const ref = useRef<HTMLTextAreaElement>(null);
-  const disabled = p.running || p.blocked;
+  const disabled = p.running || p.blocked || reading;
+  useEffect(() => {
+    attachmentGeneration.current++;
+    if (!sending.current) {
+      setImages([]);
+      setImageError("");
+      setReading(false);
+    }
+  }, [p.sessionId]);
+  const attach = async (files: File[]) => {
+    if (disabled) return;
+    const generation = attachmentGeneration.current;
+    setReading(true);
+    setImageError("");
+    if (
+      images.length + files.length >
+      (p.maxImages ?? DEFAULT_IMAGES.maxPerMessage)
+    ) {
+      setReading(false);
+      setImageError(
+        `画像の添付は1メッセージ${p.maxImages ?? DEFAULT_IMAGES.maxPerMessage}枚までです。`,
+      );
+      return;
+    }
+    try {
+      const added = await Promise.all(
+        files.map(
+          (file) =>
+            new Promise<ImageAttachment>((resolve, reject) => {
+              if (!file.size || file.size > MAX_IMAGE_BYTES)
+                return reject(new Error(IMAGE_ERROR));
+              const reader = new FileReader();
+              reader.onerror = () => reject(new Error(IMAGE_ERROR));
+              reader.onload = () => {
+                try {
+                  const match = /^data:([^;]+);base64,(.*)$/s.exec(
+                    String(reader.result),
+                  );
+                  if (!match) throw new Error(IMAGE_ERROR);
+                  const image = { mediaType: match[1]!, data: match[2]! };
+                  // Some file managers omit MIME. Detect it from content rather than the extension.
+                  image.mediaType = imageInfo(
+                    Uint8Array.from(atob(image.data), (c) => c.charCodeAt(0)),
+                  ).mediaType;
+                  attachmentInfo(image);
+                  resolve(image);
+                } catch {
+                  reject(new Error(IMAGE_ERROR));
+                }
+              };
+              reader.readAsDataURL(file);
+            }),
+        ),
+      );
+      if (generation === attachmentGeneration.current)
+        setImages((now) =>
+          [...now, ...added].slice(
+            0,
+            p.maxImages ?? DEFAULT_IMAGES.maxPerMessage,
+          ),
+        );
+    } catch {
+      if (generation === attachmentGeneration.current)
+        setImageError(IMAGE_ERROR);
+    } finally {
+      if (generation === attachmentGeneration.current) setReading(false);
+    }
+  };
   const matches = matchSuggestions(text, p.suggestions);
   const accept = (s: Suggestion) => {
     setText(s.args ? `${s.value} ` : s.value);
@@ -55,7 +141,52 @@ export function PromptLine(p: PromptLineProps) {
     if (!disabled) ref.current?.focus();
   }, [disabled]);
   return (
-    <div className={`${styles.prompt} ${p.blocked ? styles.blocked : ""}`}>
+    <div
+      className={`${styles.prompt} ${p.blocked ? styles.blocked : ""}`}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        void attach(Array.from(e.dataTransfer.files));
+      }}
+    >
+      <div className={styles.attachments}>
+        {images.map((image, i) => (
+          <div key={i}>
+            <img
+              alt={`添付画像 ${i + 1}`}
+              src={`data:${image.mediaType};base64,${image.data}`}
+            />
+            <span>
+              {image.mediaType} ·{" "}
+              {Math.floor((image.data.length * 3) / 4) -
+                (image.data.endsWith("==")
+                  ? 2
+                  : image.data.endsWith("=")
+                    ? 1
+                    : 0)}{" "}
+              bytes
+            </span>
+            <button
+              type="button"
+              disabled={disabled}
+              aria-label={`添付画像 ${i + 1}を削除`}
+              onClick={() => setImages((now) => now.filter((_, n) => n !== i))}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        {!!images.length && p.imageInput !== true && (
+          <span role="status">
+            {p.imageInput === false
+              ? "このモデルは画像入力に対応していません。モデルを切り替えてください。"
+              : "このモデルの画像入力対応は未確認です。"}
+          </span>
+        )}
+        {imageError && <span role="alert">{imageError}</span>}
+      </div>
       {matches.length > 0 && !disabled && (
         <ul className={styles.suggest} role="listbox" aria-label="commands">
           {matches.map((s, i) => (
@@ -103,6 +234,15 @@ export function PromptLine(p: PromptLineProps) {
           setText(e.target.value);
           setSelected(0);
         }}
+        onPaste={(e) => {
+          const files = Array.from(e.clipboardData.files).filter((file) =>
+            file.type.startsWith("image/"),
+          );
+          if (files.length) {
+            e.preventDefault();
+            void attach(files);
+          }
+        }}
         onKeyDown={(e) => {
           // 日本語入力の変換確定の Enter は送信しない
           if (e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -122,12 +262,24 @@ export function PromptLine(p: PromptLineProps) {
           }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
-            if (!text.trim()) return;
+            if ((!text.trim() && !images.length) || disabled || sending.current)
+              return;
             const sent = text;
+            const attached = images;
+            sending.current = true;
+            setImages([]);
             setText("");
-            void Promise.resolve(p.onSubmit(sent)).then((ok) => {
-              if (ok === false) setText((now) => (now === "" ? sent : now));
-            });
+            void Promise.resolve(
+              attached.length ? p.onSubmit(sent, attached) : p.onSubmit(sent),
+            )
+              .catch(() => false)
+              .then((ok) => {
+                if (ok === false) {
+                  setText((now) => (now === "" ? sent : now));
+                  setImages((now) => [...attached, ...now]);
+                }
+                sending.current = false;
+              });
           }
         }}
       />

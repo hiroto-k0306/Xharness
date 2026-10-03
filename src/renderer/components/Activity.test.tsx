@@ -3,6 +3,31 @@ import { expect, it, vi } from "vitest";
 import { UsagePopover, Receipts, LoopFlow } from "./Activity.js";
 import { WorkspacePicker } from "./WorkspacePicker.js";
 import { type HarnessApi } from "../../shared/ipc.js";
+it("shows per-turn/session budgets and labels simulated calls independently from quota", () => {
+  render(
+    <UsagePopover
+      open
+      onClose={() => {}}
+      onToggle={() => {}}
+      usage={{}}
+      calls={{
+        turn: 2,
+        session: 5,
+        simulatedTurn: 1,
+        simulatedSession: 3,
+        llmCallsPerTurn: 4,
+        llmCallsPerSession: 0,
+        since: 0,
+      }}
+    />,
+  );
+  expect(screen.getByText("今ターン: 2 / 4")).toBeInTheDocument();
+  expect(screen.getByText("セッション: 5 / 無制限")).toBeInTheDocument();
+  expect(
+    screen.getByText("うち模擬: 今ターン 1 / セッション 3"),
+  ).toBeInTheDocument();
+  expect(screen.getAllByText("取得不可").length).toBeGreaterThan(0);
+});
 it("shows unknown quota separately from 0%, displays reset/fallback, and emits one threshold toast", () => {
   const props = {
     open: true,

@@ -169,7 +169,7 @@ export class ChildRunner {
       if (
         !tool ||
         name === "Task" ||
-        (!worker && ["Write", "Edit"].includes(name))
+        (!worker && ["Write", "Edit", "MultiEdit"].includes(name))
       )
         continue;
       tools.set(name, {
@@ -179,7 +179,7 @@ export class ChildRunner {
             return "Worker already reported completion";
           const error = await tool.validate(input);
           if (error) return error;
-          if (worker && ["Write", "Edit"].includes(name)) {
+          if (worker && ["Write", "Edit", "MultiEdit"].includes(name)) {
             const path = await access.path(
               String((input as { path?: unknown }).path),
             );

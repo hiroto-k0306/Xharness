@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse } from "yaml";
+import { DEFAULT_IMAGES } from "../../shared/images.js";
 import { type ProviderId } from "../core/types.js";
 import { type ReasoningEffort } from "../providers/provider.js";
 
@@ -155,6 +156,8 @@ export function mcpSettings(
 }
 
 export interface MainConfig {
+  images: typeof DEFAULT_IMAGES;
+  providers: { codex: { toolImageMode: "output" | "user_message" } };
   web: WebSettings;
   mcp: McpSettings;
   fallback?: Partial<Record<ProviderId, string>>;
@@ -249,6 +252,22 @@ export async function loadMainConfig(
   }
   const web = webSettings(root.web, warnings);
   const mcp = mcpSettings(root.mcp, warnings);
+  const mode = (
+    root.providers as { codex?: { toolImageMode?: unknown } } | undefined
+  )?.codex?.toolImageMode;
+  if (mode !== undefined && mode !== "output" && mode !== "user_message")
+    warnings.push("config.yaml の providers.codex.toolImageMode が不正です");
+  const providers: MainConfig["providers"] = {
+    codex: { toolImageMode: mode === "user_message" ? mode : "output" },
+  };
+  const images = { ...DEFAULT_IMAGES };
+  for (const key of ["maxPerMessage", "warnSessionBytes"] as const) {
+    const value = (root.images as Record<string, unknown> | undefined)?.[key];
+    if (typeof value === "number" && Number.isSafeInteger(value) && value > 0)
+      images[key] = value;
+    else if (value !== undefined)
+      warnings.push(`config.yaml の images.${key} が不正です`);
+  }
   return {
     choice: { ...resolved, effort },
     aliases,
@@ -256,6 +275,8 @@ export async function loadMainConfig(
     fallback,
     web,
     mcp,
+    providers,
+    images,
   };
 }
 
@@ -298,6 +319,8 @@ export async function resolveStartup(opts: {
     fallback: cfg.fallback,
     web: cfg.web,
     mcp: cfg.mcp,
+    providers: cfg.providers,
+    images: cfg.images,
   };
 }
 

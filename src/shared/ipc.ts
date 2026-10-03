@@ -1,5 +1,6 @@
 // main / preload / renderer が共有する契約。electron を import しない。
 import { parseRewindChoice } from "./rewind.js";
+import { attachmentInfo, type ImageAttachment } from "./images.js";
 // DESIGN.md §16.4: チャネルは harness:event(main → renderer)と harness:command(renderer → main)の2本だけ。
 
 export const EVENT_CHANNEL = "harness:event";
@@ -59,6 +60,8 @@ export const EFFORT_VALUES: readonly Effort[] = [
 export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
+  llmCalls?: import("./llm-calls.js").LlmCalls;
+  imageBytes?: number;
   worktree?: { path: string; branch: string; baseBranch: string };
   permissionMode?: "default" | "acceptEdits" | "plan";
   id: string;
@@ -87,8 +90,11 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  images?: typeof import("./images.js").DEFAULT_IMAGES;
+  commands?: import("./commands.js").CommandSuggestion[];
   authentication?: AuthenticationView[];
   models?: {
+    imageInput?: boolean;
     id: string;
     provider: ProviderName;
     label: string;
@@ -128,7 +134,12 @@ export interface McpPromptView {
 }
 
 export type TranscriptItem =
-  | { kind: "user"; id: string; text: string }
+  | {
+      kind: "user";
+      id: string;
+      text: string;
+      images?: import("./images.js").ImageAttachment[];
+    }
   | { kind: "mcp"; id: string; servers: McpServerView[] }
   | { kind: "assistant"; id: string; text: string }
   | {
@@ -137,6 +148,7 @@ export type TranscriptItem =
       tool: string;
       summary: string;
       todos?: import("./todos.js").Todo[];
+      question?: import("./questions.js").QuestionChoices;
       status: "pending" | "ok" | "error" | "denied";
     }
   | {
@@ -196,7 +208,13 @@ export type UiEvent =
     }
   | { type: "repository_progress"; message: string }
   | { type: "receipt_history"; sessionId: string; receipts: Receipt[] }
-  | { type: "user_message"; sessionId: string; messageId: string; text: string }
+  | {
+      type: "user_message";
+      sessionId: string;
+      messageId: string;
+      text: string;
+      images?: import("./images.js").ImageAttachment[];
+    }
   | {
       type: "step";
       sessionId: string;
@@ -301,7 +319,12 @@ export type HarnessCommand =
     }
   | { type: "ready" }
   | { type: "abort_repository" }
-  | { type: "send"; sessionId: string; text: string }
+  | {
+      type: "send";
+      sessionId: string;
+      text: string;
+      images?: import("./images.js").ImageAttachment[];
+    }
   | { type: "abort"; sessionId: string }
   | {
       type: "permission_response";
@@ -415,10 +438,29 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
     case "abort_repository":
     case "pick_folder":
       return { type: c.type };
-    case "send":
-      return str(c.sessionId) && str(c.text, MAX_TEXT)
-        ? { type: "send", sessionId: c.sessionId, text: c.text }
-        : undefined;
+    case "send": {
+      if (
+        !str(c.sessionId) ||
+        typeof c.text !== "string" ||
+        c.text.length > MAX_TEXT
+      )
+        return undefined;
+      if (c.images === undefined)
+        return str(c.text, MAX_TEXT)
+          ? { type: "send", sessionId: c.sessionId, text: c.text }
+          : undefined;
+      if (!Array.isArray(c.images)) return undefined;
+      if (!c.text && !c.images.length) return undefined;
+      try {
+        const images: ImageAttachment[] = c.images.map((i) => {
+          attachmentInfo(i);
+          return { mediaType: i.mediaType, data: i.data };
+        });
+        return { type: "send", sessionId: c.sessionId, text: c.text, images };
+      } catch {
+        return undefined;
+      }
+    }
     case "abort":
       return str(c.sessionId)
         ? { type: "abort", sessionId: c.sessionId }

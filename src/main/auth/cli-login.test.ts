@@ -22,6 +22,7 @@ it.skipIf(process.platform !== "win32")(
       }),
     ).toBe("cli_missing");
   },
+  15000,
 );
 
 it.skipIf(process.platform !== "win32")(

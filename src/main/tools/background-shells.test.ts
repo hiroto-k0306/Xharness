@@ -1,4 +1,7 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { mkdtemp, writeFile, readFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { BackgroundShells } from "./background-shells.js";
 import { BackgroundOutput } from "./background-output.js";
 import { backgroundTools } from "./background-tools.js";
@@ -401,4 +404,68 @@ it.skipIf(process.platform !== "win32" || !hasPwsh)(
       }
     }
   },
+);
+it
+  .skipIf(process.platform !== "win32" || !hasPwsh)
+  .each(["natural", "kill", "abort", "endTurn"])(
+  "terminates Windows children and grandchildren on %s",
+  async (mode) => {
+    const folder = await mkdtemp(join(tmpdir(), "xh-job-descendants-"));
+    const script = join(folder, "parent.cjs"),
+      ids = join(folder, "pids.json");
+    await writeFile(
+      script,
+      `const {spawn}=require('node:child_process'); const child=spawn(process.execPath,['-e','setTimeout(()=>{},60000)'],{windowsHide:true,stdio:'ignore'}); require('node:fs').writeFileSync(${JSON.stringify(ids)},JSON.stringify([process.pid,child.pid])); setTimeout(()=>{},60000);`,
+    );
+    const tools = shellSearchTools(folder),
+      abort = new AbortController();
+    let pids: number[] = [];
+    try {
+      const quote = (s: string) => "'" + s.replaceAll("'", "''") + "'";
+      const command = `Start-Process -FilePath ${quote(process.execPath)} -ArgumentList ${quote('"' + script + '"')} -WindowStyle Hidden; while (!(Test-Path ${quote(ids)})) { Start-Sleep -Milliseconds 20 }; ${mode === "natural" ? "" : "Start-Sleep -Seconds 60"}`;
+      const output = await tools
+        .get("Bash")!
+        .execute({ command, run_in_background: true }, abort.signal);
+      expect(output.isError).toBe(false);
+      const { shellId } = JSON.parse(output.content);
+      await vi.waitFor(
+        async () => {
+          pids = JSON.parse(await readFile(ids, "utf8"));
+          expect(pids).toHaveLength(2);
+        },
+        { timeout: 10000 },
+      );
+      if (mode === "kill")
+        await tools.get("KillShell")!.execute({ shellId }, signal());
+      if (mode === "abort") abort.abort();
+      if (mode === "endTurn") await tools.get("Bash")!.endTurn!();
+      if (mode === "natural") {
+        await vi.waitFor(
+          async () => {
+            const result = JSON.parse(
+              (await tools.get("BashOutput")!.execute({ shellId }, signal()))
+                .content,
+            );
+            expect(result.status).toBe("completed");
+          },
+          { timeout: 10000 },
+        );
+      }
+      await vi.waitFor(
+        () => {
+          for (const pid of pids) expect(() => process.kill(pid, 0)).toThrow();
+        },
+        { timeout: 5000 },
+      );
+    } finally {
+      await tools.get("Bash")!.endTurn!();
+      for (const pid of pids)
+        try {
+          process.kill(pid);
+        } catch {
+          /* Already exited. */
+        }
+    }
+  },
+  30000,
 );

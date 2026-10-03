@@ -1,4 +1,5 @@
 import { traceStream, captureTraceResponse } from "../../core/trace.js";
+import { reserveLlmCall } from "../../core/llm-budget.js";
 import { readClaudeAccessToken } from "../../auth/claude-oauth.js";
 import {
   type Provider,
@@ -56,6 +57,7 @@ export class ClaudeAdapter implements Provider {
       )();
       signal.throwIfAborted();
       stage = "transport";
+      reserveLlmCall(signal);
       captureTraceResponse({ requestDispatched: true });
       const response = await (this.options.fetcher ?? fetch)(
         "https://api.anthropic.com/v1/messages",

@@ -11,6 +11,53 @@ import { exportExecutionReport } from "./report.js";
 import { toClaudeRequest } from "../providers/claude/convert.js";
 import { toCodexInput } from "../providers/codex/convert.js";
 import { itemsFromMessages } from "./transcript.js";
+it("keeps saved image bytes through compact but omits them from subsequent requests", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-image-compact-"));
+  const requests: ProviderRequest[] = [];
+  const c = new SessionController({
+    home,
+    model: "fake",
+    provider: new FakeProvider({
+      onRequest: (r) => requests.push(structuredClone(r)),
+    }),
+    fake: true,
+    phase4: true,
+    version: "test",
+    emit: () => {},
+    host: { pickFolder: async () => undefined },
+    createTools: () => new Map(),
+  });
+  await c.init();
+  const created = await c.handle({ type: "new_session", workspaceId: null });
+  if (!created.ok || !created.sessionId)
+    throw new Error("session creation failed");
+  const sessionId = created.sessionId;
+  async function send(text: string, images?: (typeof image)[]) {
+    expect(
+      await c.handle({ type: "send", sessionId, text, images }),
+    ).toMatchObject({ ok: true });
+    const end = Date.now() + 5000;
+    while (
+      (await c.state()).sessions.find((s) => s.id === sessionId)!.status !==
+      "idle"
+    ) {
+      if (Date.now() > end) throw new Error("timeout");
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  }
+  await send("old", [image]);
+  await send("recent");
+  await send("latest");
+  expect(
+    await c.handle({ type: "send", sessionId, text: "/compact" }),
+  ).toMatchObject({ ok: true });
+  await send("after compact");
+  expect(JSON.stringify(requests.at(-1)!.messages)).not.toContain(image.data);
+  await c.shutdown();
+  expect(
+    await readFile(join(home, "sessions", sessionId + ".jsonl"), "utf8"),
+  ).toContain(image.data);
+});
 it("rejects a sixth attachment without provider calls", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-image-limit-"));
   const requests: ProviderRequest[] = [];

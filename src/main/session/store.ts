@@ -19,6 +19,8 @@ import {
 
 /** DESIGN.md §18.4。~/.xharness/ 以下の索引と履歴。electron を使わない。 */
 export type StoredSession = Omit<SessionSummary, "status" | "branch"> & {
+  /** Fingerprint only; no system text, tools, credentials or permissions. */
+  premiseHash?: string;
   environment?: import("../tools/environment.js").EnvironmentReport;
 };
 

@@ -115,6 +115,8 @@ export interface Runtime {
   tools?: ToolRegistry;
   /** セッションで最初に組み立てた system prompt(preserved thinking のため途中で変えない) */
   system?: string;
+  /** Validated effective workflow prefix, memory only (manual Claude compact). */
+  premises?: import("./premises.js").Premises;
   webSignature?: string;
   /** WebSearch の回数(子エージェントも合算。§22.5) */
   searchBudget?: SearchBudget;
@@ -184,6 +186,8 @@ export interface ControllerContext {
 }
 
 export const STOP_NOTICE: Record<string, string> = {
+  premise_mismatch:
+    "保存履歴のsystem／toolsの前提が異なるか、旧形式のため照合できません。履歴は保持しています。/clear または新規セッションから続けてください。",
   budget_busy:
     "このセッションの通信処理が実行中です。終了してから再送信してください。",
   budget_exceeded:

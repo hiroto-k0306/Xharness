@@ -337,6 +337,7 @@ interface Rule { tool: string; pattern?: string; decision: Decision }
   - 「常に許可」はサブコマンドまで含めて保存する(`git status` → `git status *`。`git *` にはしない)。先頭の語の次がオプション・パスなら完全一致で保存する
   - 連結(`;` `|` `&` `&&` `||`)・リダイレクト(`>` `<`)・改行・変数や式の展開(`$` `` ` ``)・部分式やスクリプトブロック(`(` `)` `{` `}` `@(`)・ドットソースを含むコマンドは、allow ルールやモードでは許可せず、必ず確認する(plan では拒否)。PowerShell では `git status (Remove-Item …)` の括弧の中も実行されるため
   - 別のプログラムを起動させうるオプション(`git -c` / `-C` / `--upload-pack` / `--ext-diff`、`rg --pre` など)を含むコマンドも同じ扱い
+  - Git の status / diff / log / show も、読み取りに見えても必ず ask（plan・allow ルールでも自動承認しない）。`core.fsmonitor`、external diff、textconv、pager などリポジトリ設定による外部実行を字句解析だけでは保証できないため。危険なオプションは上記の拒否条件を維持する。アプリ内部の Git は pager と fsmonitor を無効化する（外部 diff / textconv を使う操作は内部にない）。
   - deny / ask ルールは、連結や括弧の中の部分コマンドに一致しても効く
 - 作業フォルダ外への書き込みは常に ask。作業フォルダ外の Read/Grep/Glob も、それを許可するルールが無ければ ask(Claude Code の working directories と同じ)
 - 秘密ファイル(`.env*`、鍵・証明書 `*.pem` `*.key` `id_*`、`.npmrc` `.netrc` `.git-credentials`、`.ssh/` `.aws/` `.kube/config` など)の読み取りは、ルールに関係なく ask(§A6)

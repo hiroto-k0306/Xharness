@@ -21,7 +21,10 @@ export type GitRunner = (
 ) => Promise<string>;
 export const runGit: GitRunner = (args, cwd, signal, progress) =>
   new Promise((resolveOutput, reject) => {
-    const child = spawn("git", args, {
+    // Internal status checks run without user confirmation. Disable the helper
+    // that Git otherwise loads from the repository's core.fsmonitor setting.
+    const safeArgs = ["--no-pager", "-c", "core.fsmonitor=false", ...args];
+    const child = spawn("git", safeArgs, {
       cwd,
       signal,
       windowsHide: true,

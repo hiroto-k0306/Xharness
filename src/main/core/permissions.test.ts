@@ -157,13 +157,13 @@ describe("Phase 4 permission rules", () => {
         { mode: "plan", rules: [] },
         cwd,
       ),
-    ).toBe("allow");
+    ).toBe("ask");
   });
   it("limits plan shell commands and token grants without matching gitfake", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "xh-perm-"));
     const grants = [grantFor(call("Bash", { command: "git status" }))];
     for (const [command, expected] of [
-      ["git status", "allow"],
+      ["git status", "ask"],
       ["gitfake status", "ask"],
       ["git clean -fd", "ask"],
     ])

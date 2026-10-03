@@ -41,12 +41,7 @@ describe("PowerShell nested execution cannot slip through", () => {
 
   it("still allows plain read-only commands in plan mode", async () => {
     const cwd = await workspace();
-    for (const command of [
-      "git status",
-      "git log --oneline",
-      "rg needle src",
-      "pwd",
-    ])
+    for (const command of ["rg needle src", "pwd"])
       expect(await decidePermission(bash(command), plan, cwd)).toBe("allow");
   });
 
@@ -68,11 +63,9 @@ describe("PowerShell nested execution cannot slip through", () => {
       mode: "default",
       rules: [grantFor(bash("git status"))],
     };
-    expect(await decidePermission(bash("git status"), config, cwd)).toBe(
-      "allow",
-    );
+    expect(await decidePermission(bash("git status"), config, cwd)).toBe("ask");
     expect(await decidePermission(bash("git status -s"), config, cwd)).toBe(
-      "allow",
+      "ask",
     );
     for (const command of [
       "git log (Remove-Item -Recurse C:\\x)",

@@ -158,6 +158,8 @@ export class SessionController {
         );
       });
     if (!rt.loaded) await rt.loading;
+    for (const warning of this.sessions.warnings.splice(0))
+      this.warnings.push(warning);
     return rt;
   }
 

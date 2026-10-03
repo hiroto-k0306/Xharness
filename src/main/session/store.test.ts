@@ -16,6 +16,23 @@ const session = (id: string): StoredSession => ({
   updatedAt: 0,
   providers: [],
 });
+it("warns once about invalid rewind positions while retaining all original messages", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-invalid-rewind-"));
+  const store = new SessionStore(home);
+  await store.append(
+    "s",
+    [
+      { role: "user", content: [{ type: "text", text: "original" }] },
+      { role: "user", content: [], meta: { rewind: { keep: 99 } } },
+    ],
+    (s) => s,
+  );
+  expect(await store.messages("s")).toHaveLength(2);
+  expect(await store.messages("s")).toHaveLength(2);
+  expect(store.warnings).toEqual([
+    "巻き戻し位置が現在の会話範囲外または不正なため、履歴を保持しました。",
+  ]);
+});
 
 describe("index files survive concurrent writes and corruption", () => {
   it("saves many sessions at once without failures or lost entries", async () => {

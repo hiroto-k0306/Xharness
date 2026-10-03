@@ -268,13 +268,16 @@ export class SessionStore {
       try {
         const message = JSON.parse(line) as Message;
         const keep = message.meta?.rewind?.keep;
-        if (
-          keep !== undefined &&
-          Number.isSafeInteger(keep) &&
-          keep >= 0 &&
-          keep <= out.length
-        )
-          out.splice(keep);
+        if (keep !== undefined) {
+          if (Number.isSafeInteger(keep) && keep >= 0 && keep <= out.length)
+            out.splice(keep);
+          else {
+            const warning =
+              "巻き戻し位置が現在の会話範囲外または不正なため、履歴を保持しました。";
+            if (!this.index.warnings.includes(warning))
+              this.index.warnings.push(warning);
+          }
+        }
         out.push(message);
       } catch {
         /* 壊れた行は読み飛ばす */

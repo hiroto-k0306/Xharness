@@ -71,7 +71,15 @@ export function appendResults(ctx: LoopContext, options: LoopOptions) {
       content: (item.tool?.boundedOutput ? (text: string) => text : trimOutput)(
         clean(
           (item.result.error ? JSON.stringify(item.result.error) + "\n" : "") +
-            item.result.content +
+            (item.result.error &&
+            item.result.content === JSON.stringify(item.result.error)
+              ? ""
+              : item.result.error &&
+                  item.result.content.startsWith(item.result.error.message)
+                ? item.result.content
+                    .slice(item.result.error.message.length)
+                    .trimStart()
+                : item.result.content) +
             injected,
         ),
       ),

@@ -5,7 +5,7 @@ import { type Provider, type ProviderEvent } from "../providers/provider.js";
 import { type Tool } from "../tools/registry.js";
 import { toReceipt } from "../session/context.js";
 
-async function run(sequence: (ErrorKind | "ok")[]) {
+async function run(sequence: (ErrorKind | "ok")[], detail = "") {
   let requests = 0,
     executions = 0;
   const provider: Provider = {
@@ -43,7 +43,7 @@ async function run(sequence: (ErrorKind | "ok")[]) {
       return kind === "ok"
         ? { content: "done" }
         : {
-            content: failure(kind).message,
+            content: failure(kind).message + detail,
             isError: true,
             error: failure(kind),
           };
@@ -107,3 +107,17 @@ it("resets after a successful call or a change of kind", async () => {
   expect(result.stopCause).toBe("end_turn");
   expect(executions).toBe(8);
 });
+it.each(["", " 補足：別の場所を指定してください。"])(
+  "emits the fixed error once and retains distinct tool details (%s)",
+  async (detail) => {
+    const { result } = await run(["not_found"], detail);
+    const block = result.messages
+      .flatMap((message) => message.content)
+      .find((block) => block.type === "tool_result")!;
+    if (block.type !== "tool_result" || typeof block.content !== "string")
+      throw new Error("Missing result");
+    expect(block.content.split(failure("not_found").message)).toHaveLength(2);
+    expect(block.content).toContain('"kind":"not_found"');
+    if (detail) expect(block.content).toContain(detail.trim());
+  },
+);

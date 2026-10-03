@@ -1,4 +1,6 @@
 import { withSessionTrace } from "./main/core/trace.js";
+import { withSessionCalls } from "./main/session/llm-calls.js";
+import { LlmBudgetError } from "./main/core/llm-budget.js";
 import { projectHookApproval } from "./main/hooks/shell-hooks.js";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -434,30 +436,53 @@ export async function headless(args = process.argv.slice(2)) {
         continue;
       }
       if (input.trim() === "/compact") {
-        const prepared = await withSessionTrace(
-          home,
-          session.id,
-          clean,
-          () =>
-            prepareProviderHistory(messages, {
-              provider: router.provider(model!),
-              model: model!,
-              system,
-              tools: [...tools.values()].map((t) => t.spec),
-              signal: AbortSignal.timeout(60000),
-              checkpoint,
-              force: true,
-              threshold: project.context.compactThreshold,
-            }),
-          { onWarning: (message) => process.stderr.write(message + "\n") },
-        );
-        checkpoint = prepared.checkpoint;
-        if (checkpoint) await checkpointFile().write(checkpoint);
-        process.stdout.write(
-          prepared.compacted
-            ? "History compacted; original retained\n"
-            : "No older history to compact\n",
-        );
+        const compactAbort = new AbortController();
+        try {
+          const prepared = await withSessionCalls(
+            {
+              home,
+              id: session.id,
+              limits: project.limits,
+              abort: compactAbort,
+            },
+            async (budget) => {
+              const value = await withSessionTrace(
+                home,
+                session.id,
+                clean,
+                () =>
+                  prepareProviderHistory(messages, {
+                    provider: router.provider(model!),
+                    model: model!,
+                    system,
+                    tools: [...tools.values()].map((t) => t.spec),
+                    signal: AbortSignal.any([
+                      compactAbort.signal,
+                      AbortSignal.timeout(60000),
+                    ]),
+                    checkpoint,
+                    force: true,
+                    threshold: project.context.compactThreshold,
+                  }),
+                {
+                  onWarning: (message) => process.stderr.write(message + "\n"),
+                },
+              );
+              if (budget.stopCause) throw new LlmBudgetError(budget.stopCause);
+              return value;
+            },
+          );
+          checkpoint = prepared.checkpoint;
+          if (checkpoint) await checkpointFile().write(checkpoint);
+          process.stdout.write(
+            prepared.compacted
+              ? "History compacted; original retained\n"
+              : "No older history to compact\n",
+          );
+        } catch (error) {
+          if (!(error instanceof LlmBudgetError)) throw error;
+          process.stdout.write(`[stopped: ${error.reason}]\n`);
+        }
         continue;
       }
       if (/^\/mode(?:\s|$)/.test(input.trim())) {
@@ -675,86 +700,96 @@ export async function headless(args = process.argv.slice(2)) {
         });
       }
       let compactionFailure: string | undefined;
-      const result = await workflow.run(
-        {
-          provider: router.provider(model),
-          sessionId: session.id,
-          async prepareContext(history, route, _signal, context) {
-            const prepared = await prepareProviderHistory(history, {
-              provider: route.provider,
-              model: route.model,
-              signal: _signal,
-              system: context?.system ?? system,
-              tools: context?.tools ?? [...tools.values()].map((t) => t.spec),
-              checkpoint,
-              skipCompaction: !!compactionFailure,
-              limit: route.provider.models().find((m) => m.id === route.model)
-                ?.contextTokens,
-              threshold: project.context.compactThreshold,
-              overhead:
-                estimateTokens({
+      const turnAbort = controller;
+      const result = await withSessionCalls(
+        { home, id: session.id, limits: project.limits, abort: controller },
+        async (budget) => {
+          const value = await workflow!.run(
+            {
+              provider: router.provider(model!),
+              sessionId: session.id,
+              async prepareContext(history, route, _signal, context) {
+                const prepared = await prepareProviderHistory(history, {
+                  provider: route.provider,
+                  model: route.model,
+                  signal: _signal,
                   system: context?.system ?? system,
                   tools:
                     context?.tools ?? [...tools.values()].map((t) => t.spec),
-                }) + 4096,
-            });
-            if (prepared.compacted && prepared.checkpoint) {
-              checkpoint = prepared.checkpoint;
-              await checkpointFile().write(checkpoint);
-            }
-            if (prepared.failure && !compactionFailure) {
-              compactionFailure = prepared.failure;
-              process.stdout.write(
-                `\nAuto-compaction skipped (${route.model}): ${clean(prepared.failure)}\n`,
-              );
-            }
-            return {
-              messages: prepared.messages,
-              ...(!prepared.fits ? { stop: "context_overflow" } : {}),
-            };
-          },
-          router,
-          current: () => ({ model: model!, reasoning: { effort } }),
-          onFallback: (route) => {
-            model = route.model;
-            process.stdout.write(`\n↻ fallback: ${model}\n`);
-          },
-          reasoning: { effort },
-          model,
-          system,
-          messages,
-          tools,
-          redact: clean,
-          checkpoint: fileCheckpoint,
-          permission: (call, signal) => ask(call, signal),
-          onEvent(event) {
-            if (event.type === "text_delta") {
-              bufferedText += event.text;
-              const boundary = Math.max(
-                bufferedText.lastIndexOf(" "),
-                bufferedText.lastIndexOf("\n"),
-                bufferedText.lastIndexOf("\t"),
-              );
-              if (boundary >= 0) {
-                process.stdout.write(
-                  clean(bufferedText.slice(0, boundary + 1)),
-                );
-                bufferedText = bufferedText.slice(boundary + 1);
-              }
-            } else if (event.type === "message_done") {
-              process.stdout.write(clean(bufferedText));
-              bufferedText = "";
-            } else if (event.type === "step")
-              process.stdout.write(`\n[${event.round} ${event.step}] `);
-            else if (event.type === "error")
-              process.stdout.write(clean(event.error.message));
-            else if (event.type === "rate_limited")
-              process.stdout.write(
-                `Rate limited; wait ${event.retryAfterSec ?? "unknown"} seconds`,
-              );
-          },
+                  checkpoint,
+                  skipCompaction: !!compactionFailure,
+                  limit: route.provider
+                    .models()
+                    .find((m) => m.id === route.model)?.contextTokens,
+                  threshold: project.context.compactThreshold,
+                  overhead:
+                    estimateTokens({
+                      system: context?.system ?? system,
+                      tools:
+                        context?.tools ??
+                        [...tools.values()].map((t) => t.spec),
+                    }) + 4096,
+                });
+                if (prepared.compacted && prepared.checkpoint) {
+                  checkpoint = prepared.checkpoint;
+                  await checkpointFile().write(checkpoint);
+                }
+                if (prepared.failure && !compactionFailure) {
+                  compactionFailure = prepared.failure;
+                  process.stdout.write(
+                    `\nAuto-compaction skipped (${route.model}): ${clean(prepared.failure)}\n`,
+                  );
+                }
+                return {
+                  messages: prepared.messages,
+                  ...(!prepared.fits ? { stop: "context_overflow" } : {}),
+                };
+              },
+              router,
+              current: () => ({ model: model!, reasoning: { effort } }),
+              onFallback: (route) => {
+                model = route.model;
+                process.stdout.write(`\n↻ fallback: ${model}\n`);
+              },
+              reasoning: { effort },
+              model: model!,
+              system,
+              messages,
+              tools,
+              redact: clean,
+              checkpoint: fileCheckpoint,
+              permission: (call, signal) => ask(call, signal),
+              onEvent(event) {
+                if (event.type === "text_delta") {
+                  bufferedText += event.text;
+                  const boundary = Math.max(
+                    bufferedText.lastIndexOf(" "),
+                    bufferedText.lastIndexOf("\n"),
+                    bufferedText.lastIndexOf("\t"),
+                  );
+                  if (boundary >= 0) {
+                    process.stdout.write(
+                      clean(bufferedText.slice(0, boundary + 1)),
+                    );
+                    bufferedText = bufferedText.slice(boundary + 1);
+                  }
+                } else if (event.type === "message_done") {
+                  process.stdout.write(clean(bufferedText));
+                  bufferedText = "";
+                } else if (event.type === "step")
+                  process.stdout.write(`\n[${event.round} ${event.step}] `);
+                else if (event.type === "error")
+                  process.stdout.write(clean(event.error.message));
+                else if (event.type === "rate_limited")
+                  process.stdout.write(
+                    `Rate limited; wait ${event.retryAfterSec ?? "unknown"} seconds`,
+                  );
+              },
+            },
+            turnAbort.signal,
+          );
+          return { ...value, stopCause: budget.stopCause ?? value.stopCause };
         },
-        controller.signal,
       );
       messages = result.messages;
       await sessions.append(session.id, messages.slice(persisted), clean);

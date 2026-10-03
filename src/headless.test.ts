@@ -1,9 +1,30 @@
 import { readTraceReplay } from "./main/session/report-trace.js";
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+it("waits for input after the session budget is exhausted and keeps the cap across restart", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-headless-budget-"));
+  await writeFile(
+    join(home, "config.yaml"),
+    "limits: {llmCallsPerSession: 1}\n",
+  );
+  const output = await repl(home, ["first", "second", "/exit"]);
+  expect(output).toContain("budget_exceeded");
+  const id = /session ([\w-]+)/.exec(output)![1]!;
+  const calls = JSON.parse(
+    await readFile(join(home, "sessions", id + ".llm-calls.json"), "utf8"),
+  );
+  expect(calls.session).toBe(1);
+  const resumed = await repl(home, ["third", "/exit"], ["--resume", id]);
+  expect(resumed).toContain("budget_exceeded");
+  expect(
+    JSON.parse(
+      await readFile(join(home, "sessions", id + ".llm-calls.json"), "utf8"),
+    ).session,
+  ).toBe(1);
+}, 30000);
 
 function repl(
   home: string,

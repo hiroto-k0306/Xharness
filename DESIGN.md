@@ -1633,7 +1633,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Bash による変更は追跡しない（範囲外）。画面にもその旨を表示する。worktree の worker は worktree ごと破棄できるため対象外。
 - 保存期間は Claude Code の `cleanupPeriodDays` 既定値に合わせて30日（設定 `checkpoints.retentionDays` で変更可）。期限切れとセッション削除の際に削除する。ターン数・容量の上限は設けないが、1ファイル10 MB超は退避せず、そのファイルは巻き戻せないと画面に表示する。
 - 戻す対象の選び方も Claude Code に合わせ、コード・会話・両方から選ぶ（既定はコードのみ。会話を戻すのは履歴の追記に「巻き戻し」を記録し、元の履歴は消さない）。
-- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3以降は未着手。
+- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)。M1・M2・M4・M5は未着手。
 
 ### 26.2 優先度: 中
 
@@ -1648,6 +1648,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 **M3. 通信回数と予算の上限**
 - 設定 `limits: {llmCallsPerTurn: 0, llmCallsPerSession: 0}`（0 = 無効が既定。Claude Code の `--max-turns` / `--max-budget-usd` も既定は無制限で、利用者が指定したときだけ効く方式に合わせる）。進展のない通信の防止は、既定で有効な §20.6 の継続停止と §8 の最大ステップ数（100）が担う。`llmCallsPerTurn` は §8 の最大ステップ数と別に、再試行・圧縮・子を含む実際の通信回数を数える。超えたら `budget_exceeded` で停止し、ユーザーの入力を待つ。
 - UsagePopover に今ターン・セッションの通信回数を出す。枠の残量が少ないときの警告は、取得できているヘッダの範囲で出す（推測しない）。
+- 実装済み（2026-10-03）。上限はユーザーの `~/.xharness/config.yaml` から読み、リポジトリの設定では変更しない。送信直前に数え、許可した最後の通信は完了できる。次の送信を拒否した時点で親・子を停止する。セッションの累計は会話の巻き戻しやアプリの再起動でも減らない。FakeProviderの模擬通信は別の内訳を表示する。詳細と検証結果は [docs/m3-progress.md](docs/m3-progress.md)。
 
 **M4. 編集の補助**
 - Edit / Write は既存ファイルの改行コード（CRLF / LF）と BOM を保持する。新規ファイルは作業フォルダ内の同種のファイルから推定せず、LF で作る。
@@ -1672,6 +1673,6 @@ H2 → H1 → H3 → H4 → M3 → M1 → M2 → M4 → M5 → L1〜L3。H2 を�
 規定値は Claude Code の仕様に合わせて決めた（2026-10-02、ユーザー指示）。ただし値は設計者の知識によるもので、公式ドキュメントでの再確認が済んでいない。実装前に確認し、違えばここを直す。
 1. H4（公式資料確認済み、2026-10-03）: [Claude Code公式チェックポイント資料](https://code.claude.com/docs/en/checkpointing)で保存30日・Bashの変更は追跡しないこと・コード／会話／両方の復元を確認した。現在の同資料は最大100チェックポイントとするが、XHarnessは本節の指定どおりターン数・総容量を制限しない。外部変更の不一致を検出して既定で除外することと1ファイル10 MB上限も独自仕様。
 2. H2（公式資料確認済み、2026-10-02）: [Claude Code公式ツール資料](https://code.claude.com/docs/en/tools-reference#grep-tool-behavior)でGrepの`.gitignore`尊重を確認した。同資料ではGrepの250件上限を確認できず、Globは既定では`.gitignore`を尊重しないと記載されている。XHarnessでは本節の指定どおり、両検索で`.gitignore`を尊重し、Grepを250件で打ち切る独自の規定値として実装する。
-3. M3: 上限は既定で無効（Claude Code と同じ）。
+3. M3（公式資料確認済み、2026-10-03）: [Claude Code公式CLI資料](https://code.claude.com/docs/en/cli-reference)で `--max-turns` の既定が無制限、`--max-budget-usd` が指定時に上限を設け子エージェントの使用額を含むことを確認した。XHarnessは本節の指定どおり通信の試行回数を上限とし、金額への換算は行わない。
 4. M4: 新規ファイルは LF、既存ファイルは改行コードと BOM を保持（Claude Code の Edit と同じ）。
 5. H3（公式資料確認済み、2026-10-02）: [公式環境変数資料](https://code.claude.com/docs/en/env-vars)で、通常のBashの既定120秒・上限600秒と、出力30,000文字を確認した。XHarnessのバックグラウンドはターン終了までを寿命とし、timeoutSecを明示した場合だけその上限でも終了する。

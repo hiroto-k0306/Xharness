@@ -108,7 +108,11 @@ export interface LoopOptions {
   system: string;
   messages: Message[];
   tools: ToolRegistry;
-  permission(call: ToolCall, signal: AbortSignal): Promise<boolean>;
+  permission(
+    call: ToolCall,
+    signal: AbortSignal,
+    context?: { forceAsk?: boolean },
+  ): Promise<boolean>;
   beforeStep?: StepHook;
   afterStep?: StepHook;
   onEvent?(

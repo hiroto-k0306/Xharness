@@ -516,13 +516,14 @@ async function runSessionBody(
         redact: clean,
         checkpoint: fileCheckpoint,
         sleep: options.sleep,
-        permission: async (call, signal) => {
+        permission: async (call, signal, context) => {
           const started = Date.now();
           const allowed = await gate.ask({
             session,
             rt,
             call,
             receiptId: events.receiptByCall.get(call.id),
+            forceAsk: context?.forceAsk,
             signal,
           });
           if (options.phase4) {

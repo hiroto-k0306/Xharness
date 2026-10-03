@@ -750,6 +750,7 @@ export class WorkflowRuntime {
             ].includes(call.name)
           )
             return true;
+          let forceAsk = false;
           if (
             ["classify", "plan"].includes(this.state.phase) &&
             !tools.get(call.name)?.readOnly
@@ -762,9 +763,9 @@ export class WorkflowRuntime {
                 this.options.cwd,
               )) === "deny"
             )
-              return false;
+              forceAsk = true;
           }
-          const allowed = await options.permission(call, signal);
+          const allowed = await options.permission(call, signal, { forceAsk });
           if (allowed && (await writes(call, this.options.cwd)))
             this.changes.providers.add(
               resolveModel(current().model)?.provider ?? options.provider.id,

@@ -14,6 +14,7 @@ import {
 } from "../../shared/ipc.js";
 
 export interface PendingPermission {
+  oneTime?: boolean;
   agentId?: string;
   plan?: unknown[];
   requestId: string;
@@ -214,6 +215,7 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
         ...view(s, e.sessionId),
         pending: {
           requestId: e.requestId,
+          oneTime: e.oneTime,
           receiptId: e.receiptId,
           tool: e.tool,
           summary: e.summary,

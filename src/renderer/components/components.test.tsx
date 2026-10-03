@@ -15,6 +15,24 @@ import { TitleBar } from "./TitleBar.js";
 import { Transcript } from "./Transcript.js";
 import { WorkspacePicker } from "./WorkspacePicker.js";
 
+it("offers only a single-call approval when the workflow requires confirmation", () => {
+  const respond = vi.fn();
+  render(
+    <PermissionInline
+      tool="Bash"
+      summary="dummy installer"
+      persistent
+      oneTime
+      onRespond={respond}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: /always|session/ })).toBeNull();
+  fireEvent.keyDown(window, { key: "a" });
+  expect(respond).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: /allow/ }));
+  expect(respond).toHaveBeenCalledWith("allow");
+});
+
 describe("TitleBar", () => {
   it("shows the logo, workspace + branch, and the fake badge", async () => {
     const toggle = vi.fn();

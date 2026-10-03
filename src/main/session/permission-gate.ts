@@ -86,6 +86,7 @@ export class PermissionGate {
     rt.status = "ask";
     ctx.options.emit({
       type: "permission_request",
+      oneTime: forceAsk,
       agentId,
       ...(call.name === "SubmitPlan"
         ? {

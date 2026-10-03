@@ -444,6 +444,7 @@ export function App() {
           ) : (
             view?.pending && (
               <PermissionInline
+                oneTime={view.pending.oneTime}
                 persistent={app.phase4}
                 tool={view.pending.tool}
                 summary={view.pending.summary}

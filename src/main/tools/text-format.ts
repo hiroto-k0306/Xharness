@@ -6,6 +6,7 @@ export function textFormat(original?: string, path = "") {
     found ??
     (original === undefined && /\.(bat|cmd)$/i.test(path) ? "\r\n" : "\n");
   return {
+    mixed: /\r\n/.test(original ?? "") && /(^|[^\r])\n/.test(original ?? ""),
     body: original?.replace(/^\ufeff/, ""),
     normalize: (text: string) => text.replace(/\r?\n/g, newline),
     write(text: string) {

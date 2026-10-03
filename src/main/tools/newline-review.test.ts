@@ -3,6 +3,34 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
 import { FileAccess, fileTools } from "./files.js";
+it.each(["Edit", "MultiEdit"])(
+  "adds mixed-newline advice only on %s match failures",
+  async (name) => {
+    for (const original of ["a\r\nb\nc", "a\r\nb\r\nc", "a\nb\nc"]) {
+      const cwd = await mkdtemp(join(tmpdir(), "xh-mixed-"));
+      const path = join(cwd, "a.txt");
+      await writeFile(path, original);
+      const tools = fileTools(new FileAccess(cwd));
+      await tools.get("Read")!.execute({ path }, new AbortController().signal);
+      const old = original === "a\r\nb\nc" ? "b\nc" : "b\nc\nx";
+      const args =
+        name === "Edit"
+          ? { oldString: old, newString: "new" }
+          : { edits: [{ old, new: "new" }] };
+      const result = await tools
+        .get(name)!
+        .execute({ path, ...args }, new AbortController().signal);
+      const base = "Edit 1: oldString must match exactly once";
+      expect(result.content).toBe(
+        base +
+          (original === "a\r\nb\nc"
+            ? "\nCRLFとLFが混在しています。oldStringを1行ずつに分けるか、行をまたがない範囲で指定してください。"
+            : ""),
+      );
+      expect(await readFile(path, "utf8")).toBe(original);
+    }
+  },
+);
 it.each(["a.bat", "a.CMD", "a.txt"])(
   "creates %s with its intended newline",
   async (name) => {

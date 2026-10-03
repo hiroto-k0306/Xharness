@@ -288,7 +288,7 @@ export function fileTools(access: FileAccess): ToolRegistry {
             const first = body.indexOf(old);
             if (first < 0 || body.indexOf(old, first + 1) >= 0)
               return {
-                content: `Edit ${index + 1}: oldString must match exactly once`,
+                content: `Edit ${index + 1}: oldString must match exactly once${format.mixed ? "\nCRLFとLFが混在しています。oldStringを1行ずつに分けるか、行をまたがない範囲で指定してください。" : ""}`,
                 error: failure("invalid_args"),
                 isError: true,
               };

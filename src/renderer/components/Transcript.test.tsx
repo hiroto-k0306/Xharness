@@ -157,7 +157,12 @@ it("opens an attached image enlarged and closes with Esc, backdrop and button", 
   expect(dialog).toHaveAttribute("aria-modal", "true");
   fireEvent.click(screen.getByAltText("拡大した添付画像"));
   expect(screen.getByRole("dialog")).toBeInTheDocument();
-  fireEvent.keyDown(window, { key: "Escape" });
+  // 実行中の Esc 中断(App の window の keydown)へは伝えない
+  const appEscape = vi.fn();
+  window.addEventListener("keydown", appEscape);
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  window.removeEventListener("keydown", appEscape);
+  expect(appEscape).not.toHaveBeenCalled();
   expect(screen.queryByRole("dialog")).toBeNull();
   open();
   fireEvent.click(screen.getByRole("dialog"));

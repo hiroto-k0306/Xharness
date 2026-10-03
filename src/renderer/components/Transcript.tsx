@@ -36,11 +36,14 @@ export function Transcript({
   const [zoom, setZoom] = useState<string | null>(null);
   useEffect(() => {
     if (!zoom) return;
+    // 拡大表示の Esc は閉じるだけにする。App の「Esc で実行中断」へ伝えないよう、捕捉段階で止める
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setZoom(null);
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setZoom(null);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [zoom]);
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });

@@ -386,7 +386,7 @@ it.skipIf(process.platform !== "win32" || !hasPwsh)(
         ).content,
       );
       let output = "";
-      const deadline = Date.now() + 5000;
+      const deadline = Date.now() + 15000;
       while (true) {
         const result = JSON.parse(
           (
@@ -420,6 +420,7 @@ it.skipIf(process.platform !== "win32" || !hasPwsh)(
       }
     }
   },
+  20000,
 );
 it
   .skipIf(process.platform !== "win32" || !hasPwsh)

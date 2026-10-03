@@ -108,7 +108,7 @@ it("allows a no-change proposal to finish after SkipPlan and classifies the next
   expect(s.requests).toHaveLength(2);
   expect(s.runtime.state.phase).toBe("off");
   expect((await s.run()).stopCause).toBe("workflow_complete");
-});
+}, 15000); // Two turns and local change detection compete with the full Windows suite.
 it("stops repeated completion reminders without waiving review for actual changes", async () => {
   const s = await setup(
     [

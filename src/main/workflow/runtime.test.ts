@@ -883,6 +883,11 @@ it("gates phase-specific tools by validation instead of removing them", async ()
   expect(
     await tools.get("Write")!.validate({ path: "a", content: "b" }),
   ).toMatch(/unavailable/);
+  expect(
+    await tools
+      .get("MultiEdit")!
+      .validate({ path: "a", edits: [{ old: "a", new: "b" }] }),
+  ).toMatch(/unavailable/);
   expect(await tools.get("RequestReview")!.validate({ summary: "x" })).toMatch(
     /implement phase/,
   );

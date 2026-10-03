@@ -51,7 +51,9 @@ function object(value: unknown): Record<string, unknown> {
 }
 async function writes(call: ToolCall, cwd: string): Promise<boolean> {
   return (
-    ["Write", "Edit", "SubmitPlan", "SkipPlan"].includes(call.name) ||
+    ["Write", "Edit", "MultiEdit", "SubmitPlan", "SkipPlan"].includes(
+      call.name,
+    ) ||
     (call.name === "Bash" &&
       (await decidePermission(call, { mode: "plan", rules: [] }, cwd)) ===
         "deny")
@@ -779,7 +781,13 @@ export class WorkflowRuntime {
             for (const block of ctx.completion?.message.content ?? [])
               if (
                 block.type === "tool_use" &&
-                ["Write", "Edit", "SubmitPlan", "SkipPlan"].includes(block.name)
+                [
+                  "Write",
+                  "Edit",
+                  "MultiEdit",
+                  "SubmitPlan",
+                  "SkipPlan",
+                ].includes(block.name)
               ) {
                 this.state.phase = "plan";
                 this.notify();

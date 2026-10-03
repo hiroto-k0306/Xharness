@@ -65,6 +65,7 @@ async function canonical(path: string): Promise<string> {
 }
 /** ルールの tool が呼び出しに当たるか。`mcp__<server>` と `mcp__<server>__*` はサーバー全体(§25.5) */
 function ruleTool(rule: string, name: string): boolean {
+  if (rule === "Edit" && name === "MultiEdit") return true;
   if (rule === "*" || rule === name) return true;
   if (!name.startsWith("mcp__")) return false;
   if (!rule.startsWith("mcp__")) return false;
@@ -233,7 +234,7 @@ export async function decidePermission(
     if (restricted("ask")) return "ask";
     return allowed ? "allow" : "ask";
   }
-  const write = ["Write", "Edit"].includes(call.name);
+  const write = ["Write", "Edit", "MultiEdit"].includes(call.name);
   if (mode === "plan" && write) return "deny";
   if (call.name === "Bash") {
     const shape = analyzeCommand(subject);
@@ -256,7 +257,9 @@ export async function decidePermission(
     }
     return allowed ? "allow" : "ask";
   }
-  if (["Read", "Write", "Edit", "Grep", "Glob"].includes(call.name)) {
+  if (
+    ["Read", "Write", "Edit", "MultiEdit", "Grep", "Glob"].includes(call.name)
+  ) {
     const path = await checkPath(subject, cwd);
     if (path.secret) return "ask";
     if (write) {

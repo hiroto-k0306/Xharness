@@ -25,6 +25,7 @@ const tools: Record<string, string> = {
   Read: "ファイルを読む",
   Write: "ファイルを書く",
   Edit: "ファイルを編集する",
+  MultiEdit: "同じファイルの複数箇所をまとめて編集する",
   Bash: "コマンドを実行する",
   Grep: "内容を検索する",
   Glob: "ファイルを探す",

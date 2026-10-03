@@ -1594,7 +1594,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 
 ---
 
-## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4・M3・M1・M2・M4実装済み）
+## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4・M3・M1・M2・M4・M5実装済み）
 
 実アプリの試用（docs/bugs/2026-10-02-workflow-loop.md）後のレビューで挙がった不足機能。優先度の高・中・低の順に実装する。各単位は AGENTS.md の作業ルール（1コミット1目的）で小さく区切り、前の優先度の単位を検証してから次へ進む。
 
@@ -1633,7 +1633,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Bash による変更は追跡しない（範囲外）。画面にもその旨を表示する。worktree の worker は worktree ごと破棄できるため対象外。
 - 保存期間は Claude Code の `cleanupPeriodDays` 既定値に合わせて30日（設定 `checkpoints.retentionDays` で変更可）。期限切れとセッション削除の際に削除する。ターン数・容量の上限は設けないが、1ファイル10 MB超は退避せず、そのファイルは巻き戻せないと画面に表示する。
 - 戻す対象の選び方も Claude Code に合わせ、コード・会話・両方から選ぶ（既定はコードのみ。会話を戻すのは履歴の追記に「巻き戻し」を記録し、元の履歴は消さない）。
-- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)、M1は [docs/m1-progress.md](docs/m1-progress.md)、M2は [docs/m2-progress.md](docs/m2-progress.md)、M4は [docs/m4-progress.md](docs/m4-progress.md)。M5は未着手。
+- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)、M1は [docs/m1-progress.md](docs/m1-progress.md)、M2は [docs/m2-progress.md](docs/m2-progress.md)、M4は [docs/m4-progress.md](docs/m4-progress.md)、M5は [docs/m5-progress.md](docs/m5-progress.md)。
 
 ### 26.2 優先度: 中
 
@@ -1660,6 +1660,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 
 **M5. AskUserQuestion の選択ボタン**
 - 候補がある質問は、番号入力に加えて画面に選択ボタンを出す。押すと入力欄から同じ文章を送るのと同じ扱い（LLM へは通常の返答）。headless では従来どおり番号入力。
+- 実装済み（2026-10-03）。成功したAskUserQuestionの質問・2〜5件の候補を通常の会話欄に表示し、候補の本文を入力欄と同じsend経路で送る。保存会話から再開した場合も表示する。最新の未回答の質問だけ操作でき、実行中・承認待ち・巻き戻し待ち・送信中・回答済みでは無効にする。失敗した送信は再選択できる。子の履歴では親へ誤送信しないよう選択を無効にし、子のセッション自体を再開しない既存仕様を保つ。詳細は [docs/m5-progress.md](docs/m5-progress.md)。
 
 ### 26.3 優先度: 低
 

@@ -22,16 +22,19 @@ async function withWorktree(
   if (
     !session?.worktree ||
     !root ||
+    ctx.sessionBusy.has(sessionId) ||
     ctx.runtime(session.id).status !== "idle" ||
     ctx.worktreeBusy.has(root)
   )
     return { ok: false, error: "Worktree unavailable or busy" };
   if (extraBusy?.(root)) return { ok: false, error: "Workspace writer busy" };
   ctx.worktreeBusy.add(root);
+  ctx.sessionBusy.add(sessionId);
   try {
     return await run(root, session);
   } finally {
     ctx.worktreeBusy.delete(root);
+    ctx.sessionBusy.delete(sessionId);
   }
 }
 
@@ -67,7 +70,8 @@ export function finishWorktree(
           s.workspaceId === session?.workspaceId &&
           !s.worktree &&
           !s.readOnly &&
-          (ctx.existingRuntime(s.id)?.status ?? "idle") !== "idle",
+          (ctx.sessionBusy.has(s.id) ||
+            (ctx.existingRuntime(s.id)?.status ?? "idle") !== "idle"),
       );
   return withWorktree(
     ctx,

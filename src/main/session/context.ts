@@ -169,6 +169,8 @@ export interface ControllerContext {
   /** 枠ごとの最新の使用率とリセット時刻(Web 検索の auto 用。§22.2) */
   readonly usage: ProviderUsage;
   readonly worktreeBusy: Set<string>;
+  /** Synchronous reservation covering send preparation and session operations. */
+  readonly sessionBusy: Set<string>;
   clean(text: string): string;
   runtime(id: string): Runtime;
   existingRuntime(id: string): Runtime | undefined;

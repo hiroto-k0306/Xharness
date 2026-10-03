@@ -10,3 +10,10 @@
 - 内部 Git は `--no-pager -c core.fsmonitor=false` を付け、内部 status の fsmonitor 実行を防ぐ。内部に diff / show / log の external diff / textconv を用いる経路はない。
 - 隔離した一時 Git の無害な fsmonitor スクリプトで再現。内部 status は実行せず、明示した通常 Git status は marker を作ることをテストする。
 - 初回検証: 権限関連3ファイル、78テスト成功。内部 Git 対策追加後の検証結果は後述。
+
+## 2. 送信準備と worktree 操作の排他
+
+- 最初の await より前にセッションを予約し、送信準備の終了まで保持。worktree 操作も同じ予約を取得する。マージの親ワークスペースの writer 判定にも準備中を含める。
+- 停止入力は予約を迂回して中断できる。実行中は従来の runtime.status が担当する。
+- 履歴読み込みと削除完了をそれぞれ barrier で待機させ、両順序の競合を再現するテストを追加した。
+- 初回関連テストはエラー文言の違いで1件失敗（排他自体は動作）。既存の「Turn already running」を維持するよう修正し、再検証する。

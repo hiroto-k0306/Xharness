@@ -137,6 +137,7 @@ export class SessionController {
       quota: {},
       usage: {},
       worktreeBusy: new Set(),
+      sessionBusy: new Set(),
       clean,
       runtime: (id) => this.runtime(id),
       existingRuntime: (id) => this.runtimes.get(id),
@@ -582,6 +583,34 @@ export class SessionController {
     images?: ImageAttachment[],
     scheduled?: AbortSignal,
   ): Promise<CommandResult> {
+    // Stop must remain usable while preparation/compact is awaiting I/O.
+    if (
+      /^(?:\/stop|(?:一旦)?(?:停止|中断)(?:して)?|止めて)[。！!]?$/u.test(
+        text.trim(),
+      )
+    )
+      return this.sendPrepared(sessionId, text, images, scheduled);
+    const session = this.sessions.get(sessionId);
+    if (!session) return { ok: false, error: "Unknown session" };
+    const root = this.ctx.workspaceRoot(session);
+    if (root && this.ctx.worktreeBusy.has(root))
+      return { ok: false, error: "Workspace writer busy" };
+    if (this.ctx.sessionBusy.has(sessionId))
+      return { ok: false, error: "Turn already running" };
+    this.ctx.sessionBusy.add(sessionId);
+    try {
+      return await this.sendPrepared(sessionId, text, images, scheduled);
+    } finally {
+      this.ctx.sessionBusy.delete(sessionId);
+    }
+  }
+
+  private async sendPrepared(
+    sessionId: string,
+    text: string,
+    images?: ImageAttachment[],
+    scheduled?: AbortSignal,
+  ): Promise<CommandResult> {
     const imageSettings = (await loadMainConfig(this.options.home)).images;
     this.imageSettings = imageSettings;
     if (scheduled?.aborted)
@@ -896,8 +925,8 @@ export class SessionController {
           other.workspaceId === session.workspaceId &&
           !other.readOnly &&
           !other.worktree &&
-          this.runtimes.get(other.id)?.status !== undefined &&
-          this.runtimes.get(other.id)?.status !== "idle",
+          (this.ctx.sessionBusy.has(other.id) ||
+            (this.runtimes.get(other.id)?.status ?? "idle") !== "idle"),
       );
   }
 

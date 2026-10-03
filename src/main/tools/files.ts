@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile, mkdir, stat, realpath } from "node:fs/promises";
-import { resolve, dirname, basename } from "node:path";
+import { resolve, dirname, basename, extname } from "node:path";
+import {
+  imageInfo,
+  MAX_IMAGE_BYTES,
+  IMAGE_ERROR,
+} from "../../shared/images.js";
 import { type Tool, type ToolRegistry } from "./registry.js";
 import { failure } from "./errors.js";
 
@@ -117,7 +122,7 @@ export function fileTools(access: FileAccess): ToolRegistry {
         name,
         description:
           name === "Read"
-            ? "Read a UTF-8 file before editing it"
+            ? "Read a UTF-8 file or PNG/JPEG/GIF/WebP image (max 5 MB, 8000px; no resizing) before editing it"
             : name === "Write"
               ? "Write a UTF-8 file; existing files require Read first"
               : "Replace exactly one occurrence in a previously read file",
@@ -142,7 +147,35 @@ export function fileTools(access: FileAccess): ToolRegistry {
         const args = argumentsObject(input);
         const path = await access.path(stringArg(args, "path"));
         if (name === "Read") {
+          const image = /\.(png|jpe?g|gif|webp)$/i.test(extname(path));
+          if (image && (await stat(path)).size > MAX_IMAGE_BYTES)
+            return {
+              content: IMAGE_ERROR,
+              isError: true,
+              error: { kind: "invalid_args", message: IMAGE_ERROR },
+            };
           const bytes = await readFile(path);
+          if (image) {
+            try {
+              const info = imageInfo(bytes);
+              return {
+                content: JSON.stringify(info),
+                blocks: [
+                  {
+                    type: "image",
+                    mediaType: info.mediaType,
+                    data: bytes.toString("base64"),
+                  },
+                ],
+              };
+            } catch {
+              return {
+                content: IMAGE_ERROR,
+                isError: true,
+                error: { kind: "invalid_args", message: IMAGE_ERROR },
+              };
+            }
+          }
           const content = bytes.toString("utf8");
           const info = await stat(path);
           const snapshot = {

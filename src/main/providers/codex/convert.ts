@@ -12,8 +12,18 @@ export function codexCallId(id: string): string {
     ? id
     : "call_" + createHash("sha256").update(id).digest("hex").slice(0, 24);
 }
-function resultText(content: string | ContentBlock[]): string {
+function resultText(content: string | ContentBlock[]): string | NativeItem[] {
   if (typeof content === "string") return content;
+  if (content.some((b) => b.type === "image"))
+    return content.map((b) => {
+      if (b.type === "text") return { type: "input_text", text: b.text };
+      if (b.type === "image")
+        return {
+          type: "input_image",
+          image_url: `data:${b.mediaType};base64,${b.data}`,
+        };
+      throw new Error("Unsupported function result content");
+    });
   return content
     .map((b) => {
       if (b.type !== "text")

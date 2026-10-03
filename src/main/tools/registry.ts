@@ -6,6 +6,10 @@ export interface ToolCall {
   input: unknown;
 }
 export interface ToolOutput {
+  blocks?: Extract<
+    import("../core/types.js").ContentBlock,
+    { type: "image" }
+  >[];
   error?: import("./errors.js").ToolFailure;
   stop?: { reason: "agent_stopped" | "awaiting_user"; message: string };
   content: string;

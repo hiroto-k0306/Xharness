@@ -16,7 +16,7 @@ import {
 } from "../../shared/images.js";
 import { type Tool, type ToolRegistry } from "./registry.js";
 import { failure } from "./errors.js";
-import { textFormat } from "./text-format.js";
+import { textFormat, decodeText, UTF8_ERROR } from "./text-format.js";
 
 export interface Snapshot {
   hash: string;
@@ -150,6 +150,14 @@ export function fileTools(access: FileAccess): ToolRegistry {
         if (name === "Edit" && !stringArg(args, "oldString"))
           return "oldString is empty";
         const path = await access.path(stringArg(args, "path"));
+        if (name !== "Read" || !/\.(png|jpe?g|gif|webp)$/i.test(path)) {
+          try {
+            if (decodeText(await readFile(path)) === undefined)
+              return UTF8_ERROR;
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          }
+        }
         if (
           (name === "Edit" || name === "MultiEdit") &&
           !access.reads.has(path)
@@ -188,7 +196,10 @@ export function fileTools(access: FileAccess): ToolRegistry {
           return {
             content: invalid,
             isError: true,
-            error: failure("invalid_args"),
+            error:
+              invalid === UTF8_ERROR
+                ? { kind: "invalid_args", message: UTF8_ERROR }
+                : failure("invalid_args"),
           };
         const args = argumentsObject(input);
         const path = await access.path(stringArg(args, "path"));
@@ -222,7 +233,13 @@ export function fileTools(access: FileAccess): ToolRegistry {
               };
             }
           }
-          const content = bytes.toString("utf8");
+          const content = decodeText(bytes);
+          if (content === undefined)
+            return {
+              content: UTF8_ERROR,
+              isError: true,
+              error: { kind: "invalid_args", message: UTF8_ERROR },
+            };
           const info = await stat(path);
           const snapshot = {
             hash: createHash("sha256").update(bytes).digest("hex"),
@@ -243,7 +260,13 @@ export function fileTools(access: FileAccess): ToolRegistry {
             : stringArg(args, name === "Write" ? "content" : "newString");
         let original: string | undefined;
         try {
-          original = await readFile(path, "utf8");
+          original = decodeText(await readFile(path));
+          if (original === undefined)
+            return {
+              content: UTF8_ERROR,
+              isError: true,
+              error: { kind: "invalid_args", message: UTF8_ERROR },
+            };
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
         }

@@ -112,6 +112,23 @@
   border-left: 2px solid transparent;
   text-align: left;
 }
+.sessionRow {
+  display: flex;
+  align-items: center;
+}
+.sessionRow .sess {
+  flex: 1;
+  min-width: 0;
+}
+.deleteBtn {
+  padding: 4px;
+  margin-right: 4px;
+  color: var(--dim);
+  font-size: 10px;
+}
+.deleteBtn:hover:not(:disabled) {
+  color: var(--warn);
+}
 .sess:hover {
   background: var(--panel);
 }

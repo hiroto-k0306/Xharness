@@ -25,7 +25,7 @@ export const builtinCommands: CommandSuggestion[] = [
   { value: "/init", description: "AGENTS.mdの雛形を作成（上書きなし）" },
   {
     value: "/mode",
-    args: "default|acceptEdits|plan",
+    args: "通常|自動|計画",
     description: "権限モードを変更",
   },
   { value: "/stop", description: "LLMに送信せず実行を停止" },

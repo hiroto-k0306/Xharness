@@ -19,6 +19,8 @@ it("diagnoses missing CLIs and folder access without recording PATH or leaving p
   const old = new Date("2000-01-01T00:00:00Z");
   await utimes(cwd, old, old);
   vi.stubEnv("PATH", cwd);
+  vi.stubEnv("LOCALAPPDATA", cwd);
+  vi.stubEnv("ProgramFiles", cwd);
   try {
     const result = await diagnoseEnvironment(cwd);
     expect(result.cli).toEqual({ rg: false, pwsh: false, git: false });

@@ -72,6 +72,32 @@ async function setup(provider = new FakeProvider(), config?: string) {
 beforeEach(() => setup());
 
 describe("App wired to the real SessionController", () => {
+  it("requires confirmation to delete a session and removes its history through the controller", async () => {
+    render(<App />);
+    await screen.findByText("+ new session");
+    await userEvent.type(screen.getByLabelText("prompt"), "hello{Enter}");
+    await screen.findByText("pong");
+    await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
+    const id = useStore.getState().app!.currentSessionId!;
+    await userEvent.click(
+      screen.getByRole("button", { name: "helloのセッションを削除" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "キャンセル" }));
+    expect(useStore.getState().app!.sessions.some((s) => s.id === id)).toBe(
+      true,
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "helloのセッションを削除" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "削除する" }));
+    await waitFor(() =>
+      expect(useStore.getState().app!.sessions.some((s) => s.id === id)).toBe(
+        false,
+      ),
+    );
+    expect(useStore.getState().views[id]).toBeUndefined();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
   it("warns when saved session images exceed the configured threshold without blocking", async () => {
     await setup(
       new FakeProvider(),
@@ -217,7 +243,9 @@ describe("App wired to the real SessionController", () => {
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
     await userEvent.click(screen.getByRole("button", { name: /new session/ }));
     await waitFor(() => expect(screen.queryByText("pong")).toBeNull());
-    await userEvent.click(await screen.findByRole("button", { name: /first/ }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /^first(?: |$)/ }),
+    );
     expect(await screen.findByText("pong")).toBeInTheDocument();
   });
   it("Ctrl+B hides the sidebar and the choice is remembered", async () => {
@@ -237,10 +265,9 @@ describe("App wired to the real SessionController", () => {
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
     await userEvent.keyboard("{Control>}w{/Control}");
     await waitFor(() => expect(screen.queryByText("pong")).toBeNull());
-    expect(screen.getByRole("button", { name: /first/ })).not.toHaveAttribute(
-      "aria-current",
-      "true",
-    );
+    expect(
+      screen.getByRole("button", { name: /^first(?: |$)/ }),
+    ).not.toHaveAttribute("aria-current", "true");
   });
   it("keeps the message in the input and shows one notice when the session folder is gone", async () => {
     const { rm } = await import("node:fs/promises");

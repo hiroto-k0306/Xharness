@@ -39,6 +39,9 @@ export function App() {
   );
   const [pane, setPane] = useState("transcript");
   const [usageOpen, setUsageOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
   const s = useStore();
   const { app, views, prefs } = s;
   useEffect(() => s.start(), []);
@@ -165,6 +168,60 @@ export function App() {
         />
       )}
       <div className={styles.body} data-sidebar={prefs.sidebarOpen}>
+        {deleteId && (
+          <div className={styles.deleteOverlay}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-session-title"
+              className={styles.deleteDialog}
+            >
+              <h2 id="delete-session-title">セッションを削除しますか？</h2>
+              <p>{app.sessions.find((x) => x.id === deleteId)?.title}</p>
+              <p>
+                会話履歴と巻き戻し用の記録を削除します。この操作は取り消せません。
+              </p>
+              {deleteError && (
+                <p role="alert">
+                  削除できませんでした。実行中の処理を停止してから再試行してください。
+                </p>
+              )}
+              {app.sessions.find((x) => x.id === deleteId)?.worktree && (
+                <p>
+                  worktreeと作業ファイルは残ります。片付ける場合はキャンセルし、対象セッションのworktree操作を先に行ってください。
+                </p>
+              )}
+              <button
+                type="button"
+                disabled={deleting}
+                autoFocus
+                onClick={() => {
+                  setDeleteId(null);
+                  setDeleteError(false);
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    if (await s.deleteSession(deleteId)) {
+                      setDeleteId(null);
+                      setDeleteError(false);
+                    } else setDeleteError(true);
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {deleting ? "削除中…" : "削除する"}
+              </button>
+            </div>
+          </div>
+        )}
         {prefs.sidebarOpen && (
           <Sidebar
             width={prefs.sidebarWidth}
@@ -182,6 +239,7 @@ export function App() {
               void s.newSession(session?.workspaceId ?? null, session?.readOnly)
             }
             onOpen={s.openSession}
+            onDelete={setDeleteId}
             onToggleGroup={s.toggleGroup}
             onSearch={(search) => s.setPrefs({ search })}
             onSort={(sort) => s.setPrefs({ sort })}
@@ -386,6 +444,7 @@ export function App() {
           ) : (
             view?.pending && (
               <PermissionInline
+                oneTime={view.pending.oneTime}
                 persistent={app.phase4}
                 tool={view.pending.tool}
                 summary={view.pending.summary}

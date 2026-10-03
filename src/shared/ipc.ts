@@ -239,6 +239,7 @@ export type UiEvent =
     }
   | {
       type: "permission_request";
+      oneTime?: boolean;
       agentId?: string;
       plan?: unknown[];
       sessionId: string;

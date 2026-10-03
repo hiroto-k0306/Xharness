@@ -1,4 +1,5 @@
 import { withSessionTrace } from "../core/trace.js";
+import { permissionModeLabels } from "../../shared/permission-modes.js";
 import { withSessionCalls } from "./llm-calls.js";
 import { LlmBudgetError } from "../core/llm-budget.js";
 import { premiseHash, PREMISE_NOTICE } from "./premises.js";
@@ -36,7 +37,7 @@ export async function setMode(
     provider: "harness",
     kind: "permission",
     durationMs: 0,
-    summary: `Mode: ${command.mode}`,
+    summary: `Mode: ${permissionModeLabels[command.mode]}`,
   });
   await ctx.emitState();
   return { ok: true };

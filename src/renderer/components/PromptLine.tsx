@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { permissionModeLabels } from "../../shared/permission-modes.js";
 import styles from "./PromptLine.module.css";
 import {
   attachmentInfo,
@@ -211,11 +212,6 @@ export function PromptLine(p: PromptLineProps) {
       )}
       <span className={styles.cwd}>{p.cwdLabel}</span>
       <span className={styles.gt}>❯</span>
-      {p.running && p.onStop && (
-        <button className={styles.stop} onClick={p.onStop}>
-          ■ 停止
-        </button>
-      )}
       <textarea
         ref={ref}
         className={styles.input}
@@ -299,7 +295,7 @@ export function PromptLine(p: PromptLineProps) {
           aria-label="permission mode"
           disabled={p.readOnly}
           value={p.mode}
-          title="Permission mode (Shift+Tab)"
+          title="権限モード（Shift+Tab）"
           style={{
             color: p.mode === "acceptEdits" ? "var(--warn)" : "var(--dim)",
           }}
@@ -307,9 +303,11 @@ export function PromptLine(p: PromptLineProps) {
             p.onMode?.(e.target.value as "default" | "acceptEdits" | "plan")
           }
         >
-          <option value="default">default</option>
-          <option value="acceptEdits">acceptEdits</option>
-          <option value="plan">plan</option>
+          <option value="default">{permissionModeLabels.default}</option>
+          <option value="acceptEdits">
+            {permissionModeLabels.acceptEdits}
+          </option>
+          <option value="plan">{permissionModeLabels.plan}</option>
         </select>
       ) : (
         <span
@@ -318,6 +316,17 @@ export function PromptLine(p: PromptLineProps) {
         >
           ask
         </span>
+      )}
+      {p.running && p.onStop && (
+        <button
+          type="button"
+          className={styles.stop}
+          onClick={p.onStop}
+          aria-label="停止"
+          title="停止（Esc）"
+        >
+          <span aria-hidden="true">■</span>
+        </button>
       )}
     </div>
   );

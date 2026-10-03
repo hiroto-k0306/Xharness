@@ -173,7 +173,7 @@ async function loadTrustedConfig(
       sessionId: session.id,
       tone: "warn",
       message:
-        "このワークスペースの設定にある許可ルール・acceptEdits は適用せずに続けます(deny / ask は適用します)",
+        "このワークスペースの設定にある許可ルール・自動モードは適用せずに続けます(deny / ask は適用します)",
     });
     return config;
   }
@@ -516,13 +516,14 @@ async function runSessionBody(
         redact: clean,
         checkpoint: fileCheckpoint,
         sleep: options.sleep,
-        permission: async (call, signal) => {
+        permission: async (call, signal, context) => {
           const started = Date.now();
           const allowed = await gate.ask({
             session,
             rt,
             call,
             receiptId: events.receiptByCall.get(call.id),
+            forceAsk: context?.forceAsk,
             signal,
           });
           if (options.phase4) {

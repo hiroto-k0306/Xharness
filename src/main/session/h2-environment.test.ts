@@ -50,6 +50,8 @@ it("diagnoses once, fixes the summary despite PATH changes and keeps it after re
   if (!created.ok || !created.sessionId) throw new Error("no session");
   const id = created.sessionId;
   vi.stubEnv("PATH", home);
+  vi.stubEnv("LOCALAPPDATA", home);
+  vi.stubEnv("ProgramFiles", home);
   let resumed: SessionController | undefined;
   try {
     await controller.handle({ type: "send", sessionId: id, text: "first" });

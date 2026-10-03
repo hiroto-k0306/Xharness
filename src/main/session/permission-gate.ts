@@ -79,6 +79,18 @@ export class PermissionGate {
         },
       );
       if (decision === "deny") return "deny";
+      // Selecting automatic mode is the user's grant for ordinary tool calls.
+      // Trust, external connections and project hooks have separate approvals.
+      if (
+        (latest.permissionMode ?? rt.config.permissions.mode) ===
+          "acceptEdits" &&
+        !latest.readOnly &&
+        !session.readOnly &&
+        !["ProjectSettings", "ProjectHooks", "McpServer", "McpPrompt"].includes(
+          call.name,
+        )
+      )
+        return "allow";
       if (decision === "allow" && !forceAsk) return "allow";
     } else if (!forceAsk && rt.always.has(call.name)) return "allow";
     const requestId = randomUUID().slice(0, 8);
@@ -86,6 +98,7 @@ export class PermissionGate {
     rt.status = "ask";
     ctx.options.emit({
       type: "permission_request",
+      oneTime: forceAsk && call.name === "Bash",
       agentId,
       ...(call.name === "SubmitPlan"
         ? {

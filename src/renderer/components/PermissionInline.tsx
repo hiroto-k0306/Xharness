@@ -4,6 +4,7 @@ import styles from "./PermissionInline.module.css";
 
 export interface PermissionInlineProps {
   persistent?: boolean;
+  oneTime?: boolean;
   tool: string;
   summary: string;
   onRespond(decision: PermissionDecision): void;
@@ -15,6 +16,7 @@ export function PermissionInline({
   summary,
   onRespond,
   persistent,
+  oneTime,
 }: PermissionInlineProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -23,7 +25,7 @@ export function PermissionInline({
       const decision: PermissionDecision | undefined =
         key === "y"
           ? "allow"
-          : key === "a"
+          : key === "a" && !oneTime
             ? "always"
             : key === "n" || key === "escape"
               ? "deny"
@@ -34,7 +36,7 @@ export function PermissionInline({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onRespond]);
+  }, [onRespond, oneTime]);
   return (
     <div
       className={styles.perm}
@@ -49,11 +51,13 @@ export function PermissionInline({
         <button type="button" onClick={() => onRespond("allow")}>
           <kbd>y</kbd>allow
         </button>
-        <button type="button" onClick={() => onRespond("always")}>
-          <kbd>a</kbd>
-          {persistent ? "always" : "session"}
-        </button>
-        {persistent && (
+        {!oneTime && (
+          <button type="button" onClick={() => onRespond("always")}>
+            <kbd>a</kbd>
+            {persistent ? "always" : "session"}
+          </button>
+        )}
+        {persistent && !oneTime && (
           <button type="button" onClick={() => onRespond("session")}>
             session
           </button>

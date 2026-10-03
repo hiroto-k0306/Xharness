@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { argumentsObject, stringArg } from "./files.js";
 import { runProcess } from "./process.js";
 import { type ToolRegistry } from "./registry.js";
-import { cliAvailable } from "./environment.js";
+import { cliAvailable, resolveCli } from "./environment.js";
 import { nodeSearch, searchExcluded } from "./node-search.js";
 import { failure, structuredFailure, ToolExecutionError } from "./errors.js";
 import { BackgroundShells } from "./background-shells.js";
@@ -86,7 +86,8 @@ export function shellSearchTools(cwd: string): ToolRegistry {
             );
           let execution;
           if (name === "Bash") {
-            if (!(await cliAvailable("pwsh")))
+            const shell = await resolveCli("pwsh");
+            if (!shell)
               throw new ToolExecutionError(
                 "PowerShell 7（pwsh）が見つかりません。インストールしてアプリを再起動してください。",
                 "missing_cli",
@@ -99,7 +100,7 @@ export function shellSearchTools(cwd: string): ToolRegistry {
               return {
                 content: JSON.stringify(
                   await shells.start(
-                    "pwsh",
+                    shell,
                     parameters,
                     cwd,
                     signal,
@@ -111,7 +112,7 @@ export function shellSearchTools(cwd: string): ToolRegistry {
                 isError: false,
               };
             execution = await runProcess(
-              "pwsh",
+              shell,
               parameters,
               cwd,
               signal,

@@ -311,7 +311,8 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
             item.tool?.autoAllow ||
             (await options.permission(item.call, signal));
           if (!item.allowed) {
-            item.error = "操作がユーザーに拒否されました。";
+            item.error =
+              "操作は許可されませんでした。ユーザーの拒否、権限ルール、またはワークフロー段階の制限を確認してください。同じ操作を繰り返す前に、制限の原因を確認してください。";
             item.errorKind = "denied";
           }
         }

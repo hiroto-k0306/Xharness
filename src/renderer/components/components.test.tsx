@@ -15,6 +15,24 @@ import { TitleBar } from "./TitleBar.js";
 import { Transcript } from "./Transcript.js";
 import { WorkspacePicker } from "./WorkspacePicker.js";
 
+it("offers only a single-call approval when the workflow requires confirmation", () => {
+  const respond = vi.fn();
+  render(
+    <PermissionInline
+      tool="Bash"
+      summary="dummy installer"
+      persistent
+      oneTime
+      onRespond={respond}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: /always|session/ })).toBeNull();
+  fireEvent.keyDown(window, { key: "a" });
+  expect(respond).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: /allow/ }));
+  expect(respond).toHaveBeenCalledWith("allow");
+});
+
 describe("TitleBar", () => {
   it("shows the logo, workspace + branch, and the fake badge", async () => {
     const toggle = vi.fn();
@@ -183,6 +201,25 @@ describe("Transcript", () => {
 });
 
 describe("PromptLine", () => {
+  it("labels the compatible acceptEdits value as automatic", () => {
+    render(
+      <PromptLine
+        cwdLabel="test"
+        running={false}
+        blocked={false}
+        modelLabel="fake"
+        modelColor="red"
+        mode="acceptEdits"
+        onSubmit={() => {}}
+      />,
+    );
+    expect(screen.getByRole("option", { name: "自動" })).toHaveValue(
+      "acceptEdits",
+    );
+    expect(screen.getByRole("option", { name: "通常" })).toHaveValue("default");
+    expect(screen.getByRole("option", { name: "計画" })).toHaveValue("plan");
+    expect(screen.queryByRole("option", { name: "acceptEdits" })).toBeNull();
+  });
   it("allows stopping while a permission prompt disables message input", () => {
     const onStop = vi.fn();
     const onSubmit = vi.fn();
@@ -198,7 +235,10 @@ describe("PromptLine", () => {
       />,
     );
     expect(screen.getByRole("textbox", { name: "prompt" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "■ 停止" }));
+    const stop = screen.getByRole("button", { name: "停止" });
+    expect(stop.parentElement?.lastElementChild).toBe(stop);
+    expect(stop).toHaveAttribute("title", "停止（Esc）");
+    fireEvent.click(stop);
     expect(onStop).toHaveBeenCalledOnce();
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -392,6 +432,15 @@ const sidebarProps = (over: Partial<SidebarProps> = {}): SidebarProps => ({
   ...over,
 });
 describe("Sidebar", () => {
+  it("disables session deletion during running and permission waits", () => {
+    render(<Sidebar {...sidebarProps({ onDelete: vi.fn() })} />);
+    expect(
+      screen.getByRole("button", { name: "ログイン追加のセッションを削除" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "雑談のセッションを削除" }),
+    ).toBeDisabled();
+  });
   it("groups by workspace and puts 'その他' last, with path, kind and branch", () => {
     render(<Sidebar {...sidebarProps()} />);
     const groups = screen.getAllByTestId(/^group-/);

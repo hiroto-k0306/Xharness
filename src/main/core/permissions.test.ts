@@ -16,6 +16,19 @@ import {
 } from "../config/project.js";
 const call = (name: string, input: unknown) => ({ id: "test", name, input });
 describe("Phase 4 permission rules", () => {
+  it("asks for installer discovery in acceptEdits but denies it under the planning gate", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-install-gate-"));
+    const command = call("Bash", {
+      command:
+        "Get-Command winget, scoop, choco, rg -ErrorAction SilentlyContinue | Select-Object Name, Source",
+    });
+    expect(
+      await decidePermission(command, { mode: "acceptEdits", rules: [] }, cwd),
+    ).toBe("ask");
+    expect(
+      await decidePermission(command, { mode: "plan", rules: [] }, cwd),
+    ).toBe("deny");
+  });
   it("reuses a saved grant for quoted arguments after a cwd cd prefix", async () => {
     const home = await mkdtemp(join(tmpdir(), "xh-grant-home-"));
     const cwd = await mkdtemp(join(tmpdir(), "xh-grant-cwd-"));

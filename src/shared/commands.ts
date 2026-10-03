@@ -4,6 +4,16 @@ export interface CommandSuggestion {
   args?: string;
 }
 export const builtinCommands: CommandSuggestion[] = [
+  {
+    value: "/schedule",
+    args: "help|after|every|idle|event|list|cancel",
+    description: "起動中だけ有効な予約・イベント待ち（発火時にモデル通信）",
+  },
+  {
+    value: "/signal",
+    args: "<名前>",
+    description: "この会話の名前付きイベントを通知（通信なし）",
+  },
   { value: "/clear", description: "履歴を残して新しい会話を開始" },
   { value: "/resume", args: "[sessionId]", description: "履歴を一覧・再開" },
   {

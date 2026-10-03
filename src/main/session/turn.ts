@@ -257,8 +257,8 @@ export async function runSessionTurn(
   rt: Runtime,
   text: string,
   images?: import("../../shared/images.js").ImageAttachment[],
+  abort = new AbortController(),
 ): Promise<void> {
-  const abort = new AbortController();
   rt.abort = abort;
   try {
     const config = await loadProjectConfig(ctx.options.home);
@@ -277,7 +277,11 @@ export async function runSessionTurn(
     );
   } catch (error) {
     const stopCause =
-      error instanceof LlmBudgetError ? error.reason : "step_failed";
+      error instanceof LlmBudgetError
+        ? error.reason
+        : abort.signal.aborted
+          ? "aborted"
+          : "step_failed";
     rt.status = "idle";
     rt.abort = undefined;
     ctx.options.emit({
@@ -294,6 +298,7 @@ export async function runSessionTurn(
       stopCause,
     });
   } finally {
+    if (rt.closing && rt.status === "idle") ctx.dropRuntime(session.id);
     await ctx.emitState();
   }
 }

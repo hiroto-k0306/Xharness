@@ -91,6 +91,17 @@ it("lists only trusted definitions and sends the expansion as one ordinary user 
       text: "/task example",
     }),
   ).toMatchObject({ ok: true });
+  await vi.waitFor(() =>
+    expect(
+      s.events.some(
+        (e) =>
+          e.type === "turn" &&
+          e.sessionId === s.id &&
+          e.status === "idle" &&
+          e.stopCause === "end_turn",
+      ),
+    ).toBe(true),
+  );
   await restarted.shutdown();
   const store = new SessionStore(s.home);
   await store.load();

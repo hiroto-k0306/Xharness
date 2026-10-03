@@ -248,12 +248,27 @@ export async function decidePermission(
       )
     )
       return confirm();
-    if (shape.tokens.some((t) => isSecretPath(t))) return "ask";
+    // Resolve possible path arguments too: a relative junction can hide an
+    // outside/secret target even though its spelling looks harmless.
+    const paths = shape.tokens
+      .slice(1)
+      .flatMap((token) => token.replace(/^-{1,2}[\w-]+[:=]/, "").split(","))
+      .filter((token) => token && !token.startsWith("-"));
+    const targets = await Promise.all(
+      paths.map((path) => checkPath(path, cwd)),
+    );
+    if (
+      shape.tokens.some((t) => isSecretPath(t)) ||
+      targets.some((p) => p.secret)
+    )
+      return "ask";
     if (restricted("ask")) return "ask";
     if (mode === "plan") {
       if (!READ_ONLY_COMMAND.test(subject)) return "deny";
       // 作業フォルダの外を読む引数は、読み取りでも確認する
-      return shape.outsidePath ? "ask" : "allow";
+      return shape.outsidePath || targets.some((p) => p.outside)
+        ? "ask"
+        : "allow";
     }
     return allowed ? "allow" : "ask";
   }

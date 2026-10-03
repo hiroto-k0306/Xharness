@@ -1,0 +1,23 @@
+# 既存の config.yaml に hooks 配列を統合してください。自動では適用されません。
+hooks:
+  - id: protect-migrations
+    step: act
+    timing: before
+    when:
+      tools: [Edit, Write, MultiEdit]
+      pathGlob: "migrations/**"
+    onMatch: block
+    reason: "migrations/ は手で編集してください。"
+  - id: format-typescript
+    step: act
+    timing: after
+    when:
+      tools: [Edit, Write, MultiEdit]
+      pathGlob: "src/**/*.{ts,tsx}"
+    # ローカルの既存依存だけを使う。npx による取得は行わない。
+    command: >-
+      if (!(Test-Path -LiteralPath './node_modules/prettier/bin/prettier.cjs' -PathType Leaf)) { throw 'ローカルのPrettierが見つかりません。' };
+      node ./node_modules/prettier/bin/prettier.cjs --write -- {{files}};
+      exit $LASTEXITCODE
+    onFailure: inject
+    timeoutSec: 60

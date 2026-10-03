@@ -67,6 +67,10 @@ async function json(path: string, value: unknown) {
   }
 }
 export class FileCheckpointStore {
+  private static readonly purges = new Map<
+    string,
+    { at: number; done: Promise<void> }
+  >();
   readonly root: string;
   constructor(home: string) {
     this.root = resolve(home, "checkpoints");
@@ -387,22 +391,73 @@ export class FileCheckpointStore {
     await this.checked(directory);
     await rm(directory, { recursive: true, force: true });
   }
-  async purge(retentionDays: number, now = Date.now()) {
-    let sessions;
+  async purge(retentionDays: number, now = Date.now(), force = false) {
+    const key =
+      process.platform === "win32" ? this.root.toLowerCase() : this.root;
+    const previous = FileCheckpointStore.purges.get(key);
+    if (previous && !force && now - previous.at < 3600000) return previous.done;
+    const done = (previous?.done ?? Promise.resolve()).then(() =>
+      this.purgeExpired(retentionDays, now),
+    );
+    FileCheckpointStore.purges.set(key, { at: now, done });
+    return done;
+  }
+  private async purgeExpired(retentionDays: number, now: number) {
+    // Expiry is best effort; unrelated damaged records must never stop a turn.
     try {
-      sessions = await readdir(this.root, { withFileTypes: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw error;
-    }
-    for (const session of sessions) {
-      if (!session.isDirectory() || session.isSymbolicLink()) continue;
-      for (const turn of await this.turns(session.name))
-        if (turn.createdAt < now - retentionDays * 86400000) {
-          const directory = this.directory(session.name, turn.id);
-          await this.checked(directory);
-          await rm(directory, { recursive: true, force: true });
+      if (
+        !Number.isSafeInteger(retentionDays) ||
+        retentionDays < 1 ||
+        (await lstat(this.root)).isSymbolicLink()
+      )
+        return;
+      for (const session of await readdir(this.root, { withFileTypes: true })) {
+        if (
+          !session.isDirectory() ||
+          session.isSymbolicLink() ||
+          !/^[\w-]+$/.test(session.name)
+        )
+          continue;
+        try {
+          const parent = this.directory(session.name);
+          await this.checked(parent);
+          for (const turn of await readdir(parent, { withFileTypes: true })) {
+            if (
+              !turn.isDirectory() ||
+              turn.isSymbolicLink() ||
+              !/^[\w-]+$/.test(turn.name)
+            )
+              continue;
+            try {
+              const directory = this.directory(session.name, turn.name);
+              await this.checked(directory);
+              const manifest = join(directory, "turn.json");
+              const info = await lstat(manifest);
+              if (!info.isFile() || info.isSymbolicLink()) continue;
+              const value: unknown = JSON.parse(
+                await readFile(manifest, "utf8"),
+              );
+              const createdAt = (value as { createdAt?: unknown } | null)
+                ?.createdAt;
+              if (
+                typeof createdAt !== "number" ||
+                !Number.isFinite(createdAt) ||
+                createdAt < 0 ||
+                createdAt >= now - retentionDays * 86400000
+              )
+                continue;
+              await this.checked(directory);
+              await rm(directory, { recursive: true, force: true });
+            } catch {
+              /* Preserve unreadable or unsafe records. */
+            }
+          }
+        } catch {
+          /* Continue with other sessions. */
         }
+      }
+    } catch {
+      /* Missing or inaccessible backup storage is not a turn failure. */
     }
   }
 }

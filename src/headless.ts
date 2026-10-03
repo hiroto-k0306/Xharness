@@ -269,7 +269,11 @@ export async function headless(args = process.argv.slice(2)) {
   let messages: Message[] = resume ? await sessions.messages(session.id) : [];
   let persisted = messages.length;
   const fileCheckpoints = new FileCheckpointStore(home);
-  await fileCheckpoints.purge(project.checkpoints?.retentionDays ?? 30);
+  await fileCheckpoints.purge(
+    project.checkpoints?.retentionDays ?? 30,
+    Date.now(),
+    true,
+  );
   let checkpoint: Checkpoint | undefined;
   const checkpointFile = () =>
     new JsonFile<Checkpoint | undefined>(

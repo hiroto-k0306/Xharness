@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  writeFile,
+  mkdir,
+  symlink,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -11,6 +18,17 @@ import { type UiEvent } from "../../shared/ipc.js";
 it("tracks real Write calls, previews locally, cancels safely, and rewinds both without LLM communication", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-undo-controller-"));
   await writeFile(join(home, "config.yaml"), "workflow:\n  mode: off\n");
+  await mkdir(join(home, "checkpoints", "broken", "turn"), { recursive: true });
+  await writeFile(
+    join(home, "checkpoints", "broken", "turn", "turn.json"),
+    "broken",
+  );
+  await mkdir(join(home, "checkpoints", "invalid name"));
+  await symlink(
+    join(home, "scratch"),
+    join(home, "checkpoints", "linked"),
+    process.platform === "win32" ? "junction" : "dir",
+  );
   const events: UiEvent[] = [];
   const request = vi.fn();
   const controller = new SessionController({

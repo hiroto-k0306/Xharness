@@ -117,6 +117,8 @@ export class SessionController {
     await new FileCheckpointStore(this.options.home).purge(
       (await loadProjectConfig(this.options.home)).checkpoints?.retentionDays ??
         30,
+      Date.now(),
+      true,
     );
     if (this.options.phase4) {
       this.gitAvailable = await this.ctx.repository.available();

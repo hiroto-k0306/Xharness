@@ -161,6 +161,12 @@ describe("six-step agent loop", () => {
       isError: true,
       content: expect.stringContaining('"kind":"denied"'),
     });
+    expect(JSON.stringify(result.messages[2])).toContain(
+      "ワークフロー段階の制限",
+    );
+    expect(JSON.stringify(result.messages[2])).not.toContain(
+      "操作がユーザーに拒否されました",
+    );
   });
   it("rechecks the precondition after waiting for permission", async () => {
     const { options, executions } = setup([[completion(true)], [completion()]]);

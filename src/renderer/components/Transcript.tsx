@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { type TranscriptItem } from "../../shared/ipc.js";
 import { Logo } from "./Logo.js";
 import { McpStatus } from "./McpStatus.js";
@@ -34,16 +35,26 @@ export function Transcript({
 }: TranscriptProps) {
   const end = useRef<HTMLDivElement>(null);
   const [zoom, setZoom] = useState<string | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!zoom) return;
-    // 拡大表示の Esc は閉じるだけにする。App の「Esc で実行中断」へ伝えないよう、捕捉段階で止める
+    closeButton.current?.focus();
+    // 拡大表示中のキーは、捕捉段階で止めて背後へ伝えない(App の Esc 中断や承認の y / a / n を押させない)
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
       e.stopPropagation();
-      setZoom(null);
+      if (e.key === "Escape") setZoom(null);
+      else if (e.key === "Tab") {
+        // 操作できるのは閉じるボタンだけなので、フォーカスをそこにとどめる
+        e.preventDefault();
+        closeButton.current?.focus();
+      }
     };
     window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      if (opener.current?.isConnected) opener.current.focus();
+    };
   }, [zoom]);
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
@@ -168,9 +179,10 @@ export function Transcript({
                   type="button"
                   className={styles.thumb}
                   aria-label={`添付画像 ${i + 1} を拡大`}
-                  onClick={() =>
-                    setZoom(`data:${image.mediaType};base64,${image.data}`)
-                  }
+                  onClick={(e) => {
+                    opener.current = e.currentTarget;
+                    setZoom(`data:${image.mediaType};base64,${image.data}`);
+                  }}
                 >
                   <img
                     alt={`添付画像 ${i + 1}`}
@@ -184,31 +196,34 @@ export function Transcript({
       })}
       {running && <span className={styles.cursor} aria-hidden />}
       <div ref={end} />
-      {zoom && (
-        <div
-          className={styles.overlay}
-          role="dialog"
-          aria-modal="true"
-          aria-label="画像の拡大表示"
-          data-testid="image-overlay"
-          onClick={() => setZoom(null)}
-        >
-          <button
-            type="button"
-            className={styles.close}
-            aria-label="閉じる"
+      {zoom &&
+        createPortal(
+          <div
+            className={styles.overlay}
+            role="dialog"
+            aria-modal="true"
+            aria-label="画像の拡大表示"
+            data-testid="image-overlay"
             onClick={() => setZoom(null)}
           >
-            ×
-          </button>
-          <img
-            className={styles.zoomed}
-            alt="拡大した添付画像"
-            src={zoom}
-            onClick={(e) => e.stopPropagation()}
-          />
-        </div>
-      )}
+            <button
+              ref={closeButton}
+              type="button"
+              className={styles.close}
+              aria-label="閉じる"
+              onClick={() => setZoom(null)}
+            >
+              ×
+            </button>
+            <img
+              className={styles.zoomed}
+              alt="拡大した添付画像"
+              src={zoom}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

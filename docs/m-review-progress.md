@@ -29,3 +29,23 @@
 ## 全体検証での修正
 
 - 初回全体実行は892件中891成功、権限確認イベント直後のstateがaskであると即時に仮定した既存テスト1件失敗。stateとpermission_requestは別通知で、今回の設定読み込みが間隔を広げて露呈した。画像設定は起動・送信時に読み、stateごとの追加ファイルIOを除去。テストも後続stateを明示的に待つようにした。
+- 画像の保存を含む追加統合試験では、初回は圧縮後の送信に画像が残って失敗。テストが圧縮用のprepareContextを使わないPhase 2相当の設定だったため、実アプリ同様のphase4=trueへ修正した。SessionController経由の /compact 後の送信に古い画像がなく、保存JSONLには残ることを確認した。
+- 改行テストの追加直後は修正適用の不足で4件失敗し、textFormatの変更を適用して成功した。既存の「改行なしWriteはLF」というテストを、今回承認された入力保持へ更新した。
+
+## 最終検証結果
+
+- Windows、Node 24.16.0（`C:/Program Files/nodejs/node.exe`）、ユーザーのWindowsApps版PowerShell 7.6.6（`C:/Users/ahwri/AppData/Local/Microsoft/WindowsApps/pwsh.exe`）をPATH先頭へ指定。実API通信なし。新しい依存なし。
+- rgありの `pnpm test`：全117ファイル・893件成功、失敗・スキップなし。
+- rgを含むPATHディレクトリを外し `Get-Command rg` が存在しないことを確認した `pnpm test`：全117ファイル・892件成功・1件スキップ（合計893）。スキップは既存のrg専用試験で、Node代替検索の試験は成功。
+- Node 22.23.3（`.tools/node_modules/node/bin/node.exe`）：今回の文字コード・改行・MultiEdit・Codex画像形式・圧縮・画像セッション・入力欄・Appの関連10ファイル・55件成功。
+- `pnpm typecheck` / `pnpm lint` / `pnpm build` / `pnpm build:headless` 成功。変更コードのPrettier check・`git diff --check`成功。既存のpnpm 10.34.6の `pnpm.onlyBuiltDependencies` 配置警告は継続（今回変更なし）。
+- 単体試験の保存JSONLと実SessionController経由の圧縮、画面はjsdomで検証。警告の試験は設定を1バイトに下げ、実際の画像添付で超過と送信を止めない動作を確認した。既定値20 MBも設定に保持している。
+
+## 手元（Windows）で実施が必要
+
+1. CP932/Shift-JISの実ファイルをRead/Edit/MultiEdit/Writeで拒否し、アプリ外でバイト列が不変であることを確認する。UTF-16とバイナリも同様。
+2. 新規.bat/.cmdのCRLF、改行なし既存Writeの入力保持、混在改行の日本語ヒントをアプリで確認する。
+3. 画像を含む会話の `/compact` 前後の再送・保存履歴、6枚目の添付拒否、画像合計の警告、再起動後の表示を確認する。保存合計なので圧縮後も警告は残る。
+4. [Codex画像結果の確認手順](m-codex-image-local-check.md)で、軽いモデル1つ・最大2リクエストの実通信を行う。output/user_messageのどちらも現状は実通信未確認。ヘッダ・秘密値は保存しない。
+
+exeの作成・インストール済みアプリの更新・実モデルでの確認は今回未実施。手順書の検証プログラム例も実行していない。コード・設定・仕様の修正は1〜5すべて完了。

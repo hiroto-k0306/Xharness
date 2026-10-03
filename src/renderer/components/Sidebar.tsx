@@ -21,6 +21,7 @@ export interface SidebarProps {
   now?: number;
   onNew(): void;
   onOpen(id: string): void;
+  onDelete?(id: string): void;
   onToggleGroup(id: string): void;
   onSearch(text: string): void;
   onSort(sort: "recent" | "name"): void;
@@ -138,65 +139,83 @@ export function Sidebar(p: SidebarProps) {
                     ? stepColor(view.step.node, p.app.model)
                     : "var(--code)";
                   return (
-                    <button
-                      type="button"
-                      key={s.id}
-                      className={`${styles.sess} ${
-                        s.id === p.app.currentSessionId ? styles.cur : ""
-                      } ${s.status === "ask" ? styles.askRow : ""}`}
-                      aria-current={s.id === p.app.currentSessionId}
-                      onClick={() => p.onOpen(s.id)}
-                    >
-                      <div className={styles.title}>{s.title}</div>
-                      <div className={styles.meta}>
-                        {!!Object.values(view?.agents ?? {}).filter(
-                          (a) => a.status === "running",
-                        ).length && (
-                          <span>
-                            ●{" "}
-                            {
-                              Object.values(view?.agents ?? {}).filter(
-                                (a) => a.status === "running",
-                              ).length
-                            }{" "}
-                            agents
-                          </span>
-                        )}
-                        {s.permissionMode && (
-                          <span
-                            style={{
-                              color:
-                                s.permissionMode === "acceptEdits"
-                                  ? "var(--warn)"
-                                  : "var(--dim)",
-                            }}
-                          >
-                            {s.permissionMode}
-                          </span>
-                        )}
-                        {s.providers.map((pr) => (
-                          <i
-                            key={pr}
-                            className={styles.pdot}
-                            style={{ background: providerColor[pr] }}
-                          />
-                        ))}
-                        {s.branch && <span>⎇ {s.branch}</span>}
-                        {s.readOnly && <span>read-only</span>}
-                        {s.status === "running" ? (
-                          <span
-                            className={styles.live}
-                            style={{ ["--glow" as string]: color }}
-                          >
-                            ● running
-                          </span>
-                        ) : s.status === "ask" ? (
-                          <span style={{ color: "var(--warn)" }}>● ask</span>
-                        ) : (
-                          <span>{ago(s.updatedAt, p.now)}</span>
-                        )}
-                      </div>
-                    </button>
+                    <div key={s.id} className={styles.sessionRow}>
+                      <button
+                        type="button"
+                        key={s.id}
+                        className={`${styles.sess} ${
+                          s.id === p.app.currentSessionId ? styles.cur : ""
+                        } ${s.status === "ask" ? styles.askRow : ""}`}
+                        aria-current={s.id === p.app.currentSessionId}
+                        onClick={() => p.onOpen(s.id)}
+                      >
+                        <div className={styles.title}>{s.title}</div>
+                        <div className={styles.meta}>
+                          {!!Object.values(view?.agents ?? {}).filter(
+                            (a) => a.status === "running",
+                          ).length && (
+                            <span>
+                              ●{" "}
+                              {
+                                Object.values(view?.agents ?? {}).filter(
+                                  (a) => a.status === "running",
+                                ).length
+                              }{" "}
+                              agents
+                            </span>
+                          )}
+                          {s.permissionMode && (
+                            <span
+                              style={{
+                                color:
+                                  s.permissionMode === "acceptEdits"
+                                    ? "var(--warn)"
+                                    : "var(--dim)",
+                              }}
+                            >
+                              {s.permissionMode}
+                            </span>
+                          )}
+                          {s.providers.map((pr) => (
+                            <i
+                              key={pr}
+                              className={styles.pdot}
+                              style={{ background: providerColor[pr] }}
+                            />
+                          ))}
+                          {s.branch && <span>⎇ {s.branch}</span>}
+                          {s.readOnly && <span>read-only</span>}
+                          {s.status === "running" ? (
+                            <span
+                              className={styles.live}
+                              style={{ ["--glow" as string]: color }}
+                            >
+                              ● running
+                            </span>
+                          ) : s.status === "ask" ? (
+                            <span style={{ color: "var(--warn)" }}>● ask</span>
+                          ) : (
+                            <span>{ago(s.updatedAt, p.now)}</span>
+                          )}
+                        </div>
+                      </button>
+                      {p.onDelete && (
+                        <button
+                          type="button"
+                          className={styles.deleteBtn}
+                          aria-label={`${s.title}のセッションを削除`}
+                          title="セッションを削除"
+                          disabled={
+                            !!view?.running ||
+                            s.status === "running" ||
+                            s.status === "ask"
+                          }
+                          onClick={() => p.onDelete?.(s.id)}
+                        >
+                          削除
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
             </section>

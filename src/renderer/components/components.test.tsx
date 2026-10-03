@@ -392,6 +392,15 @@ const sidebarProps = (over: Partial<SidebarProps> = {}): SidebarProps => ({
   ...over,
 });
 describe("Sidebar", () => {
+  it("disables session deletion during running and permission waits", () => {
+    render(<Sidebar {...sidebarProps({ onDelete: vi.fn() })} />);
+    expect(
+      screen.getByRole("button", { name: "ログイン追加のセッションを削除" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "雑談のセッションを削除" }),
+    ).toBeDisabled();
+  });
   it("groups by workspace and puts 'その他' last, with path, kind and branch", () => {
     render(<Sidebar {...sidebarProps()} />);
     const groups = screen.getAllByTestId(/^group-/);

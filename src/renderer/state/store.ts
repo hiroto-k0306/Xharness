@@ -383,6 +383,7 @@ interface UiStore extends EventState {
   ): Promise<void>;
   openSession(id: string): void;
   closeSession(id: string): void;
+  deleteSession(id: string): Promise<boolean>;
   pickFolder(): Promise<string | undefined>;
 }
 
@@ -468,6 +469,23 @@ export const useStore = create<UiStore>()((set, get) => ({
   },
   closeSession(id) {
     void window.harness.command({ type: "close_session", sessionId: id });
+  },
+  async deleteSession(id) {
+    const result = await window.harness.command({
+      type: "delete_session",
+      sessionId: id,
+      confirmed: true,
+    });
+    if (!result.ok) {
+      get().apply({ type: "error", sessionId: id, message: result.error });
+      return false;
+    }
+    set((state) => {
+      const views = { ...state.views };
+      delete views[id];
+      return { views };
+    });
+    return true;
   },
   async pickFolder() {
     const r = await window.harness.command({ type: "pick_folder" });

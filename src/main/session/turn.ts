@@ -15,6 +15,7 @@ import {
   type ProjectConfig,
 } from "../config/project.js";
 import { estimateTokens } from "../context/compactor.js";
+import { hasProjectCommands } from "./slash-commands.js";
 import { prepareProviderHistory } from "../context/provider-compactor.js";
 import { Router } from "../core/router.js";
 import { webTools } from "../tools/web.js";
@@ -116,6 +117,7 @@ async function beginTurn(
     ...(images?.length ? { images } : {}),
   });
   emit({ type: "turn", sessionId, status: "running" });
+  await ctx.refreshCommands?.();
   await ctx.emitState();
   return session;
 }
@@ -139,13 +141,23 @@ async function loadTrustedConfig(
   let config = await loadProjectConfig(home, root, {
     trusted: await trusted(),
   });
-  if (!root || !config.untrusted || rt.trustDeclined) return config;
+  if (
+    !root ||
+    rt.trustDeclined ||
+    (await trusted()) ||
+    (!config.untrusted && !(await hasProjectCommands(session.cwd)))
+  )
+    return config;
   const decision = await gate.request({
     session,
     rt,
     call: {
       name: "ProjectSettings",
-      input: { workspace: root, ...config.untrusted },
+      input: {
+        workspace: root,
+        ...config.untrusted,
+        commands: "プロジェクトのユーザー定義コマンドも有効にします",
+      },
     },
     signal,
     forceAsk: true,
@@ -164,6 +176,8 @@ async function loadTrustedConfig(
     });
     return config;
   }
+  await ctx.refreshCommands?.();
+  await ctx.emitState();
   const heldMode = config.untrusted?.mode;
   config = await loadProjectConfig(home, root, { trusted: true });
   // 信頼前に作ったセッションは既定モードのまま保存されている。保留していたモードを反映する

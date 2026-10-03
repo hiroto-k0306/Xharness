@@ -174,6 +174,7 @@ export interface ControllerContext {
   dropRuntime(id: string): void;
   load(id: string): Promise<Runtime>;
   emitState(): Promise<void>;
+  refreshCommands?(): Promise<void>;
   record(rt: Runtime, receipt: Receipt): Promise<void>;
   /** セッションが属するワークスペースのルート(指定なしなら undefined) */
   workspaceRoot(session: StoredSession): string | undefined;

@@ -44,6 +44,12 @@ import {
 } from "./worktree-commands.js";
 import { emitMcpState, MCP_COMMAND } from "./mcp-session.js";
 import { exportExecutionReport } from "./report.js";
+import {
+  costSummary,
+  expandCommand,
+  initAgents,
+  userCommands,
+} from "./slash-commands.js";
 
 export { defaultTools } from "./context.js";
 export type { ControllerOptions, Host } from "./context.js";
@@ -73,6 +79,7 @@ export class SessionController {
   private warnings: string[];
   private stopped = false;
   private gitAvailable = true;
+  private commands: NonNullable<AppState["commands"]> = [];
 
   constructor(private readonly options: ControllerOptions) {
     this.sessions = new SessionStore(options.home);
@@ -102,6 +109,7 @@ export class SessionController {
       },
       load: (id) => this.load(id),
       emitState: () => this.emitState(),
+      refreshCommands: () => this.refreshCommands(),
       record: async (rt, receipt: Receipt) => {
         await receipts.append(receipt.sessionId, [receipt], clean);
         (rt.receipts ??= []).push(receipt);
@@ -175,6 +183,7 @@ export class SessionController {
     const workspaces = await this.workspaces.summaries();
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
+      commands: this.commands,
       authentication: this.options.fake
         ? undefined
         : this.options.authentication?.snapshot(),
@@ -213,6 +222,26 @@ export class SessionController {
   private async emitState() {
     this.options.emit({ type: "state", state: await this.state() });
   }
+  private async refreshCommands() {
+    const id = this.current;
+    const active = id ? this.sessions.get(id) : undefined;
+    const root = active && this.ctx.workspaceRoot(active);
+    const commands = await userCommands(
+      this.options.home,
+      active?.cwd,
+      !!active &&
+        (!root ||
+          !!this.runtimes.get(active.id)?.trustedSession ||
+          (await this.ctx.trust.isTrusted(root))),
+    );
+    if (this.current === id)
+      this.commands = commands.map((c) => ({
+        value: `/${c.name}`,
+        args: "[arguments]",
+        description:
+          c.source === "project" ? "プロジェクト定義" : "ユーザー定義",
+      }));
+  }
 
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
@@ -244,7 +273,10 @@ export class SessionController {
             };
           await this.sessions.delete(command.sessionId);
           this.ctx.dropRuntime(command.sessionId);
-          if (this.current === command.sessionId) this.current = null;
+          if (this.current === command.sessionId) {
+            this.current = null;
+            this.commands = [];
+          }
           await this.emitState();
           return { ok: true };
         }
@@ -276,6 +308,7 @@ export class SessionController {
         case "set_mode":
           return await setMode(this.ctx, command);
         case "ready": {
+          await this.refreshCommands();
           await this.emitState();
           if (this.current) {
             await this.emitTranscript(this.current);
@@ -296,8 +329,9 @@ export class SessionController {
           if (!this.sessions.get(command.sessionId))
             return { ok: false, error: "Unknown session" };
           this.current = command.sessionId;
-          await this.emitState();
+          await this.refreshCommands();
           await this.emitTranscript(command.sessionId);
+          await this.emitState();
           // §18.4: 再開時に cwd の存在を確認する。無ければ実行できないことを知らせる
           await this.reportMissingCwd(this.sessions.get(command.sessionId)!);
           this.flushWarnings(command.sessionId);
@@ -476,8 +510,9 @@ export class SessionController {
     await this.sessions.save(session);
     this.runtime(id).loaded = true;
     this.current = id;
-    await this.emitState();
+    await this.refreshCommands();
     this.options.emit({ type: "transcript", sessionId: id, items: [] });
+    await this.emitState();
     this.flushWarnings(id);
     return { ok: true, sessionId: id };
   }
@@ -539,6 +574,70 @@ export class SessionController {
     if (root && this.ctx.worktreeBusy.has(root))
       return { ok: false, error: "Workspace writer busy" };
     const command = text.trim();
+    const notice = (message: string): CommandResult => {
+      this.options.emit({
+        type: "notice",
+        sessionId,
+        tone: "dim",
+        message: this.ctx.clean(message),
+      });
+      return { ok: true };
+    };
+    if (/^\/(?:clear|resume|cost|init)(?:\s|$)/.test(command)) {
+      const [name, argument, extra] = command.split(/\s+/);
+      const rt = await this.load(sessionId);
+      if (rt.status !== "idle")
+        return { ok: false, error: "実行終了後にコマンドを使用してください。" };
+      if (extra || (name !== "/resume" && argument))
+        return { ok: false, error: "コマンドの引数を確認してください。" };
+      if (name === "/clear")
+        return this.newSession(
+          session.workspaceId,
+          session.readOnly,
+          !!session.worktree,
+        );
+      if (name === "/resume") {
+        if (argument)
+          return this.handle({ type: "open_session", sessionId: argument });
+        return notice(
+          "再開する会話（/resume <sessionId>）：\n" +
+            this.sessions
+              .list()
+              .map((s) => `${s.id} · ${s.title}`)
+              .join("\n"),
+        );
+      }
+      if (name === "/cost")
+        return notice(
+          costSummary(
+            await readLlmCalls(this.options.home, sessionId),
+            rt.receipts ?? [],
+          ),
+        );
+      if (this.otherWriterRunning(session))
+        return { ok: false, error: "Workspace writer busy" };
+      rt.status = "running";
+      try {
+        const config = await loadProjectConfig(this.options.home, root, {
+          trusted:
+            !root ||
+            !!rt.trustedSession ||
+            (await this.ctx.trust.isTrusted(root)),
+        });
+        const result = await initAgents(
+          session.cwd,
+          session.readOnly ||
+            (session.permissionMode ?? config.permissions.mode) === "plan",
+        );
+        if (result.ok)
+          notice(
+            "AGENTS.mdの雛形を作成しました。プロジェクトに合わせて編集してください。",
+          );
+        return result;
+      } finally {
+        rt.status = "idle";
+      }
+    }
     if (/^\/mode(?:\s|$)/.test(command)) {
       const [, mode, extra] = command.split(/\s+/);
       if (extra || !["default", "acceptEdits", "plan"].includes(mode ?? ""))
@@ -559,6 +658,14 @@ export class SessionController {
         : compactNow(this.ctx, sessionId);
     if (/^\/model(?:\s|$)/.test(command)) {
       const [, model, effort, extra] = command.split(/\s+/);
+      if (!model)
+        return notice(
+          "モデル（/model <provider:model> [effort]）：\n" +
+            loadModelCatalog()
+              .filter((m) => m.enabled)
+              .map((m) => m.id)
+              .join("\n"),
+        );
       if (!model || extra || (effort !== undefined && !isEffort(effort)))
         return { ok: false, error: "Usage: /model provider:model [effort]" };
       return this.setModel(sessionId, model, effort as Effort | undefined);
@@ -634,6 +741,37 @@ export class SessionController {
         error: "認証欄で公式CLIの認証・更新を許可してから再送信してください",
       };
     rt.status = "running";
+    // Resolve user definitions once. The expansion is a user message, never a second command.
+    try {
+      const expanded = expandCommand(
+        text,
+        await userCommands(
+          this.options.home,
+          session.cwd,
+          !root ||
+            !!rt.trustedSession ||
+            (await this.ctx.trust.isTrusted(root)),
+        ),
+      );
+      if (expanded !== undefined) text = expanded;
+      else if (
+        /^\/[\p{L}\p{N}_-]+(?:\s|$)/u.test(command) &&
+        !phaseCommand &&
+        !command.startsWith("/mcp__")
+      ) {
+        rt.status = "idle";
+        return {
+          ok: false,
+          error: "コマンドが見つからないか、プロジェクトが未信頼です。",
+        };
+      }
+    } catch {
+      rt.status = "idle";
+      return {
+        ok: false,
+        error: "ユーザー定義コマンドを読み込めませんでした。",
+      };
+    }
     // 作業フォルダが無いときは、モデルを呼ばずツールも動かさずに知らせる(§18.4)
     if (await this.reportMissingCwd(session)) {
       rt.status = "idle";
@@ -752,7 +890,10 @@ export class SessionController {
       this.release(rt);
       if (rt.status === "idle") this.ctx.dropRuntime(sessionId);
     }
-    if (this.current === sessionId) this.current = null;
+    if (this.current === sessionId) {
+      this.current = null;
+      this.commands = [];
+    }
     await this.emitState();
     return { ok: true };
   }

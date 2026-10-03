@@ -89,6 +89,7 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  commands?: import("./commands.js").CommandSuggestion[];
   authentication?: AuthenticationView[];
   models?: {
     imageInput?: boolean;

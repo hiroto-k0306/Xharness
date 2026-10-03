@@ -42,6 +42,23 @@ public static class XHarnessBackgroundJob {
       throw new Exception("Background process management unavailable");
     }
   }
+  public static void Track(uint id) {
+    // Keep the same handle across membership checking and assignment.
+    IntPtr process = OpenProcess(0x101101, false, id); // quota, terminate, query, synchronize
+    if (process == IntPtr.Zero) {
+      if (Marshal.GetLastWin32Error() == 87) return; // Already exited.
+      throw new Exception("Background process management unavailable");
+    }
+    try {
+      bool member;
+      if (!IsProcessInJob(process, job, out member) ||
+          (!member && !AssignProcessToJobObject(job, process))) {
+        TerminateProcess(process, 1);
+        WaitForSingleObject(process, 5000);
+        throw new Exception("Background process management unavailable");
+      }
+    } finally { CloseHandle(process); }
+  }
   public static void Finish() {
     // Keep the parent alive until its job members have actually exited. Closing
     // the job on parent exit initiates termination but does not wait for it.
@@ -81,6 +98,21 @@ public static class XHarnessBackgroundJob {
 }
 '@ -ErrorAction Stop
   [XHarnessBackgroundJob]::Attach()
+  # Generate the proxy from this PowerShell's own metadata to preserve parameters.
+  $xhStartMetadata = [System.Management.Automation.CommandMetadata]::new((Get-Command Microsoft.PowerShell.Management\\Start-Process))
+  $xhStartProxy = [System.Management.Automation.ProxyCommand]::Create($xhStartMetadata)
+  if (!$xhStartProxy.Contains('$outBuffer = $null') -or !$xhStartProxy.Contains('$scriptCmd = {& $wrappedCmd @PSBoundParameters }')) {
+    throw 'Background process management unavailable'
+  }
+  $xhStartProxy = $xhStartProxy.Replace('$outBuffer = $null', '$xhPassThru = $PSBoundParameters.ContainsKey("PassThru") -and $PSBoundParameters["PassThru"]; $PSBoundParameters["PassThru"] = $true; $outBuffer = $null')
+  $xhStartProxy = $xhStartProxy.Replace('$scriptCmd = {& $wrappedCmd @PSBoundParameters }', @'
+$scriptCmd = { & $wrappedCmd @PSBoundParameters | ForEach-Object {
+  try { [XHarnessBackgroundJob]::Track($_.Id) }
+  catch { [Console]::Error.WriteLine('起動した子プロセスを管理できませんでした。'); exit 1 }
+  if ($xhPassThru) { $_ }
+} }
+'@)
+  Set-Item Function:global:Start-Process ([ScriptBlock]::Create($xhStartProxy))
 } catch {
   [Console]::Error.WriteLine('バックグラウンド処理の管理を開始できませんでした。')
   exit 1

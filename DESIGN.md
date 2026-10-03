@@ -1620,8 +1620,10 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 
 **H3. Bash のバックグラウンド実行**
 - 実装・検証結果は [docs/h3-progress.md](docs/h3-progress.md)。
+- Windowsの起動経路の追加検証と追跡方針（2026-10-03、ユーザー承認）は [docs/h3-job-investigation.md](docs/h3-job-investigation.md)。WindowsApps版pwshでは子がJobを継承しない場合があるため、バックグラウンドの非修飾Start-Processをプロキシ化し、戻り値の子PIDを捕捉して同じJobへ明示登録する。PassThruを内部で有効にし、利用者が指定しなければ戻り値は出力しない。登録失敗時は取得できたハンドルで子の終了を試み、固定エラーで親も終了する。昇格・別ユーザー等によりプロセスアクセス権限がない場合は、子の終了も保証できない。
+- 終了保証はJobに所属したプロセスと、Start-Processプロキシで捕捉した子に限る。直接のProcess.Start、モジュール名付きStart-Process、プロキシの上書き、外部ブローカー経由、登録前に生成されたJob外の子孫は追跡対象外で、終了を保証しない。バックグラウンドでは非修飾Start-Processを使うようBashの説明にも明記する。プロキシは任意コマンドを隔離するセキュリティ境界ではない。
 - `Bash` に `run_in_background: true` を追加する。起動すると `shellId` を返し、待たない。`BashOutput({shellId, wait?, timeoutSec?})`（前回以降の出力と状態。待機は最大60秒）と `KillShell({shellId})` を新設する。
-- 同時実行は5件まで（Claude Code に件数の上限はないが、Windows の資源を守る XHarness 独自の安全弁）。BashOutput が1回に返す出力は30,000文字（Claude Code の `BASH_MAX_OUTPUT_LENGTH` 既定値）で、超過分は先頭と末尾を残して中略し、未取得分は次の BashOutput で続きを返す。保持する出力は1件につき直近1 MB。ターンの終了・停止・セッション終了でプロセスツリーごと終了する（MCP の stdio と同じ後片付け）。次のターンへの持ち越しはしない。
+- 同時実行は5件まで（Claude Code に件数の上限はないが、Windows の資源を守る XHarness 独自の安全弁）。BashOutput が1回に返す出力は30,000文字（Claude Code の `BASH_MAX_OUTPUT_LENGTH` 既定値）で、超過分は先頭と末尾を残して中略し、未取得分は次の BashOutput で続きを返す。保持する出力は1件につき直近1 MB。ターンの終了・停止・セッション終了で管理対象のプロセスツリーごと終了する（MCP の stdio と同じ後片付け。上記の追跡外の起動経路は除く）。次のターンへの持ち越しはしない。
 - 権限は通常の Bash と同じ gate を起動時に通す。BashOutput / KillShell は自分が起動した shellId のみ操作でき、allow。出力は秘密値のマスクを通す。
 - 同時に、通常の Bash の既定タイムアウトを明示し（既定120秒、上限600秒）、時間切れは `timeout` 種別で返す。
 

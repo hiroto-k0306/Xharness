@@ -54,7 +54,7 @@ export function shellSearchTools(cwd: string): ToolRegistry {
         name,
         description:
           name === "Bash"
-            ? "Run a command in PowerShell 7; foreground default timeout 120 seconds, maximum 600. run_in_background=true returns a shellId immediately (at most 5 running); use BashOutput/KillShell. Backgrounds end with this agent turn; timeoutSec optionally limits their lifetime."
+            ? "Run a command in PowerShell 7; foreground default timeout 120 seconds, maximum 600. run_in_background=true returns a shellId immediately (at most 5 running); use BashOutput/KillShell. Backgrounds end with this agent turn; timeoutSec optionally limits their lifetime. On Windows, launch children with unqualified Start-Process (including -WindowStyle Hidden), which registers them in our Job. Direct Process.Start, module-qualified Start-Process, overwritten functions, external brokers, or descendants born before registration can bypass tracking; do not use those for background children because cleanup is not guaranteed."
             : name === "Grep"
               ? "Search file contents with ripgrep regular expressions"
               : "List files matching a ripgrep glob",

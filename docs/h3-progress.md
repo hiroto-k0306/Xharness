@@ -1,5 +1,7 @@
 # H3：Bashのバックグラウンド実行
 
+追加のJob所属切り分けと修正（2026-10-03）：[h3-job-investigation.md](h3-job-investigation.md)。
+
 2026-10-02。DESIGN.md §26のH2 → H1 → H3の順に実装。ブランチは `codex/h3-background-shells`、開始点はH1の `4b7a907`。H4以降は未着手。
 
 ## 実装

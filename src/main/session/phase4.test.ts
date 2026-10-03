@@ -7,6 +7,72 @@ import { type UiEvent } from "../../shared/ipc.js";
 import { type Provider, type ProviderRequest } from "../providers/provider.js";
 import { type Tool } from "../tools/registry.js";
 import { SessionStore } from "./store.js";
+import { CodexAdapter } from "../providers/codex/adapter.js";
+it("manual compaction respects the session cap and emits a single budget stop without changing history", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-compact-budget-"));
+  await writeFile(
+    join(home, "config.yaml"),
+    "limits: {llmCallsPerSession: 3}\n",
+  );
+  const fixture = JSON.parse(
+    await readFile("test/fixtures/codex/x2-gpt-6-luna.json", "utf8"),
+  );
+  let dispatched = 0;
+  const provider = new CodexAdapter({
+    getCredentials: async () => ({ accessToken: "test", accountId: "test" }),
+    fetcher: async () => {
+      dispatched++;
+      return new Response(
+        fixture.events
+          .map(
+            (e: { event: string; data: string }) =>
+              `event: ${e.event}\ndata: ${e.data}\n\n`,
+          )
+          .join(""),
+      );
+    },
+  });
+  const events: UiEvent[] = [];
+  const c = new SessionController({
+    home,
+    provider,
+    model: "gpt-6-luna",
+    phase4: true,
+    fake: true,
+    version: "test",
+    host: { pickFolder: async () => undefined },
+    createTools: () => new Map(),
+    emit: (e) => events.push(e),
+  });
+  await c.init();
+  const { sessionId } = (await c.handle({
+    type: "new_session",
+    workspaceId: null,
+  })) as { sessionId: string };
+  for (const text of ["first", "second", "third"]) {
+    events.length = 0;
+    await c.handle({ type: "send", sessionId, text });
+    await until(() =>
+      events.some((e) => e.type === "turn" && e.status === "idle"),
+    );
+  }
+  const history = await readFile(
+    join(home, "sessions", sessionId + ".jsonl"),
+    "utf8",
+  );
+  events.length = 0;
+  expect(
+    await c.handle({ type: "send", sessionId, text: "/compact" }),
+  ).toMatchObject({ ok: false });
+  expect(
+    events.filter((e) => e.type === "turn" && e.status === "idle"),
+  ).toEqual([expect.objectContaining({ stopCause: "budget_exceeded" })]);
+  expect(dispatched).toBe(3);
+  expect(
+    await readFile(join(home, "sessions", sessionId + ".jsonl"), "utf8"),
+  ).toBe(history);
+  await c.shutdown();
+});
 async function until(check: () => boolean) {
   const end = Date.now() + 3000;
   while (!check()) {

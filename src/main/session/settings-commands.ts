@@ -1,4 +1,7 @@
 import { withSessionTrace } from "../core/trace.js";
+import { withSessionCalls } from "./llm-calls.js";
+import { LlmBudgetError } from "../core/llm-budget.js";
+import { loadProjectConfig } from "../config/project.js";
 // 設定に関するコマンド: 権限モード、既定モデル(config.yaml の main)、/compact。
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -90,38 +93,56 @@ export async function compactNow(
   });
   rt.abort = abort;
   rt.status = "running";
+  let stopCause: string | undefined;
   ctx.options.emit({ type: "turn", sessionId, status: "running" });
   try {
-    const result = await withSessionTrace(
-      ctx.options.home,
-      sessionId,
-      ctx.clean,
-      async () =>
-        prepareProviderHistory(rt.messages, {
-          provider,
-          model: session.model,
-          signal: abort.signal,
-          system:
-            rt.system ??
-            (await systemPrompt(
-              ctx,
-              session.cwd,
-              !session.workspaceId,
-              rt.config,
-            )),
-          tools: [...(rt.tools?.values() ?? [])].map((t) => t.spec),
-          checkpoint: rt.checkpoint,
-          threshold: 0.8,
-          force: true,
-        }),
+    const limits = (await loadProjectConfig(ctx.options.home)).limits;
+    const result = await withSessionCalls(
       {
-        onWarning: (message) =>
-          ctx.options.emit({
-            type: "notice",
-            tone: "warn",
-            sessionId,
-            message,
-          }),
+        home: ctx.options.home,
+        id: sessionId,
+        limits,
+        abort,
+        changed: (calls) => {
+          rt.llmCalls = calls;
+          void ctx.emitState();
+        },
+      },
+      async (budget) => {
+        const prepared = await withSessionTrace(
+          ctx.options.home,
+          sessionId,
+          ctx.clean,
+          async () =>
+            prepareProviderHistory(rt.messages, {
+              provider,
+              model: session.model,
+              signal: abort.signal,
+              system:
+                rt.system ??
+                (await systemPrompt(
+                  ctx,
+                  session.cwd,
+                  !session.workspaceId,
+                  rt.config,
+                )),
+              tools: [...(rt.tools?.values() ?? [])].map((t) => t.spec),
+              checkpoint: rt.checkpoint,
+              threshold: 0.8,
+              force: true,
+            }),
+          {
+            onWarning: (message) =>
+              ctx.options.emit({
+                type: "notice",
+                tone: "warn",
+                sessionId,
+                message,
+              }),
+          },
+        );
+        if (budget.stopCause) throw new LlmBudgetError(budget.stopCause);
+        return prepared;
       },
     );
     if (result.checkpoint) {
@@ -147,12 +168,20 @@ export async function compactNow(
         : "圧縮できる古い履歴がありません",
     });
     return { ok: true };
-  } catch {
+  } catch (error) {
+    if (error instanceof LlmBudgetError) {
+      stopCause = error.reason;
+      return {
+        ok: false,
+        error:
+          "通信回数の上限または保存先を確認してください。元の履歴を維持しています。",
+      };
+    }
     return { ok: false, error: "圧縮に失敗しました。元の履歴を維持しています" };
   } finally {
     rt.status = "idle";
     rt.abort = undefined;
-    ctx.options.emit({ type: "turn", sessionId, status: "idle" });
+    ctx.options.emit({ type: "turn", sessionId, status: "idle", stopCause });
     if (rt.closing) ctx.dropRuntime(sessionId);
     finish();
   }

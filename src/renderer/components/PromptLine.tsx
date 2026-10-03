@@ -179,11 +179,9 @@ export function PromptLine(p: PromptLineProps) {
             </button>
           </div>
         ))}
-        {!!images.length && p.imageInput !== true && (
+        {!!images.length && p.imageInput === false && (
           <span role="status">
-            {p.imageInput === false
-              ? "このモデルは画像入力に対応していません。モデルを切り替えてください。"
-              : "このモデルの画像入力対応は未確認です。"}
+            このモデルは画像入力に対応していません。モデルを切り替えてください。
           </span>
         )}
         {imageError && <span role="alert">{imageError}</span>}

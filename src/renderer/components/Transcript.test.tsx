@@ -138,3 +138,31 @@ it("escapes model text and preserves manual entry for questions without choices"
   );
   await waitFor(() => expect(screen.queryByRole("button")).toBeNull());
 });
+
+it("opens an attached image enlarged and closes with Esc, backdrop and button", () => {
+  const items: TranscriptItem[] = [
+    {
+      kind: "user",
+      id: "u1",
+      text: "see",
+      images: [{ mediaType: "image/png", data: "AAAA" }],
+    },
+  ];
+  render(<Transcript {...props} items={items} />);
+  const open = () =>
+    fireEvent.click(screen.getByRole("button", { name: "添付画像 1 を拡大" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  open();
+  const dialog = screen.getByRole("dialog", { name: "画像の拡大表示" });
+  expect(dialog).toHaveAttribute("aria-modal", "true");
+  fireEvent.click(screen.getByAltText("拡大した添付画像"));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: "Escape" });
+  expect(screen.queryByRole("dialog")).toBeNull();
+  open();
+  fireEvent.click(screen.getByRole("dialog"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  open();
+  fireEvent.click(screen.getByRole("button", { name: "閉じる" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+});

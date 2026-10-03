@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type TranscriptItem } from "../../shared/ipc.js";
 import { Logo } from "./Logo.js";
 import { McpStatus } from "./McpStatus.js";
@@ -33,6 +33,15 @@ export function Transcript({
   onReply,
 }: TranscriptProps) {
   const end = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState<string | null>(null);
+  useEffect(() => {
+    if (!zoom) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoom(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [zoom]);
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
   }, [items]);
@@ -151,18 +160,52 @@ export function Transcript({
             <div className={styles.bubble}>{item.text}</div>
             {item.kind === "user" &&
               item.images?.map((image, i) => (
-                <img
+                <button
                   key={i}
-                  alt={`添付画像 ${i + 1}`}
-                  src={`data:${image.mediaType};base64,${image.data}`}
-                  style={{ maxWidth: 240, maxHeight: 180 }}
-                />
+                  type="button"
+                  className={styles.thumb}
+                  aria-label={`添付画像 ${i + 1} を拡大`}
+                  onClick={() =>
+                    setZoom(`data:${image.mediaType};base64,${image.data}`)
+                  }
+                >
+                  <img
+                    alt={`添付画像 ${i + 1}`}
+                    src={`data:${image.mediaType};base64,${image.data}`}
+                    style={{ maxWidth: 240, maxHeight: 180 }}
+                  />
+                </button>
               ))}
           </div>
         );
       })}
       {running && <span className={styles.cursor} aria-hidden />}
       <div ref={end} />
+      {zoom && (
+        <div
+          className={styles.overlay}
+          role="dialog"
+          aria-modal="true"
+          aria-label="画像の拡大表示"
+          data-testid="image-overlay"
+          onClick={() => setZoom(null)}
+        >
+          <button
+            type="button"
+            className={styles.close}
+            aria-label="閉じる"
+            onClick={() => setZoom(null)}
+          >
+            ×
+          </button>
+          <img
+            className={styles.zoomed}
+            alt="拡大した添付画像"
+            src={zoom}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

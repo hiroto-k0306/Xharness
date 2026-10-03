@@ -159,3 +159,35 @@
   color: var(--dim);
   font-size: 11px;
 }
+
+.thumb {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+}
+.zoomed {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+}
+.close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: 24px;
+  color: #fff;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}

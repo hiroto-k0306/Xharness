@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 export const claudeIdentity =
   "You are Claude Code, Anthropic's official CLI for Claude.";
+export const defaultMaxTokens = 32000;
 type NativeBlock = Record<string, unknown>;
 function callId(id: string) {
   return id.startsWith("call_")
@@ -82,7 +83,7 @@ function convertBlocks(blocks: ContentBlock[]): NativeBlock[] {
 }
 
 export function toClaudeRequest(request: ProviderRequest) {
-  const maxTokens = request.maxOutputTokens ?? 4096;
+  const maxTokens = request.maxOutputTokens ?? defaultMaxTokens;
   if (
     !Number.isSafeInteger(maxTokens) ||
     maxTokens < 1 ||

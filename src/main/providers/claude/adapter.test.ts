@@ -283,6 +283,21 @@ describe("Claude conversion using Phase 0 recordings", () => {
     ]);
     expect(done(events).stopReason).toBe("end_turn");
   });
+  it("completes a response cut by max_tokens inside a tool_use without a protocol error", async () => {
+    const recorded = await fixture("max-tokens-truncated-tool-use");
+    const events = await collect(response(recorded.events));
+    expect(events.some((e) => e.type === "error")).toBe(false);
+    expect(events.some((e) => e.type === "tool_use")).toBe(false);
+    const completion = done(events);
+    expect(completion.stopReason).toBe("max_tokens");
+    expect(completion.message.content).toContainEqual({
+      type: "text",
+      text: "Submitting the plan.",
+    });
+    expect(
+      completion.message.content.some((block) => block.type === "tool_use"),
+    ).toBe(false);
+  });
   it("does not complete a truncated actual stream", async () => {
     const recorded = await fixture("c3-tool-1");
     const events = await collect(response(recorded.events.slice(0, -1)));

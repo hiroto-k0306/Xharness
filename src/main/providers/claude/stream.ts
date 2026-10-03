@@ -209,9 +209,16 @@ export async function* decodeClaudeStream(
         break;
       }
       case "message_delta": {
-        if (!started || active || stopReason)
-          throw new Error("Invalid message delta");
+        if (!started || stopReason) throw new Error("Invalid message delta");
         const reason = string(object(data.delta).stop_reason);
+        if (active) {
+          // Only an output-limit cut may leave a block open.
+          if (reason !== "max_tokens") throw new Error("Invalid message delta");
+          // Keep the text written so far; tool_use, hosted search and reasoning
+          // (signature may be incomplete) are dropped without emitting events.
+          if (active.block.type === "text") blocks.push(active.block);
+          active = undefined;
+        }
         stopReason = [
           "end_turn",
           "tool_use",

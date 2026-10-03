@@ -438,6 +438,8 @@ export function App() {
             />
           )}
           <PromptLine
+            sessionId={current}
+            imageInput={app.models?.find((m) => m.id === model)?.imageInput}
             onStop={s.abort}
             onModel={() => setModelOpen((v) => !v)}
             mode={
@@ -478,7 +480,7 @@ export function App() {
             modelColor={
               providerOf(model) === "codex" ? "var(--codex)" : "var(--claude)"
             }
-            onSubmit={(text) => s.send(text)}
+            onSubmit={(text, images) => s.send(text, images)}
           />
         </main>
       </div>

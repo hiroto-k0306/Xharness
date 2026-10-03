@@ -121,6 +121,15 @@ export function Transcript({
               )}
             </div>
             <div className={styles.bubble}>{item.text}</div>
+            {item.kind === "user" &&
+              item.images?.map((image, i) => (
+                <img
+                  key={i}
+                  alt={`添付画像 ${i + 1}`}
+                  src={`data:${image.mediaType};base64,${image.data}`}
+                  style={{ maxWidth: 240, maxHeight: 180 }}
+                />
+              ))}
           </div>
         );
       })}

@@ -197,6 +197,18 @@ export class WorkspaceStore {
 
 export class SessionStore {
   private sessions: StoredSession[] = [];
+  private readonly deleted = new Set<string>();
+  private readonly writes = new Map<string, Promise<void>>();
+  /** History writes and deletion share one per-session queue. */
+  private write(id: string, run: () => Promise<void>): Promise<void> {
+    const next = (this.writes.get(id) ?? Promise.resolve()).then(run);
+    const tail = next.catch(() => undefined);
+    this.writes.set(id, tail);
+    void tail.then(() => {
+      if (this.writes.get(id) === tail) this.writes.delete(id);
+    });
+    return next;
+  }
   private readonly index: JsonFile<StoredSession[]>;
   constructor(private readonly home: string) {
     this.index = new JsonFile(
@@ -212,7 +224,9 @@ export class SessionStore {
     return join(this.home, "sessions", `${id}.jsonl`);
   }
   async load() {
-    this.sessions = await this.index.read([]);
+    this.sessions = (await this.index.read([])).filter(
+      (s) => !this.deleted.has(s.id),
+    );
   }
   /** 旧い索引にはモデルが無い。メモリ上だけ既定値で補う(次の保存で書かれる)。 */
   fillDefaults(defaults: { model: string; effort: StoredSession["effort"] }) {
@@ -229,10 +243,13 @@ export class SessionStore {
     return this.sessions.find((s) => s.id === id);
   }
   async save(session: StoredSession) {
-    const i = this.sessions.findIndex((s) => s.id === session.id);
-    if (i >= 0) this.sessions[i] = session;
-    else this.sessions.push(session);
-    await this.index.write(this.sessions);
+    return this.write(session.id, async () => {
+      if (this.deleted.has(session.id)) return;
+      const i = this.sessions.findIndex((s) => s.id === session.id);
+      if (i >= 0) this.sessions[i] = session;
+      else this.sessions.push(session);
+      await this.index.write(this.sessions);
+    });
   }
   /** 履歴は追記のみ(§12)。redact は呼び出し側が渡す。 */
   async append(
@@ -241,25 +258,28 @@ export class SessionStore {
     redactText: (s: string) => string,
   ) {
     if (!messages.length) return;
-    await mkdir(join(this.home, "sessions"), { recursive: true });
-    const block = (
-      b: import("../core/types.js").ContentBlock,
-    ): import("../core/types.js").ContentBlock => {
-      if (b.type === "reasoning" || b.type === "image") return b;
-      if (b.type === "tool_result" && Array.isArray(b.content))
-        return { ...b, content: b.content.map(block) };
-      return JSON.parse(
-        redactText(JSON.stringify(b)),
-      ) as import("../core/types.js").ContentBlock;
-    };
-    const lines = messages.map((m) =>
-      JSON.stringify({
-        ...m,
-        // reasoningと画像本体は不透明。入れ子の画像もバイト列を保持する。
-        content: m.content.map(block),
-      }),
-    );
-    await appendFile(this.history(id), lines.join("\n") + "\n", "utf8");
+    return this.write(id, async () => {
+      if (this.deleted.has(id)) return;
+      await mkdir(join(this.home, "sessions"), { recursive: true });
+      const block = (
+        b: import("../core/types.js").ContentBlock,
+      ): import("../core/types.js").ContentBlock => {
+        if (b.type === "reasoning" || b.type === "image") return b;
+        if (b.type === "tool_result" && Array.isArray(b.content))
+          return { ...b, content: b.content.map(block) };
+        return JSON.parse(
+          redactText(JSON.stringify(b)),
+        ) as import("../core/types.js").ContentBlock;
+      };
+      const lines = messages.map((m) =>
+        JSON.stringify({
+          ...m,
+          // reasoningと画像本体は不透明。入れ子の画像もバイト列を保持する。
+          content: m.content.map(block),
+        }),
+      );
+      await appendFile(this.history(id), lines.join("\n") + "\n", "utf8");
+    });
   }
   async messages(id: string): Promise<Message[]> {
     let raw: string;
@@ -292,13 +312,17 @@ export class SessionStore {
     return out;
   }
   async delete(id: string) {
-    await new FileCheckpointStore(this.home).remove(id);
-    await rm(this.history(id), { force: true });
-    await rm(this.history(id).replace(/\.jsonl$/, ".llm-calls.json"), {
-      force: true,
-    });
+    // Fence stale turns/saves and remove from lookup BEFORE any await.
+    this.deleted.add(id);
     this.sessions = this.sessions.filter((session) => session.id !== id);
-    await this.index.write(this.sessions);
+    return this.write(id, async () => {
+      await new FileCheckpointStore(this.home).remove(id);
+      await rm(this.history(id), { force: true });
+      await rm(this.history(id).replace(/\.jsonl$/, ".llm-calls.json"), {
+        force: true,
+      });
+      await this.index.write(this.sessions);
+    });
   }
 }
 

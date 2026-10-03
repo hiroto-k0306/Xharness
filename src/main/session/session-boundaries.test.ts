@@ -1,5 +1,5 @@
 // Offline only: controlled I/O barriers and local dummy worktrees, never model APIs.
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -7,6 +7,8 @@ import { FakeProvider } from "../providers/fake/fake-provider.js";
 import { SessionController } from "./controller.js";
 import { SessionStore } from "./store.js";
 import { Repository } from "./repository.js";
+import { FileCheckpointStore } from "../checkpoints/store.js";
+import { JsonFile } from "./store.js";
 
 beforeEach(() =>
   vi.stubGlobal(
@@ -137,5 +139,118 @@ it("refuses sends while worktree removal is awaiting completion", async () => {
   expect(c.onRequest).not.toHaveBeenCalled();
   release.resolve();
   expect(await remove).toMatchObject({ ok: true });
+  await c.controller.shutdown();
+});
+
+it("refuses deletion during history loading, then deletes normally after cancellation", async () => {
+  const c = await fixture();
+  const entered = deferred(),
+    release = deferred();
+  vi.spyOn(SessionStore.prototype, "messages").mockImplementationOnce(
+    async () => {
+      entered.resolve();
+      await release.promise;
+      return [];
+    },
+  );
+  const send = c.controller.handle({
+    type: "send",
+    sessionId: c.id,
+    text: "offline",
+  });
+  await entered.promise;
+  expect(
+    await c.controller.handle({
+      type: "delete_session",
+      sessionId: c.id,
+      confirmed: true,
+    }),
+  ).toMatchObject({ ok: false });
+  release.resolve();
+  await send;
+  await c.controller.handle({ type: "abort", sessionId: c.id });
+  await c.controller.shutdown();
+  expect(
+    await c.controller.handle({
+      type: "delete_session",
+      sessionId: c.id,
+      confirmed: true,
+    }),
+  ).toMatchObject({ ok: true });
+  await c.store.load();
+  expect(c.store.get(c.id)).toBeUndefined();
+  await expect(
+    readFile(join(c.home, "sessions", `${c.id}.jsonl`)),
+  ).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("rejects new sends from deletion start until all disk cleanup completes", async () => {
+  const c = await fixture();
+  const entered = deferred(),
+    release = deferred();
+  const remove = FileCheckpointStore.prototype.remove;
+  vi.spyOn(FileCheckpointStore.prototype, "remove").mockImplementationOnce(
+    async function (this: FileCheckpointStore, id) {
+      entered.resolve();
+      await release.promise;
+      await remove.call(this, id);
+    },
+  );
+  const deletion = c.controller.handle({
+    type: "delete_session",
+    sessionId: c.id,
+    confirmed: true,
+  });
+  await entered.promise;
+  expect(
+    await c.controller.handle({
+      type: "send",
+      sessionId: c.id,
+      text: "offline",
+    }),
+  ).toMatchObject({ ok: false });
+  expect(c.onRequest).not.toHaveBeenCalled();
+  release.resolve();
+  expect(await deletion).toMatchObject({ ok: true });
+  expect((await c.controller.state()).sessions).toEqual([]);
+  await c.controller.shutdown();
+});
+
+it("drains earlier saves and fences late history/save writes without resurrecting disk data", async () => {
+  const c = await fixture();
+  const session = c.store.get(c.id)!;
+  const entered = deferred(),
+    release = deferred();
+  const write = JsonFile.prototype.write;
+  vi.spyOn(JsonFile.prototype, "write").mockImplementationOnce(async function (
+    this: JsonFile<unknown>,
+    value,
+  ) {
+    entered.resolve();
+    await release.promise;
+    await write.call(this, value);
+  });
+  const saving = c.store.save({ ...session, title: "earlier save" });
+  await entered.promise;
+  const deleting = c.store.delete(c.id);
+  expect(c.store.get(c.id)).toBeUndefined();
+  const stale = Promise.all([
+    c.store.append(
+      c.id,
+      [{ role: "assistant", content: [{ type: "text", text: "stale turn" }] }],
+      (s) => s,
+    ),
+    c.store.save(session),
+  ]);
+  release.resolve();
+  await Promise.all([saving, deleting, stale]);
+  await c.store.load();
+  expect(c.store.get(c.id)).toBeUndefined();
+  expect(
+    JSON.parse(await readFile(join(c.home, "sessions", "index.json"), "utf8")),
+  ).toEqual([]);
+  await expect(
+    readFile(join(c.home, "sessions", `${c.id}.jsonl`)),
+  ).rejects.toMatchObject({ code: "ENOENT" });
   await c.controller.shutdown();
 });

@@ -306,6 +306,7 @@ export class SessionController {
           if (
             !command.confirmed ||
             !this.sessions.get(command.sessionId) ||
+            this.ctx.sessionBusy.has(command.sessionId) ||
             (this.runtimes.get(command.sessionId)?.status !== "idle" &&
               this.runtimes.has(command.sessionId))
           )
@@ -313,15 +314,20 @@ export class SessionController {
               ok: false,
               error: "待機中のセッションを確認して削除してください。",
             };
-          this.schedules.cancel(command.sessionId);
-          await this.sessions.delete(command.sessionId);
-          this.ctx.dropRuntime(command.sessionId);
-          if (this.current === command.sessionId) {
-            this.current = null;
-            this.commands = [];
+          this.ctx.sessionBusy.add(command.sessionId);
+          try {
+            this.schedules.cancel(command.sessionId);
+            await this.sessions.delete(command.sessionId);
+            this.ctx.dropRuntime(command.sessionId);
+            if (this.current === command.sessionId) {
+              this.current = null;
+              this.commands = [];
+            }
+            await this.emitState();
+            return { ok: true };
+          } finally {
+            this.ctx.sessionBusy.delete(command.sessionId);
           }
-          await this.emitState();
-          return { ok: true };
         }
         case "refresh_auth":
           if (!this.options.fake) await this.options.authentication?.refresh();

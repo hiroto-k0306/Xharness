@@ -93,7 +93,7 @@ export function dangerous(command: string) {
 
 /** plan モード(読み取り専用)で確認なしに動かしてよい、読み取りだけのコマンド */
 const READ_ONLY_COMMAND =
-  /^(?:git (?:status|diff|log|show)(?:\s|$)|Get-(?:Content|ChildItem|Location)(?:\s|$)|rg(?:\s|$)|pwd$)/i;
+  /^(?:Get-(?:Content|ChildItem|Location)(?:\s|$)|rg(?:\s|$)|pwd$)/i;
 
 interface PathCheck {
   target?: string;
@@ -263,6 +263,16 @@ export async function decidePermission(
     )
       return "ask";
     if (restricted("ask")) return "ask";
+    // Git reads can execute repository-configured fsmonitor, external diff,
+    // textconv and pager helpers. A lexical read classification cannot prove
+    // their safety; even an allow rule must not bypass confirmation.
+    if (
+      shape.tokens[0]?.toLowerCase() === "git" &&
+      ["status", "diff", "log", "show"].includes(
+        shape.tokens[1]?.toLowerCase() ?? "",
+      )
+    )
+      return "ask";
     if (mode === "plan") {
       if (!READ_ONLY_COMMAND.test(subject)) return "deny";
       // 作業フォルダの外を読む引数は、読み取りでも確認する

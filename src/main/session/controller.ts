@@ -89,7 +89,9 @@ export class SessionController {
   constructor(private readonly options: ControllerOptions) {
     this.schedules = new SessionSchedules({
       now: () => Date.now(),
-      busy: (id) => (this.runtimes.get(id)?.status ?? "idle") !== "idle",
+      busy: (id) =>
+        this.ctx.sessionBusy.has(id) ||
+        (this.runtimes.get(id)?.status ?? "idle") !== "idle",
       send: (id, text, signal) => this.send(id, text, undefined, signal),
       notice: (sessionId, message) =>
         this.options.emit({
@@ -137,6 +139,7 @@ export class SessionController {
       quota: {},
       usage: {},
       worktreeBusy: new Set(),
+      sessionBusy: new Set(),
       clean,
       runtime: (id) => this.runtime(id),
       existingRuntime: (id) => this.runtimes.get(id),
@@ -305,6 +308,7 @@ export class SessionController {
           if (
             !command.confirmed ||
             !this.sessions.get(command.sessionId) ||
+            this.ctx.sessionBusy.has(command.sessionId) ||
             (this.runtimes.get(command.sessionId)?.status !== "idle" &&
               this.runtimes.has(command.sessionId))
           )
@@ -312,15 +316,20 @@ export class SessionController {
               ok: false,
               error: "待機中のセッションを確認して削除してください。",
             };
-          this.schedules.cancel(command.sessionId);
-          await this.sessions.delete(command.sessionId);
-          this.ctx.dropRuntime(command.sessionId);
-          if (this.current === command.sessionId) {
-            this.current = null;
-            this.commands = [];
+          this.ctx.sessionBusy.add(command.sessionId);
+          try {
+            this.schedules.cancel(command.sessionId);
+            await this.sessions.delete(command.sessionId);
+            this.ctx.dropRuntime(command.sessionId);
+            if (this.current === command.sessionId) {
+              this.current = null;
+              this.commands = [];
+            }
+            await this.emitState();
+            return { ok: true };
+          } finally {
+            this.ctx.sessionBusy.delete(command.sessionId);
           }
-          await this.emitState();
-          return { ok: true };
         }
         case "refresh_auth":
           if (!this.options.fake) await this.options.authentication?.refresh();
@@ -582,6 +591,34 @@ export class SessionController {
     images?: ImageAttachment[],
     scheduled?: AbortSignal,
   ): Promise<CommandResult> {
+    // Stop must remain usable while preparation/compact is awaiting I/O.
+    if (
+      /^(?:\/stop|(?:一旦)?(?:停止|中断)(?:して)?|止めて)[。！!]?$/u.test(
+        text.trim(),
+      )
+    )
+      return this.sendPrepared(sessionId, text, images, scheduled);
+    const session = this.sessions.get(sessionId);
+    if (!session) return { ok: false, error: "Unknown session" };
+    const root = this.ctx.workspaceRoot(session);
+    if (root && this.ctx.worktreeBusy.has(root))
+      return { ok: false, error: "Workspace writer busy" };
+    if (this.ctx.sessionBusy.has(sessionId))
+      return { ok: false, error: "Turn already running" };
+    this.ctx.sessionBusy.add(sessionId);
+    try {
+      return await this.sendPrepared(sessionId, text, images, scheduled);
+    } finally {
+      this.ctx.sessionBusy.delete(sessionId);
+    }
+  }
+
+  private async sendPrepared(
+    sessionId: string,
+    text: string,
+    images?: ImageAttachment[],
+    scheduled?: AbortSignal,
+  ): Promise<CommandResult> {
     const imageSettings = (await loadMainConfig(this.options.home)).images;
     this.imageSettings = imageSettings;
     if (scheduled?.aborted)
@@ -727,6 +764,10 @@ export class SessionController {
       return this.setModel(sessionId, model, effort as Effort | undefined);
     }
     const rt = await this.load(sessionId);
+    // Another session's worktree operation can claim the root while history
+    // loads. Our own session reservation prevents same-session deletion.
+    if (root && this.ctx.worktreeBusy.has(root))
+      return { ok: false, error: "Workspace writer busy" };
     if (/^\/(?:undo|rewind)(?:\s|$)/.test(command)) {
       const count = rewindTurns(command);
       if (!count)
@@ -896,8 +937,8 @@ export class SessionController {
           other.workspaceId === session.workspaceId &&
           !other.readOnly &&
           !other.worktree &&
-          this.runtimes.get(other.id)?.status !== undefined &&
-          this.runtimes.get(other.id)?.status !== "idle",
+          (this.ctx.sessionBusy.has(other.id) ||
+            (this.runtimes.get(other.id)?.status ?? "idle") !== "idle"),
       );
   }
 

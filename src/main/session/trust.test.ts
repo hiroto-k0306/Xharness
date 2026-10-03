@@ -16,7 +16,7 @@ async function until(check: () => boolean) {
   }
 }
 
-/** 1回目は Bash の git status を呼び、結果を受け取ったら終える */
+/** 1回目は Bash の pwd を呼び、結果を受け取ったら終える */
 const provider: Provider = {
   id: "claude",
   models: () => [{ id: "fake", contextTokens: 1000000 }],
@@ -37,7 +37,7 @@ const provider: Provider = {
                 type: "tool_use",
                 id: `call-${request.messages.length}`,
                 name: "Bash",
-                input: { command: "git status" },
+                input: { command: "pwd" },
               },
             ],
       },

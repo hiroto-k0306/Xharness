@@ -276,7 +276,10 @@ it("persists an always grant, reopens receipts with masked details, and keeps se
                   type: "tool_use",
                   id: `call-${requests.length}`,
                   name: "Bash",
-                  input: { command: "git status", extra: "private-token" },
+                  input: {
+                    command: "Get-Content dummy.txt",
+                    extra: "private-token",
+                  },
                 },
               ],
         },
@@ -325,9 +328,9 @@ it("persists an always grant, reopens receipts with masked details, and keeps se
     events.some((e) => e.type === "turn" && e.status === "idle"),
   );
   await controller.shutdown();
-  // 「常に許可」は先頭の語だけでなくサブコマンドまで含めて保存する(git * にはしない)
+  // 「常に許可」はパスを含む完全一致で保存し、別の読み取りへ広げない
   expect(await readFile(join(home, "config.yaml"), "utf8")).toContain(
-    "git status *",
+    "Get-Content dummy.txt",
   );
   expect(
     await readFile(join(home, `receipts/${sessionId}.jsonl`), "utf8"),

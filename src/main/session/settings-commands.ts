@@ -1,6 +1,7 @@
 import { withSessionTrace } from "../core/trace.js";
 import { withSessionCalls } from "./llm-calls.js";
 import { LlmBudgetError } from "../core/llm-budget.js";
+import { premiseHash, PREMISE_NOTICE } from "./premises.js";
 import { loadProjectConfig } from "../config/project.js";
 // 設定に関するコマンド: 権限モード、既定モデル(config.yaml の main)、/compact。
 import { randomUUID } from "node:crypto";
@@ -98,6 +99,14 @@ export async function compactNow(
     const provider = new Router(
       ctx.options.providers ?? [ctx.options.provider],
     ).provider(session.model);
+    // Codex summaries use an independent fixed system and strip reasoning.
+    // Claude compact reuses the original prefix, which must be validated first.
+    if (
+      provider.id === "claude" &&
+      rt.messages.some((m) => m.role === "assistant") &&
+      (!rt.premises || session.premiseHash !== premiseHash(rt.premises))
+    )
+      return { ok: false, error: PREMISE_NOTICE };
     const limits = (await loadProjectConfig(ctx.options.home)).limits;
     const result = await withSessionCalls(
       {
@@ -121,6 +130,7 @@ export async function compactNow(
               model: session.model,
               signal: abort.signal,
               system:
+                rt.premises?.system ??
                 rt.system ??
                 (await systemPrompt(
                   ctx,
@@ -128,7 +138,9 @@ export async function compactNow(
                   !session.workspaceId,
                   rt.config,
                 )),
-              tools: [...(rt.tools?.values() ?? [])].map((t) => t.spec),
+              tools:
+                rt.premises?.tools ??
+                [...(rt.tools?.values() ?? [])].map((t) => t.spec),
               checkpoint: rt.checkpoint,
               threshold: 0.8,
               force: true,

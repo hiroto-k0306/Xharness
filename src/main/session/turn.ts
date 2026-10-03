@@ -1,5 +1,6 @@
 // 1ターン(ユーザーの1発言 → 応答の完了)を実行し、履歴とレシートを保存する。
 import { readFile } from "node:fs/promises";
+import { checkPremises } from "./premises.js";
 import { withSessionCalls } from "./llm-calls.js";
 import {
   LlmBudgetError,
@@ -403,65 +404,76 @@ async function runSessionBody(
     let compactionFailure: string | undefined;
     const result = await rt.workflow!.run(
       {
-        prepareContext: options.phase4
-          ? async (messages, route, signal, context) => {
-              signal.throwIfAborted();
-              const limit = route.provider
-                .models()
-                .find((m) => m.id === route.model)?.contextTokens;
-              const prepared = await prepareProviderHistory(messages, {
-                provider: route.provider,
-                model: route.model,
-                signal,
+        prepareContext: async (messages, route, signal, context) => {
+          signal.throwIfAborted();
+          if (
+            !(await checkPremises(
+              ctx,
+              sessionId,
+              rt,
+              {
                 system: context?.system ?? system,
                 tools:
                   context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
-                checkpoint: rt.checkpoint,
-                skipCompaction: !!compactionFailure,
-                limit,
-                threshold: rt.config?.context.compactThreshold ?? 0.8,
-                overhead:
-                  estimateTokens({
-                    system: context?.system ?? system,
-                    tools:
-                      context?.tools ??
-                      [...rt.tools!.values()].map((t) => t.spec),
-                  }) + 4096,
-              });
-              if (prepared.compacted && prepared.checkpoint) {
-                rt.checkpoint = prepared.checkpoint;
-                await checkpointFile(options.home, sessionId).write(
-                  prepared.checkpoint,
-                );
-                events.record({
-                  id: events.nextReceiptId(),
-                  sessionId,
-                  ts: Date.now(),
-                  provider: "harness",
-                  kind: "compact",
-                  durationMs: 0,
-                  summary: `Compacted ${prepared.checkpoint.covered} older messages`,
-                });
-              }
-              if (prepared.failure && !compactionFailure) {
-                compactionFailure = prepared.failure;
-                emit({
-                  type: "notice",
-                  sessionId,
-                  tone: "warn",
-                  message: clean(
-                    prepared.fits
-                      ? `履歴の自動圧縮ができなかったため、圧縮せずに続けます(${route.model}: ${prepared.failure})。次のターンで再試行します`
-                      : `履歴の自動圧縮ができず、コンテキスト上限を超えるため停止します(${route.model}: ${prepared.failure})`,
-                  ),
-                });
-              }
-              return {
-                messages: prepared.messages,
-                ...(!prepared.fits ? { stop: "context_overflow" } : {}),
-              };
-            }
-          : undefined,
+              },
+              messages,
+            ))
+          )
+            return { messages, stop: "premise_mismatch" };
+          if (!options.phase4) return { messages };
+          const limit = route.provider
+            .models()
+            .find((m) => m.id === route.model)?.contextTokens;
+          const prepared = await prepareProviderHistory(messages, {
+            provider: route.provider,
+            model: route.model,
+            signal,
+            system: context?.system ?? system,
+            tools: context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
+            checkpoint: rt.checkpoint,
+            skipCompaction: !!compactionFailure,
+            limit,
+            threshold: rt.config?.context.compactThreshold ?? 0.8,
+            overhead:
+              estimateTokens({
+                system: context?.system ?? system,
+                tools:
+                  context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
+              }) + 4096,
+          });
+          if (prepared.compacted && prepared.checkpoint) {
+            rt.checkpoint = prepared.checkpoint;
+            await checkpointFile(options.home, sessionId).write(
+              prepared.checkpoint,
+            );
+            events.record({
+              id: events.nextReceiptId(),
+              sessionId,
+              ts: Date.now(),
+              provider: "harness",
+              kind: "compact",
+              durationMs: 0,
+              summary: `Compacted ${prepared.checkpoint.covered} older messages`,
+            });
+          }
+          if (prepared.failure && !compactionFailure) {
+            compactionFailure = prepared.failure;
+            emit({
+              type: "notice",
+              sessionId,
+              tone: "warn",
+              message: clean(
+                prepared.fits
+                  ? `履歴の自動圧縮ができなかったため、圧縮せずに続けます(${route.model}: ${prepared.failure})。次のターンで再試行します`
+                  : `履歴の自動圧縮ができず、コンテキスト上限を超えるため停止します(${route.model}: ${prepared.failure})`,
+              ),
+            });
+          }
+          return {
+            messages: prepared.messages,
+            ...(!prepared.fits ? { stop: "context_overflow" } : {}),
+          };
+        },
         provider: options.provider,
         router: options.providers
           ? new Router(

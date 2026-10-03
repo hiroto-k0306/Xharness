@@ -337,6 +337,7 @@ interface Rule { tool: string; pattern?: string; decision: Decision }
   - 「常に許可」はサブコマンドまで含めて保存する(`git status` → `git status *`。`git *` にはしない)。先頭の語の次がオプション・パスなら完全一致で保存する
   - 連結(`;` `|` `&` `&&` `||`)・リダイレクト(`>` `<`)・改行・変数や式の展開(`$` `` ` ``)・部分式やスクリプトブロック(`(` `)` `{` `}` `@(`)・ドットソースを含むコマンドは、allow ルールやモードでは許可せず、必ず確認する(plan では拒否)。PowerShell では `git status (Remove-Item …)` の括弧の中も実行されるため
   - 別のプログラムを起動させうるオプション(`git -c` / `-C` / `--upload-pack` / `--ext-diff`、`rg --pre` など)を含むコマンドも同じ扱い
+  - Git の status / diff / log / show も、読み取りに見えても必ず ask（plan・allow ルールでも自動承認しない）。`core.fsmonitor`、external diff、textconv、pager などリポジトリ設定による外部実行を字句解析だけでは保証できないため。危険なオプションは上記の拒否条件を維持する。アプリ内部の Git は pager と fsmonitor を無効化する（外部 diff / textconv を使う操作は内部にない）。
   - deny / ask ルールは、連結や括弧の中の部分コマンドに一致しても効く
 - 作業フォルダ外への書き込みは常に ask。作業フォルダ外の Read/Grep/Glob も、それを許可するルールが無ければ ask(Claude Code の working directories と同じ)
 - 秘密ファイル(`.env*`、鍵・証明書 `*.pem` `*.key` `id_*`、`.npmrc` `.netrc` `.git-credentials`、`.ssh/` `.aws/` `.kube/config` など)の読み取りは、ルールに関係なく ask(§A6)
@@ -1459,6 +1460,8 @@ HTMLは直近の分割ファイルを合計16 MB・2万行まで読み、範囲�
 - workflow は段階ごとにツールを出し入れしない。全段階で同じ集合・同じ順のツールを渡し、段階による制限(計画前の書き込み、SubmitPlan / SkipPlan / UpdatePlan / RequestReview を使える段階)は各ツールの検証で掛ける
 - system に足す workflow の説明は、段階ではなく設定の `workflow.mode` で決める(同じ会話では変わらない)
 - main の system はセッションの最初の組み立てで固定する。途中で AGENTS.md などが編集されても、次のセッションから反映する
+- 再起動後は workflow の追加分を含む実際の system / tools（順序も含む）の SHA-256 と版を、索引に保存したハッシュと照合してから送信・自動圧縮する。本文・資格情報・以前の承認は保存／復元しない。前提が不一致、または assistant 履歴がある旧形式で照合できない場合は送信せず、履歴を保持して `/clear` または新規セッションを案内する。user のみの旧履歴は初回送信で前提を設定できる。今回の不一致による実際の Claude 拒否は未検証であり、予防的な処理とする。
+- Claude の手動 `/compact` は、同じ runtime で検証した実際の workflow system / tools を使う。再起動直後にまだ検証できていない履歴では圧縮せず、上記の案内を返す（前提が同じなら通常のターンを一度実行後に圧縮できる）。Codex の要約は固定の別 system、tools なし、reasoning 除外であるため、この制限を付けない。ただし通常の再送は上記照合を通す。
 - 自動圧縮ができないとき(要約の失敗・529・サーバー圧縮の無い Haiku)は、上限に収まる間は圧縮せずに続け、同じターンでは再試行しない。上限を超えるときだけ `context_overflow` で止め、モデル名と理由を通知する。手動の `/compact` は失敗を返す
 
 

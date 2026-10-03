@@ -986,7 +986,8 @@ describe("send is safe against concurrent requests", () => {
         version: "1",
         host: { pickFolder: async () => workspace },
         emit: (e) => events.push(e),
-        createTools: () => new Map(),
+        // Resume the same tool premise as build(); changing it is now refused.
+        createTools: () => new Map([["Read", readTool]]),
       });
       await again.init();
       const opening = again.handle({ type: "open_session", sessionId: id });

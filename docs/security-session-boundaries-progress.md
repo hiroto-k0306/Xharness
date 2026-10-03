@@ -10,6 +10,7 @@
 - 内部 Git は `--no-pager -c core.fsmonitor=false` を付け、内部 status の fsmonitor 実行を防ぐ。内部に diff / show / log の external diff / textconv を用いる経路はない。
 - 隔離した一時 Git の無害な fsmonitor スクリプトで再現。内部 status は実行せず、明示した通常 Git status は marker を作ることをテストする。
 - 初回検証: 権限関連3ファイル、78テスト成功。内部 Git 対策追加後の検証結果は後述。
+- 集約検証で trust / Phase 4 の2件が確認待ちのタイムアウトになった。Git が常に確認対象になったため、従来の「allow が適用される」結合試験は pwd / Get-Content のダミーへ変更し、本来の信頼・永続ルールの検証目的を維持した。新たに external diff / textconv の設定経由の無害なスクリプト実行も一時 Git で確認する。
 
 ## 2. 送信準備と worktree 操作の排他
 

@@ -84,3 +84,39 @@ it("demonstrates fsmonitor execution in an isolated repository before requiring 
   await git(["status", "--porcelain"]);
   expect(await readFile(join(cwd, "monitor-ran"), "utf8")).toBe("safe");
 });
+it.each(["external", "textconv"])(
+  "requires confirmation for plain diff with a configured %s helper",
+  async (helper) => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-git-helper-"));
+    const env = {
+      ...process.env,
+      GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+      GIT_CONFIG_SYSTEM: process.platform === "win32" ? "NUL" : "/dev/null",
+    };
+    const git = (args: string[]) => exec("git", args, { cwd, env });
+    await git(["init"]);
+    await writeFile(
+      join(cwd, "dummy-diff"),
+      "#!/bin/sh\nprintf safe > helper-ran\nprintf dummy\n",
+      { mode: 0o755 },
+    );
+    await writeFile(join(cwd, ".gitattributes"), "*.txt diff=dummy\n");
+    await writeFile(join(cwd, "a.txt"), "before\n");
+    await git(["add", "a.txt"]);
+    await writeFile(join(cwd, "a.txt"), "after\n");
+    await git([
+      "config",
+      helper === "external" ? "diff.external" : "diff.dummy.textconv",
+      "./dummy-diff",
+    ]);
+    expect(
+      await decidePermission(
+        { id: "test", name: "Bash", input: { command: "git diff" } },
+        { mode: "plan", rules: [{ tool: "Bash", decision: "allow" }] },
+        cwd,
+      ),
+    ).toBe("ask");
+    await git(["diff"]);
+    expect(await readFile(join(cwd, "helper-ran"), "utf8")).toBe("safe");
+  },
+);

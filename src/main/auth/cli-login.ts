@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
 import { type ProviderName } from "../../shared/ipc.js";
+import { resolveCli } from "../tools/environment.js";
+import { dirname, delimiter } from "node:path";
 
 export type LoginResult =
   boolean | "shell_missing" | "cli_missing" | "launch_failed";
@@ -16,14 +18,16 @@ export function loginScript(provider: ProviderName) {
   return `$ErrorActionPreference = 'Stop'; if (!(Get-Command ${provider} -CommandType Application -ErrorAction SilentlyContinue)) { exit 20 }; try { $p = Start-Process -FilePath (Get-Command pwsh -CommandType Application -ErrorAction Stop | Select-Object -First 1).Source -WorkingDirectory $HOME -ArgumentList @('-NoLogo','-NoProfile','-EncodedCommand','${encoded}') -PassThru -Wait; if ($p.ExitCode -eq 0) { exit 0 }; exit 1 } catch { exit 21 }`;
 }
 
-export function launchOfficialLogin(
+export async function launchOfficialLogin(
   provider: ProviderName,
   env = process.env,
 ): Promise<LoginResult> {
   if (process.platform !== "win32") return Promise.resolve(false);
+  const shell = await resolveCli("pwsh", env);
+  if (!shell) return "shell_missing";
   return new Promise((resolve) => {
     const child = spawn(
-      "pwsh",
+      shell,
       [
         "-NoLogo",
         "-NoProfile",
@@ -32,7 +36,7 @@ export function launchOfficialLogin(
       ],
       {
         cwd: homedir(),
-        env,
+        env: { ...env, PATH: dirname(shell) + delimiter + (env.PATH ?? "") },
         windowsHide: true,
         stdio: "ignore",
       },

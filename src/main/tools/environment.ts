@@ -8,25 +8,47 @@ export interface EnvironmentReport {
   warnings: string[];
   summary: string;
 }
-/** PATH lookup only; never runs a shell or prints PATH/credentials. */
-export async function cliAvailable(name: string): Promise<boolean> {
+/** Never runs a shell or prints PATH/credentials. Windows aliases may reject stat. */
+export async function resolveCli(
+  name: string,
+  env = process.env,
+): Promise<string | undefined> {
   const extensions = process.platform === "win32" ? [".exe", ""] : [""];
-  for (const directory of (process.env.PATH ?? "")
-    .split(delimiter)
-    .filter(Boolean)) {
+  const directories = (env.PATH ?? "").split(delimiter).filter(Boolean);
+  if (process.platform === "win32" && name === "pwsh") {
+    if (env.LOCALAPPDATA)
+      directories.push(join(env.LOCALAPPDATA, "Microsoft", "WindowsApps"));
+    if (env.ProgramFiles)
+      directories.push(join(env.ProgramFiles, "PowerShell", "7"));
+  }
+  for (const directory of directories) {
     if (!isAbsolute(directory.replace(/^"|"$/g, ""))) continue;
     for (const extension of extensions) {
       const path = join(directory.replace(/^"|"$/g, ""), name + extension);
       try {
-        if (!(await stat(path)).isFile()) continue;
         await access(path, constants.X_OK);
-        return true;
+        try {
+          if (!(await stat(path)).isFile()) continue;
+        } catch (error) {
+          // Store execution aliases are accessible but stat can return EACCES.
+          if (
+            process.platform !== "win32" ||
+            extension !== ".exe" ||
+            !/[\\/]Microsoft[\\/]WindowsApps$/i.test(directory) ||
+            (error as NodeJS.ErrnoException).code !== "EACCES"
+          )
+            continue;
+        }
+        return path;
       } catch {
         /* Try the next PATH entry. */
       }
     }
   }
-  return false;
+  return undefined;
+}
+export async function cliAvailable(name: string): Promise<boolean> {
+  return !!(await resolveCli(name));
 }
 export async function diagnoseEnvironment(
   cwd: string,

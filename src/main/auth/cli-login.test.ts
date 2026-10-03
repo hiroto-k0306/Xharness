@@ -10,7 +10,12 @@ it.skipIf(process.platform !== "win32")(
   async () => {
     const dir = await mkdtemp(join(tmpdir(), "xh-login-missing-"));
     expect(
-      await launchOfficialLogin("claude", { ...process.env, PATH: dir }),
+      await launchOfficialLogin("claude", {
+        ...process.env,
+        PATH: dir,
+        LOCALAPPDATA: dir,
+        ProgramFiles: dir,
+      }),
     ).toBe("shell_missing");
     const pwsh = execFileSync("where.exe", ["pwsh"], { encoding: "utf8" })
       .trim()

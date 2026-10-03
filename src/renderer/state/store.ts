@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { summarizeInput } from "../../shared/summary.js";
 import { parseTodos } from "../../shared/todos.js";
+import { parseQuestionChoices } from "../../shared/questions.js";
 import {
   REPORTED_ERRORS,
   type AppState,
@@ -190,6 +191,10 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
           tool: e.tool,
           summary: summarizeInput(e.tool, e.input),
           todos: e.tool === "TodoWrite" ? parseTodos(e.input) : undefined,
+          question:
+            e.tool === "AskUserQuestion"
+              ? parseQuestionChoices(e.input)
+              : undefined,
           status: "pending",
         }),
       );

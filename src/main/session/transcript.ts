@@ -2,6 +2,7 @@ import { type Message } from "../core/types.js";
 import { type TranscriptItem } from "../../shared/ipc.js";
 import { summarizeInput } from "../../shared/summary.js";
 import { parseTodos } from "../../shared/todos.js";
+import { parseQuestionChoices } from "../../shared/questions.js";
 
 /** 保存済み履歴から画面用の項目を作る(再開時)。 */
 export function itemsFromMessages(messages: Message[]): TranscriptItem[] {
@@ -52,6 +53,10 @@ export function itemsFromMessages(messages: Message[]): TranscriptItem[] {
           summary: summarizeInput(block.name, block.input),
           todos:
             block.name === "TodoWrite" ? parseTodos(block.input) : undefined,
+          question:
+            block.name === "AskUserQuestion"
+              ? parseQuestionChoices(block.input)
+              : undefined,
           status: "pending",
         };
         tools.set(block.id, item);

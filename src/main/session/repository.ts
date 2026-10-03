@@ -272,6 +272,18 @@ export class Repository {
     if (dirty && (action === "merge" || !confirmed))
       throw new Error("Worktree has uncommitted changes");
     if (action === "merge") {
+      if (
+        (await this.git(
+          ["rev-parse", "--abbrev-ref", "HEAD"],
+          root,
+          signal,
+        )) !== tree.baseBranch
+      )
+        throw new Error(
+          "Original repository branch changed; restore the base branch before merging",
+        );
+      if (await this.git(["status", "--porcelain"], root, signal))
+        throw new Error("Original repository has uncommitted changes");
       await this.git(["merge", "--no-edit", tree.branch], root, signal);
       return;
     }

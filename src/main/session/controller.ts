@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { SessionSchedules } from "./schedules.js";
 import { readLlmCalls } from "./llm-calls.js";
 import {
   attachmentInfo,
@@ -69,6 +70,7 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private readonly schedules: SessionSchedules;
   private readonly runtimes = new Map<string, Runtime>();
   private readonly sessions: SessionStore;
   private readonly workspaces: WorkspaceStore;
@@ -85,6 +87,39 @@ export class SessionController {
   private imageSettings = { ...DEFAULT_IMAGES };
 
   constructor(private readonly options: ControllerOptions) {
+    this.schedules = new SessionSchedules({
+      now: () => Date.now(),
+      busy: (id) => (this.runtimes.get(id)?.status ?? "idle") !== "idle",
+      send: (id, text, signal) => this.send(id, text, undefined, signal),
+      notice: (sessionId, message) =>
+        this.options.emit({
+          type: "notice",
+          sessionId,
+          message: this.ctx.clean(message),
+          tone: "dim",
+        }),
+    });
+    const emit = options.emit;
+    options = {
+      ...options,
+      emit: (event) => {
+        emit(event);
+        if (
+          event.type === "turn" &&
+          event.status === "idle" &&
+          event.stopCause
+        ) {
+          if (
+            ["end_turn", "workflow_complete", "reported_done"].includes(
+              event.stopCause,
+            )
+          )
+            this.schedules.idle(event.sessionId);
+          else this.schedules.cancel(event.sessionId);
+        }
+      },
+    };
+    this.options = options;
     this.sessions = new SessionStore(options.home);
     this.workspaces = new WorkspaceStore(options.home);
     this.model = options.model;
@@ -277,6 +312,7 @@ export class SessionController {
               ok: false,
               error: "待機中のセッションを確認して削除してください。",
             };
+          this.schedules.cancel(command.sessionId);
           await this.sessions.delete(command.sessionId);
           this.ctx.dropRuntime(command.sessionId);
           if (this.current === command.sessionId) {
@@ -393,6 +429,7 @@ export class SessionController {
         case "send":
           return this.send(command.sessionId, command.text, command.images);
         case "abort": {
+          this.schedules.cancel(command.sessionId);
           const rt = this.runtimes.get(command.sessionId);
           if (rt) this.release(rt);
           return { ok: true };
@@ -543,9 +580,12 @@ export class SessionController {
     sessionId: string,
     text: string,
     images?: ImageAttachment[],
+    scheduled?: AbortSignal,
   ): Promise<CommandResult> {
     const imageSettings = (await loadMainConfig(this.options.home)).images;
     this.imageSettings = imageSettings;
+    if (scheduled?.aborted)
+      return { ok: false, error: "予約を取り消しました。" };
     if ((images?.length ?? 0) > imageSettings.maxPerMessage)
       return {
         ok: false,
@@ -569,6 +609,7 @@ export class SessionController {
       if (!this.sessions.get(sessionId))
         return { ok: false, error: "Unknown session" };
       const rt = this.runtimes.get(sessionId);
+      this.schedules.cancel(sessionId);
       if (rt) this.release(rt);
       this.options.emit({
         type: "notice",
@@ -587,6 +628,8 @@ export class SessionController {
     if (root && this.ctx.worktreeBusy.has(root))
       return { ok: false, error: "Workspace writer busy" };
     const command = text.trim();
+    if (/^\/(?:schedule|signal)(?:\s|$)/.test(command))
+      return this.schedules.command(sessionId, command);
     const notice = (message: string): CommandResult => {
       this.options.emit({
         type: "notice",
@@ -753,7 +796,20 @@ export class SessionController {
         ok: false,
         error: "認証欄で公式CLIの認証・更新を許可してから再送信してください",
       };
+    if (scheduled?.aborted)
+      return { ok: false, error: "予約を取り消しました。" };
     rt.status = "running";
+    rt.closing = false;
+    const abort = new AbortController();
+    const cancelScheduled = () => abort.abort();
+    scheduled?.addEventListener("abort", cancelScheduled, { once: true });
+    rt.abort = abort;
+    let finish!: () => void;
+    rt.done = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let launched = false;
+    this.options.emit({ type: "turn", sessionId, status: "running" });
     // Resolve user definitions once. The expansion is a user message, never a second command.
     try {
       const expanded = expandCommand(
@@ -766,40 +822,53 @@ export class SessionController {
             (await this.ctx.trust.isTrusted(root)),
         ),
       );
+      abort.signal.throwIfAborted();
       if (expanded !== undefined) text = expanded;
       else if (
         /^\/[\p{L}\p{N}_-]+(?:\s|$)/u.test(command) &&
         !phaseCommand &&
         !command.startsWith("/mcp__")
       ) {
-        rt.status = "idle";
         return {
           ok: false,
           error: "コマンドが見つからないか、プロジェクトが未信頼です。",
         };
       }
+      // The reservation covers preparation too, so stop/close/shutdown can cancel it.
+      if (await this.reportMissingCwd(session))
+        return { ok: false, error: "Working directory not found" };
+      abort.signal.throwIfAborted();
+      launched = true;
+      void runSessionTurn(this.ctx, this.gate, session, rt, text, images, abort)
+        .catch(() => undefined)
+        .finally(() => {
+          scheduled?.removeEventListener("abort", cancelScheduled);
+          finish();
+        });
+      return { ok: true, sessionId };
     } catch {
-      rt.status = "idle";
       return {
         ok: false,
-        error: "ユーザー定義コマンドを読み込めませんでした。",
+        error: abort.signal.aborted
+          ? "送信を中断しました。"
+          : "ユーザー定義コマンドを読み込めませんでした。",
       };
+    } finally {
+      if (!launched) {
+        scheduled?.removeEventListener("abort", cancelScheduled);
+        rt.status = "idle";
+        rt.abort = undefined;
+        this.options.emit({
+          type: "turn",
+          sessionId,
+          status: "idle",
+          ...(abort.signal.aborted ? { stopCause: "aborted" } : {}),
+        });
+        if (rt.closing) this.ctx.dropRuntime(sessionId);
+        finish();
+        await this.emitState();
+      }
     }
-    // 作業フォルダが無いときは、モデルを呼ばずツールも動かさずに知らせる(§18.4)
-    if (await this.reportMissingCwd(session)) {
-      rt.status = "idle";
-      return { ok: false, error: "Working directory not found" };
-    }
-    rt.closing = false;
-    rt.done = runSessionTurn(
-      this.ctx,
-      this.gate,
-      session,
-      rt,
-      text,
-      images,
-    ).catch(() => undefined);
-    return { ok: true, sessionId };
   }
 
   private authenticationRequired(session: StoredSession) {
@@ -895,6 +964,7 @@ export class SessionController {
    * 履歴は残る(一覧からは消えない)。
    */
   private async closeSession(sessionId: string): Promise<CommandResult> {
+    this.schedules.cancel(sessionId);
     if (!this.sessions.get(sessionId))
       return { ok: false, error: "Unknown session" };
     const rt = this.runtimes.get(sessionId);
@@ -920,6 +990,7 @@ export class SessionController {
   /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
   async shutdown(timeoutMs = 3000): Promise<void> {
     this.stopped = true;
+    this.schedules.close();
     this.repositories.abort();
     const running: Promise<void>[] = [];
     for (const rt of this.runtimes.values()) {

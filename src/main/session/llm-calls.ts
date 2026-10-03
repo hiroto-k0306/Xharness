@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import {
   LlmBudget,
   withLlmBudget,
@@ -38,7 +38,23 @@ export async function readLlmCalls(
     };
   }
 }
+const activeSessions = new Set<string>();
 export async function withSessionCalls<T>(
+  options: Parameters<typeof runSessionCalls<T>>[0],
+  run: (budget: LlmBudget) => Promise<T>,
+): Promise<T> {
+  const absolute = resolve(path(options.home, options.id));
+  const key = process.platform === "win32" ? absolute.toLowerCase() : absolute;
+  if (activeSessions.has(key)) throw new LlmBudgetError("budget_busy");
+  activeSessions.add(key);
+  try {
+    options.abort.signal.throwIfAborted();
+    return await runSessionCalls(options, run);
+  } finally {
+    activeSessions.delete(key);
+  }
+}
+async function runSessionCalls<T>(
   options: {
     home: string;
     id: string;

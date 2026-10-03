@@ -79,13 +79,9 @@ export async function compactNow(
 ): Promise<CommandResult> {
   const rt = await ctx.load(sessionId);
   if (rt.status !== "idle") return { ok: false, error: "Turn already running" };
-  const file = checkpointFile(ctx.options.home, sessionId);
-  rt.checkpoint ??= await file.read(undefined);
   const session = ctx.sessions.get(sessionId);
   if (!session) return { ok: false, error: "Unknown session" };
-  const provider = new Router(
-    ctx.options.providers ?? [ctx.options.provider],
-  ).provider(session.model);
+  // Claim the runtime before any further await, including checkpoint loading.
   const abort = new AbortController();
   let finish: () => void = () => {};
   rt.done = new Promise<void>((resolve) => {
@@ -96,6 +92,12 @@ export async function compactNow(
   let stopCause: string | undefined;
   ctx.options.emit({ type: "turn", sessionId, status: "running" });
   try {
+    const file = checkpointFile(ctx.options.home, sessionId);
+    rt.checkpoint ??= await file.read(undefined);
+    abort.signal.throwIfAborted();
+    const provider = new Router(
+      ctx.options.providers ?? [ctx.options.provider],
+    ).provider(session.model);
     const limits = (await loadProjectConfig(ctx.options.home)).limits;
     const result = await withSessionCalls(
       {
@@ -169,6 +171,13 @@ export async function compactNow(
     });
     return { ok: true };
   } catch (error) {
+    if (abort.signal.aborted && !(error instanceof LlmBudgetError)) {
+      stopCause = "aborted";
+      return {
+        ok: false,
+        error: "圧縮を中断しました。元の履歴を維持しています。",
+      };
+    }
     if (error instanceof LlmBudgetError) {
       stopCause = error.reason;
       return {
@@ -184,5 +193,6 @@ export async function compactNow(
     ctx.options.emit({ type: "turn", sessionId, status: "idle", stopCause });
     if (rt.closing) ctx.dropRuntime(sessionId);
     finish();
+    await ctx.emitState();
   }
 }

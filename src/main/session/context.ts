@@ -82,6 +82,7 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  childHandoffs?: import("../agents/handoffs.js").ChildHandoffs;
   llmCalls?: import("../../shared/llm-calls.js").LlmCalls;
   rewindPrompt?: {
     requestId: string;
@@ -181,6 +182,8 @@ export interface ControllerContext {
 }
 
 export const STOP_NOTICE: Record<string, string> = {
+  budget_busy:
+    "このセッションの通信処理が実行中です。終了してから再送信してください。",
   budget_exceeded:
     "通信回数の上限に達したため停止しました。上限の設定を確認してから新しい指示を入力してください。",
   budget_storage_failed:

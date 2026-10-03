@@ -1,5 +1,6 @@
 // セッションのタスク段階(§20)を動かす WorkflowRuntime を、controller の状態とつないで作る。
 import { childNeedsAsk } from "../agents/permissions.js";
+import { ChildHandoffs } from "../agents/handoffs.js";
 import { type loadAgentConfig } from "../agents/definitions.js";
 import { Router } from "../core/router.js";
 import { type Message } from "../core/types.js";
@@ -68,6 +69,7 @@ export function createWorkflow(
         );
   rt.hookApproval = { fingerprint, approve: approveHooks };
   return new WorkflowRuntime({
+    handoffs: (rt.childHandoffs ??= new ChildHandoffs()),
     approveHooks: (_hooks, signal) => approveHooks(signal),
     home: options.home,
     parentId: sessionId,

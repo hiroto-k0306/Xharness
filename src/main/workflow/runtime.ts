@@ -200,7 +200,7 @@ export class WorkflowRuntime {
         name,
         description:
           name === "Task"
-            ? "Delegate investigation/review to a configured child agent. background=true returns a taskId immediately; use TaskList/TaskOutput/TaskStop to manage it. At most 3 run concurrently. Running children are cancelled when this parent turn ends; collect results before finishing. Workers are managed by SubmitPlan, not Task."
+            ? "Delegate investigation/review to a configured child agent. Use TaskHistory to explicitly choose a previousChildId to attach its bounded final result/questions to a NEW child; no conversation or permissions are resumed. background=true returns a taskId immediately; use TaskList/TaskOutput/TaskStop. At most 3 run concurrently. Running children are cancelled when this parent turn ends. Workers are managed by SubmitPlan, not Task."
             : name + " is managed by the harness workflow",
         inputSchema: {
           type: "object",
@@ -297,6 +297,16 @@ export class WorkflowRuntime {
     for (const [name, tool] of lifecycleTools()) result.set(name, tool);
     for (const [name, tool] of todoTools()) result.set(name, tool);
     for (const [name, tool] of this.tasks.tools()) result.set(name, tool);
+    result.set("TaskHistory", {
+      ...this.tool(
+        "TaskHistory",
+        {},
+        [],
+        () => undefined,
+        async () => JSON.stringify(this.runner.handoffs.list()),
+      ),
+      readOnly: true,
+    });
     const workflowTools = this.options.config.workflow.mode !== "off";
     const gated = (
       tool: Tool,
@@ -316,6 +326,7 @@ export class WorkflowRuntime {
           agent: { type: "string" },
           model: { type: "string" },
           background: { type: "boolean" },
+          previousChildId: { type: "string" },
         },
         ["description", "prompt", "agent"],
         (a) =>
@@ -324,10 +335,20 @@ export class WorkflowRuntime {
           ) &&
           (a.model === undefined || typeof a.model === "string") &&
           (a.background === undefined || typeof a.background === "boolean") &&
+          String(a.prompt).length <= 64000 &&
+          (a.previousChildId === undefined ||
+            this.runner.handoffs.has(a.previousChildId)) &&
           Object.hasOwn(this.options.config.agents, String(a.agent))
             ? undefined
             : "Unknown agent or invalid Task",
         async (a, signal) => {
+          a = {
+            ...a,
+            prompt: this.runner.handoffs.attach(
+              String(a.prompt),
+              a.previousChildId,
+            ),
+          };
           if (a.background === true) return this.tasks.start(a, signal);
           const definition = this.options.config.agents[String(a.agent)]!;
           return (
@@ -723,6 +744,7 @@ export class WorkflowRuntime {
               "UpdatePlan",
               "RequestReview",
               "TaskList",
+              "TaskHistory",
               "TaskOutput",
               "TaskStop",
             ].includes(call.name)

@@ -1,4 +1,5 @@
 import { traceOperation } from "../core/trace.js";
+import { ChildHandoffs } from "./handoffs.js";
 import { randomUUID } from "node:crypto";
 import { join, relative, isAbsolute } from "node:path";
 import { resolveModel } from "../config/config.js";
@@ -44,6 +45,7 @@ export interface ChildContext {
   files?: string[];
 }
 export interface ChildOptions {
+  handoffs?: ChildHandoffs;
   checkpoint?(cwd: string): LoopOptions["checkpoint"];
   onTraceWarning?(message: string): void;
   onTranscript?(
@@ -76,8 +78,10 @@ export interface ChildOptions {
   redact?(text: string): string;
 }
 export class ChildRunner {
+  readonly handoffs: ChildHandoffs;
   private childStore?: Promise<SessionStore>;
   constructor(private readonly options: ChildOptions) {
+    this.handoffs = options.handoffs ?? new ChildHandoffs();
     if (!/^[\w-]+$/.test(options.parentId))
       throw new Error("Invalid parent session id");
   }
@@ -340,6 +344,34 @@ export class ChildRunner {
       await Promise.all(writes);
       await store.append(context.id, result.messages, clean);
       this.options.onTranscript?.(context, result.messages);
+      if (
+        ["end_turn", "reported_done", "awaiting_user"].includes(
+          result.stopCause,
+        )
+      ) {
+        const final = result.messages.findLast((m) => m.role === "assistant");
+        const questions = result.messages.flatMap((m) =>
+          m.content.flatMap((b) =>
+            b.type === "tool_use" &&
+            b.name === "AskUserQuestion" &&
+            typeof (b.input as { question?: unknown })?.question === "string"
+              ? [clean(String((b.input as { question: string }).question))]
+              : [],
+          ),
+        );
+        this.handoffs.remember({
+          childId: context.id,
+          name,
+          status:
+            result.stopCause === "awaiting_user" ? "awaiting_user" : "done",
+          result: clean(
+            final?.content
+              .flatMap((b) => (b.type === "text" ? [b.text] : []))
+              .join("\n") ?? "",
+          ),
+          questions,
+        });
+      }
       if (
         result.stopCause === "agent_stopped" ||
         result.stopCause === "awaiting_user"

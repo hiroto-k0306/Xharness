@@ -779,7 +779,9 @@ describe("working directory is checked when a session starts or resumes (§18.4)
     expect(err.sessionId).toBe(id);
     expect(err.message).toContain("作業フォルダが見つかりません");
     expect(err.message).toContain(gone);
-    expect(events.some((e) => e.type === "turn")).toBe(false);
+    expect(
+      events.filter((e) => e.type === "turn").map((e) => e.status),
+    ).toEqual(["running", "idle"]);
     await c2.handle({ type: "ready" });
     expect(sessionOf(id).status).toBe("idle");
   });

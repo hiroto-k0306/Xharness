@@ -2,7 +2,7 @@
 
 Claude (Pro/Max) と GPT (ChatGPT Plus/Pro) のサブスク枠を直接利用する、Claude Code ライクな汎用エージェントハーネス。
 
-- 言語: TypeScript (Node.js 22+)
+- 言語: TypeScript (Node.js 24 LTSを基準、Node 22.20以降も互換確認)
 - 配布形態: Windows デスクトップアプリ (.exe / Electron) — §16, §17
 - 利用形態: 個人利用・ローカル実行
 - ステータス: 設計のみ。実装は別端末で行う
@@ -564,7 +564,7 @@ agents: { ... }              # §10
 
 | 用途 | ツール | ライセンス |
 |---|---|---|
-| 実行環境 | Node.js 22 LTS | MIT |
+| 実行環境 | Node.js 24 LTS（基準24.16.0、2026-10-03ユーザー環境に合わせて更新。22.20以降も互換確認） | MIT |
 | パッケージ管理 | pnpm | MIT |
 | アプリ基盤・ビルド・パッケージ | Electron / electron-vite / electron-builder | MIT |
 | UI | React / Zustand | MIT |
@@ -576,7 +576,9 @@ agents: { ... }              # §10
 | エディタ | VS Code(任意) | 無料 |
 | アイコン変換 | sharp + png-to-ico(npm) | Apache-2.0 / MIT |
 
-Node代替検索のGlob照合には `node:path.matchesGlob` を使用する（ユーザー承認2026-10-03）。Node 22.20以降ではstable。古いNode 22でのExperimentalWarningと代替案・確認結果は [docs/h4-review-progress.md](docs/h4-review-progress.md) に記録する。Nodeの最低バージョン設定は今回変更しない。
+Node代替検索のGlob照合には `node:path.matchesGlob` を使用する（ユーザー承認2026-10-03）。Node 22.20以降ではstable。古いNode 22でのExperimentalWarningと代替案・確認結果は [docs/h4-review-progress.md](docs/h4-review-progress.md) に記録する。開発環境の基準はユーザー環境のNode 24.16.0へ合わせ、enginesは22.20以降の22系および24.16以降の24系を許可する。型定義は22系を維持して互換範囲を越えるAPI追加を避ける。Electron実行時のNodeはElectron同梱の版であり、システムのNodeとは別に確認する。
+
+Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex同梱／WindowsApps・Store版など）を合わせる。PATHは検証プロセスの中だけで設定し、システム全体の設定は変更しない。実測した環境とH3のJob継承の差は [docs/h3-job-investigation.md](docs/h3-job-investigation.md) に記録する。
 
 | # | 項目 | 決定 |
 |---|---|---|

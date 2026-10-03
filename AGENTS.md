@@ -22,11 +22,12 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 
 ## 技術スタック(DESIGN.md §15-B で決定済み。勝手に変えない)
 
-- Node.js 22 LTS / TypeScript(`strict: true`)/ pnpm
+- Node.js 24 LTS（基準24.16.0、ユーザー環境に合わせて2026-10-03更新）/ TypeScript(`strict: true`)/ pnpm。Node 22.20以降も互換確認する
 - Electron + electron-vite + electron-builder
 - React + Zustand + CSS Modules
 - Vitest / ESLint / Prettier
 - 実行シェル: PowerShell 7(Windows)
+- Windows検証はユーザーが使うpwshの実体・配布形態まで合わせる。Codex同梱版だけで成功しても、WindowsApps / Store版での成功とみなさない。使用したNode・pwshの版と実体をdocs/へ記録する
 - MCP クライアント: 公式 `@modelcontextprotocol/sdk`(ユーザー承認 2026-10-02。DESIGN.md §25。モデルの API 呼び出しには引き続き SDK を使わない)
 
 ## コードのルール

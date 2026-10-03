@@ -17,8 +17,9 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 ## 開発環境
 
-- Node.js 22 LTS(`.node-version`)、pnpm 10(`packageManager`)
+- Node.js 24 LTS（基準24.16.0、`.node-version`）、pnpm 10(`packageManager`)。Node 22.20以降も互換確認対象
 - Windows で動かす場合: PowerShell 7(`pwsh`)、ripgrep(`rg`)、Git
+- Windowsの検証ではNodeとpwshの版・実体を確認する（`node --version`、`Get-Command node,pwsh`、`pwsh -NoProfile -Command '$PSVersionTable.PSVersion'`）。Codex同梱pwshとWindowsApps版は子プロセスのJob継承が異なる場合があるため、ユーザーと同じpwshをPATHの先頭に指定する。切り分けは [docs/h3-job-investigation.md](docs/h3-job-investigation.md)
 - 実際のモデルを使う確認には、公式 CLI(`claude` / `codex`)でのログインが要る。クラウド(Linux)では実 API を呼ばず、`--fake` と `test/fixtures/` で確認する(AGENTS.md)
 
 ```powershell

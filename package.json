@@ -5,7 +5,7 @@
   "description": "XHarness Windows coding agent",
   "type": "module",
   "engines": {
-    "node": ">=22 <23"
+    "node": "^22.20.0 || ^24.16.0"
   },
   "scripts": {
     "postinstall": "node node_modules/electron/install.js",

@@ -288,6 +288,9 @@ export class SessionStore {
   async delete(id: string) {
     await new FileCheckpointStore(this.home).remove(id);
     await rm(this.history(id), { force: true });
+    await rm(this.history(id).replace(/\.jsonl$/, ".llm-calls.json"), {
+      force: true,
+    });
     this.sessions = this.sessions.filter((session) => session.id !== id);
     await this.index.write(this.sessions);
   }

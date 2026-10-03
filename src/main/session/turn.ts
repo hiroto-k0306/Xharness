@@ -173,7 +173,7 @@ async function loadTrustedConfig(
       sessionId: session.id,
       tone: "warn",
       message:
-        "このワークスペースの設定にある許可ルール・acceptEdits は適用せずに続けます(deny / ask は適用します)",
+        "このワークスペースの設定にある許可ルール・自動モードは適用せずに続けます(deny / ask は適用します)",
     });
     return config;
   }

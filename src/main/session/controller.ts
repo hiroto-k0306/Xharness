@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolvePermissionMode } from "../../shared/permission-modes.js";
 import { SessionSchedules } from "./schedules.js";
 import { readLlmCalls } from "./llm-calls.js";
 import {
@@ -779,12 +780,13 @@ export class SessionController {
     }
     if (/^\/mode(?:\s|$)/.test(command)) {
       const [, mode, extra] = command.split(/\s+/);
-      if (extra || !["default", "acceptEdits", "plan"].includes(mode ?? ""))
-        return { ok: false, error: "Usage: /mode default|acceptEdits|plan" };
+      const permissionMode = resolvePermissionMode(mode);
+      if (extra || !permissionMode)
+        return { ok: false, error: "Usage: /mode 通常|自動|計画" };
       return setMode(this.ctx, {
         type: "set_mode",
         sessionId,
-        mode: mode as "default" | "acceptEdits" | "plan",
+        mode: permissionMode,
       });
     }
     if (command === "/compact")

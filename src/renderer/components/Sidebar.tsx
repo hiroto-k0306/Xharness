@@ -1,4 +1,5 @@
 import { type SessionSummary } from "../../shared/ipc.js";
+import { permissionModeLabels } from "../../shared/permission-modes.js";
 import { ago, groupSessions } from "../state/groups.js";
 import { stepColor } from "../state/steps.js";
 import { type SessionView } from "../state/store.js";
@@ -173,7 +174,7 @@ export function Sidebar(p: SidebarProps) {
                                     : "var(--dim)",
                               }}
                             >
-                              {s.permissionMode}
+                              {permissionModeLabels[s.permissionMode]}
                             </span>
                           )}
                           {s.providers.map((pr) => (

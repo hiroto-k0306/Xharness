@@ -201,6 +201,25 @@ describe("Transcript", () => {
 });
 
 describe("PromptLine", () => {
+  it("labels the compatible acceptEdits value as automatic", () => {
+    render(
+      <PromptLine
+        cwdLabel="test"
+        running={false}
+        blocked={false}
+        modelLabel="fake"
+        modelColor="red"
+        mode="acceptEdits"
+        onSubmit={() => {}}
+      />,
+    );
+    expect(screen.getByRole("option", { name: "自動" })).toHaveValue(
+      "acceptEdits",
+    );
+    expect(screen.getByRole("option", { name: "通常" })).toHaveValue("default");
+    expect(screen.getByRole("option", { name: "計画" })).toHaveValue("plan");
+    expect(screen.queryByRole("option", { name: "acceptEdits" })).toBeNull();
+  });
   it("allows stopping while a permission prompt disables message input", () => {
     const onStop = vi.fn();
     const onSubmit = vi.fn();

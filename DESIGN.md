@@ -351,12 +351,13 @@ interface Rule { tool: string; pattern?: string; decision: Decision }
 
 | モード | 読み取り系 | Edit / Write | Bash・WebFetch | 用途 |
 |---|---|---|---|---|
-| `default` | allow | ask | ask | 既定。ルールで個別に allow を増やしていく |
-| `acceptEdits` | allow | **allow**(ワークスペース内) | ask | 実装を任せたいとき |
-| `plan` | allow | deny | 読み取り専用コマンドのみ allow | 調査・計画だけさせたいとき |
+| 通常（保存値 `default`） | allow | ask | ask | 既定。ルールで個別に allow を増やしていく |
+| 自動（保存値 `acceptEdits`） | allow | allow | allow（実行確認を自動許可） | ツール実行を任せたいとき |
+| 計画（保存値 `plan`） | allow | deny | 読み取り専用コマンドのみ allow | 調査・計画だけさせたいとき |
 
 - **モードはセッションごとに持つ**。新しいセッションは設定の `permissions.mode`(既定 `default`)で始まる
-- 切替方法: PromptLine 右下の `mode ▾` ボタン / `Shift+Tab` で順に切替 / `/mode acceptEdits`
+- 切替方法: PromptLine 右下の `mode ▾` ボタン / `Shift+Tab` で順に切替 / `/mode 通常|自動|計画`（英語名default・auto・plan、旧acceptEditsも利用可）
+- 2026-10-04ユーザー承認: 画面のacceptEditsを「自動」に改名し、この選択を通常のツール実行のユーザー許可として扱う。内部の設定・保存値はacceptEditsを維持し、過去のセッションでも自動として動作する。ask判定とworkflowの確認必須指定も実行確認を省略するが、deny判定、セッションのplan/readOnly、ツール自身のネットワーク・ファイル拒否条件は解除しない。ワークスペースの信頼、プロジェクトフックの承認、MCP接続・プロンプト取り込み、公式CLIの認証は別の承認として維持する。子のreadOnly指定も自動許可の対象外。defaultの動作は従来どおり。
 - 切替は次のツール呼び出しから反映する。モードを変えたことは Receipt に残す
 - セッションの worker・reviewer は親セッションのモードを引き継ぐ
 - タスク段階の **plan 段階では、モードに関係なく書き込み系を使えない**(§20)
@@ -1164,7 +1165,7 @@ workflow:
 ### 20.6 継続指示の停止と提案のみの終了（2026-10-02、ユーザー承認）
 
 - `auto`の読み取り調査で、保守的な権限判定によりBashが拒否されても、それだけではplanへ切り替えない。Write/Edit/SubmitPlan/SkipPlanの呼び出しは従来どおり段階を開始する。
-- 2026-10-04ユーザー承認: workflowのclassify/plan段階で読み取り専用と判定できないBashは、一律拒否せず、毎回ユーザーの実行確認へ回す。許可された呼び出しだけ実行する。過去のallowルールでもこの確認は省略しない。チャット本文の「許可」は承認応答として扱わない。明示的denyルール、セッションのplanモード・readOnlyによる拒否は維持する。Write/Edit等の計画前制限とレビュー要件は変更しない。
+- 2026-10-04ユーザー承認: workflowのclassify/plan段階で読み取り専用と判定できないBashは、一律拒否せず、ユーザーの実行確認へ回す。許可された呼び出しだけ実行する。defaultでは過去のallowルールでもこの確認は省略しない。自動モードは§9.1の承認状態として確認を自動許可する。チャット本文の「許可」は承認応答として扱わない。明示的denyルール、セッションのplanモード・readOnlyによる拒否は維持する。Write/Edit等の計画前制限とレビュー要件は変更しない。
 - `auto`で計画項目も実際の差分もなく、classifyまたはimplementでend_turnになった場合は、提案・調査結果・阻害理由の回答として終了できる。変更を捏造させず、RequestReviewも要求しない。次の依頼は再びclassifyから判定する。差分のある実装のレビュー必須条件は維持する。
 - plan/implementのend_turnに対する継続指示は、段階・計画項目の状態・reviewRound・差分を比較する。同じ状態のend_turnが3回続いたらworkflow_stalledで停止し、ユーザーの新しい入力を待つ。未レビューの作業を完了扱いにはしない。
 - 実行中・承認待ちに「停止」ボタンを表示し、既存abortと同じ経路で実行・子・承認待ちを中断する。`/stop`と、単独の「停止」「停止して」「中断」「中断して」（先頭の「一旦」は任意）・「止めて」（末尾の句点・感嘆符は任意）もLLMへ送らず直接停止する。文中の「停止」は停止コマンドと解釈しない。

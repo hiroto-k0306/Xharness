@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { permissionModeLabels } from "../../shared/permission-modes.js";
 import styles from "./PromptLine.module.css";
 import {
   attachmentInfo,
@@ -294,7 +295,7 @@ export function PromptLine(p: PromptLineProps) {
           aria-label="permission mode"
           disabled={p.readOnly}
           value={p.mode}
-          title="Permission mode (Shift+Tab)"
+          title="権限モード（Shift+Tab）"
           style={{
             color: p.mode === "acceptEdits" ? "var(--warn)" : "var(--dim)",
           }}
@@ -302,9 +303,11 @@ export function PromptLine(p: PromptLineProps) {
             p.onMode?.(e.target.value as "default" | "acceptEdits" | "plan")
           }
         >
-          <option value="default">default</option>
-          <option value="acceptEdits">acceptEdits</option>
-          <option value="plan">plan</option>
+          <option value="default">{permissionModeLabels.default}</option>
+          <option value="acceptEdits">
+            {permissionModeLabels.acceptEdits}
+          </option>
+          <option value="plan">{permissionModeLabels.plan}</option>
         </select>
       ) : (
         <span

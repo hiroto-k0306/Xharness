@@ -17,13 +17,21 @@ async function until(check: () => boolean) {
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 }
-it.each(["allow", "deny", "abort", "plan", "rule_deny"] as const)(
+it.each([
+  "allow",
+  "deny",
+  "abort",
+  "auto",
+  "plan",
+  "readOnly",
+  "rule_deny",
+] as const)(
   "planning Bash executes only after user approval: %s",
   async (choice) => {
     const home = await mkdtemp(join(tmpdir(), "xh-workflow-bash-"));
     await writeFile(
       join(home, "config.yaml"),
-      `permissions:\n  mode: ${choice === "plan" ? "plan" : "acceptEdits"}\n  rules:\n    - tool: Bash\n      decision: ${choice === "rule_deny" ? "deny" : "allow"}\nworkflow: {mode: auto, worktrees: false}\n`,
+      `permissions:\n  mode: ${choice === "plan" ? "plan" : choice === "auto" || choice === "readOnly" || choice === "rule_deny" ? "acceptEdits" : "default"}\n  rules:\n    - tool: Bash\n      decision: ${choice === "rule_deny" ? "deny" : "allow"}\nworkflow: {mode: auto, worktrees: false}\n`,
     );
     let executions = 0;
     const events: UiEvent[] = [];
@@ -89,15 +97,25 @@ it.each(["allow", "deny", "abort", "plan", "rule_deny"] as const)(
       const created = await c.handle({
         type: "new_session",
         workspaceId: null,
+        readOnly: choice === "readOnly",
       });
       if (!created.ok || !created.sessionId) throw new Error("no test session");
       const sessionId = created.sessionId;
+      if (choice === "auto")
+        expect(
+          await c.handle({ type: "send", sessionId, text: "/mode auto" }),
+        ).toMatchObject({ ok: true });
       await c.handle({
         type: "send",
         sessionId,
         text: "run dummy installer after approval",
       });
-      if (choice !== "plan" && choice !== "rule_deny") {
+      if (
+        choice !== "auto" &&
+        choice !== "plan" &&
+        choice !== "readOnly" &&
+        choice !== "rule_deny"
+      ) {
         await until(() => events.some((e) => e.type === "permission_request"));
         const request = events.find((e) => e.type === "permission_request");
         if (!request || request.type !== "permission_request")
@@ -118,8 +136,13 @@ it.each(["allow", "deny", "abort", "plan", "rule_deny"] as const)(
       await until(() =>
         events.some((e) => e.type === "turn" && e.status === "idle"),
       );
-      expect(executions).toBe(choice === "allow" ? 1 : 0);
-      if (choice === "plan" || choice === "rule_deny")
+      expect(executions).toBe(choice === "allow" || choice === "auto" ? 1 : 0);
+      if (
+        choice === "auto" ||
+        choice === "plan" ||
+        choice === "readOnly" ||
+        choice === "rule_deny"
+      )
         expect(events.some((e) => e.type === "permission_request")).toBe(false);
     } finally {
       await c.shutdown();

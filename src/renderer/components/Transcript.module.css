@@ -118,6 +118,9 @@
 .notice {
   font-size: 12px;
   margin: 6px 0;
+  /* 完了通知などの複数行(項目一覧)を1行ずつ表示する */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 .dim {
   color: var(--dim);

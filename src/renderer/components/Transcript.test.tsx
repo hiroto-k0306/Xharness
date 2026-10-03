@@ -171,3 +171,57 @@ it("opens an attached image enlarged and closes with Esc, backdrop and button", 
   fireEvent.click(screen.getByRole("button", { name: "閉じる" }));
   expect(screen.queryByRole("dialog")).toBeNull();
 });
+
+it("keeps keyboard focus inside the enlarged image and restores it on close", () => {
+  render(
+    <Transcript
+      {...props}
+      items={[
+        {
+          kind: "user",
+          id: "u1",
+          text: "see",
+          images: [{ mediaType: "image/png", data: "AAAA" }],
+        },
+      ]}
+    />,
+  );
+  const thumb = screen.getByRole("button", { name: "添付画像 1 を拡大" });
+  thumb.focus();
+  fireEvent.click(thumb);
+  const close = screen.getByRole("button", { name: "閉じる" });
+  expect(close).toHaveFocus();
+  // Tab でも背後へ出ない
+  fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+  expect(close).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!, { key: "Tab", shiftKey: true });
+  expect(close).toHaveFocus();
+  // 承認の y などの背後のショートカットへ伝えない
+  const behind = vi.fn();
+  window.addEventListener("keydown", behind);
+  fireEvent.keyDown(document.activeElement!, { key: "y" });
+  fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+  window.removeEventListener("keydown", behind);
+  expect(behind).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(thumb).toHaveFocus();
+});
+
+it("keeps line breaks of multi-line notices", () => {
+  render(
+    <Transcript
+      {...props}
+      items={[
+        {
+          kind: "notice",
+          id: "n1",
+          tone: "dim",
+          text: "ワークフローが完了しました。\n- A 項目1\n- B 項目2",
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByText(/ワークフローが完了しました/).textContent).toBe(
+    "# ワークフローが完了しました。\n- A 項目1\n- B 項目2",
+  );
+});

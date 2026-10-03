@@ -107,7 +107,7 @@ xharness/
 │  │  │  ├─ Transcript.tsx  # 会話ビュー
 │  │  │  ├─ LoopFlow.tsx    # ループ可視化(ノード + 矢印 + 注釈)
 │  │  │  ├─ Receipts.tsx    # ステップログ表
-│  │  │  ├─ AgentsPanel.tsx # サブエージェント一覧
+│  │  │  ├─ AgentsPanel.tsx # サブエージェント切替バー(Hero の overview 行の右側。§16.3)
 │  │  │  ├─ PermissionDialog.tsx
 │  │  │  └─ PromptLine.tsx  # `~/project ❯ ` 形式の入力欄
 │  │  └─ store.ts           # Zustand。メインからのイベントを反映
@@ -648,21 +648,22 @@ Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex�
 ```
 ┌ TitleBar ─ ✕XHARNESS [📁 ~/dev/myapp ⎇ xh/a91f worktree ▾]  [◔ usage 84% ▾] claude● codex● ─□× ┐
 ├───────────────┬──────────────────────────────────────────────────────────────┤
-│ Sidebar        │ Hero:  ✕HARNESS (ピクセルロゴ)             model · agents · steps · ● live │
-│ [+ new session]│        Claude plans, GPT builds, code decides. ...                 │
+│ Sidebar        │ Hero:  [▾ overview] [自動追従][main · opus][worker · sol · 確認待ち] … │
+│ [+ new session]│        ✕HARNESS (ピクセルロゴ)  model · steps · ● live / Claude plans, GPT builds… │
 │ [search      ] │ PhaseBar: [✓ 1 PLAN] → [● 2 IMPLEMENT] → [○ 3 REVIEW]               │
 │                │ StepTabs: loop 7 · main [1/6 context][2/6 model] … [6/6 receipt]   │
 │ sort: recent ▾ ├─────────────────────────────┬────────────────────────────────┤
 │ ▾ myapp     ●4 │ Transcript                   │ LoopFlow                         │
 │   ▌ログイン 12m │  発言・応答・ツール呼び出し     │  レーン名 / ノード / # 注釈         │
 │    README …    │                              │  実行中ノードは枠を光が回る         │
-│ ▾ client-site 2├─────────────────────────────┴──────────┬─────────────────────┤
-│    依存更新 ask │ Receipts                                 │ AgentsPanel          │
-│ ▸ cli-tool   2 ├──────────────────────────────────────────┴─────────────────────┤
+│ ▾ client-site 2├─────────────────────────────┴────────────────────────────────┤
+│    依存更新 ask │ Receipts                                                       │
+│ ▸ cli-tool   2 ├──────────────────────────────────────────────────────────────┤
 │ ▾ その他      4 │ PermissionInline (必要なときだけ)                                  │
 │ ⚙ settings     │ PromptLine:  ~/dev/myapp ❯ _          [● opus 5.5 · high ▾] [ask ▾] │
 └───────────────┴──────────────────────────────────────────────────────────────┘
    ▲ WorkspacePicker と UsagePopover はタイトルバーのボタンから開くポップオーバー
+   (AgentsPanel は右の列ではなく、Hero の overview ボタンの右側に横並びで出る)
 ```
 
 - **Sidebar は折りたたみ可能**(`Ctrl+B`。幅は 252px、ドラッグで 200〜400px に変更可)
@@ -677,6 +678,9 @@ Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex�
   - OS の「アニメーションを減らす」設定(`prefers-reduced-motion`)が有効なら、アニメーションせず色付きの枠だけにする
   - 裏で動いているセッションは、Sidebar の行の `●` を同じ色で明滅させる
 - **ウィンドウ幅が 1100px 未満**のときは LoopFlow を隠し、Transcript だけを表示する(タブで切替)
+- **AgentsPanel は Hero の ▸ overview ボタンの右側に横並びで置く**(ユーザー要望 2026-10-03。右の Agents 列はなくし、会話欄を右端まで広げる)。自動追従 / main · {model} · {状態} / エージェントごとの {name} · {model} · {状態}(branch があれば ` · {branch}`。STEP は title 属性)の小さなボタンと、未起動の項目の {id} · 起動待ち ラベルを並べ、はみ出したら横スクロールする。Hero を開いていても閉じていても、この行に出る。Hero が無いとき(Phase 4 前)は StepTabs の上に単独で出す。エージェントがいなければ何も出さない
+- **ツールカード**(ユーザー要望 2026-10-03)は標準で閉じた 1 行表示にし、クリックすると入力の全文(Bash はコマンド、ほかは整形した JSON。4000 文字で省略)を開閉できる
+- **応答の文字の送り方**(ユーザー要望 2026-10-03): 応答の文字は空白までためてから画面へ送る。ただしツール呼び出しの前には、ためた分を送り切る
 
 ### 16.4 core → UI のイベント
 
@@ -1007,7 +1011,7 @@ interface SessionWorkspace {
 
 - サブエージェントも**同じ 6 STEP のループ**で動く。STEP の定義は共通
 - 親が STEP 5 で Task を実行している間、子は自分の STEP 1〜6 を回る
-- 画面: StepTabs と LoopFlow は「今見ているエージェント」の STEP を表示する。AgentsPanel でエージェントを選ぶと切り替わる。既定は「いちばん最近動いたエージェント」に自動で追従する
+- 画面: StepTabs と LoopFlow は「今見ているエージェント」の STEP を表示する。AgentsPanel(Hero の overview 行の右側の横並びバー。ユーザー要望 2026-10-03)でエージェントを選ぶと切り替わる。既定は「いちばん最近動いたエージェント」に自動で追従する
 - 子が ask になったら、親ではなく子の STEP 4 が光る(`--warn`)
 
 ### 19.7 UI への反映
@@ -1283,7 +1287,7 @@ main のシステムプロンプトに次の指針を入れ、項目ごとに判
 
 - Transcript: main の計画に、項目・担当・依存・wave を表にして表示する。implement 中は worker ごとのカード(担当モデルの色ドット、ブランチ、今の STEP)を並べる
 - PhaseBar の implement 段階: `wave 1 / 2 · 2 並列` と `完了項目 / 全項目` を表示する
-- AgentsPanel: main・worker・reviewer を一覧にし、選んだエージェントの STEP を StepTabs と LoopFlow に表示する。未起動の worker は `wave 2` のように待ち状態を出す
+- AgentsPanel(ユーザー要望 2026-10-03: 右の列をやめ、Hero の overview 行の右側に横並びのバーで置く): main・worker・reviewer を並べ、選んだエージェントの STEP を StepTabs と LoopFlow に表示する。未起動の worker は `wave 2` のように待ち状態を出す
 - 動いている worker が複数あるときは、Sidebar のセッション行に `● 2` のように並列数を出す
 
 ### 21.9 モデルカタログ

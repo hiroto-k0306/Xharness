@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { type Receipt, type UiEvent, type AppState } from "../../shared/ipc.js";
 import { type SessionView } from "../state/store.js";
 import { STEPS, stepColor } from "../state/steps.js";
@@ -16,17 +16,22 @@ export function Hero({
   view,
   open,
   onToggle,
+  extra,
 }: {
   model: string;
   view?: SessionView;
   open: boolean;
   onToggle(): void;
+  extra?: ReactNode;
 }) {
   return (
     <section className={styles.hero} aria-label="session overview">
-      <button onClick={onToggle} aria-expanded={open} title="Hero (Ctrl+H)">
-        {open ? "▾" : "▸"} overview
-      </button>
+      <div className={styles.heroHead}>
+        <button onClick={onToggle} aria-expanded={open} title="Hero (Ctrl+H)">
+          {open ? "▾" : "▸"} overview
+        </button>
+        <div className={styles.heroExtra}>{extra}</div>
+      </div>
       {open && (
         <>
           <h1>

@@ -14,8 +14,7 @@ export function AgentsPanel({
   const agents = Object.values(view?.agents ?? {});
   if (!agents.length && !view?.workflow?.items.length) return null;
   return (
-    <aside className={styles.agents} aria-label="AgentsPanel">
-      <strong>Agents</strong>
+    <div className={styles.agentBar} role="group" aria-label="AgentsPanel">
       <button
         aria-pressed={selected === "auto"}
         onClick={() => onSelect("auto")}
@@ -26,39 +25,33 @@ export function AgentsPanel({
         aria-pressed={selected === "main"}
         onClick={() => onSelect("main")}
       >
-        main · {model}
-        <small>
-          {view?.pending ? "確認待ち" : view?.running ? "running" : "idle"}
-        </small>
+        {`main · ${model} · ${
+          view?.pending ? "確認待ち" : view?.running ? "running" : "idle"
+        }`}
       </button>
       {agents.map((a) => (
         <button
           key={a.agentId}
           aria-pressed={selected === a.agentId}
+          title={`STEP ${view?.agentSteps?.[a.agentId]?.step ?? "context"}`}
           onClick={() => onSelect(a.agentId)}
         >
-          {a.name} · {a.model}
-          <small>
-            {view?.pending?.agentId === a.agentId
+          {`${a.name} · ${a.model} · ${
+            view?.pending?.agentId === a.agentId
               ? "確認待ち"
               : a.status === "stopped"
                 ? "停止"
                 : a.status === "awaiting_user"
                   ? "返答待ち"
-                  : a.status}{" "}
-            · STEP {view?.agentSteps?.[a.agentId]?.step ?? "context"}
-            {a.branch ? ` · ${a.branch}` : ""}
-          </small>
+                  : a.status
+          }${a.branch ? ` · ${a.branch}` : ""}`}
         </button>
       ))}
       {view?.workflow?.items
         .filter((i) => i.status === "pending")
         .map((i) => (
-          <div key={i.id}>
-            {i.id} · {i.agent ?? "worker"} · {i.model ?? ""}
-            <small>起動待ち</small>
-          </div>
+          <small key={i.id}>{`${i.id} · 起動待ち`}</small>
         ))}
-    </aside>
+    </div>
   );
 }

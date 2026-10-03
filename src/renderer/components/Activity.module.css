@@ -4,6 +4,15 @@
   color: var(--dim);
   font-size: 11px;
 }
+.heroHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.heroExtra {
+  flex: 1;
+  min-width: 0;
+}
 .hero h1 {
   display: flex;
   align-items: center;
@@ -15,7 +24,7 @@
 .hero p {
   margin: 4px 0;
 }
-.hero button,
+.heroHead > button,
 .usage button,
 .details button {
   background: var(--panel);

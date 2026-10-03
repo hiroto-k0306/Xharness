@@ -128,6 +128,16 @@ export function App() {
   if (!app) return <div className={styles.boot}># starting…</div>;
   const model = session?.model ?? app.model;
   const effort = session?.effort ?? app.effort;
+  const agentsPanel = (
+    <AgentsPanel
+      view={view}
+      selected={selected}
+      model={model}
+      onSelect={(id) => {
+        if (current) setSelectedAgents((v) => ({ ...v, [current]: id }));
+      }}
+    />
+  );
   return (
     <div className={styles.win}>
       <TitleBar
@@ -332,6 +342,7 @@ export function App() {
               view={view}
               open={prefs.heroOpen}
               onToggle={() => s.setPrefs({ heroOpen: !prefs.heroOpen })}
+              extra={agentsPanel}
             />
           )}
           <PhaseBar
@@ -350,6 +361,7 @@ export function App() {
               );
             }}
           />
+          {!app.phase4 && agentsPanel}
           <StepTabs
             active={activeView?.step}
             waiting={waiting}
@@ -394,15 +406,6 @@ export function App() {
                 <LoopFlow view={activeView} model={agent?.model ?? model} />
               )}
             </div>
-            <AgentsPanel
-              view={view}
-              selected={selected}
-              model={model}
-              onSelect={(id) => {
-                if (current)
-                  setSelectedAgents((v) => ({ ...v, [current]: id }));
-              }}
-            />
           </div>
           {app.phase4 && (
             <Receipts

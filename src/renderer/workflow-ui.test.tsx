@@ -77,6 +77,14 @@ it("App switches the actual StepTabs, LoopFlow and transcript together", () => {
     },
   });
   render(<App />);
+  const hero = screen.getByRole("region", { name: "session overview" });
+  const bar = screen.getByLabelText("AgentsPanel");
+  expect(hero).toContainElement(bar);
+  expect(bar.tagName).not.toBe("ASIDE");
+  expect(
+    screen.queryByRole("complementary", { name: "AgentsPanel" }),
+  ).toBeNull();
+  expect(screen.queryByText("Agents")).not.toBeInTheDocument();
   expect(screen.getByTestId("step-model")).toHaveAttribute(
     "aria-current",
     "step",
@@ -178,9 +186,14 @@ it("AgentsPanel switches selection and shows permission and branch", () => {
   );
   fireEvent.click(screen.getByRole("button", { name: /worker · sol/ }));
   expect(select).toHaveBeenCalledWith("w");
+  const button = screen.getByRole("button", {
+    name: "worker · sol · 確認待ち · xh/s-w1",
+  });
+  expect(button).toHaveAttribute("title", "STEP gate");
+  expect(screen.getByRole("button", { name: "自動追従" })).toBeInTheDocument();
   expect(
-    screen.getByText(/確認待ち · STEP gate · xh\/s-w1/),
-  ).toBeInTheDocument();
+    screen.getByRole("button", { name: "main · opus · 確認待ち" }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 it("PhaseBar hides classification and provides transcript jumps and progress", () => {
   const jump = vi.fn();

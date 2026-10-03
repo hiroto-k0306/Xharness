@@ -82,6 +82,13 @@ export class SessionController {
   private effort: Effort;
   private warnings: string[];
   private stopped = false;
+  private readonly preparations = new Map<
+    string,
+    {
+      abort: AbortController;
+      done: Promise<void>;
+    }
+  >();
   private gitAvailable = true;
   private commands: NonNullable<AppState["commands"]> = [];
   private imageSettings = { ...DEFAULT_IMAGES };
@@ -438,6 +445,7 @@ export class SessionController {
         case "send":
           return this.send(command.sessionId, command.text, command.images);
         case "abort": {
+          this.preparations.get(command.sessionId)?.abort.abort();
           this.schedules.cancel(command.sessionId);
           const rt = this.runtimes.get(command.sessionId);
           if (rt) this.release(rt);
@@ -596,8 +604,23 @@ export class SessionController {
       /^(?:\/stop|(?:一旦)?(?:停止|中断)(?:して)?|止めて)[。！!]?$/u.test(
         text.trim(),
       )
-    )
-      return this.sendPrepared(sessionId, text, images, scheduled);
+    ) {
+      if (images?.length && text.trim().startsWith("/"))
+        return {
+          ok: false,
+          error: "画像は通常のメッセージと一緒に送信してください。",
+        };
+      if (!this.sessions.get(sessionId))
+        return { ok: false, error: "Unknown session" };
+      await this.handle({ type: "abort", sessionId });
+      this.options.emit({
+        type: "notice",
+        sessionId,
+        tone: "dim",
+        message: "停止しました。再開するときは新しい指示を入力してください。",
+      });
+      return { ok: true };
+    }
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, error: "Unknown session" };
     const root = this.ctx.workspaceRoot(session);
@@ -606,20 +629,41 @@ export class SessionController {
     if (this.ctx.sessionBusy.has(sessionId))
       return { ok: false, error: "Turn already running" };
     this.ctx.sessionBusy.add(sessionId);
+    const abort = new AbortController();
+    const cancelScheduled = () => abort.abort();
+    scheduled?.addEventListener("abort", cancelScheduled, { once: true });
+    if (scheduled?.aborted) abort.abort();
+    let finish!: () => void;
+    const preparation = {
+      abort,
+      done: new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    };
+    this.preparations.set(sessionId, preparation);
     try {
-      return await this.sendPrepared(sessionId, text, images, scheduled);
+      return await this.sendPrepared(sessionId, text, images, scheduled, abort);
+    } catch (error) {
+      if (abort.signal.aborted)
+        return { ok: false, error: "送信を中断しました。" };
+      throw error;
     } finally {
+      scheduled?.removeEventListener("abort", cancelScheduled);
+      this.preparations.delete(sessionId);
       this.ctx.sessionBusy.delete(sessionId);
+      finish();
     }
   }
 
   private async sendPrepared(
     sessionId: string,
     text: string,
-    images?: ImageAttachment[],
-    scheduled?: AbortSignal,
+    images: ImageAttachment[] | undefined,
+    scheduled: AbortSignal | undefined,
+    abort: AbortController,
   ): Promise<CommandResult> {
     const imageSettings = (await loadMainConfig(this.options.home)).images;
+    abort.signal.throwIfAborted();
     this.imageSettings = imageSettings;
     if (scheduled?.aborted)
       return { ok: false, error: "予約を取り消しました。" };
@@ -679,6 +723,7 @@ export class SessionController {
     if (/^\/(?:clear|resume|cost|init)(?:\s|$)/.test(command)) {
       const [name, argument, extra] = command.split(/\s+/);
       const rt = await this.load(sessionId);
+      abort.signal.throwIfAborted();
       if (rt.status !== "idle")
         return { ok: false, error: "実行終了後にコマンドを使用してください。" };
       if (extra || (name !== "/resume" && argument))
@@ -717,6 +762,7 @@ export class SessionController {
             !!rt.trustedSession ||
             (await this.ctx.trust.isTrusted(root)),
         });
+        abort.signal.throwIfAborted();
         const result = await initAgents(
           session.cwd,
           session.readOnly ||
@@ -764,6 +810,7 @@ export class SessionController {
       return this.setModel(sessionId, model, effort as Effort | undefined);
     }
     const rt = await this.load(sessionId);
+    abort.signal.throwIfAborted();
     // Another session's worktree operation can claim the root while history
     // loads. Our own session reservation prevents same-session deletion.
     if (root && this.ctx.worktreeBusy.has(root))
@@ -841,7 +888,6 @@ export class SessionController {
       return { ok: false, error: "予約を取り消しました。" };
     rt.status = "running";
     rt.closing = false;
-    const abort = new AbortController();
     const cancelScheduled = () => abort.abort();
     scheduled?.addEventListener("abort", cancelScheduled, { once: true });
     rt.abort = abort;
@@ -1005,6 +1051,7 @@ export class SessionController {
    * 履歴は残る(一覧からは消えない)。
    */
   private async closeSession(sessionId: string): Promise<CommandResult> {
+    this.preparations.get(sessionId)?.abort.abort();
     this.schedules.cancel(sessionId);
     if (!this.sessions.get(sessionId))
       return { ok: false, error: "Unknown session" };
@@ -1034,6 +1081,10 @@ export class SessionController {
     this.schedules.close();
     this.repositories.abort();
     const running: Promise<void>[] = [];
+    for (const preparation of this.preparations.values()) {
+      preparation.abort.abort();
+      running.push(preparation.done);
+    }
     for (const rt of this.runtimes.values()) {
       this.release(rt);
       if (rt.done) running.push(rt.done);

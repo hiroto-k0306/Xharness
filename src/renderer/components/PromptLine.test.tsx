@@ -29,6 +29,15 @@ it("clears the attachment draft when switching sessions", async () => {
   );
   expect(screen.queryByAltText("添付画像 1")).toBeNull();
 });
+it("does not show an unverified notice when image support is unknown", async () => {
+  render(<PromptLine {...props} onSubmit={() => {}} />);
+  fireEvent.paste(screen.getByRole("textbox"), {
+    clipboardData: { files: [file()] },
+  });
+  await screen.findByAltText("添付画像 1");
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(screen.queryByText(/未確認/)).toBeNull();
+});
 it("refuses the sixth attachment and keeps the first five", async () => {
   render(<PromptLine {...props} onSubmit={() => {}} />);
   const textbox = screen.getByRole("textbox");

@@ -77,6 +77,14 @@ it("App switches the actual StepTabs, LoopFlow and transcript together", () => {
     },
   });
   render(<App />);
+  const hero = screen.getByRole("region", { name: "session overview" });
+  const bar = screen.getByLabelText("AgentsPanel");
+  expect(hero).toContainElement(bar);
+  expect(bar.tagName).not.toBe("ASIDE");
+  expect(
+    screen.queryByRole("complementary", { name: "AgentsPanel" }),
+  ).toBeNull();
+  expect(screen.queryByText("Agents")).not.toBeInTheDocument();
   expect(screen.getByTestId("step-model")).toHaveAttribute(
     "aria-current",
     "step",
@@ -95,6 +103,76 @@ it("App switches the actual StepTabs, LoopFlow and transcript together", () => {
   ).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /main · claude-opus/ }));
   expect(screen.getByText("Main history")).toBeInTheDocument();
+});
+it("auto-follow keeps main transcript while STEP follows the worker", () => {
+  window.harness = {
+    command: vi.fn(async () => ({ ok: true as const })),
+    onEvent: () => () => {},
+  };
+  useStore.setState({
+    app: {
+      phase4: true,
+      models,
+      model: "claude-opus-5-5",
+      effort: "high",
+      fake: true,
+      version: "test",
+      currentSessionId: "s",
+      workspaces: [],
+      sessions: [
+        {
+          id: "s",
+          title: "Test",
+          cwd: "test",
+          workspaceId: null,
+          model: "claude-opus-5-5",
+          effort: "high",
+          readOnly: false,
+          createdAt: 0,
+          updatedAt: 0,
+          status: "running",
+          providers: [],
+        },
+      ],
+    },
+    views: {
+      s: {
+        items: [{ kind: "assistant", id: "main", text: "Main history" }],
+        running: true,
+        activeAgent: "w",
+        agents: {
+          w: {
+            type: "agent",
+            sessionId: "s",
+            agentId: "w",
+            name: "worker",
+            model: "gpt-6.1-sol",
+            status: "running",
+          },
+        },
+        agentSteps: {
+          w: {
+            type: "agent_step",
+            sessionId: "s",
+            agentId: "w",
+            step: "act",
+            round: 3,
+          },
+        },
+      },
+    },
+  });
+  render(<App />);
+  expect(screen.getByText("Main history")).toBeInTheDocument();
+  expect(screen.getByTestId("step-act")).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+  fireEvent.click(screen.getByRole("button", { name: /worker · gpt-6.1-sol/ }));
+  expect(screen.queryByText("Main history")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("# worker の出力はまだありません"),
+  ).toBeInTheDocument();
 });
 it("retains isolated child transcript and tracks the latest active STEP", () => {
   let state: EventState = { app: null, views: {} };
@@ -178,9 +256,14 @@ it("AgentsPanel switches selection and shows permission and branch", () => {
   );
   fireEvent.click(screen.getByRole("button", { name: /worker · sol/ }));
   expect(select).toHaveBeenCalledWith("w");
+  const button = screen.getByRole("button", {
+    name: "worker · sol · 確認待ち · xh/s-w1",
+  });
+  expect(button).toHaveAttribute("title", "STEP gate");
+  expect(screen.getByRole("button", { name: "自動追従" })).toBeInTheDocument();
   expect(
-    screen.getByText(/確認待ち · STEP gate · xh\/s-w1/),
-  ).toBeInTheDocument();
+    screen.getByRole("button", { name: "main · opus · 確認待ち" }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 it("PhaseBar hides classification and provides transcript jumps and progress", () => {
   const jump = vi.fn();

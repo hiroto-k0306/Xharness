@@ -28,6 +28,27 @@ it.each([
   expect(items[0]).toMatchObject({ kind: "tool", tool: "Read", status });
 });
 
+it("restores the full tool input as detail", () => {
+  const items = itemsFromMessages([
+    {
+      role: "assistant",
+      content: [
+        {
+          type: "tool_use",
+          id: "b",
+          name: "Bash",
+          input: { command: "echo hi\nls" },
+        },
+        { type: "tool_use", id: "r", name: "Read", input: { path: "a.txt" } },
+      ],
+    },
+  ]);
+  expect(items[0]).toMatchObject({ detail: "echo hi\nls" });
+  expect(items[1]).toMatchObject({
+    detail: JSON.stringify({ path: "a.txt" }, null, 2),
+  });
+});
+
 it("restores the same question choices as live tool events", () => {
   const input = {
     question: "どうしますか？",

@@ -104,6 +104,8 @@ export class WorkflowRuntime {
   private base?: string;
   private initialized = false;
   private interrupted = false;
+  /** 1: 完了直後(main が最終報告を書く1ラウンドを許す) */
+  private finalReport = 0;
   constructor(private readonly options: RuntimeOptions) {
     this.state = new WorkflowState(
       options.config.workflow.mode,
@@ -580,13 +582,17 @@ export class WorkflowRuntime {
                 const results = await Promise.all(jobs);
                 this.state.reviewed(results.flat());
                 this.notify();
+                if (["complete", "attention"].includes(this.state.phase))
+                  this.finalReport = 1;
                 return JSON.stringify({
                   phase: this.state.phase,
                   findings: this.state.findings,
                   instruction:
                     this.state.phase === "implement"
                       ? "Fix only must findings, then RequestReview again."
-                      : "Review finished.",
+                      : this.state.phase === "complete"
+                        ? "Review finished. Now write the final report to the user in the user's language: what was done, verification results, and anything untested or incomplete. Do not call more tools."
+                        : "The review round limit was reached. Report the remaining must findings to the user in the user's language and finish. Do not call more tools.",
                 });
               } catch (error) {
                 reviewAbort.abort();
@@ -678,6 +684,7 @@ export class WorkflowRuntime {
             : "review_attention",
       };
     this.interrupted = false;
+    this.finalReport = 0;
     const base = this.changes.wrap(options.tools);
     const tools = new Map(base);
     let lastSelection = options.current?.().model ?? options.model;
@@ -844,10 +851,22 @@ export class WorkflowRuntime {
           }
           if (this.interrupted)
             return { kind: "stop", reason: "plan_rejected" };
-          if (this.state.phase === "complete")
-            return { kind: "stop", reason: "workflow_complete" };
-          if (this.state.phase === "attention")
-            return { kind: "stop", reason: "review_attention" };
+          if (["complete", "attention"].includes(this.state.phase)) {
+            // 通信失敗・中断などで止まった理由は、完了扱いで上書きしない
+            if (ctx.stopCause) return { kind: "stop", reason: ctx.stopCause };
+            // 完了直後は、main が最終報告を書く1ラウンドを許してから止める
+            if (this.finalReport === 1) {
+              this.finalReport = 0;
+              return custom;
+            }
+            return {
+              kind: "stop",
+              reason:
+                this.state.phase === "complete"
+                  ? "workflow_complete"
+                  : "review_attention",
+            };
+          }
           if (ctx.stopCause || ctx.completion?.stopReason !== "end_turn")
             return custom;
           const diff = await this.diff(signal);

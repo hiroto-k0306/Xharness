@@ -30,14 +30,44 @@
   border: 1px solid var(--line);
   border-radius: 3px;
   font-size: 12px;
+}
+.head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  list-style: none;
+  cursor: pointer;
+}
+.head::-webkit-details-marker {
+  display: none;
+}
+.head::before {
+  content: "▸";
+  flex-shrink: 0;
+  color: var(--tool);
+}
+.call[open] > .head::before {
+  content: "▾";
 }
 .k {
   color: var(--tool);
   overflow-wrap: anywhere;
   min-width: 0;
+  flex: 1;
+}
+.call:not([open]) .k {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detail {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+  font: inherit;
+  color: var(--text);
+  margin: 6px 0 0;
 }
 .question {
   margin: 12px 0;
@@ -128,4 +158,36 @@
 .hint {
   color: var(--dim);
   font-size: 11px;
+}
+
+.thumb {
+  display: inline-block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.75);
+}
+.zoomed {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+}
+.close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-size: 24px;
+  color: #fff;
+  background: none;
+  border: 0;
+  cursor: pointer;
 }

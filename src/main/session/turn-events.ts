@@ -152,6 +152,8 @@ export class TurnEvents {
         this.rt.messageSeq++;
         break;
       case "tool_use": {
+        // ためていた文字を、ツールカードより先に同じ messageId で送り切る
+        this.flush();
         const receiptId = this.nextReceiptId();
         this.calls.push({ callId: event.id, receiptId });
         this.receiptByCall.set(event.id, receiptId);

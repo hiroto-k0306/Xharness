@@ -40,6 +40,37 @@ it("sends the option text once and locks all choices until the next turn", async
   expect(button).toBeDisabled();
 });
 
+it("renders generic tool cards closed and opens the full input on click", () => {
+  const detail = '<b>x</b>\n{\n  "path": "a.txt"\n}';
+  render(
+    <Transcript
+      {...props}
+      items={[
+        {
+          kind: "tool",
+          id: "#0001",
+          tool: "Read",
+          summary: "Read a.txt",
+          detail,
+          status: "ok",
+        },
+      ]}
+    />,
+  );
+  const card = document.querySelector("details[data-status='ok']")!;
+  expect(card).not.toBeNull();
+  expect(card).not.toHaveAttribute("open");
+  const summary = screen.getByText("#0001 Read a.txt").closest("summary")!;
+  expect(summary).toHaveTextContent("✓ ok");
+  fireEvent.click(summary);
+  expect(card).toHaveAttribute("open");
+  const pre = card.querySelector("pre")!;
+  expect(pre.textContent).toBe(detail);
+  expect(card.querySelector("b")).toBeNull();
+  fireEvent.click(summary);
+  expect(card).not.toHaveAttribute("open");
+});
+
 it.each([false, "throw"])(
   "allows retry when sending fails (%s)",
   async (result) => {
@@ -106,4 +137,37 @@ it("escapes model text and preserves manual entry for questions without choices"
     <Transcript {...props} items={[{ ...question, question: undefined }]} />,
   );
   await waitFor(() => expect(screen.queryByRole("button")).toBeNull());
+});
+
+it("opens an attached image enlarged and closes with Esc, backdrop and button", () => {
+  const items: TranscriptItem[] = [
+    {
+      kind: "user",
+      id: "u1",
+      text: "see",
+      images: [{ mediaType: "image/png", data: "AAAA" }],
+    },
+  ];
+  render(<Transcript {...props} items={items} />);
+  const open = () =>
+    fireEvent.click(screen.getByRole("button", { name: "添付画像 1 を拡大" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  open();
+  const dialog = screen.getByRole("dialog", { name: "画像の拡大表示" });
+  expect(dialog).toHaveAttribute("aria-modal", "true");
+  fireEvent.click(screen.getByAltText("拡大した添付画像"));
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  // 実行中の Esc 中断(App の window の keydown)へは伝えない
+  const appEscape = vi.fn();
+  window.addEventListener("keydown", appEscape);
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  window.removeEventListener("keydown", appEscape);
+  expect(appEscape).not.toHaveBeenCalled();
+  expect(screen.queryByRole("dialog")).toBeNull();
+  open();
+  fireEvent.click(screen.getByRole("dialog"));
+  expect(screen.queryByRole("dialog")).toBeNull();
+  open();
+  fireEvent.click(screen.getByRole("button", { name: "閉じる" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
 });

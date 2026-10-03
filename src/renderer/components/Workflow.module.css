@@ -4,8 +4,7 @@
   padding: 8px 12px;
   flex-wrap: wrap;
 }
-.phases button,
-.agents button {
+.phases button {
   background: var(--panel);
   color: var(--dim);
   border: 1px solid var(--line);
@@ -17,25 +16,36 @@
   border-color: var(--claude);
   box-shadow: 0 0 8px color-mix(in srgb, var(--claude) 35%, transparent);
 }
-.agents {
-  width: 230px;
-  overflow: auto;
+.agentBar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  min-width: 0;
+}
+.agentBar button {
   flex-shrink: 0;
-  border-left: 1px solid var(--line);
-  padding: 8px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
 }
-.agents button {
-  display: block;
-  width: 100%;
-  margin-top: 6px;
-  overflow-wrap: anywhere;
-}
-.agents button[aria-pressed="true"] {
+.agentBar button[aria-pressed="true"] {
   color: var(--code);
   border-color: var(--code);
 }
-.phases small,
-.agents small {
+.agentBar small {
+  display: inline;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.phases small {
   display: block;
   color: var(--dim);
   margin-top: 4px;
@@ -69,9 +79,4 @@
 }
 .plan select {
   margin: 4px;
-}
-@media (max-width: 900px) {
-  .agents {
-    width: 160px;
-  }
 }

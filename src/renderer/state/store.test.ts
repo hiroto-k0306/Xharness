@@ -61,6 +61,30 @@ describe("applyEvent", () => {
       status: "ok",
     });
   });
+  it("puts the full input into the tool card detail", () => {
+    const s = run([
+      {
+        type: "tool_call",
+        sessionId: "s1",
+        receiptId: "#0001",
+        provider: "claude",
+        tool: "Bash",
+        input: { command: "echo hi\nls" },
+      },
+      {
+        type: "tool_call",
+        sessionId: "s1",
+        receiptId: "#0002",
+        provider: "claude",
+        tool: "Read",
+        input: { path: "a" },
+      },
+    ]);
+    expect(s.views.s1!.items[0]).toMatchObject({ detail: "echo hi\nls" });
+    expect(s.views.s1!.items[1]).toMatchObject({
+      detail: JSON.stringify({ path: "a" }, null, 2),
+    });
+  });
   it("keeps 'denied' when the error result arrives afterwards", () => {
     const s = run([
       {

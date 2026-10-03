@@ -1,0 +1,95 @@
+{
+  "status": 200,
+  "requestHeaders": {
+    "anthropic-beta": "oauth-2025-04-20",
+    "anthropic-version": "2023-06-01",
+    "content-type": "application/json"
+  },
+  "requestBody": {
+    "model": "claude-opus-5-5",
+    "max_tokens": 4096,
+    "stream": true,
+    "tools": [
+      {
+        "name": "SubmitPlan",
+        "description": "Submit the plan",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "plan": {
+              "type": "string"
+            }
+          },
+          "required": ["plan"]
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a very long plan and submit it with SubmitPlan."
+      }
+    ]
+  },
+  "responseHeaders": {
+    "all": {
+      "cache-control": "no-cache",
+      "content-type": "text/event-stream; charset=utf-8",
+      "transfer-encoding": "chunked"
+    }
+  },
+  "events": [
+    {
+      "event": "message_start",
+      "data": "{\"type\":\"message_start\",\"message\":{\"model\":\"claude-opus-5-5\",\"id\":\"msg_trace_max_tokens\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":900,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":4}}}"
+    },
+    {
+      "event": "content_block_start",
+      "data": "{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"Plan the work.\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"opaque\"}}"
+    },
+    {
+      "event": "content_block_stop",
+      "data": "{\"type\":\"content_block_stop\",\"index\":0}"
+    },
+    {
+      "event": "content_block_start",
+      "data": "{\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"Submitting the plan.\"}}"
+    },
+    {
+      "event": "content_block_stop",
+      "data": "{\"type\":\"content_block_stop\",\"index\":1}"
+    },
+    {
+      "event": "content_block_start",
+      "data": "{\"type\":\"content_block_start\",\"index\":2,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_truncated\",\"name\":\"SubmitPlan\",\"input\":{}}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}}"
+    },
+    {
+      "event": "content_block_delta",
+      "data": "{\"type\":\"content_block_delta\",\"index\":2,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"plan\\\": \\\"Step 1: inspect\"}}"
+    },
+    {
+      "event": "message_delta",
+      "data": "{\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"max_tokens\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":900,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":4096}}"
+    },
+    {
+      "event": "message_stop",
+      "data": "{\"type\":\"message_stop\"}"
+    }
+  ]
+}

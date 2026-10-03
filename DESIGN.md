@@ -1594,7 +1594,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 
 ---
 
-## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4・M3・M1実装済み）
+## 26. 汎用エージェント機能の追加（仕様 2026-10-02、H2・H1・H3・H4・M3・M1・M2実装済み）
 
 実アプリの試用（docs/bugs/2026-10-02-workflow-loop.md）後のレビューで挙がった不足機能。優先度の高・中・低の順に実装する。各単位は AGENTS.md の作業ルール（1コミット1目的）で小さく区切り、前の優先度の単位を検証してから次へ進む。
 
@@ -1633,7 +1633,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Bash による変更は追跡しない（範囲外）。画面にもその旨を表示する。worktree の worker は worktree ごと破棄できるため対象外。
 - 保存期間は Claude Code の `cleanupPeriodDays` 既定値に合わせて30日（設定 `checkpoints.retentionDays` で変更可）。期限切れとセッション削除の際に削除する。ターン数・容量の上限は設けないが、1ファイル10 MB超は退避せず、そのファイルは巻き戻せないと画面に表示する。
 - 戻す対象の選び方も Claude Code に合わせ、コード・会話・両方から選ぶ（既定はコードのみ。会話を戻すのは履歴の追記に「巻き戻し」を記録し、元の履歴は消さない）。
-- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)、M1は [docs/m1-progress.md](docs/m1-progress.md)。M2・M4・M5は未着手。
+- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)、M1は [docs/m1-progress.md](docs/m1-progress.md)、M2は [docs/m2-progress.md](docs/m2-progress.md)。M4・M5は未着手。
 
 ### 26.2 優先度: 中
 
@@ -1645,6 +1645,7 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 **M2. スラッシュコマンドの体系**
 - 組み込み: `/clear`（新しい会話。履歴は残す）・`/resume`（履歴から再開）・`/model`・`/cost`（通信回数と使用量。M3 と連動）・`/init`（AGENTS.md の雛形を作業フォルダへ作成。既存は上書きしない）に、既存の `/mode` `/stop` `/compact` `/mcp` を加えて、入力欄の補完に一覧する。
 - ユーザー定義: `<project>/.xharness/commands/*.md` と `~/.xharness/commands/*.md` を `/<ファイル名>` として展開する（本文が user メッセージになる。`$ARGUMENTS` を置換）。プロジェクト側はワークスペースの信頼（§9）の対象とし、信頼するまで一覧に出さない。
+- 実装済み（2026-10-03）。`/resume`と`/model`は引数なしで一覧、引数ありで選択する。`/cost`はM3の実通信／模擬通信の回数と、親・子の取得済みレシートのトークン合計を表示する。金額・未取得使用量は推測しない。`/init`は排他的な新規作成で既存のAGENTS.mdを保持し、読み取り専用・planでは作成しない。同名の定義は信頼済みプロジェクトがユーザー定義より優先し、組み込み・MCP名は上書きしない。展開は1回だけで、本文をコマンドとして再解釈しない。信頼確認は通常の送信時に既存のワークスペース確認で行う。headlessの信頼は既存の保存済み承認を使う。詳細は [docs/m2-progress.md](docs/m2-progress.md)。
 
 **M3. 通信回数と予算の上限**
 - 設定 `limits: {llmCallsPerTurn: 0, llmCallsPerSession: 0}`（0 = 無効が既定。Claude Code の `--max-turns` / `--max-budget-usd` も既定は無制限で、利用者が指定したときだけ効く方式に合わせる）。進展のない通信の防止は、既定で有効な §20.6 の継続停止と §8 の最大ステップ数（100）が担う。`llmCallsPerTurn` は §8 の最大ステップ数と別に、再試行・圧縮・子を含む実際の通信回数を数える。超えたら `budget_exceeded` で停止し、ユーザーの入力を待つ。

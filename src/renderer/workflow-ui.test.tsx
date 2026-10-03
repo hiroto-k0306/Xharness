@@ -104,6 +104,74 @@ it("App switches the actual StepTabs, LoopFlow and transcript together", () => {
   fireEvent.click(screen.getByRole("button", { name: /main · claude-opus/ }));
   expect(screen.getByText("Main history")).toBeInTheDocument();
 });
+it("auto-follow keeps main transcript while STEP follows the worker", () => {
+  window.harness = {
+    command: vi.fn(async () => ({ ok: true as const })),
+    onEvent: () => () => {},
+  };
+  useStore.setState({
+    app: {
+      phase4: true,
+      models,
+      model: "claude-opus-5-5",
+      effort: "high",
+      fake: true,
+      version: "test",
+      currentSessionId: "s",
+      workspaces: [],
+      sessions: [
+        {
+          id: "s",
+          title: "Test",
+          cwd: "test",
+          workspaceId: null,
+          model: "claude-opus-5-5",
+          effort: "high",
+          readOnly: false,
+          createdAt: 0,
+          updatedAt: 0,
+          status: "running",
+          providers: [],
+        },
+      ],
+    },
+    views: {
+      s: {
+        items: [{ kind: "assistant", id: "main", text: "Main history" }],
+        running: true,
+        activeAgent: "w",
+        agents: {
+          w: {
+            type: "agent",
+            sessionId: "s",
+            agentId: "w",
+            name: "worker",
+            model: "gpt-6.1-sol",
+            status: "running",
+          },
+        },
+        agentSteps: {
+          w: {
+            type: "agent_step",
+            sessionId: "s",
+            agentId: "w",
+            step: "act",
+            round: 3,
+          },
+        },
+      },
+    },
+  });
+  render(<App />);
+  expect(screen.getByText("Main history")).toBeInTheDocument();
+  expect(screen.getByTestId("step-act")).toHaveAttribute(
+    "aria-current",
+    "step",
+  );
+  fireEvent.click(screen.getByRole("button", { name: /worker · gpt-6.1-sol/ }));
+  expect(screen.queryByText("Main history")).not.toBeInTheDocument();
+  expect(screen.getByText("worker の出力はまだありません")).toBeInTheDocument();
+});
 it("retains isolated child transcript and tracks the latest active STEP", () => {
   let state: EventState = { app: null, views: {} };
   state = applyEvent(state, {

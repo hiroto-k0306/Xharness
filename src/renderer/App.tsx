@@ -68,14 +68,28 @@ export function App() {
               round: agentStep.round,
             }
           : undefined,
-        items:
-          agent.items ??
-          (agent.text
-            ? [{ kind: "assistant" as const, id: agentId, text: agent.text }]
-            : []),
       }
     : view;
-
+  const agentItems = agent
+    ? (agent.items ??
+      (agent.text
+        ? [{ kind: "assistant" as const, id: agentId, text: agent.text }]
+        : []))
+    : undefined;
+  const transcriptItems =
+    selected === "auto" || !agent
+      ? (view?.items ?? [])
+      : agentItems && agentItems.length > 0
+        ? agentItems
+        : [
+            {
+              kind: "notice" as const,
+              id: `empty-${agentId}`,
+              tone: "dim" as const,
+              text: `${agent.name} の出力はまだありません`,
+            },
+          ];
+  const transcriptKey = `${current}:${selected === "auto" ? "main" : agentId}`;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
@@ -392,15 +406,15 @@ export function App() {
           <div className={styles.agentArea}>
             <div className={styles.middle} data-pane={pane}>
               <Transcript
-                key={`${current}:${agentId}`}
-                items={activeView?.items ?? []}
+                key={transcriptKey}
+                items={transcriptItems}
                 running={!!view?.running}
                 model={model}
                 onCommand={(text) => void s.send(text)}
                 blocked={
                   waiting || !!view?.rewind || session?.status !== "idle"
                 }
-                onReply={agent ? undefined : s.send}
+                onReply={selected === "auto" || !agent ? s.send : undefined}
               />
               {app.phase4 && (
                 <LoopFlow view={activeView} model={agent?.model ?? model} />

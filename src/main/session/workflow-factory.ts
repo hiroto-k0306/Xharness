@@ -15,6 +15,7 @@ import { itemsFromMessages } from "./transcript.js";
 import { type StoredSession } from "./store.js";
 import { type PermissionGate } from "./permission-gate.js";
 import { type TurnEvents, updateQuota } from "./turn-events.js";
+import { type UiEvent } from "../../shared/ipc.js";
 import {
   defaultTools,
   safeInput,
@@ -24,6 +25,31 @@ import {
 } from "./context.js";
 
 type AgentConfig = Awaited<ReturnType<typeof loadAgentConfig>>;
+type WorkflowView = Omit<
+  Extract<UiEvent, { type: "workflow" }>,
+  "type" | "sessionId"
+>;
+
+/** 完了・往復上限のときにチャットへ出す報告(項目の一覧と残る指摘)。マスク前の文 */
+export function workflowNotice(workflow: WorkflowView): string {
+  return (
+    (workflow.phase === "complete"
+      ? "ワークフローが完了しました。レビューで修正必須の指摘はありません。"
+      : "レビューの往復上限に達しました。残る必須指摘を確認してください。") +
+    workflow.items
+      .map(
+        (i) =>
+          `\n- ${i.id} ${i.title ?? ""}（${i.agent ?? "worker"} · ${i.model ?? ""}）: ${i.status}`,
+      )
+      .join("") +
+    workflow.findings
+      .map(
+        (f) =>
+          `\n${f.severity}: ${f.file}${f.line ? `:${f.line}` : ""} — ${f.message}`,
+      )
+      .join("")
+  );
+}
 
 /** 段階が終わっていれば(または未作成なら)作り直す必要がある */
 export function needsNewWorkflow(rt: Runtime): boolean {
@@ -190,17 +216,7 @@ export function createWorkflow(
           type: "notice",
           sessionId,
           tone: workflow.phase === "complete" ? "dim" : "warn",
-          message: clean(
-            (workflow.phase === "complete"
-              ? "レビュー完了。修正必須の指摘はありません。"
-              : "レビューの往復上限に達しました。残る必須指摘を確認してください。") +
-              workflow.findings
-                .map(
-                  (f) =>
-                    `\n${f.severity}: ${f.file}${f.line ? `:${f.line}` : ""} — ${f.message}`,
-                )
-                .join(""),
-          ),
+          message: clean(workflowNotice(workflow)),
         });
     },
     redact: clean,

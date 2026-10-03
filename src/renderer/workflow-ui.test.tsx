@@ -170,7 +170,9 @@ it("auto-follow keeps main transcript while STEP follows the worker", () => {
   );
   fireEvent.click(screen.getByRole("button", { name: /worker · gpt-6.1-sol/ }));
   expect(screen.queryByText("Main history")).not.toBeInTheDocument();
-  expect(screen.getByText("worker の出力はまだありません")).toBeInTheDocument();
+  expect(
+    screen.getByText("# worker の出力はまだありません"),
+  ).toBeInTheDocument();
 });
 it("retains isolated child transcript and tracks the latest active STEP", () => {
   let state: EventState = { app: null, views: {} };

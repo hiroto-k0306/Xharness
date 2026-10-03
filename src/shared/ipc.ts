@@ -147,6 +147,8 @@ export type TranscriptItem =
       id: string;
       tool: string;
       summary: string;
+      /** カードを開いたときに見せる入力の全文(マスク済み) */
+      detail?: string;
       todos?: import("./todos.js").Todo[];
       question?: import("./questions.js").QuestionChoices;
       status: "pending" | "ok" | "error" | "denied";

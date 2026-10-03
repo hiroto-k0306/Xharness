@@ -88,18 +88,23 @@ export function Transcript({
               />
             );
           return (
-            <div
+            <details
               key={item.id}
               className={styles.call}
               data-status={item.status}
             >
-              <span className={styles.k}>
-                {item.id} {item.summary}
-              </span>
-              <span className={styles[st.cls]}>
-                {st.mark} {st.label}
-              </span>
-            </div>
+              <summary className={styles.head}>
+                <span className={styles.k}>
+                  {item.id} {item.summary}
+                </span>
+                <span className={styles[st.cls]}>
+                  {st.mark} {st.label}
+                </span>
+              </summary>
+              {item.detail && (
+                <pre className={styles.detail}>{item.detail}</pre>
+              )}
+            </details>
           );
         }
         if (item.kind === "mcp")

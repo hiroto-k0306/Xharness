@@ -40,6 +40,37 @@ it("sends the option text once and locks all choices until the next turn", async
   expect(button).toBeDisabled();
 });
 
+it("renders generic tool cards closed and opens the full input on click", () => {
+  const detail = '<b>x</b>\n{\n  "path": "a.txt"\n}';
+  render(
+    <Transcript
+      {...props}
+      items={[
+        {
+          kind: "tool",
+          id: "#0001",
+          tool: "Read",
+          summary: "Read a.txt",
+          detail,
+          status: "ok",
+        },
+      ]}
+    />,
+  );
+  const card = document.querySelector("details[data-status='ok']")!;
+  expect(card).not.toBeNull();
+  expect(card).not.toHaveAttribute("open");
+  const summary = screen.getByText("#0001 Read a.txt").closest("summary")!;
+  expect(summary).toHaveTextContent("✓ ok");
+  fireEvent.click(summary);
+  expect(card).toHaveAttribute("open");
+  const pre = card.querySelector("pre")!;
+  expect(pre.textContent).toBe(detail);
+  expect(card.querySelector("b")).toBeNull();
+  fireEvent.click(summary);
+  expect(card).not.toHaveAttribute("open");
+});
+
 it.each([false, "throw"])(
   "allows retry when sending fails (%s)",
   async (result) => {

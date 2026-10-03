@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { summarizeInput } from "../../shared/summary.js";
+import { detailInput, summarizeInput } from "../../shared/summary.js";
 import { parseTodos } from "../../shared/todos.js";
 import { parseQuestionChoices } from "../../shared/questions.js";
 import {
@@ -191,6 +191,7 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
           id: e.receiptId,
           tool: e.tool,
           summary: summarizeInput(e.tool, e.input),
+          detail: detailInput(e.tool, e.input),
           todos: e.tool === "TodoWrite" ? parseTodos(e.input) : undefined,
           question:
             e.tool === "AskUserQuestion"

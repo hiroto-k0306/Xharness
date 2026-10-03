@@ -30,14 +30,44 @@
   border: 1px solid var(--line);
   border-radius: 3px;
   font-size: 12px;
+}
+.head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  list-style: none;
+  cursor: pointer;
+}
+.head::-webkit-details-marker {
+  display: none;
+}
+.head::before {
+  content: "▸";
+  flex-shrink: 0;
+  color: var(--tool);
+}
+.call[open] > .head::before {
+  content: "▾";
 }
 .k {
   color: var(--tool);
   overflow-wrap: anywhere;
   min-width: 0;
+  flex: 1;
+}
+.call:not([open]) .k {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.detail {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+  font: inherit;
+  color: var(--text);
+  margin: 6px 0 0;
 }
 .question {
   margin: 12px 0;

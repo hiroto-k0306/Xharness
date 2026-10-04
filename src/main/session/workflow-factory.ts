@@ -216,6 +216,7 @@ export function createWorkflow(
           type: "notice",
           sessionId,
           tone: workflow.phase === "complete" ? "dim" : "warn",
+          presentation: "assistant",
           message: clean(workflowNotice(workflow)),
         });
     },

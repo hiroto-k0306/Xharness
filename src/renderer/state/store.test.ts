@@ -179,6 +179,31 @@ describe("applyEvent", () => {
     s = applyEvent(s, { type: "transcript", sessionId: "s1", items: [] });
     expect(s.views.s1!.items).toEqual([]);
   });
+  it("preserves assistant presentation only on explicitly marked report notices", () => {
+    const s = run([
+      {
+        type: "notice",
+        sessionId: "s1",
+        tone: "dim",
+        message: "report",
+        presentation: "assistant",
+      },
+      { type: "notice", sessionId: "s1", tone: "warn", message: "ordinary" },
+      { type: "error", sessionId: "s1", message: "failed" },
+    ]);
+    expect(s.views.s1!.items[0]).toMatchObject({
+      kind: "notice",
+      text: "report",
+      presentation: "assistant",
+    });
+    expect(s.views.s1!.items[1]).not.toHaveProperty("presentation");
+    expect(s.views.s1!.items[2]).toMatchObject({
+      kind: "notice",
+      tone: "err",
+      text: "failed",
+    });
+    expect(s.views.s1!.items[2]).not.toHaveProperty("presentation");
+  });
   it("stores app state and ignores events Phase 2 does not display", () => {
     const next = app({ model: "claude-haiku-4-5" });
     const s = run([

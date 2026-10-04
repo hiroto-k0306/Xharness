@@ -14,6 +14,88 @@ const STATUS = {
   denied: { mark: "✗", cls: "err", label: "denied" },
 } as const;
 
+type ToolItem = Extract<TranscriptItem, { kind: "tool" }>;
+type ToolGroup = { kind: "tool_group"; id: string; tools: ToolItem[] };
+
+/** 専用の進捗・回答UIは隠さず、それ以外の連続した呼び出しだけをまとめる。 */
+function groupCommands(
+  items: TranscriptItem[],
+): (TranscriptItem | ToolGroup)[] {
+  const rows: (TranscriptItem | ToolGroup)[] = [];
+  for (const item of items) {
+    if (
+      item.kind !== "tool" ||
+      (item.tool === "TodoWrite" && item.todos) ||
+      (item.tool === "AskUserQuestion" && item.question)
+    ) {
+      rows.push(item);
+      continue;
+    }
+    const last = rows.at(-1);
+    if (last?.kind === "tool_group") last.tools.push(item);
+    else rows.push({ kind: "tool_group", id: item.id, tools: [item] });
+  }
+  return rows;
+}
+
+function ToolCard({ item }: { item: ToolItem }) {
+  const st = STATUS[item.status];
+  return (
+    <details className={styles.call} data-status={item.status}>
+      <summary className={styles.head}>
+        <span className={styles.k}>
+          {item.id} {item.summary}
+        </span>
+        <span className={styles[st.cls]}>
+          {st.mark} {st.label}
+        </span>
+      </summary>
+      {item.detail && <pre className={styles.detail}>{item.detail}</pre>}
+    </details>
+  );
+}
+
+function CommandGroup({ tools }: { tools: ToolItem[] }) {
+  const single = tools.length === 1 ? tools[0] : undefined;
+  // 1件→複数件でも同じ details を使い、手動で開いた状態を維持する。
+  return (
+    <details
+      className={styles.call}
+      data-testid={single ? undefined : "tool-group"}
+      data-status={single?.status}
+    >
+      <summary className={styles.head}>
+        <span className={styles.k}>
+          {single
+            ? `${single.id} ${single.summary}`
+            : `コマンド ${tools.length} 件`}
+        </span>
+        <span className={styles.groupStatus}>
+          {(Object.keys(STATUS) as ToolItem["status"][]).map((status) => {
+            const count = tools.filter((t) => t.status === status).length;
+            const st = STATUS[status];
+            return count ? (
+              <span key={status} className={styles[st.cls]}>
+                {st.mark} {st.label}
+                {single ? "" : ` ${count}`}
+              </span>
+            ) : null;
+          })}
+        </span>
+      </summary>
+      {single ? (
+        single.detail && <pre className={styles.detail}>{single.detail}</pre>
+      ) : (
+        <div className={styles.groupContent}>
+          {tools.map((item) => (
+            <ToolCard key={item.id} item={item} />
+          ))}
+        </div>
+      )}
+    </details>
+  );
+}
+
 export interface TranscriptProps {
   items: TranscriptItem[];
   running: boolean;
@@ -37,8 +119,20 @@ export function Transcript({
   const [zoom, setZoom] = useState<string | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const hasItems = items.length > 0;
   useEffect(() => {
     if (!zoom) return;
+    if (!hasItems) {
+      // 空の会話へ切り替わるとポータルも消えるので、キー制御を残さない。
+      setZoom(null);
+      return;
+    }
+    // PromptLine などが実行終了時に focus() しても、背景へ移さない。
+    // focusin は同期的に発火するので、次の文字入力より先に引き戻せる。
+    const onFocus = (e: FocusEvent) => {
+      if (e.target !== closeButton.current) closeButton.current?.focus();
+    };
+    window.addEventListener("focusin", onFocus, true);
     closeButton.current?.focus();
     // 拡大表示中のキーは、捕捉段階で止めて背後へ伝えない(App の Esc 中断や承認の y / a / n を押させない)
     const onKey = (e: KeyboardEvent) => {
@@ -53,9 +147,10 @@ export function Transcript({
     window.addEventListener("keydown", onKey, true);
     return () => {
       window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("focusin", onFocus, true);
       if (opener.current?.isConnected) opener.current.focus();
     };
-  }, [zoom]);
+  }, [zoom, hasItems]);
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
   }, [items]);
@@ -92,9 +187,10 @@ export function Transcript({
       role="log"
       aria-live="polite"
     >
-      {items.map((item) => {
+      {groupCommands(items).map((item) => {
+        if (item.kind === "tool_group")
+          return <CommandGroup key={item.id} tools={item.tools} />;
         if (item.kind === "tool") {
-          const st = STATUS[item.status];
           if (item.tool === "TodoWrite" && item.status === "ok" && item.todos)
             return <TodoList key={item.id} todos={item.todos} />;
           if (
@@ -110,25 +206,7 @@ export function Transcript({
                 onReply={onReply}
               />
             );
-          return (
-            <details
-              key={item.id}
-              className={styles.call}
-              data-status={item.status}
-            >
-              <summary className={styles.head}>
-                <span className={styles.k}>
-                  {item.id} {item.summary}
-                </span>
-                <span className={styles[st.cls]}>
-                  {st.mark} {st.label}
-                </span>
-              </summary>
-              {item.detail && (
-                <pre className={styles.detail}>{item.detail}</pre>
-              )}
-            </details>
-          );
+          return <ToolCard key={item.id} item={item} />;
         }
         if (item.kind === "mcp")
           return (
@@ -140,7 +218,7 @@ export function Transcript({
               stale={item.id !== latestMcp}
             />
           );
-        if (item.kind === "notice")
+        if (item.kind === "notice" && item.presentation !== "assistant")
           return (
             <div
               key={item.id}

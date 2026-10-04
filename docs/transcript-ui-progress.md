@@ -20,9 +20,29 @@ PR #9（codex/transcript-collapse-agents-bar）と PR #10（codex/notice-newline
 
 実アプリのトレース（`~/.xharness/traces/`、2026-10-03T20:05:35Z と 20:25:27Z）で確認した。Opus 5.5 の応答が `max_tokens: 4096`（うち thinking 1282）で打ち切られ、tool_use（SubmitPlan / 長い編集）の `content_block_stop` が来ないまま `message_delta`（`stop_reason: max_tokens`）が届いた。デコーダがこれを不正な順序として例外にし、adapter が `Claude protocol failed`（画面: 応答を解釈できませんでした）にしていた。再現用 fixture: `test/fixtures/claude/max-tokens-truncated-tool-use.json`。
 
-## 残っている改善点（レビューの should、未対応）
+## 追加修正（2026-10-04、レビューの should 対応）
 
-- **拡大表示中に、別の部品がプログラムでフォーカスを移した場合**: 例えば実行中に画像を開いたまま実行が終わると、PromptLine が `textarea.focus()` を呼び、フォーカスが開いたままの拡大表示の背後へ移る。キーの伝播は止めているが、入力欄への文字入力（既定動作）は止まらないため、背後の入力欄に文字が入りうる。対策: 拡大表示中は背景を `inert` にするか、フォーカスが外へ出たら拡大表示へ引き戻す。実行中→待機への遷移を含む結合テストを足す。
+- **拡大表示中のプログラムによるフォーカス移動**: 実行終了時に PromptLine が `textarea.focus()` を呼ぶと、背景の入力欄へフォーカスが移り、文字が入りうる指摘を修正。拡大中だけ `focusin` を捕捉し、閉じるボタン以外へ移ったら同期的に引き戻す。閉じるとき・アンマウント時にはリスナーを解除してから元の画像ボタンへフォーカスを戻す（入力欄ではなく元画像に戻す既存仕様を維持）。空の会話へ切り替わってポータルが消えた場合も拡大状態を解除する。
+- 単体テストで背景の `textarea.focus()`、閉じた後の通常フォーカス、開いた状態のアンマウント後のリスナー解除、会話が空になった後のキー制御解除と拡大状態のリセットを確認。
+- 実際の App・PromptLine・SessionController と待機可能な FakeProvider を使う結合テストを追加。画像を拡大したまま実行中→待機へ移っても閉じるボタンにフォーカスが残り、文字が背景へ入らず、背景に下書きがあっても Enter は拡大表示を閉じるだけで追加送信しないこと、閉じた後は通常入力できることを確認。
+
+### 追加修正の検証
+
+- Windows、Node 24.16.0（`C:\Program Files\nodejs\node.exe`）、pwsh 7.6.6（実体は下記と同じ WindowsApps / Store 版）。
+- このシェルでは `pnpm` が PATH に無いため、インストール済み `node_modules` の各 CLI を Node で直接実行。`tsc --noEmit` / `eslint .` / `electron-vite build`: 成功。
+- `vitest run --exclude=spike/.out/** --exclude=.tools/** --exclude=dist/** --maxWorkers=4`: 133 ファイル / 1022 件成功（スキップなし）。対象2ファイルのテストも27件成功。
+- 既存の AskUserQuestion 結合テストでは React の重複 key 警告が出るが、テストは成功。今回のフォーカス修正の範囲外として残す。
+- 修正後のインストーラーは再作成していない。実アプリでの表示・操作確認と、以下の実 API 未実測事項は引き続き未確認。
+
+## 追加要望：完了報告と連続コマンド（2026-10-04）
+
+- ワークフロー完了・レビュー往復上限の項目一覧つき通知に `presentation: "assistant"` を付け、main → store → Transcript で保持する。assistant の発言と同じラベル・本文装飾・改行保持で表示し、先頭の `#` は付けない。通常の通知やエラーは従来の表示を維持する。表示だけの変更で、モデル履歴へシステム報告を追加しない。
+- 2件以上連続する通常のツール呼び出しを、標準で閉じた1つの「コマンド N 件」にまとめる。見出しに running / ok / error / denied の件数を出す。展開すると、従来の個別カードと入力全文を確認できる。
+- 会話・通知・MCP表示・TodoWrite / AskUserQuestion の専用表示でグループを区切る。回答ボタンや進捗リストを折りたたみに隠さない。
+- 先頭の呼び出しIDをキーにし、1件→複数件の増加、追加の呼び出し、結果更新でも手動の開閉状態を維持する。
+- 仕様はユーザー要望に基づき DESIGN.md §16.3 を更新。テストで標準closed・展開と全文・増分更新時の状態・区切り・専用UIの可視性、通知イベントからassistant表示への変換とHTMLエスケープを確認。
+- 同じWindows / Node 24.16.0 / WindowsApps版pwsh 7.6.6で、`tsc --noEmit` / `eslint .` / `electron-vite build` に成功（上記と同じNode直接実行）。全体テストは133ファイル / 1029件成功、スキップなし（`--maxWorkers=4`）。既存の重複key警告は継続する。
+- 実画面の見た目・操作確認とインストーラー再作成は未実施。以前提示したインストーラーには今回の変更は含まれない。
 
 ## 未確認・未実測
 

@@ -149,6 +149,19 @@ export class TurnEvents {
     this.buffer = "";
   }
 
+  /** 失敗試行の未確定表示だけを破棄する。確定済み履歴・レシートは残す。 */
+  private discardAttempt() {
+    const calls = this.calls.splice(0);
+    for (const call of calls) this.receiptByCall.delete(call.callId);
+    this.buffer = "";
+    this.ctx.options.emit({
+      type: "attempt_discarded",
+      sessionId: this.sessionId,
+      messageId: this.messageId(),
+      receiptIds: calls.map((call) => call.receiptId),
+    });
+  }
+
   readonly onEvent = (event: LoopEvent) => {
     const { ctx, sessionId } = this;
     const emit = ctx.options.emit;
@@ -233,6 +246,7 @@ export class TurnEvents {
         break;
       }
       case "rate_limited":
+        this.discardAttempt();
         emit({
           type: "error",
           sessionId,
@@ -240,6 +254,7 @@ export class TurnEvents {
         });
         break;
       case "error":
+        this.discardAttempt();
         emit({
           type: "error",
           sessionId,

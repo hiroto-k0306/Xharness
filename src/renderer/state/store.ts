@@ -182,6 +182,18 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
         withItem(v, { kind: "assistant", id: e.messageId, text: e.text }),
       );
     }
+    case "attempt_discarded": {
+      const v = view(s, e.sessionId);
+      const receipts = new Set(e.receiptIds);
+      return put(s, e.sessionId, {
+        ...v,
+        items: v.items.filter(
+          (item) =>
+            !(item.kind === "assistant" && item.id === e.messageId) &&
+            !(item.kind === "tool" && receipts.has(item.id)),
+        ),
+      });
+    }
     case "tool_call":
       return put(
         s,

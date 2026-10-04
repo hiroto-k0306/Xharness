@@ -235,6 +235,12 @@ export type UiEvent =
     }
   | { type: "text_delta"; sessionId: string; messageId: string; text: string }
   | {
+      type: "attempt_discarded";
+      sessionId: string;
+      messageId: string;
+      receiptIds: string[];
+    }
+  | {
       type: "tool_call";
       sessionId: string;
       receiptId: string;

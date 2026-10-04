@@ -123,6 +123,70 @@ describe("App wired to the real SessionController", () => {
     ).toHaveTextContent("/compact");
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
   });
+  it("keeps image zoom focused when a running turn completes without typing into the prompt", async () => {
+    let finish!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    // ターンの終了を画像を開いた後まで待たせ、時間に依存せず遷移を再現する。
+    class WaitingProvider extends FakeProvider {
+      override async *stream(...args: Parameters<FakeProvider["stream"]>) {
+        await ready;
+        yield* super.stream(...args);
+      }
+    }
+    await setup(new WaitingProvider());
+    render(<App />);
+    await screen.findByText("+ new session");
+    await userEvent.click(screen.getByRole("button", { name: /new session/ }));
+    await waitFor(() =>
+      expect(useStore.getState().app!.currentSessionId).toBeTruthy(),
+    );
+    const id = useStore.getState().app!.currentSessionId!;
+    const prompt = screen.getByLabelText("prompt");
+    await userEvent.type(prompt, "draft");
+    try {
+      await act(async () => {
+        expect(
+          await window.harness.command({
+            type: "send",
+            sessionId: id,
+            text: "see",
+            images: [image],
+          }),
+        ).toMatchObject({ ok: true });
+      });
+      const thumb = await screen.findByRole("button", {
+        name: "添付画像 1 を拡大",
+      });
+      await waitFor(() => expect(prompt).toBeDisabled());
+      await userEvent.click(thumb);
+      const close = screen.getByRole("button", { name: "閉じる" });
+      expect(close).toHaveFocus();
+      finish();
+      await screen.findByText("pong");
+      await waitFor(() => expect(prompt).toBeEnabled());
+      expect(close).toHaveFocus();
+      expect(
+        screen.getByRole("dialog", { name: "画像の拡大表示" }),
+      ).toBeInTheDocument();
+      await userEvent.keyboard("abc");
+      expect(prompt).toHaveValue("draft");
+      expect(close).toHaveFocus();
+      await userEvent.keyboard("{Enter}");
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(thumb).toHaveFocus();
+      expect(
+        useStore.getState().views[id]!.items.filter((i) => i.kind === "user"),
+      ).toHaveLength(1);
+      expect(prompt).toHaveValue("draft");
+      await userEvent.clear(prompt);
+      await userEvent.type(prompt, "after");
+      expect(prompt).toHaveValue("after");
+    } finally {
+      finish();
+    }
+  });
   it("answers AskUserQuestion through the normal send command and provider history", async () => {
     const requests: string[] = [];
     await setup(

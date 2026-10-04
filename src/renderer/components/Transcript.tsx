@@ -37,8 +37,20 @@ export function Transcript({
   const [zoom, setZoom] = useState<string | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const hasItems = items.length > 0;
   useEffect(() => {
     if (!zoom) return;
+    if (!hasItems) {
+      // 空の会話へ切り替わるとポータルも消えるので、キー制御を残さない。
+      setZoom(null);
+      return;
+    }
+    // PromptLine などが実行終了時に focus() しても、背景へ移さない。
+    // focusin は同期的に発火するので、次の文字入力より先に引き戻せる。
+    const onFocus = (e: FocusEvent) => {
+      if (e.target !== closeButton.current) closeButton.current?.focus();
+    };
+    window.addEventListener("focusin", onFocus, true);
     closeButton.current?.focus();
     // 拡大表示中のキーは、捕捉段階で止めて背後へ伝えない(App の Esc 中断や承認の y / a / n を押させない)
     const onKey = (e: KeyboardEvent) => {
@@ -53,9 +65,10 @@ export function Transcript({
     window.addEventListener("keydown", onKey, true);
     return () => {
       window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("focusin", onFocus, true);
       if (opener.current?.isConnected) opener.current.focus();
     };
-  }, [zoom]);
+  }, [zoom, hasItems]);
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: "end" });
   }, [items]);

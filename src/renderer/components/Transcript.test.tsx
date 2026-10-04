@@ -207,6 +207,78 @@ it("keeps keyboard focus inside the enlarged image and restores it on close", ()
   expect(thumb).toHaveFocus();
 });
 
+it("recaptures programmatic background focus and removes the trap on unmount", () => {
+  const background = document.createElement("textarea");
+  document.body.append(background);
+  const { unmount } = render(
+    <Transcript
+      {...props}
+      items={[
+        {
+          kind: "user",
+          id: "u1",
+          text: "see",
+          images: [{ mediaType: "image/png", data: "AAAA" }],
+        },
+      ]}
+    />,
+  );
+  try {
+    const thumb = screen.getByRole("button", { name: "添付画像 1 を拡大" });
+    fireEvent.click(thumb);
+    background.focus();
+    expect(screen.getByRole("button", { name: "閉じる" })).toHaveFocus();
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(thumb).toHaveFocus();
+    background.focus();
+    expect(background).toHaveFocus();
+    // 再度開いた状態でアンマウントしてもリスナーを残さない。
+    fireEvent.click(thumb);
+    unmount();
+    const behind = vi.fn();
+    window.addEventListener("keydown", behind);
+    try {
+      background.focus();
+      expect(background).toHaveFocus();
+      fireEvent.keyDown(background, { key: "y" });
+      expect(behind).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener("keydown", behind);
+    }
+  } finally {
+    unmount();
+    background.remove();
+  }
+});
+
+it("clears zoom and releases keyboard capture when the transcript becomes empty", () => {
+  const items: TranscriptItem[] = [
+    {
+      kind: "user",
+      id: "u1",
+      text: "see",
+      images: [{ mediaType: "image/png", data: "AAAA" }],
+    },
+  ];
+  const { rerender } = render(<Transcript {...props} items={items} />);
+  fireEvent.click(screen.getByRole("button", { name: "添付画像 1 を拡大" }));
+  rerender(<Transcript {...props} items={[]} />);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  const behind = vi.fn();
+  window.addEventListener("keydown", behind);
+  try {
+    fireEvent.keyDown(document.body, { key: "b", ctrlKey: true });
+    expect(behind).toHaveBeenCalledOnce();
+    rerender(<Transcript {...props} items={items} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const thumb = screen.getByRole("button", { name: "添付画像 1 を拡大" });
+    thumb.focus();
+    expect(thumb).toHaveFocus();
+  } finally {
+    window.removeEventListener("keydown", behind);
+  }
+});
+
 it("keeps line breaks of multi-line notices", () => {
   render(
     <Transcript

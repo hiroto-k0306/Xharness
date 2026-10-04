@@ -50,7 +50,7 @@
 ### 修正版の検証
 
 - 環境は上記と同じ Node.js 24.16.0 / WindowsApps版 PowerShell 7.6.6 / ローカルpnpm 10.34.6。今回も実体を確認した。
-- 最終版の `./scripts/pnpm.ps1 test --maxWorkers=1`: **136ファイル / 1156件成功**（181.63秒、スキップなし）。worker環境で報告された replay / images の失敗は、この統合環境の全体試験では再現しなかった。
+- 3件の修正統合時点の `./scripts/pnpm.ps1 test --maxWorkers=1`: **136ファイル / 1156件成功**（181.63秒、スキップなし）。worker環境で報告された replay / images の失敗は、この統合環境の全体試験では再現しなかった。
 - `typecheck` / `lint` / `package`（icon・build・electron-builderを含む）: 成功。
 - ASAR 内の main / preload / renderer HTML と最終ビルド出力の一致、配布先の `SHA256SUMS.txt` と実ファイルのハッシュ一致を確認済み。
 - `git diff --check`: 成功。usageテストのPrettier警告も整形した。
@@ -66,4 +66,20 @@
 | XHarness-0.0.0-portable.exe | `e53f5447ce150bfb8f1440ca35258f12578e0f3c4aafc734f51d99df8a9b380b` |
 | README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
 
-この記録は正式な再レビュー前に作成した。再レビューの合否とmainへの統合・pushの最終状態は、最後の `RequestReview` 結果とGitのremote refで確認する。
+### 再レビューで見つかった引用符内の区切りの修正
+
+- `779d249` の正式再レビューは `should` 1件。`rg 'set-content|add-content|out-file' src` の引用符内の `|` をコマンド区切りと誤認し、由来を上書きするケースが残っていた。
+- `af853ab` で由来専用の分割を引用符・PowerShellのバックティックescape・コメントを考慮するものへ変更。構文が不確かなコマンドは変更の証拠にしない。権限判定用の既存 `subcommands` は変更していない。
+- 単引用符/二重引用符の検索、引用符内のセミコロン、連続引用符、escape、コメント、未閉鎖引用符、実際のパイプ書き込みと連結書き込みの9ケースを追加。runtimeの59テストが成功。
+- **最終版の全体テストは136ファイル / 1165件成功**（185.35秒、スキップなし）。typecheck / lint / package / Prettier / diff --checkも再確認し成功。最終ASARのmain / preload / renderer HTMLとビルド出力の一致、配布先のハッシュ一致を確認した。両exeは未署名。インストール・新版UI操作・実API動作試験は未実施のまま。
+- `20261004-review-fixes` のexeはこの追加修正を含まない。利用する配布物は、次の**最終修正版**とする（既存配布物は上書きしていない）。
+
+`D:\AIwork\XHarness-release\20261004-review-fixes-final\XHarness-0.0.0\`
+
+| ファイル | SHA-256 |
+|---|---|
+| XHarness-Setup-0.0.0.exe | `941f4d35755289f9fd20672bc14dbda384428a69b7ce112d140cfe3fdfacce2d` |
+| XHarness-0.0.0-portable.exe | `ca55d8400a8e625ffa19622329597cb5e852718398a4c7c297b1a3fb5265c6e1` |
+| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+
+この追記は最終の正式再レビュー前に作成した。再レビューの合否とmainへの統合・pushの最終状態は、最後の `RequestReview` 結果とGitのremote refで確認する。

@@ -77,6 +77,46 @@ export async function prepareProviderHistory(
   }
 }
 
+/** Codex: normally keep two turns; a large tail may be cut only between complete tool groups. */
+function codexCovered(
+  messages: Message[],
+  normal: number,
+  previous: number,
+  options: Parameters<typeof prepareProviderHistory>[1],
+): number {
+  const pending = new Set<string>();
+  const boundaries: number[] = [];
+  for (const [i, message] of messages.entries()) {
+    for (const block of message.content) {
+      if (block.type === "tool_use") {
+        if (pending.has(block.id)) return previous;
+        pending.add(block.id);
+      }
+      if (block.type === "tool_result" && !pending.delete(block.toolUseId))
+        return previous;
+    }
+    // Keep at least the newest message/group, including any unresolved calls.
+    if (!pending.size && i + 1 < messages.length) boundaries.push(i + 1);
+  }
+  const baseline = Math.max(normal, previous);
+  const safeNormal = baseline === 0 || boundaries.includes(baseline);
+  // Conservative suffix estimates, computed once rather than serializing every suffix.
+  const suffix = new Array<number>(messages.length + 1).fill(0);
+  for (let i = messages.length - 1; i >= 0; i--)
+    suffix[i] = suffix[i + 1]! + estimateTokens(messages[i]) + 1;
+  const capacity = (options.limit ?? Infinity) * options.threshold;
+  // Reserve space for the maximum accepted 16,000-character summary and its wrapper.
+  const available = capacity - (options.overhead ?? 0) - 32064;
+  if (safeNormal && suffix[baseline]! <= available) return baseline;
+  const candidates = boundaries.filter((i) => i > baseline);
+  // Leave breathing room so every following tool result does not trigger another summary.
+  return (
+    candidates.find((i) => suffix[i]! <= available / 2) ??
+    candidates.at(-1) ??
+    (safeNormal ? baseline : previous)
+  );
+}
+
 async function compactNow(
   messages: Message[],
   options: Parameters<typeof prepareProviderHistory>[1],
@@ -99,9 +139,12 @@ async function compactNow(
       ? messages.at(-1)?.role === "user"
         ? (starts.at(-1) ?? 0)
         : messages.length
-      : starts.length >= 3
-        ? starts.at(-2)!
-        : 0;
+      : codexCovered(
+          messages,
+          starts.length >= 3 ? starts.at(-2)! : 0,
+          checkpoint?.covered ?? 0,
+          options,
+        );
   if (!covered || covered <= (checkpoint?.covered ?? 0))
     return {
       messages: view,

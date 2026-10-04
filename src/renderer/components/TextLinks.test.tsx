@@ -354,6 +354,37 @@ it("renders escaped explicit file links and keeps HTTPS browser behavior", () =>
   expect(container.querySelector("script")).toBeNull();
   expect(container.textContent).toContain("<script>alert(1)</script>");
 });
+it.each([
+  ["D:/releases/Setup.exe", "file:///D:/releases/Setup.exe"],
+  ["C:/work/", "file:///C:/work/"],
+  [
+    "D:/日本/a%20b%28draft%29%25.txt",
+    "file:///D:/%E6%97%A5%E6%9C%AC/a%20b%28draft%29%25.txt",
+  ],
+  ["D:/report#1.txt", "file:///D:/report%231.txt"],
+])("links explicit Windows drive destinations: %s", (path, url) => {
+  render(<TextLinks text={`[open](${path})`} />);
+  expect(screen.getByRole("link", { name: "open" }).getAttribute("href")).toBe(
+    url,
+  );
+});
+it.each([
+  "D:/releases/Setup.exe",
+  "`[code](D:/releases/Setup.exe)`",
+  "```\n[code](D:/releases/Setup.exe)\n```",
+  "![image](D:/work/a.png)",
+  "[![image](D:/work/a.png)](D:/work/a.txt)",
+  "[relative](../a.txt)",
+  "[unc](//server/share/a.txt)",
+  String.raw`[backslash](D:\work\a.txt)`,
+  "[bad](D:/a%ZZ.txt)",
+  "[traversal](D:/%2e%2e/a.txt)",
+  "[separator](D:/a%2fb.txt)",
+])("keeps non-links and ambiguous drive destinations literal: %s", (text) => {
+  const { container } = render(<TextLinks text={text} />);
+  expect(screen.queryAllByRole("link")).toHaveLength(0);
+  expect(container.textContent).toBe(text);
+});
 it("does not turn code, images, HTML, remote file URLs or dangerous schemes into links", () => {
   const { container } = render(
     <TextLinks

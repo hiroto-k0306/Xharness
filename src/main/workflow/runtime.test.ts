@@ -503,6 +503,15 @@ it.each([
   ["node sum.test.js", "gpt-6-astra"],
   ["Set-Content P1.txt changed", "gpt-6-luna"],
   ["git restore P1.txt", "gpt-6-luna"],
+  ["rg 'set-content|add-content|out-file' src", "gpt-6-astra"],
+  ['rg "set-content|add-content|out-file" src', "gpt-6-astra"],
+  ["Get-Content 'name;add-content;out-file.txt'", "gpt-6-astra"],
+  ["rg 'can''t|add-content|out-file' src", "gpt-6-astra"],
+  ['rg "quote`"|add-content|out-file" src', "gpt-6-astra"],
+  ["git status # add-content; Remove-Item P1.txt", "gpt-6-astra"],
+  ["rg 'unterminated|add-content|out-file", "gpt-6-astra"],
+  ['Write-Output "set-content|out-file" | Out-File P1.txt', "gpt-6-luna"],
+  ["Get-Content 'name;out-file.txt'; Set-Content P1.txt done", "gpt-6-luna"],
 ])(
   "worker provenance after parent Bash %s selects %s",
   async (command, expected) => {

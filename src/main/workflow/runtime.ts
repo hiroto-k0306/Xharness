@@ -15,7 +15,7 @@ import { WorkflowState, findings } from "./state.js";
 import { runGit } from "../session/repository.js";
 import { gitInfo } from "../session/store.js";
 import { decidePermission } from "../core/permissions.js";
-import { analyzeCommand, subcommands } from "../core/shell-command.js";
+import { analyzeCommand } from "../core/shell-command.js";
 import { type ToolCall } from "../tools/registry.js";
 import { shellHooks, type ShellHook } from "../hooks/shell-hooks.js";
 import { shellSearchTools } from "../tools/shell-search.js";
@@ -60,10 +60,48 @@ async function writes(call: ToolCall, cwd: string): Promise<boolean> {
         "deny")
   );
 }
+/** Split execution boundaries, never separators inside quoted search patterns/arguments. */
+function attributionCommands(command: string): string[] {
+  const parts: string[] = [];
+  let part = "";
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+  let comment = false;
+  for (const char of command) {
+    if (comment) {
+      if (char !== "\n" && char !== "\r") continue;
+      comment = false;
+    }
+    if (escaped) {
+      part += char;
+      escaped = false;
+    } else if (char === "`" && quote !== "'") {
+      part += char;
+      escaped = true;
+    } else if (quote) {
+      part += char;
+      if (char === quote) quote = undefined;
+    } else if (char === "'" || char === '"') {
+      part += char;
+      quote = char;
+    } else if (char === "#" || /[;|&\r\n]/.test(char)) {
+      parts.push(part);
+      part = "";
+      comment = char === "#";
+    } else {
+      part += char;
+    }
+  }
+  if (quote || escaped) return []; // Uncertain syntax is not proof of a change.
+  parts.push(part);
+  return parts;
+}
+
 /** Attribution only, not a permission gate. Unknown scripts are not evidence of implementation. */
 function implementationCommand(command: string): boolean {
-  return subcommands(command).some((part) => {
-    const { tokens } = analyzeCommand(part);
+  return attributionCommands(command).some((part) => {
+    const { tokens, simple } = analyzeCommand(part);
+    if (!simple) return false;
     const [program = "", action = ""] = tokens.map((token) =>
       token.toLowerCase(),
     );

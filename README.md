@@ -29,7 +29,7 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 ```powershell
 .\scripts\pnpm.ps1 --version
 .\scripts\pnpm.ps1 typecheck
-.\scripts\pnpm.ps1 test --maxWorkers=4
+.\scripts\pnpm.ps1 test
 .\scripts\pnpm.ps1 release
 ```
 
@@ -47,6 +47,18 @@ pnpm dev:fake      # Electron を通信なしで起動
 pnpm build         # electron-vite でビルド
 pnpm headless      # 画面なしの REPL(tsx)
 ```
+
+通常の `pnpm test` は、Windows の PowerShell / Git 系テストで並列実行時のタイムアウトが再発したため、直列（`--maxWorkers=1`）・各テスト30秒制限を既定とする。既定の並列実行が安定したという意味ではない。
+
+## GUI を操作して確認する(開発用)
+
+```powershell
+.\scripts\pnpm.ps1 test:gui
+```
+
+Playwright で開発版 XHarness を専用の一時領域に `--fake` 起動し、初期表示、scratch の ping/pong、Transcript / LoopFlow の切替を操作・撮影する。実 API や資格情報は使わず、終了時に専用プロセスと一時データを片付ける。Playwright 用ブラウザの追加インストールは不要。
+
+画像は `.out/gui/` に保存する。通常の `pnpm test`(Vitest)とは別実行。手順・安全上の境界・Windows の実測は [docs/gui-testing.md](docs/gui-testing.md)。他のアプリの操作や、XHarness エージェントへのデスクトップ操作権限の追加ではない。
 
 ## 配布物を作って保管する(手元の Windows)
 

@@ -14,6 +14,88 @@ const STATUS = {
   denied: { mark: "✗", cls: "err", label: "denied" },
 } as const;
 
+type ToolItem = Extract<TranscriptItem, { kind: "tool" }>;
+type ToolGroup = { kind: "tool_group"; id: string; tools: ToolItem[] };
+
+/** 専用の進捗・回答UIは隠さず、それ以外の連続した呼び出しだけをまとめる。 */
+function groupCommands(
+  items: TranscriptItem[],
+): (TranscriptItem | ToolGroup)[] {
+  const rows: (TranscriptItem | ToolGroup)[] = [];
+  for (const item of items) {
+    if (
+      item.kind !== "tool" ||
+      (item.tool === "TodoWrite" && item.todos) ||
+      (item.tool === "AskUserQuestion" && item.question)
+    ) {
+      rows.push(item);
+      continue;
+    }
+    const last = rows.at(-1);
+    if (last?.kind === "tool_group") last.tools.push(item);
+    else rows.push({ kind: "tool_group", id: item.id, tools: [item] });
+  }
+  return rows;
+}
+
+function ToolCard({ item }: { item: ToolItem }) {
+  const st = STATUS[item.status];
+  return (
+    <details className={styles.call} data-status={item.status}>
+      <summary className={styles.head}>
+        <span className={styles.k}>
+          {item.id} {item.summary}
+        </span>
+        <span className={styles[st.cls]}>
+          {st.mark} {st.label}
+        </span>
+      </summary>
+      {item.detail && <pre className={styles.detail}>{item.detail}</pre>}
+    </details>
+  );
+}
+
+function CommandGroup({ tools }: { tools: ToolItem[] }) {
+  const single = tools.length === 1 ? tools[0] : undefined;
+  // 1件→複数件でも同じ details を使い、手動で開いた状態を維持する。
+  return (
+    <details
+      className={styles.call}
+      data-testid={single ? undefined : "tool-group"}
+      data-status={single?.status}
+    >
+      <summary className={styles.head}>
+        <span className={styles.k}>
+          {single
+            ? `${single.id} ${single.summary}`
+            : `コマンド ${tools.length} 件`}
+        </span>
+        <span className={styles.groupStatus}>
+          {(Object.keys(STATUS) as ToolItem["status"][]).map((status) => {
+            const count = tools.filter((t) => t.status === status).length;
+            const st = STATUS[status];
+            return count ? (
+              <span key={status} className={styles[st.cls]}>
+                {st.mark} {st.label}
+                {single ? "" : ` ${count}`}
+              </span>
+            ) : null;
+          })}
+        </span>
+      </summary>
+      {single ? (
+        single.detail && <pre className={styles.detail}>{single.detail}</pre>
+      ) : (
+        <div className={styles.groupContent}>
+          {tools.map((item) => (
+            <ToolCard key={item.id} item={item} />
+          ))}
+        </div>
+      )}
+    </details>
+  );
+}
+
 export interface TranscriptProps {
   items: TranscriptItem[];
   running: boolean;
@@ -105,9 +187,10 @@ export function Transcript({
       role="log"
       aria-live="polite"
     >
-      {items.map((item) => {
+      {groupCommands(items).map((item) => {
+        if (item.kind === "tool_group")
+          return <CommandGroup key={item.id} tools={item.tools} />;
         if (item.kind === "tool") {
-          const st = STATUS[item.status];
           if (item.tool === "TodoWrite" && item.status === "ok" && item.todos)
             return <TodoList key={item.id} todos={item.todos} />;
           if (
@@ -123,25 +206,7 @@ export function Transcript({
                 onReply={onReply}
               />
             );
-          return (
-            <details
-              key={item.id}
-              className={styles.call}
-              data-status={item.status}
-            >
-              <summary className={styles.head}>
-                <span className={styles.k}>
-                  {item.id} {item.summary}
-                </span>
-                <span className={styles[st.cls]}>
-                  {st.mark} {st.label}
-                </span>
-              </summary>
-              {item.detail && (
-                <pre className={styles.detail}>{item.detail}</pre>
-              )}
-            </details>
-          );
+          return <ToolCard key={item.id} item={item} />;
         }
         if (item.kind === "mcp")
           return (
@@ -153,7 +218,7 @@ export function Transcript({
               stale={item.id !== latestMcp}
             />
           );
-        if (item.kind === "notice")
+        if (item.kind === "notice" && item.presentation !== "assistant")
           return (
             <div
               key={item.id}

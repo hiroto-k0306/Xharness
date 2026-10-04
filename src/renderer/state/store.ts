@@ -265,10 +265,12 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
         ? put(
             s,
             id,
-            withItem(
-              view(s, id),
-              notice(e.type === "notice" ? e.tone : "err", e.message),
-            ),
+            withItem(view(s, id), {
+              ...notice(e.type === "notice" ? e.tone : "err", e.message),
+              ...(e.type === "notice" && e.presentation
+                ? { presentation: e.presentation }
+                : {}),
+            }),
           )
         : s;
     }

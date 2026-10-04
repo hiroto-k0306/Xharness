@@ -159,6 +159,8 @@ export type TranscriptItem =
       tone: "dim" | "warn" | "err";
       text: string;
       phase?: string;
+      /** システムの完了報告を assistant と同じ見た目で表示する(モデル履歴は変えない) */
+      presentation?: "assistant";
     };
 
 /**
@@ -199,7 +201,13 @@ export type UiEvent =
       round: number;
     }
   | { type: "tool_progress"; sessionId: string; index: number; total: number }
-  | { type: "notice"; sessionId: string; message: string; tone: "dim" | "warn" }
+  | {
+      type: "notice";
+      sessionId: string;
+      message: string;
+      tone: "dim" | "warn";
+      presentation?: "assistant";
+    }
   | {
       type: "mcp";
       sessionId: string;

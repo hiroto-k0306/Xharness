@@ -4,10 +4,12 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import type { TranscriptItem } from "../../shared/ipc.js";
 import { Transcript } from "./Transcript.js";
+import { applyEvent, type EventState } from "../state/store.js";
 
 const question: TranscriptItem = {
   kind: "tool",
@@ -21,6 +23,17 @@ const question: TranscriptItem = {
   },
 };
 const props = { items: [question], running: false, model: "fake" };
+const command = (
+  id: string,
+  status: Extract<TranscriptItem, { kind: "tool" }>["status"] = "ok",
+): Extract<TranscriptItem, { kind: "tool" }> => ({
+  kind: "tool",
+  id,
+  tool: "Read",
+  summary: `Read ${id}.txt`,
+  detail: `full input ${id}`,
+  status,
+});
 
 it("sends the option text once and locks all choices until the next turn", async () => {
   let resolve!: (ok: boolean) => void;
@@ -278,6 +291,151 @@ it("clears zoom and releases keyboard capture when the transcript becomes empty"
     window.removeEventListener("keydown", behind);
   }
 });
+
+it("collapses consecutive commands into one group while retaining individual details", () => {
+  const { rerender } = render(
+    <Transcript
+      {...props}
+      items={[
+        command("1"),
+        command("2", "pending"),
+        command("3", "error"),
+        command("4", "denied"),
+      ]}
+    />,
+  );
+  const group = screen.getByTestId("tool-group");
+  const head = group.querySelector("summary")!;
+  expect(group).not.toHaveAttribute("open");
+  expect(head).toHaveTextContent("コマンド 4 件");
+  for (const label of ["running 1", "ok 1", "error 1", "denied 1"])
+    expect(head).toHaveTextContent(label);
+  const cardHead = screen.getByText("1 Read 1.txt");
+  expect(cardHead).not.toBeVisible();
+  fireEvent.click(head);
+  expect(cardHead).toBeVisible();
+  const card = cardHead.closest("details")!;
+  expect(card).not.toHaveAttribute("open");
+  fireEvent.click(cardHead.closest("summary")!);
+  expect(screen.getByText("full input 1")).toBeVisible();
+  rerender(
+    <Transcript
+      {...props}
+      items={[
+        command("1"),
+        command("2"),
+        command("3", "error"),
+        command("4", "denied"),
+        command("5"),
+      ]}
+    />,
+  );
+  expect(screen.getByTestId("tool-group")).toBe(group);
+  expect(group).toHaveAttribute("open");
+  expect(card).toHaveAttribute("open");
+  expect(head).toHaveTextContent("コマンド 5 件");
+  expect(head).toHaveTextContent("ok 3");
+  expect(head).not.toHaveTextContent("running");
+  fireEvent.click(head);
+  rerender(
+    <Transcript
+      {...props}
+      items={[
+        command("1"),
+        command("2"),
+        command("3"),
+        command("4"),
+        command("5"),
+        command("6"),
+      ]}
+    />,
+  );
+  expect(group).not.toHaveAttribute("open");
+});
+
+it("retains the manually opened state when a single command becomes a group", () => {
+  const { rerender } = render(<Transcript {...props} items={[command("1")]} />);
+  const head = screen.getByText("1 Read 1.txt").closest("summary")!;
+  const card = head.closest("details")!;
+  fireEvent.click(head);
+  expect(card).toHaveAttribute("open");
+  rerender(<Transcript {...props} items={[command("1"), command("2")]} />);
+  expect(screen.getByTestId("tool-group")).toBe(card);
+  expect(card).toHaveAttribute("open");
+  expect(card.querySelector("summary")).toHaveTextContent("コマンド 2 件");
+});
+
+it("breaks command groups at conversation, notices, MCP and dedicated interactive UI", () => {
+  const separators: TranscriptItem[] = [
+    { kind: "assistant", id: "a", text: "response" },
+    { kind: "user", id: "u", text: "request" },
+    { kind: "notice", id: "n", tone: "warn", text: "notice" },
+    { kind: "mcp", id: "m", servers: [] },
+    question,
+    {
+      ...command("todo"),
+      tool: "TodoWrite",
+      todos: [{ content: "visible progress", status: "in_progress" }],
+    },
+  ];
+  const items: TranscriptItem[] = [];
+  separators.forEach((separator, index) => {
+    items.push(command(`${index}a`), command(`${index}b`), separator);
+  });
+  items.push(command("last"));
+  render(<Transcript {...props} items={items} onReply={async () => true} />);
+  const groups = screen.getAllByTestId("tool-group");
+  expect(groups).toHaveLength(separators.length);
+  for (const group of groups) {
+    expect(group).not.toHaveAttribute("open");
+    expect(group.querySelectorAll("details")).toHaveLength(2);
+  }
+  expect(screen.getByText("response")).toBeVisible();
+  expect(screen.getByText("request")).toBeVisible();
+  expect(screen.getByText("# notice")).toBeVisible();
+  expect(screen.getByRole("button", { name: "1. 修正する" })).toBeVisible();
+  expect(screen.getByText("visible progress")).toBeVisible();
+  expect(screen.getByText("last Read last.txt")).toBeVisible();
+});
+
+it.each(["dim", "warn"] as const)(
+  "renders a %s completion report from the event as an assistant message",
+  (tone) => {
+    let state: EventState = { app: null, views: {} };
+    state = applyEvent(state, {
+      type: "text_delta",
+      sessionId: "s",
+      messageId: "a",
+      text: "normal assistant",
+    });
+    state = applyEvent(state, {
+      type: "notice",
+      sessionId: "s",
+      tone,
+      presentation: "assistant",
+      message: "完了報告\n- A 完了\n<script>escaped</script>",
+    });
+    state = applyEvent(state, {
+      type: "notice",
+      sessionId: "s",
+      tone: "warn",
+      message: "通常通知",
+    });
+    render(<Transcript {...props} items={state.views.s!.items} />);
+    const report = screen.getByText(/完了報告/);
+    const normal = screen.getByText("normal assistant");
+    expect(report.textContent).toBe(
+      "完了報告\n- A 完了\n<script>escaped</script>",
+    );
+    expect(report.className).toBe(normal.className);
+    expect(report.parentElement!.className).toBe(
+      normal.parentElement!.className,
+    );
+    expect(within(report.parentElement!).getByText("assistant")).toBeVisible();
+    expect(screen.getByText("# 通常通知")).toBeVisible();
+    expect(document.querySelector("script")).toBeNull();
+  },
+);
 
 it("keeps line breaks of multi-line notices", () => {
   render(

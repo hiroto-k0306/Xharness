@@ -60,6 +60,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.groupStatus {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+}
+.groupContent {
+  padding-left: 12px;
+}
 .detail {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

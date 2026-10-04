@@ -684,6 +684,9 @@ Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex�
 - **応答の文字の送り方**(ユーザー要望 2026-10-03): 応答の文字は空白までためてから画面へ送る。ただしツール呼び出しの前には、ためた分を送り切る
 - **添付画像の拡大**(ユーザー要望 2026-10-03): 会話欄の自分が貼った画像はクリックで画面全体に拡大し、Esc・背景・閉じるボタンで閉じる(この Esc は実行の中断に使わない)。画像入力の警告は、カタログで imageInput: false のモデルだけに出す
 
+- **会話・レシートの自動スクロール**（ユーザー指示 2026-10-04）: 初期表示は最新（最下部）に追従する。ユーザーが手動で遡ったらそのペインの追従を停止し、出力追加でも位置を動かさない。再び最下部（誤差2px以内）へ戻ったら追従を再開する。会話とレシートは独立し、それぞれのコンテナだけを縦方向へスクロールする（レシートの横位置は維持）。画像読み込み・カード開閉などの高さ変化にも、追従中だけ対応する。セッション・会話エージェントを切り替えると初期追従に戻る。
+- **実行停止**（ユーザー指示 2026-10-04）: Esc による実行中断を廃止し、PromptLine のモデル選択ボタンのすぐ左に停止ボタンを置く。承認待ちでもクリックできる。Esc による画像・メニュー・ダイアログの閉じる操作、権限要求の拒否は維持する。
+
 ### 16.4 core → UI のイベント
 
 レンダラは状態を持たず、メインから送られるイベントを Zustand ストアに反映するだけにする。
@@ -747,7 +750,7 @@ interface Receipt {
 
 - 普段は**タイトルバー(ウィンドウ最上部のバー)の右側、接続状態ドットと最小化ボタンの左**に、ボタンを1つだけ表示する(`◔ usage 84% ▾`)。% は、全プロバイダの中で最も使用率が高い枠の値
 - クリックまたは `Ctrl+U` でポップオーバーを開く。外側のクリックか `Esc` で閉じる
-- 中身: プロバイダごとに 5時間ウィンドウと週間上限のバー、リセットまでの時間、フォールバックの設定内容。Claude は anthropic-ratelimit-unified-{5h,7d}-utilization / reset、Codex は x-codex-primary/secondary-used-percent / window-minutes / reset-at を使用（Phase 0 実測）。Claude の utilization は割合、Codex の used-percent は百分率として表示。ヘッダ欠損時は取得不可とし、0% と見なさない
+- 中身: プロバイダごとに 5時間ウィンドウと週間上限のバー、リセットまでの時間、フォールバックの設定内容。Claude は anthropic-ratelimit-unified-{5h,7d}-utilization / reset、Codex は x-codex-primary/secondary-used-percent / window-minutes / reset-at を使用（Phase 0 実測）。Claude の utilization は割合、Codex の used-percent は百分率として表示。一度も取得していない枠は取得不可とし、0% と見なさない。取得済みの枠はプロバイダ・枠ごとの最終取得値をメモリに保持し、後続の欠損・部分取得で消さない（ユーザー指示 2026-10-04）。main・worker・reviewer・調査用の子は同じ正規化処理を使い、5h / weekly とリセット時刻を表示する。値を取得するためだけの追加通信は行わず、アプリ再起動後は取得まで未知とする
 - 色: 80% 以上は `--warn`、95% 以上は `--err`。アイコン横の % も同じ色にする
 - 自動で開くことはしない。95% を超えたときだけ、トースト通知を一度出す
 
@@ -1122,7 +1125,7 @@ hooks:
 |---|---|---|---|
 | **1 plan** | main(Claude) | 調査して計画を立てる。書き込み系ツールは使えない | main が `SubmitPlan` ツールで計画を提出し、ユーザーが承認する |
 | **2 implement** | 項目ごとに割り当てたモデル(main / worker)。並列可能な項目は同時に実行 | 計画どおりに実装し、統合後にテストを回す(§21) | 全項目が完了・統合済みで、main が `RequestReview` を呼ぶ。変更が1つ以上ある |
-| **3 review** | reviewer(Codex) | 差分をレビューして指摘を返す | 指摘が「修正必須」なし → 完了。修正必須あり → 2 implement に戻る |
+| **3 review** | reviewer(Codex) | 差分をレビューして指摘を返す | `must` / `should` ともに0件 → 完了。いずれかあり → 上限未満なら 2 implement に戻る、上限到達なら停止 |
 
 ### 20.2 段階を使うかどうか
 
@@ -1155,11 +1158,12 @@ workflow:
    ```ts
    interface ReviewFinding { severity: "must" | "should" | "nit"; file: string; line?: number; message: string }
    ```
-4. `must` が0件 → 完了。PhaseBar をすべて `✓` にする
-5. `must` がある → 指摘を main に渡して implement に戻す(round を +1)
-6. round が上限(既定 2)に達しても `must` が残る場合 → 止めて、ユーザーに判断を求める
-- `should` / `nit` は完了時にまとめて表示する(main は直さない。ユーザーが指示すれば直す)
-- Codex の枠が切れているときは、fallback の `claude:sonnet` がレビューを代行する。PhaseBar に `↻ fallback` と表示する
+4. `must` / `should` がともに0件 → 完了。PhaseBar をすべて `✓` にする
+5. `must` または `should` がある → 両方の指摘を main に渡して修正対象とし、implement に戻す(round を +1)
+6. round が上限(既定 2)に達しても `must` / `should` が残る場合 → 止めて、未解決の両方の指摘を報告し、ユーザーに判断を求める
+- `nit` は完了時にまとめて表示する(main は直さない。ユーザーが指示すれば直す)
+- 2026-10-04 ユーザー承認: 修正ループと完了条件を `must` のみから `must` / `should` の両方へ拡張。レビュー回数上限は維持する。検証は [docs/review-should-progress.md](docs/review-should-progress.md)。
+- 通常は実装とは異なるプロバイダでレビューする。ユーザー指示（2026-10-04）: 制限による fallback または rate_limited 停止を検出したプロバイダは、同じワークフロー内のレビューで再選択せず、利用可能な実装モデルを使ってレビューする。レビューで初めて制限に遭遇した場合も、既存の短時間再試行の後、実装に使った同じモデルへ fallback する（別プロバイダを使えないときにレビュー自体は省略しない）。制限状態は同じワークフローのメモリに保持し、そのプロバイダの正常応答で解除する。再起動後の状態や解除時刻は推測しない
 
 ### 20.5 ユーザーの操作
 
@@ -1278,7 +1282,7 @@ main のシステムプロンプトに次の指針を入れ、項目ごとに判
   - Claude(main / sonnet / haiku)が書いた部分 → Codex(既定は GPT-6.1 Sol)がレビュー
   - Codex が書いた部分 → Claude Sonnet 5.5 がレビュー
   - 両方が含まれる場合は、2つのレビューを並列に走らせ、結果をまとめる
-- `must` の指摘があった場合、main がどの担当に直させるか(元の worker のモデル / main 自身)を決め、implement に戻る
+- `must` / `should` の指摘があった場合、main がどの担当に直させるか(元の worker のモデル / main 自身)を決め、implement に戻る
 
 ### 21.7 権限確認と通知
 
@@ -1473,7 +1477,7 @@ HTMLは直近の分割ファイルを合計16 MB・2万行まで読み、範囲�
 - 自動圧縮ができないとき(要約の失敗・529・サーバー圧縮の無い Haiku)は、上限に収まる間は圧縮せずに続け、同じターンでは再試行しない。上限を超えるときだけ `context_overflow` で止め、モデル名と理由を通知する。手動の `/compact` は失敗を返す
 
 
-2026-10-02 の指示に基づく既存圧縮の修正。Claude のクライアント要約チェックポイントは送信に使わない。Opus/Sonnet 5.5 は `compact-2026-09-04` と `compaction: {type: summarize}` でサーバー圧縮し、返った署名付きブロックを改変せず先頭で返送する。元の保存履歴は追記のみ。今回の実装は全完了ターンを圧縮し、最新の未回答 user ターンを残す。これにより、圧縮後に workflow の system/tools が変わっても過去の thinking を残したまま接頭辞を置き換えない。Haiku は公式互換一覧にないため手元の要約へ戻さず、対応していない旨を返す。Codex は直近のターンをそのまま残し、古い部分を Luna による要約にする。要約の失敗・中断・不完全応答ではチェックポイントを更新しない。fake の決定的圧縮は通信しない試験用。
+2026-10-02 の指示に基づく既存圧縮の修正。Claude のクライアント要約チェックポイントは送信に使わない。Opus/Sonnet 5.5 は `compact-2026-09-04` と `compaction: {type: summarize}` でサーバー圧縮し、返った署名付きブロックを改変せず先頭で返送する。元の保存履歴は追記のみ。今回の実装は全完了ターンを圧縮し、最新の未回答 user ターンを残す。これにより、圧縮後に workflow の system/tools が変わっても過去の thinking を残したまま接頭辞を置き換えない。Haiku は公式互換一覧にないため手元の要約へ戻さず、対応していない旨を返す。Codex は通常、直近2ターンをそのまま残し、古い部分を Luna による要約にする。2026-10-04 のユーザー承認により、保持する末尾が圧縮閾値に収まらない場合はターン途中にも圧縮境界を広げる。未解決の tool_use がないメッセージ境界だけを使い、並列呼び出しを含む tool_use / tool_result の組を分割しない。最新のメッセージ／ツール組と未解決の呼び出しは原文のまま残す。system・tools・要約領域を差し引いた容量の半分以下を末尾の目標とし、安全な境界でも収まらなければ通常どおり停止する。元の保存履歴を変更せず、前回の要約を引き継いでチェックポイントを前進させる。原因と検証は [docs/codex-context-overflow.md](docs/codex-context-overflow.md)。要約の失敗・中断・不完全応答ではチェックポイントを更新しない。fake の決定的圧縮は通信しない試験用。
 
 公式根拠: [on-demand compaction](https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand)、[preserved thinking](https://platform.claude.com/docs/en/build-with-claude/compaction-thinking-blocks)。対応モデル、先頭ブロック、署名保持、system/tools、完了したツール結果、usage.iterations の条件に従う。実通信結果と未確認事項は docs/stabilize-progress.md。
 

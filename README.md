@@ -22,6 +22,21 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 - Windowsの検証ではNodeとpwshの版・実体を確認する（`node --version`、`Get-Command node,pwsh`、`pwsh -NoProfile -Command '$PSVersionTable.PSVersion'`）。Codex同梱pwshとWindowsApps版は子プロセスのJob継承が異なる場合があるため、ユーザーと同じpwshをPATHの先頭に指定する。切り分けは [docs/h3-job-investigation.md](docs/h3-job-investigation.md)
 - 実際のモデルを使う確認には、公式 CLI(`claude` / `codex`)でのログインが要る。クラウド(Linux)では実 API を呼ばず、`--fake` と `test/fixtures/` で確認する(AGENTS.md)
 
+### この Windows 作業環境のローカル pnpm
+
+この作業環境には `.tools\node_modules\.bin\pnpm.cmd`（10.34.6）がインストール済み。Windows では以下のラッパーを使い、グローバルの PATH に依存せずローカル版を参照する。
+
+```powershell
+.\scripts\pnpm.ps1 --version
+.\scripts\pnpm.ps1 typecheck
+.\scripts\pnpm.ps1 test --maxWorkers=4
+.\scripts\pnpm.ps1 release
+```
+
+以下の手順の `pnpm` は、この環境では `.\scripts\pnpm.ps1` に置き換える。ラッパーは実行中だけローカルの bin を PATH の先頭へ追加するため、electron-builder などの子プロセスも同じ pnpm を使用する。終了コードを引き継ぎ、終了時に PATH を戻す。ユーザー・システムの PATH や PowerShell プロファイルは変更しない。
+
+`.tools/` はローカル環境用で、新規 clone には含まれない。無い環境では pnpm 10.34.6 を別途用意して通常の `pnpm` コマンドを使う（ラッパーは自動インストールや他の版へのフォールバックを行わない）。
+
 ```powershell
 pnpm install --frozen-lockfile
 pnpm test          # Vitest

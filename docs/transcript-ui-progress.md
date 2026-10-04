@@ -32,7 +32,7 @@ PR #9（codex/transcript-collapse-agents-bar）と PR #10（codex/notice-newline
 - このシェルでは `pnpm` が PATH に無いため、インストール済み `node_modules` の各 CLI を Node で直接実行。`tsc --noEmit` / `eslint .` / `electron-vite build`: 成功。
 - `vitest run --exclude=spike/.out/** --exclude=.tools/** --exclude=dist/** --maxWorkers=4`: 133 ファイル / 1022 件成功（スキップなし）。対象2ファイルのテストも27件成功。
 - 既存の AskUserQuestion 結合テストでは React の重複 key 警告が出るが、テストは成功。今回のフォーカス修正の範囲外として残す。
-- 修正後のインストーラーは再作成していない。実アプリでの表示・操作確認と、以下の実 API 未実測事項は引き続き未確認。
+- この追加修正の検証時点ではインストーラーを再作成していなかった。後述の「インストーラー再作成」で追加要望も含む版を作成済み。実アプリでの表示・操作確認と、以下の実 API 未実測事項は引き続き未確認。
 
 ## 追加要望：完了報告と連続コマンド（2026-10-04）
 
@@ -42,7 +42,17 @@ PR #9（codex/transcript-collapse-agents-bar）と PR #10（codex/notice-newline
 - 先頭の呼び出しIDをキーにし、1件→複数件の増加、追加の呼び出し、結果更新でも手動の開閉状態を維持する。
 - 仕様はユーザー要望に基づき DESIGN.md §16.3 を更新。テストで標準closed・展開と全文・増分更新時の状態・区切り・専用UIの可視性、通知イベントからassistant表示への変換とHTMLエスケープを確認。
 - 同じWindows / Node 24.16.0 / WindowsApps版pwsh 7.6.6で、`tsc --noEmit` / `eslint .` / `electron-vite build` に成功（上記と同じNode直接実行）。全体テストは133ファイル / 1029件成功、スキップなし（`--maxWorkers=4`）。既存の重複key警告は継続する。
-- 実画面の見た目・操作確認とインストーラー再作成は未実施。以前提示したインストーラーには今回の変更は含まれない。
+- 実画面の見た目・操作確認は未実施。
+
+### インストーラー再作成（2026-10-04）
+
+- main `bb3de8c` からビルド。Node 24.16.0（`C:\Program Files\nodejs\node.exe`）、pwsh 7.6.6（上記 WindowsApps / Store 版）、pnpm 10.34.6（`.tools\node_modules\.bin\pnpm.cmd`）。
+- 初回は electron-builder が内部で呼ぶ `pnpm` が PATH に無く、"No JSON content found" で失敗した。プロセス内だけ PATH に `.tools\node_modules\.bin` を加えて再実行し、成功した。
+- 配布先: `D:\AIwork\XHarness-release\20261004-transcript-report-command-groups\XHarness-0.0.0\`。既存の配布フォルダは上書きしていない。以前提示した `20261004-transcript-ui` のインストーラーには今回の追加要望は含まれない。
+  - `XHarness-Setup-0.0.0.exe`: SHA-256 `05f2e0f0828c8dc788b0dec0d2ded6d3fbfd13c337694a5f6ed3ec8e6c9bcc77`
+  - `XHarness-0.0.0-portable.exe`: SHA-256 `d0b39558ec64c79f605907497be7afedcb7dc87f8290335cb979f2b70da9266d`
+  - `SHA256SUMS.txt` の値と実ファイルのハッシュが一致することを確認した。ASAR の内容が新しいビルドと一致することも確認した。
+- 未署名（設計どおり）。インストール・起動・実画面での確認は未実施。
 
 ## 未確認・未実測
 

@@ -52,6 +52,8 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 
 ## コマンド
 
+- この Windows 作業環境ではローカル pnpm（`.tools/node_modules/.bin/pnpm.cmd`）を使う。下記の `pnpm` は `.\scripts\pnpm.ps1` に置き換えて実行する（例: `.\scripts\pnpm.ps1 typecheck`）。子プロセスにもローカル版の PATH を引き継ぐ。グローバルへのインストールや永続 PATH 変更は不要。詳細は README.md の「この Windows 作業環境のローカル pnpm」。Linux や `.tools/` の無い環境では通常の pnpm を使う。
+
 ```bash
 pnpm install
 pnpm test          # Vitest

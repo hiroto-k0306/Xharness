@@ -17,11 +17,6 @@ type UsageEvent = Extract<UiEvent, { type: "usage" }>;
 
 /** Router の割り当て判断に使う、プロバイダごとの5時間枠の使用率を更新する */
 export function updateQuota(ctx: ControllerContext, event: UsageEvent) {
-  const used =
-    event.windows?.find((w) => w.windowMinutes === 300)?.usedPercent ??
-    event.window5h;
-  if (typeof used === "number" && Number.isFinite(used))
-    ctx.quota[event.provider] = used;
   // 枠ごとに最新の値を残す(イベントに一部の枠しか無いときも、ほかの枠を消さない)
   const windows = new Map(
     (ctx.usage[event.provider] ?? []).map((w) => [
@@ -41,17 +36,41 @@ export function updateQuota(ctx: ControllerContext, event: UsageEvent) {
       incoming.push({ name, windowMinutes, usedPercent });
   for (const w of incoming) {
     const key = w.windowMinutes ?? w.name;
-    const previous = windows.get(key);
-    windows.set(key, {
+    let previous = windows.get(key);
+    if (!previous) {
+      // primary/secondary は期間が欠けても同じ枠。明示された期間同士が
+      // 違う場合や、同名の候補が複数ある場合は混同しない。
+      const matches = [...windows.entries()].filter(
+        ([, known]) =>
+          known.name === w.name &&
+          (known.windowMinutes === undefined || w.windowMinutes === undefined),
+      );
+      if (matches.length === 1) {
+        const [previousKey, known] = matches[0]!;
+        previous = known;
+        if (previousKey !== (w.windowMinutes ?? known.windowMinutes ?? w.name))
+          windows.delete(previousKey);
+      }
+    }
+    const merged = {
       ...previous,
       ...w,
+      windowMinutes: w.windowMinutes ?? previous?.windowMinutes,
       usedPercent: Number.isFinite(w.usedPercent)
         ? w.usedPercent
         : previous?.usedPercent,
       resetAt: w.resetAt ?? previous?.resetAt,
-    });
+    };
+    windows.set(merged.windowMinutes ?? merged.name, merged);
   }
   ctx.usage[event.provider] = [...windows.values()];
+  // 欠損していた期間を既存枠から補った後の値を、Router にも反映する。
+  const used = shapeUsage({
+    ...event,
+    windows: ctx.usage[event.provider],
+  }).window5h;
+  if (typeof used === "number" && Number.isFinite(used))
+    ctx.quota[event.provider] = used;
 }
 
 /** 使用量イベントを §16.7 の表示用(5時間枠・週間枠)に整える */

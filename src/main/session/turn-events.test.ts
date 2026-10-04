@@ -73,6 +73,104 @@ describe("usage tracking for Web auto (§22.2)", () => {
       usageEvent(ctx, { type: "usage", provider: "codex", window5h: 0 }),
     ).toMatchObject({ window5h: 0, weekly: 71 });
   });
+  it.each([
+    ["primary", "secondary"],
+    ["secondary", "primary"],
+  ])("merges duration-less %s/%s updates and refreshes 5h routing", (short, long) => {
+    const ctx = { quota: {}, usage: {} } as unknown as ControllerContext;
+    usageEvent(ctx, {
+      type: "usage",
+      provider: "codex",
+      windows: [
+        { name: short, windowMinutes: 300, usedPercent: 35, resetAt: "a" },
+        { name: long, windowMinutes: 10080, usedPercent: 70, resetAt: "b" },
+      ],
+    });
+    const updated = usageEvent(ctx, {
+      type: "usage",
+      provider: "codex",
+      windows: [
+        { name: short, windowMinutes: undefined, usedPercent: 0 },
+        { name: long, usedPercent: 71, resetAt: "c" },
+      ],
+    });
+    expect(updated).toMatchObject({ window5h: 0, weekly: 71 });
+    expect(ctx.quota.codex).toBe(0);
+    expect(ctx.usage.codex).toHaveLength(2);
+    expect(ctx.usage.codex).toEqual(
+      expect.arrayContaining([
+        { name: short, windowMinutes: 300, usedPercent: 0, resetAt: "a" },
+        { name: long, windowMinutes: 10080, usedPercent: 71, resetAt: "c" },
+      ]),
+    );
+    const resetOnly = usageEvent(ctx, {
+      type: "usage",
+      provider: "codex",
+      windows: [{ name: short, resetAt: "d" }],
+    });
+    expect(resetOnly).toMatchObject({ window5h: 0, weekly: 71 });
+    expect(resetOnly.windows).toContainEqual({
+      name: short,
+      windowMinutes: 300,
+      usedPercent: 0,
+      resetAt: "d",
+    });
+    expect(ctx.quota.codex).toBe(0);
+    expect(ctx.usage.codex).toHaveLength(2);
+  });
+  it("merges unknown durations when they first become known without losing usage/reset", () => {
+    const ctx = { quota: {}, usage: {} } as unknown as ControllerContext;
+    const unknown = usageEvent(ctx, {
+      type: "usage",
+      provider: "codex",
+      windows: [
+        { name: "primary", usedPercent: 25, resetAt: "a" },
+        { name: "secondary", usedPercent: 65, resetAt: "b" },
+      ],
+    });
+    expect(unknown).toMatchObject({ window5h: undefined, weekly: undefined });
+    expect(ctx.quota.codex).toBeUndefined();
+    const known = usageEvent(ctx, {
+      type: "usage",
+      provider: "codex",
+      windows: [
+        { name: "primary", windowMinutes: 300 },
+        { name: "secondary", windowMinutes: 10080, usedPercent: 66 },
+      ],
+    });
+    expect(known).toMatchObject({ window5h: 25, weekly: 66 });
+    expect(ctx.quota.codex).toBe(25);
+    expect(ctx.usage.codex).toEqual([
+      { name: "primary", windowMinutes: 300, usedPercent: 25, resetAt: "a" },
+      { name: "secondary", windowMinutes: 10080, usedPercent: 66, resetAt: "b" },
+    ]);
+  });
+  it("does not merge the same name with an explicitly different duration", () => {
+    const ctx = { quota: {}, usage: {} } as unknown as ControllerContext;
+    updateQuota(ctx, {
+      type: "usage",
+      provider: "codex",
+      windows: [
+        { name: "primary", windowMinutes: 300, usedPercent: 20, resetAt: "a" },
+      ],
+    });
+    const updated = usageEvent(ctx, {
+      type: "usage",
+      provider: "codex",
+      windows: [{ name: "primary", windowMinutes: 10080, usedPercent: 80 }],
+    });
+    expect(updated).toMatchObject({ window5h: 20, weekly: 80 });
+    expect(ctx.quota.codex).toBe(20);
+    expect(ctx.usage.codex).toEqual([
+      { name: "primary", windowMinutes: 300, usedPercent: 20, resetAt: "a" },
+      {
+        name: "primary",
+        windowMinutes: 10080,
+        usedPercent: 80,
+        resetAt: undefined,
+      },
+    ]);
+  });
   it("keeps the latest value per window and does not drop windows missing from a later event", () => {
     const ctx = { quota: {}, usage: {} } as unknown as ControllerContext;
     updateQuota(ctx, {

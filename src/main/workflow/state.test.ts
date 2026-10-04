@@ -8,6 +8,20 @@ const finding = (severity: ReviewFinding["severity"]): ReviewFinding => ({
 });
 
 it.each(["must", "should"] as const)(
+  "defaults to five reviews before stopping on %s",
+  (severity) => {
+    const state = new WorkflowState("auto");
+    state.approve();
+    for (let round = 1; round <= 5; round++) {
+      state.requestReview(true, true);
+      state.reviewed([finding(severity)]);
+      expect(state.reviewRound).toBe(round);
+      expect(state.phase).toBe(round === 5 ? "attention" : "implement");
+    }
+  },
+);
+
+it.each(["must", "should"] as const)(
   "%s requires correction and stops at the configured review limit",
   (severity) => {
     const state = new WorkflowState("auto", 2);

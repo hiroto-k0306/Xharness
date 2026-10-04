@@ -50,7 +50,7 @@ export async function loadAgentConfig(
     workflow: {
       mode: "auto",
       planApproval: "ask",
-      reviewRounds: 2,
+      reviewRounds: 5,
       worktrees: true,
     },
   };

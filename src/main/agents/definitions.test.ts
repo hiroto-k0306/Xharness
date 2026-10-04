@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
 import { loadAgentConfig } from "./definitions.js";
 import { childNeedsAsk } from "./permissions.js";
+it("defaults to five review rounds without explicit settings", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-review-default-"));
+  expect((await loadAgentConfig(home)).workflow.reviewRounds).toBe(5);
+});
 it("merges project agents and workflow settings without widening readonly tools", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-agent-config-"));
   const cwd = join(home, "project");

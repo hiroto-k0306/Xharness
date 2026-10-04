@@ -316,7 +316,12 @@ const item = (id: string, dependsOn: string[] = []): PlanItem => ({
   },
   acceptance: `${id}.txt is done`,
 });
-async function setup(claude: FakeStep[], codex: FakeStep[], git = false) {
+async function setup(
+  claude: FakeStep[],
+  codex: FakeStep[],
+  git = false,
+  reviewRounds?: number,
+) {
   const home = await mkdtemp(join(tmpdir(), "xh-workflow-"));
   const cwd = join(home, "workspace");
   await mkdir(cwd);
@@ -349,6 +354,7 @@ async function setup(claude: FakeStep[], codex: FakeStep[], git = false) {
     );
   }
   const config = await loadAgentConfig(home);
+  if (reviewRounds !== undefined) config.workflow.reviewRounds = reviewRounds;
   let approvals = 0;
   let checks = 0;
   const runtime = new WorkflowRuntime({
@@ -743,6 +749,8 @@ it.each(["must", "should"])(
         call("RequestReview", { summary: "Still unchanged" }),
       ],
       [text(JSON.stringify(finding)), text(JSON.stringify(finding))],
+      false,
+      2,
     );
     const result = await s.run();
     expect(result.stopCause).toBe("review_attention");

@@ -40,7 +40,7 @@ export class WorkflowState {
   findings: ReviewFinding[] = [];
   constructor(
     mode: "auto" | "always" | "off",
-    private readonly reviewRounds = 2,
+    private readonly reviewRounds = 5,
   ) {
     this.phase =
       mode === "auto" ? "classify" : mode === "always" ? "plan" : "off";

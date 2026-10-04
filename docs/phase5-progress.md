@@ -30,6 +30,8 @@ DESIGN.md §13・§21.2〜21.4 に従い、Electron と通信に依存しない�
 
 ## 1〜3 の実装
 
+> 以下は2026-10-02時点の実装記録。現在は must / should の両方が解消するまで修正し、2026-10-04にレビュー上限の既定を初回を含む合計5回へ変更した。詳細は [review-limit-progress.md](review-limit-progress.md)。
+
 - **Task / 子セッション**: explorer / reviewer の定義をグローバル・プロジェクト設定から読み、モデル・effort をカタログで確認する。子には prompt とプロジェクト指示を渡し、親の履歴は渡さない。子は Task・Write・Edit を使えず、reviewer の Bash はテストコマンドに限定する。最終テキストだけを親の tool_result に返す。履歴とレシートは `agents/<parentId>/` に独立して保存し、親の中断・終了は子の通信・権限待ちも終了させる。
 - **計画とレビュー**: auto / always / off、SubmitPlan・SkipPlan・UpdatePlan・RequestReview を Agent Loop に接続。計画中の書き込みを禁止する。ask の計画承認は既存の権限確認欄に全文を出し、広い allow ルールでも自動承認しない。却下すると止め、次の入力で修正できる。全項目の統合と実際の変更が揃うまでレビューしない。main の end_turn だけでは実装完了にならない。
 - **レビューの終了条件**: JSON の ReviewFinding を厳密に読む。must が無ければ終了し、should / nit も通知する。must があれば implement に戻し、既定2回で残る場合は止めてユーザー判断を待つ。不正なレビュー出力や通信失敗は完了扱いしない。Claude の実装は Codex、Codex の実装は Sonnet、両方があれば2件を並行してレビューする。レビュー失敗・中断時はもう一方も止め、権限確認は待ち行列で1件ずつ扱う。

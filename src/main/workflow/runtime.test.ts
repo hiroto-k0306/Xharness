@@ -490,7 +490,25 @@ it("mixed implementations collapse to one exact-model review after Claude become
   ).toEqual(["gpt-6-astra"]);
 }, 15000);
 
+const quotedWrites = [
+  {
+    command: "Set-Content P1.txt 'const value = 1;'",
+    content: "const value = 1;",
+  },
+  { command: "Set-Content P1.txt 'left|right'", content: "left|right" },
+  { command: "Set-Content P1.txt '$literal'", content: "$literal" },
+  {
+    command: 'Set-Content P1.txt "const value = 1;"',
+    content: "const value = 1;",
+  },
+  { command: 'Set-Content P1.txt "left|right"', content: "left|right" },
+  { command: 'Set-Content P1.txt "`$literal"', content: "$literal" },
+];
 it.each([
+  ...quotedWrites.map(({ command }) => [command, "gpt-6-luna"]),
+  ["'Set-Content'", "gpt-6-astra"],
+  ['"Set-Content"', "gpt-6-astra"],
+  ["Set-Content $unknownPath done", "gpt-6-astra"],
   ["Get-Content P1.txt", "gpt-6-astra"],
   ["git status", "gpt-6-astra"],
   ["pnpm test --maxWorkers=1", "gpt-6-astra"],
@@ -534,10 +552,15 @@ it.each([
       ],
     );
     const tools = defaultTools(s.cwd, false);
-    tools.set("Bash", {
-      ...tools.get("Bash")!,
-      execute: async () => ({ content: "success" }),
-    });
+    const actualWrite =
+      process.platform === "win32"
+        ? quotedWrites.find((entry) => entry.command === command)
+        : undefined;
+    if (!actualWrite)
+      tools.set("Bash", {
+        ...tools.get("Bash")!,
+        execute: async () => ({ content: "success" }),
+      });
     const runtime = new WorkflowRuntime({
       home: s.home,
       cwd: s.cwd,
@@ -566,6 +589,14 @@ it.each([
         .filter((r) => r.system.startsWith("You are reviewer"))
         .map((r) => r.model),
     ).toEqual([expected]);
+    if (actualWrite) {
+      expect((await readFile(join(s.cwd, "P1.txt"), "utf8")).trimEnd()).toBe(
+        actualWrite.content,
+      );
+      expect(
+        result.receipts.find((receipt) => receipt.tool === "Bash")?.decision,
+      ).toBe("allow");
+    }
   },
   15000,
 );

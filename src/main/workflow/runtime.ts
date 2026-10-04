@@ -61,9 +61,12 @@ async function writes(call: ToolCall, cwd: string): Promise<boolean> {
   );
 }
 /** Split execution boundaries, never separators inside quoted search patterns/arguments. */
-function attributionCommands(command: string): string[] {
-  const parts: string[] = [];
+function attributionCommands(
+  command: string,
+): { text: string; syntax: string }[] {
+  const parts: { text: string; syntax: string }[] = [];
   let part = "";
+  let syntax = "";
   let quote: "'" | '"' | undefined;
   let escaped = false;
   let comment = false;
@@ -77,31 +80,37 @@ function attributionCommands(command: string): string[] {
       escaped = false;
     } else if (char === "`" && quote !== "'") {
       part += char;
+      if (!quote) syntax += char;
       escaped = true;
     } else if (quote) {
       part += char;
       if (char === quote) quote = undefined;
     } else if (char === "'" || char === '"') {
       part += char;
+      syntax += " "; // Argument data is not execution syntax.
       quote = char;
     } else if (char === "#" || /[;|&\r\n]/.test(char)) {
-      parts.push(part);
+      parts.push({ text: part, syntax });
       part = "";
+      syntax = "";
       comment = char === "#";
     } else {
       part += char;
+      syntax += char;
     }
   }
   if (quote || escaped) return []; // Uncertain syntax is not proof of a change.
-  parts.push(part);
+  parts.push({ text: part, syntax });
   return parts;
 }
 
 /** Attribution only, not a permission gate. Unknown scripts are not evidence of implementation. */
 function implementationCommand(command: string): boolean {
-  return attributionCommands(command).some((part) => {
-    const { tokens, simple } = analyzeCommand(part);
-    if (!simple) return false;
+  return attributionCommands(command).some(({ text, syntax }) => {
+    // Ignore uncertain execution syntax, but never reject punctuation in quoted data.
+    // A bare quoted command name is a string expression, not a command invocation.
+    if (/^\s*['"]/.test(text) || /[<>$`(){}]|--%/.test(syntax)) return false;
+    const { tokens } = analyzeCommand(text);
     const [program = "", action = ""] = tokens.map((token) =>
       token.toLowerCase(),
     );

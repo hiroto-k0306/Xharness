@@ -2,6 +2,34 @@ import { Fragment } from "react";
 
 type Part = { text: string; label?: string; href?: string };
 
+/** 同じ長さのバッククォートで閉じる区間。コード内の括弧は数えない。 */
+function codeEnd(text: string, start: number): number | undefined {
+  const runs = /`+/g;
+  runs.lastIndex = start;
+  const open = runs.exec(text)!;
+  for (let close; (close = runs.exec(text));) {
+    if (close[0].length === open[0].length) return runs.lastIndex;
+  }
+}
+
+/** 画像のURL・titleを一括で保護。引用符／山括弧内の丸括弧は閉じ括弧ではない。 */
+function destinationEnd(text: string, start: number): number | undefined {
+  if (text[start] !== "(") return;
+  let depth = 1;
+  let quoted: string | undefined;
+  for (let end = start + 1; end < text.length; end++) {
+    const char = text[end];
+    if (char === "\\") end++;
+    else if (quoted) {
+      if (char === quoted) quoted = undefined;
+    } else if (char === "<") quoted = ">";
+    else if ((char === '"' || char === "'") && /\s/.test(text[end - 1] ?? "")) {
+      quoted = char;
+    } else if (char === "(") depth++;
+    else if (char === ")" && --depth === 0) return end + 1;
+  }
+}
+
 /** リンクより先にコードと画像（入れ子を含む）を消費する。HTML は解釈しない。 */
 function splitLinks(text: string): Part[] {
   const parts: Part[] = [];
@@ -24,37 +52,44 @@ function splitLinks(text: string): Part[] {
       const match = close.exec(text);
       end = match ? close.lastIndex : text.length;
     } else if (token[0].startsWith("`")) {
-      // 同じ長さのバッククォートだけが閉じる。改行を含む区間も保護する。
-      const close = /`+/g;
-      close.lastIndex = end;
-      let match;
-      while ((match = close.exec(text))) {
-        if (match[0].length === token[0].length) break;
-      }
-      if (!match) continue;
-      end = close.lastIndex;
+      const close = codeEnd(text, start);
+      if (!close) continue;
+      end = close;
     } else {
       const labelStart = end;
       let depth = 1;
       let nested = false;
       for (; end < text.length && depth; end++) {
         if (text[end] === "\\") end++;
-        else if (text[end] === "[") {
+        else if (text[end] === "`") {
+          const close = codeEnd(text, end);
+          if (close) end = close - 1;
+          else while (text[end + 1] === "`") end++;
+        } else if (text[end] === "[") {
           depth++;
           nested = true;
-        } else if (text[end] === "]") depth--;
-        else if (text[end] === "\n") break;
+        } else if (text[end] === "]") {
+          depth--;
+          // 入れ子画像のtitle内の角括弧も、外側のラベルを閉じない。
+          if (depth) end = (destinationEnd(text, end + 1) ?? end + 1) - 1;
+        }
       }
       if (depth) continue;
       const destination = /^\(([^\s)]+)\)/.exec(text.slice(end));
+      const destinationClose = destinationEnd(text, end);
       // 画像ラベルは destination の形式（reference・title 等）に関係なく保護する。
-      if (!destination && token[0] !== "![") continue;
+      if (!destinationClose && token[0] !== "![") continue;
       // 画像自身も、画像をラベルに含む外側のリンクも文字のまま。
-      if (!nested && token[0] === "[" && destination) {
+      if (
+        !nested &&
+        token[0] === "[" &&
+        destination &&
+        end + destination[0].length === destinationClose
+      ) {
         label = text.slice(labelStart, end - 1);
         href = destination[1];
       }
-      end += destination?.[0].length ?? 0;
+      end = destinationClose ?? end;
     }
     if (start > cursor) parts.push({ text: text.slice(cursor, start) });
     parts.push({ text: text.slice(start, end), label, href });

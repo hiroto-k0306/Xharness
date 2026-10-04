@@ -45,6 +45,21 @@
 - Windows / Node.js 24.16.0 (`C:\Program Files\nodejs\node.exe`) / PowerShell 7.6.6 Store版 (`C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\pwsh.exe`) / workspace内のローカルpnpm 10.34.6を使用した。
 - typecheck、lint、electron-vite build、変更3ファイルのPrettierチェック、`git diff --check` は成功。編集ツールによるファイル名の小文字化で最初のtypecheckが大文字小文字の不一致を検出したため、Git登録どおりの `TextLinks.tsx` に戻して再実行した。全テスト・GUI確認・exe生成・実API通信は今回も行っていない。上記の全テスト既知失敗と以下のGUI制約は変わらない。
 
+## main での最終検証（2026-10-04）
+
+- 追加の should: 複数行の画像ラベルも括弧の対応が閉じるまで保護する。LF／CRLF の回帰2件で、画像内のリンクは起動できず、画像後の通常リンクは維持されることを確認した。この時点のTextLinksは30件成功、typecheck・lint成功。
+- main の全体テスト（並列2）は139ファイル・1253件成功、phase5の既存待機で1件タイムアウト。worktreeで失敗していたreplayはmainでは成功。後続の並列1での再確認は、以下のとおり全件成功した。
+
+## 最新レビューの should 2件への修正・再検証（2026-10-04）
+
+- 画像ラベル内のinline codeを同じ長さのバッククォートまで読み飛ばし、コード内の `[` / `]` をラベルの括弧対応に数えない。任意長・複数行のコードを含む画像も文字のまま保持する。
+- 画像のURL・titleを、引用符・エスケープ・山括弧・丸括弧の入れ子を考慮して最後までまとめて保護する。画像title内のリンクと、画像をラベルに含む外側のリンクは起動できない。入れ子画像のtitle内の角括弧も外側のラベルを閉じない。保護範囲の外のfile / HTTPSリンクは維持する。
+- 簡易リンク形式として認識したdestinationが保護範囲の全体と一致するときだけリンクにする。未対応の括弧入りURLなどで、途中までのURLを誤って起動リンクにしない。完全なMarkdown解釈・依存追加・設計変更はしていない。
+- 回帰18件を追加（最初の12件は修正前に11件失敗・1件成功を確認）。TextLinksは **48件成功**。
+- `scripts/pnpm.ps1 test --maxWorkers=1 --testTimeout=30000 --reporter=dot`: **140ファイル・1275件、全件成功**。phase5の既存待機タイムアウトとreplayも今回は成功。過去の失敗は履歴として上に残している。Appの既存React重複key警告は残る。
+- typecheck、lint、electron-vite buildは成功。初回typecheckのstrictな文字列添字検査を修正して再実行した。進捗の「再確認中」を実結果に更新し、文字化け指摘のあった文をUTF-8で書き直した。
+- Windows / Node.js 24.16.0 (`C:\Program Files\nodejs\node.exe`) / PowerShell 7.6.6 Store版 (`C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\pwsh.exe`) / ローカルpnpmを使用。GUI確認・exe生成・新規API疎通試験・資格情報更新はこの修正作業では行っていない。
+
 ## 未実施・制約
 
 - **Electron GUIでのクリック／キーボードによるリンク起動、ネイティブ確認のフルパス表示、既定アプリ起動、Explorer選択、Cancel／Escapeと連続操作は未検証。手元で実施が必要。**

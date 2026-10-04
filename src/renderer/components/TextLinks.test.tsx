@@ -45,6 +45,41 @@ it.each([
   expect(container.textContent).toBe(`${image}\noutside`);
 });
 it.each([
+  "![alt `]` [file](file:///C:/a.txt)](https://example.com/a.png)",
+  "![alt ``] ` [`` [file](https://example.com)](file:///C:/a.png)",
+  "![alt `[` [file](file:///C:/a.txt)](https://example.com/a.png)",
+  "![alt `line\n]` [file](file:///C:/a.txt)][preview]",
+  '![alt](https://example.com/a.png "[file](file:///C:/a.txt)")',
+  "![alt](<https://example.com/a.png> '[web](https://example.com)')",
+  "![alt](file:///C:/a.png ([file](file:///C:/a.txt)))",
+  '![alt](https://example.com/a.png "before ) [file](file:///C:/a.txt) after")',
+  '![alt](https://example.com/a.png "escaped \\" [file](file:///C:/a.txt)")',
+  '![alt](https://example.com/a.png\n"[file](file:///C:/a.txt)")',
+  '![alt `]` [file](file:///C:/a.txt)](https://example.com/a.png "[web](https://example.com)")',
+  '[![alt `]` [file](file:///C:/a.txt)](https://example.com/a.png "[web](https://example.com)")](file:///C:/b.txt)',
+  '[![alt](https://example.com/a.png "unmatched ] [file](file:///C:/a.txt)")](https://example.com)',
+  '[![alt](https://example.com/a.png "unmatched [ [file](file:///C:/a.txt)")](file:///C:/a.txt)',
+  '![alt](<https://example.com/a)b.png> "[file](file:///C:/a.txt)")',
+  '![alt](https://example.com/it\'s.png "[file](file:///C:/a.txt)")',
+  "[unsupported](file:///C:/a(b).txt)",
+  '[unsupported](https://example.com "[file](file:///C:/a.txt)")',
+])("protects image labels with code and the entire title: %s", (image) => {
+  const { container } = render(
+    <TextLinks
+      text={`${image}\n[outside](file:///C:/outside.txt) [web](https://example.org)`}
+    />,
+  );
+  expect(screen.getAllByRole("link")).toHaveLength(2);
+  expect(
+    screen.getByRole("link", { name: "outside" }).getAttribute("href"),
+  ).toBe("file:///C:/outside.txt");
+  expect(screen.getByRole("link", { name: "web" }).getAttribute("href")).toBe(
+    "https://example.org",
+  );
+  expect(container.querySelector("img")).toBeNull();
+  expect(container.textContent).toBe(`${image}\noutside web`);
+});
+it.each([
   "```[code](file:///C:/a.txt)```",
   "   ````[code](file:///C:/a.txt)````",
   "```info ` [code](file:///C:/a.txt)```",
@@ -58,6 +93,20 @@ it.each([
   );
   expect(container.textContent).toBe(`${code}\nfile`);
 });
+it.each(["\n", "\r\n"])(
+  "protects multiline image labels with %j",
+  (newline) => {
+    const image = `![alt${newline}[file](file:///C:/a.txt)](https://example.com/a.png)`;
+    const { container } = render(
+      <TextLinks text={`${image}${newline}[outside](file:///C:/b.txt)`} />,
+    );
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(
+      screen.getByRole("link", { name: "outside" }).getAttribute("href"),
+    ).toBe("file:///C:/b.txt");
+    expect(container.textContent).toBe(`${image}${newline}outside`);
+  },
+);
 it("still links text outside protected regions", () => {
   render(
     <TextLinks

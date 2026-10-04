@@ -15,7 +15,6 @@ import { WorkflowState, findings } from "./state.js";
 import { runGit } from "../session/repository.js";
 import { gitInfo } from "../session/store.js";
 import { decidePermission } from "../core/permissions.js";
-import { analyzeCommand } from "../core/shell-command.js";
 import { type ToolCall } from "../tools/registry.js";
 import { shellHooks, type ShellHook } from "../hooks/shell-hooks.js";
 import { shellSearchTools } from "../tools/shell-search.js";
@@ -104,13 +103,51 @@ function attributionCommands(
   return parts;
 }
 
+/** PowerShell argument tokens for attribution, independent of the permission analyzer. */
+function attributionTokens(command: string): string[] {
+  const tokens: string[] = [];
+  let token = "";
+  let started = false;
+  let quote: "'" | '"' | undefined;
+  let escaped = false;
+  for (let index = 0; index < command.length; index++) {
+    const char = command[index]!;
+    if (escaped) {
+      token += char;
+      escaped = false;
+    } else if (char === "`" && quote !== "'") {
+      escaped = true;
+      started = true;
+    } else if (quote) {
+      if (char !== quote) token += char;
+      else if (command[index + 1] === quote) {
+        token += char; // Doubled quotes are literal characters within quoted data.
+        index++;
+      } else quote = undefined;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+      started = true;
+    } else if (/\s/.test(char)) {
+      if (started) tokens.push(token);
+      token = "";
+      started = false;
+    } else {
+      token += char;
+      started = true;
+    }
+  }
+  if (quote || escaped) return [];
+  if (started) tokens.push(token);
+  return tokens;
+}
+
 /** Attribution only, not a permission gate. Unknown scripts are not evidence of implementation. */
 function implementationCommand(command: string): boolean {
   return attributionCommands(command).some(({ text, syntax }) => {
     // Ignore uncertain execution syntax, but never reject punctuation in quoted data.
     // A bare quoted command name is a string expression, not a command invocation.
     if (/^\s*['"]/.test(text) || /[<>$`(){}]|--%/.test(syntax)) return false;
-    const { tokens } = analyzeCommand(text);
+    const tokens = attributionTokens(text);
     const [program = "", action = ""] = tokens.map((token) =>
       token.toLowerCase(),
     );

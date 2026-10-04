@@ -71,8 +71,8 @@
 - `779d249` の正式再レビューは `should` 1件。`rg 'set-content|add-content|out-file' src` の引用符内の `|` をコマンド区切りと誤認し、由来を上書きするケースが残っていた。
 - `af853ab` で由来専用の分割を引用符・PowerShellのバックティックescape・コメントを考慮するものへ変更。構文が不確かなコマンドは変更の証拠にしない。権限判定用の既存 `subcommands` は変更していない。
 - 単引用符/二重引用符の検索、引用符内のセミコロン、連続引用符、escape、コメント、未閉鎖引用符、実際のパイプ書き込みと連結書き込みの9ケースを追加。runtimeの59テストが成功。
-- **最終版の全体テストは136ファイル / 1165件成功**（185.35秒、スキップなし）。typecheck / lint / package / Prettier / diff --checkも再確認し成功。最終ASARのmain / preload / renderer HTMLとビルド出力の一致、配布先のハッシュ一致を確認した。両exeは未署名。インストール・新版UI操作・実API動作試験は未実施のまま。
-- `20261004-review-fixes` のexeはこの追加修正を含まない。利用する配布物は、次の**最終修正版**とする（既存配布物は上書きしていない）。
+- **引用符内の区切り修正時点の全体テストは136ファイル / 1165件成功**（185.35秒、スキップなし）。typecheck / lint / package / Prettier / diff --checkも再確認し成功。最終ASARのmain / preload / renderer HTMLとビルド出力の一致、配布先のハッシュ一致を確認した。両exeは未署名。インストール・新版UI操作・実API動作試験は未実施のまま。
+- `20261004-review-fixes` のexeはこの追加修正を含まない。この時点の配布物は次のフォルダに保存した（既存配布物は上書きしていない）。ただし、その後の再レビューで下記の残件が見つかったため、現在の最新版ではない。
 
 `D:\AIwork\XHarness-release\20261004-review-fixes-final\XHarness-0.0.0\`
 
@@ -82,4 +82,25 @@
 | XHarness-0.0.0-portable.exe | `ca55d8400a8e625ffa19622329597cb5e852718398a4c7c297b1a3fb5265c6e1` |
 | README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
 
-この追記は最終の正式再レビュー前に作成した。再レビューの合否とmainへの統合・pushの最終状態は、最後の `RequestReview` 結果とGitのremote refで確認する。
+## 再開後の引用符付き書き込みの修正（2026-10-04）
+
+- `9c78267` の正式再レビューに残った `should` 1件を、ユーザーの再開指示により修正した。引用符を考慮した分割後も、権限判定用の `analyzeCommand(...).simple` が引用符内の `;` 等を拒否していたため、実際の `Set-Content P1.txt 'const value = 1;'` による変更元モデルを記録できなかった。
+- `0fc8558` で由来専用の分類を修正。コマンドの原文と引用符外の実行構文を分け、引用符内の内容は構文判定に用いない。引用符外の不確かな式・展開等は引き続き証拠にしない。権限判定・承認ルールは変更していない。
+- 単引用符・二重引用符それぞれで `;` / `|` / `$` を含む6ケースを追加。WindowsではBashツールの実体を使い、一時作業フォルダのP1.txtに実際に書き込み、内容・成功レシート・Lunaへの由来更新・Lunaによるfallbackレビューを確認した。Windows以外では分類用の模擬レシートで検証し、PowerShellは起動しない。裸の引用符付きコマンド名が文字列式であること、および引用符外の不確かな変数を誤認しないことも追加。runtimeの**68テスト成功**。
+- 実行環境はNode.js 24.16.0 / WindowsApps版PowerShell 7.6.6 / ローカルpnpm 10.34.6。Node・pwshの版と実体を再確認し、上記と一致した。
+- 最終版の全体テスト: **136ファイル / 1174件成功**（210.53秒、スキップなし）。typecheck / lint / package / Prettier / diff --checkも成功。最終ASARのmain / preload / renderer HTMLとビルド出力が一致し、配布先のSHA-256も一致した。
+- インストール・新版UI操作・実API動作試験は未実施。稼働中の既存アプリは終了していない。資格情報の読み取り・更新は行っていない。両exeは未署名。
+
+### 最新の配布先
+
+`D:\AIwork\XHarness-release\20261004-quoted-write-fix\XHarness-0.0.0\`
+
+`20261004-review-fixes-final` を含む以前の配布物には今回の残件修正が入っていない。既存フォルダは上書きしていない。
+
+| ファイル | SHA-256 |
+|---|---|
+| XHarness-Setup-0.0.0.exe | `9420b7b0cc5329210b899d073a8e1caf46dd00dd2b5fac29ebfbd0ecac32f875` |
+| XHarness-0.0.0-portable.exe | `0d7e63cc95233122c0381f200b58b5195073665ff6d9a27b30ced0d993c3fc6b` |
+| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+
+この追記は今回の正式再レビュー前に作成した。再レビューの合否とmainへの統合・pushの最終状態は、最後の `RequestReview` 結果とGitのremote refで確認する。

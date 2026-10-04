@@ -26,6 +26,38 @@ it.each([
   expect(container.querySelector("img")).toBeNull();
   expect(container.textContent).toBe(text);
 });
+it.each([
+  "![alt [file](file:///C:/a.txt)][preview]\n\n[preview]: https://example.com/a.png",
+  '![alt [file](file:///C:/a.txt)](https://example.com/a.png "title")',
+  "![alt [file](file:///C:/a.txt)](<https://example.com/a.png> 'title')",
+  "![alt [file](https://example.com)](file:///C:/a.png (title))",
+  "![alt [file](file:///C:/a.txt)][]",
+  "![alt [file](file:///C:/a.txt)]",
+])("protects the entire image label regardless of destination: %s", (image) => {
+  const { container } = render(
+    <TextLinks text={`${image}\n[outside](file:///C:/b.txt)`} />,
+  );
+  expect(screen.getAllByRole("link")).toHaveLength(1);
+  expect(
+    screen.getByRole("link", { name: "outside" }).getAttribute("href"),
+  ).toBe("file:///C:/b.txt");
+  expect(container.querySelector("img")).toBeNull();
+  expect(container.textContent).toBe(`${image}\noutside`);
+});
+it.each([
+  "```[code](file:///C:/a.txt)```",
+  "   ````[code](file:///C:/a.txt)````",
+  "```info ` [code](file:///C:/a.txt)```",
+])("does not mistake backticks in fence info for a fence: %s", (code) => {
+  const { container } = render(
+    <TextLinks text={`${code}\n[file](file:///C:/b.txt)`} />,
+  );
+  expect(screen.getAllByRole("link")).toHaveLength(1);
+  expect(screen.getByRole("link", { name: "file" }).getAttribute("href")).toBe(
+    "file:///C:/b.txt",
+  );
+  expect(container.textContent).toBe(`${code}\nfile`);
+});
 it("still links text outside protected regions", () => {
   render(
     <TextLinks

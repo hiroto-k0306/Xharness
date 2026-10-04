@@ -5,7 +5,9 @@ type Part = { text: string; label?: string; href?: string };
 /** リンクより先にコードと画像（入れ子を含む）を消費する。HTML は解釈しない。 */
 function splitLinks(text: string): Part[] {
   const parts: Part[] = [];
-  const tokens = /^ {0,3}(`{3,}|~{3,})[^\r\n]*(?:\r?\n|$)|`+|!?\[/gm;
+  // バッククォートのフェンスは info string にバッククォートを許さない。
+  const tokens =
+    /^ {0,3}(`{3,}(?![^\r\n]*`)|~{3,})[^\r\n]*(?:\r?\n|$)|`+|!?\[/gm;
   let cursor = 0;
   for (let token; (token = tokens.exec(text));) {
     const start = token.index;
@@ -45,13 +47,14 @@ function splitLinks(text: string): Part[] {
       }
       if (depth) continue;
       const destination = /^\(([^\s)]+)\)/.exec(text.slice(end));
-      if (!destination) continue;
+      // 画像ラベルは destination の形式（reference・title 等）に関係なく保護する。
+      if (!destination && token[0] !== "![") continue;
       // 画像自身も、画像をラベルに含む外側のリンクも文字のまま。
-      if (!nested && token[0] === "[") {
+      if (!nested && token[0] === "[" && destination) {
         label = text.slice(labelStart, end - 1);
         href = destination[1];
       }
-      end += destination[0].length;
+      end += destination?.[0].length ?? 0;
     }
     if (start > cursor) parts.push({ text: text.slice(cursor, start) });
     parts.push({ text: text.slice(start, end), label, href });

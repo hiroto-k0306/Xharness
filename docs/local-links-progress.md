@@ -37,6 +37,14 @@
 - 変更した2テストファイルは **61件成功**（実Windowsドライブ照会を含む）。関連テスト7ファイル（local-links、local-links-ipc、preload/local-links、TextLinks、tools/environment、Transcript、App）は `--maxWorkers=2 --testTimeout=30000` で **99件成功**。WindowsApps alias の解決・実行も成功した。Appの既存テストではReactの重複key警告が出るが、テスト自体は成功した。
 - typecheck、lint、electron-vite build、変更したファイルのPrettierチェックは成功。今回の全テスト再実行・GUI確認・exe生成・実API通信は行っていない。上記の全テスト既知失敗と以下のGUI制約は引き続き残る。
 
+## 残存 should 2件への修正（2026-10-04）
+
+- 画像ラベルの保護を destination の認識から独立させた。reference画像・title付きinline画像・空のreference・destinationなしでも、ラベル内の入れ子リンクを起動リンクへ変換せず、画像表記を文字のまま保持する。保護区間外の通常リンクは維持する。
+- バッククォートフェンスの info string にバッククォートを許さない。行頭の三重バッククォートinline spanを未閉鎖フェンスと誤認して、後続行の通常リンクまで消す問題を修正した。チルダフェンスと既存のコード保護は維持する。設計変更・依存追加はない。
+- 回帰テスト9件（画像6件・inline span3件）を追加し、修正前に9件すべての失敗を確認した。修正後の `TextLinks` は **28件成功**。関連7ファイル（local-links、local-links-ipc、preload/local-links、TextLinks、tools/environment、Transcript、App）を `scripts/pnpm.ps1 test ... --maxWorkers=2 --testTimeout=30000` で実行し、**108件成功**。実Windowsドライブ照会・WindowsApps aliasの実行も成功。既存AppテストのReact重複key警告は引き続き出る。
+- Windows / Node.js 24.16.0 (`C:\Program Files\nodejs\node.exe`) / PowerShell 7.6.6 Store版 (`C:\Program Files\WindowsApps\Microsoft.PowerShell_7.6.6.0_x64__8wekyb3d8bbwe\pwsh.exe`) / workspace内のローカルpnpm 10.34.6を使用した。
+- typecheck、lint、electron-vite build、変更3ファイルのPrettierチェック、`git diff --check` は成功。編集ツールによるファイル名の小文字化で最初のtypecheckが大文字小文字の不一致を検出したため、Git登録どおりの `TextLinks.tsx` に戻して再実行した。全テスト・GUI確認・exe生成・実API通信は今回も行っていない。上記の全テスト既知失敗と以下のGUI制約は変わらない。
+
 ## 未実施・制約
 
 - **Electron GUIでのクリック／キーボードによるリンク起動、ネイティブ確認のフルパス表示、既定アプリ起動、Explorer選択、Cancel／Escapeと連続操作は未検証。手元で実施が必要。**

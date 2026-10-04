@@ -3,6 +3,8 @@ import { realpath, stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { isAbsolute } from "node:path";
+import { resolveCli } from "./tools/environment.js";
 
 /** Windows のローカル絶対 file URL のみ。URL の寛容な補正に任せない。 */
 export function localFilePath(raw: unknown): string | undefined {
@@ -50,10 +52,13 @@ const run = promisify(execFile);
 export async function isLocalDrive(path: string): Promise<boolean> {
   if (process.platform !== "win32" || !safeLocalPath(path)) return false;
   try {
+    // 未解決名を起動すると Windows が CWD の exe を PATH より先に選び得る。
+    const shell = await resolveCli("pwsh");
+    if (!shell || !isAbsolute(shell)) return false;
     // 引数に使うのは検証済みのドライブ文字だけ。任意のパス・コマンドは挿入しない。
     const script = `Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class XHarnessDrive { [DllImport("kernel32.dll", CharSet=CharSet.Unicode)] public static extern uint GetDriveType(string root); }'; [XHarnessDrive]::GetDriveType('${path.slice(0, 3)}')`;
     const result = await run(
-      "pwsh",
+      shell,
       ["-NoProfile", "-NonInteractive", "-Command", script],
       {
         windowsHide: true,

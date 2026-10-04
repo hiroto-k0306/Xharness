@@ -1,6 +1,62 @@
 import type { Stats } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isLocalDrive, localFilePath, LocalLinks } from "./local-links.js";
+import { resolveCli } from "./tools/environment.js";
+
+const { run } = vi.hoisted(() => ({ run: vi.fn() }));
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  const { promisify } = await import("node:util");
+  run.mockImplementation(promisify(actual.execFile));
+  return {
+    ...actual,
+    execFile: Object.assign(vi.fn(actual.execFile), {
+      [promisify.custom]: run,
+    }),
+  };
+});
+vi.mock("./tools/environment.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("./tools/environment.js")>();
+  return { ...actual, resolveCli: vi.fn(actual.resolveCli) };
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.clearAllMocks();
+});
+
+describe("local drive shell resolution", () => {
+  it("executes only the resolved absolute pwsh, never the CWD command name", async () => {
+    vi.stubGlobal("process", { ...process, platform: "win32" });
+    const shell = `${process.cwd()}/trusted/pwsh.exe`;
+    vi.mocked(resolveCli).mockResolvedValueOnce(shell);
+    run.mockResolvedValueOnce({ stdout: "3\r\n", stderr: "" });
+    expect(await isLocalDrive("C:\\work\\a.txt")).toBe(true);
+    expect(resolveCli).toHaveBeenCalledExactlyOnceWith("pwsh");
+    expect(run).toHaveBeenCalledExactlyOnceWith(
+      shell,
+      ["-NoProfile", "-NonInteractive", "-Command", expect.any(String)],
+      { windowsHide: true, timeout: 10_000, maxBuffer: 4096 },
+    );
+  });
+  it.each([undefined, "pwsh", "./pwsh.exe"])(
+    "rejects unresolved or relative pwsh (%s) without executing",
+    async (shell) => {
+      vi.stubGlobal("process", { ...process, platform: "win32" });
+      vi.mocked(resolveCli).mockResolvedValueOnce(shell);
+      expect(await isLocalDrive("C:\\work\\a.txt")).toBe(false);
+      expect(run).not.toHaveBeenCalled();
+    },
+  );
+  it("rejects resolution failures without executing", async () => {
+    vi.stubGlobal("process", { ...process, platform: "win32" });
+    vi.mocked(resolveCli).mockRejectedValueOnce(
+      new Error("private OS details"),
+    );
+    expect(await isLocalDrive("C:\\work\\a.txt")).toBe(false);
+    expect(run).not.toHaveBeenCalled();
+  });
+});
 
 const url = "file:///C:/work/%E6%97%A5%E6%9C%AC%20file.txt";
 const path = "C:\\work\\日本 file.txt";

@@ -490,53 +490,76 @@ it("mixed implementations collapse to one exact-model review after Claude become
   ).toEqual(["gpt-6-astra"]);
 }, 15000);
 
-it("a worker fallback is remembered without replacing its implementation model with the parent model", async () => {
-  const plan = item("P1");
-  plan.assignee.model = "claude:opus";
-  const s = await setup(
-    [{ type: "rate_limited", retryAfterSec: 600 }],
-    [
-      call("SubmitPlan", { items: [plan], notes: "Worker" }),
-      call("Write", { path: "P1.txt", content: "done" }),
-      call("ReportDone", {
-        summary: "done",
-        changedFiles: ["P1.txt"],
-        testsRun: [],
-      }),
-      call("RequestReview", { summary: "done" }),
-      text("[]"),
-      text("report"),
-    ],
-  );
-  const runtime = new WorkflowRuntime({
-    home: s.home,
-    cwd: s.cwd,
-    parentId: "worker-fallback",
-    config: s.config,
-    router: new Router(s.providers, { claude: "codex:astra" }),
-    createTools: (cwd) => defaultTools(cwd, false),
-    permission: async () => true,
-    approve: async () => true,
-  });
-  const result = await runtime.run(
-    {
-      provider: s.providers[1]!,
-      model: "gpt-6-luna",
-      system: "Test",
-      messages: [],
-      tools: defaultTools(s.cwd, false),
+it.each([
+  ["Get-Content P1.txt", "gpt-6-astra"],
+  ["git status", "gpt-6-astra"],
+  ["pnpm test --maxWorkers=1", "gpt-6-astra"],
+  ["npm run typecheck", "gpt-6-astra"],
+  ["node --test", "gpt-6-astra"],
+  [".\\scripts\\pnpm.ps1 test", "gpt-6-astra"],
+  ["cd .; pnpm test", "gpt-6-astra"],
+  ["Get-ChildItem | Format-Table", "gpt-6-astra"],
+  ["git diff --stat; Get-Content P1.txt", "gpt-6-astra"],
+  ["node sum.test.js", "gpt-6-astra"],
+  ["Set-Content P1.txt changed", "gpt-6-luna"],
+  ["git restore P1.txt", "gpt-6-luna"],
+])(
+  "worker provenance after parent Bash %s selects %s",
+  async (command, expected) => {
+    const plan = item("P1");
+    plan.assignee.model = "claude:opus";
+    const s = await setup(
+      [{ type: "rate_limited", retryAfterSec: 600 }],
+      [
+        call("SubmitPlan", { items: [plan], notes: "Worker" }),
+        call("Write", { path: "P1.txt", content: "done" }),
+        call("ReportDone", {
+          summary: "done",
+          changedFiles: ["P1.txt"],
+          testsRun: [],
+        }),
+        call("Bash", { command }),
+        call("RequestReview", { summary: "done" }),
+        text("[]"),
+        text("report"),
+      ],
+    );
+    const tools = defaultTools(s.cwd, false);
+    tools.set("Bash", {
+      ...tools.get("Bash")!,
+      execute: async () => ({ content: "success" }),
+    });
+    const runtime = new WorkflowRuntime({
+      home: s.home,
+      cwd: s.cwd,
+      parentId: "worker-fallback",
+      config: s.config,
+      router: new Router(s.providers, { claude: "codex:astra" }),
+      createTools: (cwd) => defaultTools(cwd, false),
       permission: async () => true,
-      maxRounds: 10,
-    },
-    new AbortController().signal,
-  );
-  expect(result.stopCause).toBe("workflow_complete");
-  expect(
-    s.requests
-      .filter((r) => r.system.startsWith("You are reviewer"))
-      .map((r) => r.model),
-  ).toEqual(["gpt-6-astra"]);
-}, 15000);
+      approve: async () => true,
+    });
+    const result = await runtime.run(
+      {
+        provider: s.providers[1]!,
+        model: "gpt-6-luna",
+        system: "Test",
+        messages: [],
+        tools,
+        permission: async () => true,
+        maxRounds: 10,
+      },
+      new AbortController().signal,
+    );
+    expect(result.stopCause).toBe("workflow_complete");
+    expect(
+      s.requests
+        .filter((r) => r.system.startsWith("You are reviewer"))
+        .map((r) => r.model),
+    ).toEqual([expected]);
+  },
+  15000,
+);
 
 it("child TodoWrite has its own history and never replaces the parent's list", async () => {
   const s = await setup(

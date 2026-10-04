@@ -15,6 +15,7 @@ import { WorkflowState, findings } from "./state.js";
 import { runGit } from "../session/repository.js";
 import { gitInfo } from "../session/store.js";
 import { decidePermission } from "../core/permissions.js";
+import { analyzeCommand, subcommands } from "../core/shell-command.js";
 import { type ToolCall } from "../tools/registry.js";
 import { shellHooks, type ShellHook } from "../hooks/shell-hooks.js";
 import { shellSearchTools } from "../tools/shell-search.js";
@@ -59,6 +60,29 @@ async function writes(call: ToolCall, cwd: string): Promise<boolean> {
         "deny")
   );
 }
+/** Attribution only, not a permission gate. Unknown scripts are not evidence of implementation. */
+function implementationCommand(command: string): boolean {
+  return subcommands(command).some((part) => {
+    const { tokens } = analyzeCommand(part);
+    const [program = "", action = ""] = tokens.map((token) =>
+      token.toLowerCase(),
+    );
+    return (
+      /^(?:set-content|add-content|out-file|copy-item|move-item|new-item|rename-item|remove-item|clear-content|sc|ac|cp|copy|mv|move|ni|ren|rm|del|erase|mkdir|rmdir|touch|tee)$/.test(
+        program,
+      ) ||
+      (program === "git" &&
+        /^(?:apply|am|merge|cherry-pick|checkout|restore|revert|reset)$/.test(
+          action,
+        )) ||
+      (program === "sed" &&
+        tokens
+          .slice(1)
+          .some((token) => /^-i(?:$|[^-])|^--in-place(?:=|$)/.test(token)))
+    );
+  });
+}
+
 export class WorkflowRuntime {
   private fileCheckpoint?: LoopOptions["checkpoint"];
   manualReview = false;
@@ -117,8 +141,14 @@ export class WorkflowRuntime {
       r.decision === "allow" &&
       ["Write", "Edit", "MultiEdit", "Bash"].includes(r.tool ?? "")
     ) {
-      const provider = resolveModel(r.model, this.options.aliases)?.provider;
-      if (provider) this.implementationModels.set(provider, r.model);
+      const command = (r.input as { command?: unknown } | undefined)?.command;
+      if (
+        r.tool !== "Bash" ||
+        (typeof command === "string" && implementationCommand(command))
+      ) {
+        const provider = resolveModel(r.model, this.options.aliases)?.provider;
+        if (provider) this.implementationModels.set(provider, r.model);
+      }
     }
     if (r.provider !== "claude" && r.provider !== "codex") return;
     if (["fallback", "rate_limited"].includes(r.decision))

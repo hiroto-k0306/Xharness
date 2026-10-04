@@ -88,10 +88,10 @@
 - `0fc8558` で由来専用の分類を修正。コマンドの原文と引用符外の実行構文を分け、引用符内の内容は構文判定に用いない。引用符外の不確かな式・展開等は引き続き証拠にしない。権限判定・承認ルールは変更していない。
 - 単引用符・二重引用符それぞれで `;` / `|` / `$` を含む6ケースを追加。WindowsではBashツールの実体を使い、一時作業フォルダのP1.txtに実際に書き込み、内容・成功レシート・Lunaへの由来更新・Lunaによるfallbackレビューを確認した。Windows以外では分類用の模擬レシートで検証し、PowerShellは起動しない。裸の引用符付きコマンド名が文字列式であること、および引用符外の不確かな変数を誤認しないことも追加。runtimeの**68テスト成功**。
 - 実行環境はNode.js 24.16.0 / WindowsApps版PowerShell 7.6.6 / ローカルpnpm 10.34.6。Node・pwshの版と実体を再確認し、上記と一致した。
-- 最終版の全体テスト: **136ファイル / 1174件成功**（210.53秒、スキップなし）。typecheck / lint / package / Prettier / diff --checkも成功。最終ASARのmain / preload / renderer HTMLとビルド出力が一致し、配布先のSHA-256も一致した。
+- 引用符付き書き込み修正時点の全体テスト: **136ファイル / 1174件成功**（210.53秒、スキップなし）。typecheck / lint / package / Prettier / diff --checkも成功。最終ASARのmain / preload / renderer HTMLとビルド出力が一致し、配布先のSHA-256も一致した。
 - インストール・新版UI操作・実API動作試験は未実施。稼働中の既存アプリは終了していない。資格情報の読み取り・更新は行っていない。両exeは未署名。
 
-### 最新の配布先
+### トークン解析修正前の配布先
 
 `D:\AIwork\XHarness-release\20261004-quoted-write-fix\XHarness-0.0.0\`
 
@@ -103,4 +103,23 @@
 | XHarness-0.0.0-portable.exe | `0d7e63cc95233122c0381f200b58b5195073665ff6d9a27b30ced0d993c3fc6b` |
 | README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
 
-この追記は今回の正式再レビュー前に作成した。再レビューの合否とmainへの統合・pushの最終状態は、最後の `RequestReview` 結果とGitのremote refで確認する。
+### 続けて見つかったトークン解析の修正
+
+- `9ad477e` の正式再レビューで `should` 1件。権限判定用のトークン解析がPowerShellのバックティックescapeに非対応なため、読み取り用の ``sed -n "/`" -i /p" P1.txt`` のパターン内の `-i` を書き込みオプションと誤認することが分かった。
+- `9cface5` で由来専用の `attributionTokens` を追加し、backtick escapeと引用符内の連続引用符を扱うよう修正。由来判定から `analyzeCommand` の利用を完全に取り除いた。権限判定のコード・ルールは変更していない。
+- 上記の読み取り、パターン内の `--in-place`、単引用符内の連続引用符を含む読み取りでAstraを維持し、実際の `sed -i` 形式ではLunaを記録する4ケースを追加した。sedのケースは模擬レシートによる分類試験であり、sed自体の実行試験ではない。先の6ケースのPowerShell実書き込みも含め、runtimeの**72テスト成功**。
+- 最終版の全体テスト: **136ファイル / 1178件成功**（198.29秒、スキップなし）。同じWindows環境でtypecheck / lint / package / Prettier / diff --checkを再実施し成功。最終ASARとビルド出力の一致・配布物のSHA-256一致を確認した。両exeは未署名で、インストール・新版UI実操作・実API試験は未実施のまま。
+
+### 最新の配布先
+
+`D:\AIwork\XHarness-release\20261004-quoted-write-final\XHarness-0.0.0\`
+
+`20261004-quoted-write-fix` を含む以前の配布物にはトークン解析の追加修正が入っていない。以前の配布物は上書きしていない。
+
+| ファイル | SHA-256 |
+|---|---|
+| XHarness-Setup-0.0.0.exe | `03de9fe4ea0015236ad473ec266a9056286a3796eddc666bd951c4b2ad5913e3` |
+| XHarness-0.0.0-portable.exe | `61ff9683be220519247725d6876167a76f12e86ef5a83fbca31ddc01a0096f1c` |
+| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+
+この追記は最終の正式再レビュー前に作成した。再レビューの合否とmainへの統合・pushの最終状態は、最後の `RequestReview` 結果とGitのremote refで確認する。

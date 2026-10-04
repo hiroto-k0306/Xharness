@@ -38,3 +38,32 @@
 - 新版の unpacked exe を `--fake`・専用 `XHARNESS_HOME` で起動したが、ウィンドウを表示せず終了コード0で終了。既存のインストール済み XHarness が稼働しており、アプリの単一起動制限と整合する。終了理由の断定や画面の起動成功扱いはしない。キャッシュのアクセス拒否ログも出た。既存アプリは終了していない。
 - インストール・新版の画面表示・スクロール/停止ボタンの実操作・実 API は未確認。ユーザーが既存アプリを閉じた後、上記インストーラを使って確認する必要がある。
 - この文書だけではレビュー合格・コミット・マージ・push 完了を証明しない。最終状態はワークフローの `RequestReview` 結果と Git の履歴・remote ref で確認する。
+
+## 正式レビュー後の3件の修正（2026-10-04）
+
+前回の `RequestReview` で出た `should` 3件を、ユーザーの追加依頼により修正した。上記 `20261004-all-fixes` の配布物はこの修正を含まない。修正版は別フォルダに保管し、古い配布物を上書きしていない。
+
+- 使用量: `windowMinutes` が欠けた更新を、同じ名前かつ期間が矛盾しない既知枠へ統合。既知の期間・使用率・resetを保持し、新しい使用率を表示と Router の quota に反映する。期間の初回確定・primary/secondary の逆順・0%・resetのみの更新を回帰テスト化した。
+- 実装モデルの由来: 読み取りや検証の Bash では実装モデルを上書きしない。成功した Write / Edit / MultiEdit と既知の変更コマンドのみを由来の証拠にし、任意スクリプトの副作用は推定しない。この分類はモデル由来専用で、既存の権限判定は変更していない。worker の Astra fallback の後に main の Luna が読み取り・テスト・パイプ付き調査を行っても、レビューは Astra を使うことを確認した。Set-Content / git restore では変更元の Luna を記録する。
+- reviewer のコマンド: 固定の `scripts/pnpm.ps1` に対する test / lint / typecheck / build（任意の run 接頭辞、追加引数なし）だけを許可。Windowsでローカルpnpmとラッパーが実ファイルとして存在するとき、そのラッパーのテストコマンドを案内する。任意スクリプト・インストール・連結・展開・リダイレクトの拒否は維持する。Bashツールからリポジトリのラッパーと一時的なローカルpnpm代替を実行し、引数が渡ることも通信なしで確認した。
+
+### 修正版の検証
+
+- 環境は上記と同じ Node.js 24.16.0 / WindowsApps版 PowerShell 7.6.6 / ローカルpnpm 10.34.6。今回も実体を確認した。
+- 最終版の `./scripts/pnpm.ps1 test --maxWorkers=1`: **136ファイル / 1156件成功**（181.63秒、スキップなし）。worker環境で報告された replay / images の失敗は、この統合環境の全体試験では再現しなかった。
+- `typecheck` / `lint` / `package`（icon・build・electron-builderを含む）: 成功。
+- ASAR 内の main / preload / renderer HTML と最終ビルド出力の一致、配布先の `SHA256SUMS.txt` と実ファイルのハッシュ一致を確認済み。
+- `git diff --check`: 成功。usageテストのPrettier警告も整形した。
+- 両exeは `NotSigned`。インストール・新版画面操作・実API通信は今回も行っていない。稼働中の既存アプリは終了していない。
+
+### 修正版の配布先
+
+`D:\AIwork\XHarness-release\20261004-review-fixes\XHarness-0.0.0\`
+
+| ファイル | SHA-256 |
+|---|---|
+| XHarness-Setup-0.0.0.exe | `c23512e5ff604bfc28bc30e17471411f201b309303ea6439f684b1201ab981dd` |
+| XHarness-0.0.0-portable.exe | `e53f5447ce150bfb8f1440ca35258f12578e0f3c4aafc734f51d99df8a9b380b` |
+| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+
+この記録は正式な再レビュー前に作成した。再レビューの合否とmainへの統合・pushの最終状態は、最後の `RequestReview` 結果とGitのremote refで確認する。

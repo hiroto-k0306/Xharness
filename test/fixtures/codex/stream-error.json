@@ -1,0 +1,13 @@
+{
+  "inspectedOn": "2026-10-04",
+  "source": "Existing local Codex SSE trace; five matching failures observed",
+  "sanitization": "Only event type and error type/code retained; message replaced, all headers and other fields removed. No requests or credentials retained.",
+  "payload": {
+    "type": "error",
+    "error": {
+      "type": "service_unavailable_error",
+      "code": "server_is_overloaded",
+      "message": "[redacted]"
+    }
+  }
+}

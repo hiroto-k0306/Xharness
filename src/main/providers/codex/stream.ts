@@ -203,16 +203,31 @@ export async function* decodeCodexStream(
         return;
       }
       case "response.failed":
-      case "error":
+      case "error": {
+        const envelope = data.type === "response.failed" ? data.response : data;
+        const failure =
+          envelope && typeof envelope === "object" && !Array.isArray(envelope)
+            ? (envelope as Obj).error
+            : undefined;
+        // 実測済みの過負荷だけを再試行する。生の本文・ヘッダは外へ渡さない。
+        const overloaded =
+          !!failure &&
+          typeof failure === "object" &&
+          !Array.isArray(failure) &&
+          (failure as Obj).type === "service_unavailable_error" &&
+          (failure as Obj).code === "server_is_overloaded";
         yield {
           type: "error",
           error: {
-            kind: "request",
-            message: "Codex stream returned an error",
-            retryable: false,
+            kind: overloaded ? "transport" : "protocol",
+            message: overloaded
+              ? "Codex側が一時的に混雑しています"
+              : "Codexストリームで未分類のエラーが発生しました",
+            retryable: overloaded,
           },
         };
         return;
+      }
     }
   }
   throw new Error("Codex stream ended before completion");

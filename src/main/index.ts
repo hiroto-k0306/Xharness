@@ -1,5 +1,7 @@
 import { app, BrowserWindow, dialog, safeStorage, shell } from "electron";
 import { homedir } from "node:os";
+import { mkdirSync } from "node:fs";
+import { fakeUserDataPath } from "./fake-profile.js";
 import { loadMainConfig } from "./config/config.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +30,16 @@ import {
 const here = fileURLToPath(new URL(".", import.meta.url));
 const startup = parseStartupArgs(process.argv.slice(1));
 const fake = startup.fake;
+// userData は単一起動ロックより前に分離する。実版・配布版は従来の保存先。
+const fakeUserData = fakeUserDataPath(
+  fake,
+  app.isPackaged,
+  process.env.XHARNESS_HOME,
+);
+if (fakeUserData) {
+  mkdirSync(fakeUserData, { recursive: true });
+  app.setPath("userData", fakeUserData);
+}
 let quitting = false;
 
 let window: BrowserWindow | null = null;

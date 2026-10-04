@@ -22,7 +22,6 @@ export function updateQuota(ctx: ControllerContext, event: UsageEvent) {
     event.window5h;
   if (typeof used === "number" && Number.isFinite(used))
     ctx.quota[event.provider] = used;
-  else delete ctx.quota[event.provider];
   // 枠ごとに最新の値を残す(イベントに一部の枠しか無いときも、ほかの枠を消さない)
   const windows = new Map(
     (ctx.usage[event.provider] ?? []).map((w) => [
@@ -30,9 +29,28 @@ export function updateQuota(ctx: ControllerContext, event: UsageEvent) {
       w,
     ]),
   );
-  for (const w of event.windows ?? [])
-    if (w.usedPercent !== undefined && Number.isFinite(w.usedPercent))
-      windows.set(w.windowMinutes ?? w.name, { ...w });
+  const incoming = [...(event.windows ?? [])];
+  for (const [name, windowMinutes, usedPercent] of [
+    ["5h", 300, event.window5h],
+    ["7d", 10080, event.weekly],
+  ] as const)
+    if (
+      usedPercent !== undefined &&
+      !incoming.some((w) => w.windowMinutes === windowMinutes)
+    )
+      incoming.push({ name, windowMinutes, usedPercent });
+  for (const w of incoming) {
+    const key = w.windowMinutes ?? w.name;
+    const previous = windows.get(key);
+    windows.set(key, {
+      ...previous,
+      ...w,
+      usedPercent: Number.isFinite(w.usedPercent)
+        ? w.usedPercent
+        : previous?.usedPercent,
+      resetAt: w.resetAt ?? previous?.resetAt,
+    });
+  }
   ctx.usage[event.provider] = [...windows.values()];
 }
 
@@ -42,8 +60,12 @@ export function shapeUsage(event: UsageEvent): UsageEvent {
     type: "usage",
     provider: event.provider,
     windows: event.windows,
-    window5h: event.windows?.find((w) => w.windowMinutes === 300)?.usedPercent,
-    weekly: event.windows?.find((w) => w.windowMinutes === 10080)?.usedPercent,
+    window5h:
+      event.windows?.find((w) => w.windowMinutes === 300)?.usedPercent ??
+      event.window5h,
+    weekly:
+      event.windows?.find((w) => w.windowMinutes === 10080)?.usedPercent ??
+      event.weekly,
   };
 }
 
@@ -53,7 +75,7 @@ export function usageEvent(
   event: UsageEvent,
 ): UsageEvent {
   updateQuota(ctx, event);
-  return shapeUsage(event);
+  return shapeUsage({ ...event, windows: ctx.usage[event.provider] });
 }
 
 export class TurnEvents {

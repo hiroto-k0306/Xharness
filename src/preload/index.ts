@@ -8,6 +8,24 @@ import {
   type UiEvent,
 } from "../shared/ipc.js";
 
+import { LOCAL_LINK_CHANNEL, isFileLink } from "../shared/local-links.js";
+
+// fileリンクは公開APIにしない。隔離されたpreloadで実際のクリックだけを受ける。
+window.addEventListener(
+  "click",
+  (event) => {
+    const anchor =
+      event.target instanceof Element ? event.target.closest("a[href]") : null;
+    const href = anchor?.getAttribute("href");
+    if (!href || !isFileLink(href)) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (!event.isTrusted || !navigator.userActivation.isActive) return;
+    void ipcRenderer.invoke(LOCAL_LINK_CHANNEL, href).catch(() => undefined);
+  },
+  true,
+);
+
 // 画面側へ渡すのは、型付きの command() と onEvent() だけ。
 // ipcRenderer 本体・トークン・ファイルパスの読み取り手段は公開しない。
 const api: HarnessApi = {

@@ -5,6 +5,7 @@ import { Logo } from "./Logo.js";
 import { McpStatus } from "./McpStatus.js";
 import { TodoList } from "./TodoList.js";
 import { QuestionChoices } from "./QuestionChoices.js";
+import { TextLinks } from "./TextLinks.js";
 import styles from "./Transcript.module.css";
 import { useFollowScroll } from "../hooks/useFollowScroll.js";
 
@@ -107,7 +108,7 @@ export interface TranscriptProps {
   onReply?(text: string): Promise<boolean>;
 }
 
-/** モデル出力は文字列としてだけ描画する(React が escape する)。HTML / Markdown は解釈しない。 */
+/** モデル出力はReactでescapeする。HTMLは解釈せず、明示的な安全なリンクのみ描画する。 */
 export function Transcript({
   items,
   running,
@@ -248,7 +249,9 @@ export function Transcript({
                 </span>
               )}
             </div>
-            <div className={styles.bubble}>{item.text}</div>
+            <div className={styles.bubble}>
+              <TextLinks text={item.text} />
+            </div>
             {item.kind === "user" &&
               item.images?.map((image, i) => (
                 <button

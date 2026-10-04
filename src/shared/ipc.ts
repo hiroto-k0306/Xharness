@@ -1,7 +1,8 @@
 // main / preload / renderer が共有する契約。electron を import しない。
 import { parseRewindChoice } from "./rewind.js";
 import { attachmentInfo, type ImageAttachment } from "./images.js";
-// DESIGN.md §16.4: チャネルは harness:event(main → renderer)と harness:command(renderer → main)の2本だけ。
+// DESIGN.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
+// §14.2のローカルリンク専用IPCはpreload内部だけで使用し、公開APIには含めない。
 
 export const EVENT_CHANNEL = "harness:event";
 export const COMMAND_CHANNEL = "harness:command";

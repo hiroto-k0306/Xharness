@@ -2,6 +2,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  shell,
   type IpcMainInvokeEvent,
 } from "electron";
 import {
@@ -12,6 +13,71 @@ import {
   type UiEvent,
 } from "../shared/ipc.js";
 import { type ProviderName } from "../shared/ipc.js";
+import { LOCAL_LINK_CHANNEL } from "../shared/local-links.js";
+import { LocalLinks } from "./local-links.js";
+
+/** 任意のローカルパスを一般commandから開くAPIは設けない。 */
+export function registerLocalLinksIpc(getWindow: () => BrowserWindow | null) {
+  let owner: BrowserWindow | null = null;
+  const links = new LocalLinks({
+    active: () => !!owner && !owner.isDestroyed() && owner === getWindow(),
+    async confirm(path, directory) {
+      if (!owner || owner.isDestroyed()) return "cancel";
+      const result = await dialog.showMessageBox(owner, {
+        type: "warning",
+        title: "ローカルファイルを開く",
+        message: "このローカルリンクを開きますか？",
+        detail: `${path}\n\n「実行」は既定のアプリで開きます。プログラムやスクリプトの場合はコードが実行される可能性があります。信頼できる対象だけ許可してください。`,
+        buttons: [
+          "キャンセル",
+          "実行",
+          directory ? "フォルダを開く" : "フォルダを開く（ファイルを表示）",
+        ],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      return result.response === 1
+        ? "open"
+        : result.response === 2
+          ? "folder"
+          : "cancel";
+    },
+    open: (path) => shell.openPath(path),
+    reveal: (path) => shell.showItemInFolder(path),
+  });
+  let pending = false;
+  ipcMain.handle(
+    LOCAL_LINK_CHANNEL,
+    async (event: IpcMainInvokeEvent, raw: unknown) => {
+      const win = getWindow();
+      if (
+        !win ||
+        win.isDestroyed() ||
+        pending ||
+        event.sender !== win.webContents ||
+        event.senderFrame !== win.webContents.mainFrame
+      )
+        return false;
+      pending = true;
+      owner = win;
+      try {
+        // renderer申告のbooleanは信じない。Chromiumのユーザーactivationをmainで照会。
+        // trueを第2引数に渡すとactivationを作ってしまうので必ずfalse。
+        const activated = await win.webContents.executeJavaScript(
+          "navigator.userActivation.isActive",
+          false,
+        );
+        return await links.handle(raw, activated === true);
+      } catch {
+        return false;
+      } finally {
+        owner = null;
+        pending = false;
+      }
+    },
+  );
+}
 
 export async function confirmAuthentication(
   win: BrowserWindow | null,
@@ -69,6 +135,7 @@ export function registerIpc(
   getController: () => SessionController,
   getWindow: () => BrowserWindow | null,
 ) {
+  registerLocalLinksIpc(getWindow);
   ipcMain.handle(
     COMMAND_CHANNEL,
     async (event: IpcMainInvokeEvent, raw: unknown): Promise<CommandResult> => {

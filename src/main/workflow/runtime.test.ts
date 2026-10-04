@@ -405,6 +405,139 @@ async function setup(claude: FakeStep[], codex: FakeStep[], git = false) {
   };
 }
 
+it.each([true, false])(
+  "reviews with the exact implementation model when Claude is limited (alreadyKnown=%s)",
+  async (alreadyKnown) => {
+    const s = await setup(
+      [{ type: "rate_limited", retryAfterSec: 600 }],
+      [
+        call("SkipPlan", { reason: "Small" }),
+        call("Write", { path: "fix.txt", content: "fix" }),
+        call("RequestReview", { summary: "fix" }),
+        text("[]"),
+        text("report"),
+      ],
+    );
+    let model = alreadyKnown ? "claude-opus-5-5" : "gpt-6-astra";
+    const result = await s.runtime.run(
+      {
+        provider: s.providers[alreadyKnown ? 0 : 1]!,
+        router: new Router(s.providers, { claude: "codex:astra" }),
+        model,
+        current: () => ({ model }),
+        onFallback: (route) => {
+          model = route.model;
+        },
+        system: "Test",
+        messages: [],
+        tools: defaultTools(s.cwd, false),
+        permission: async () => true,
+        maxRounds: 10,
+      },
+      new AbortController().signal,
+    );
+    expect(result.stopCause).toBe("workflow_complete");
+    const reviews = s.requests.filter((r) =>
+      r.system.startsWith("You are reviewer"),
+    );
+    expect(reviews.map((r) => r.model)).toEqual(
+      alreadyKnown ? ["gpt-6-astra"] : ["claude-sonnet-5-5", "gpt-6-astra"],
+    );
+    expect(s.requests.filter((r) => r.model.startsWith("claude"))).toHaveLength(
+      1,
+    );
+  },
+  15000,
+);
+
+it("mixed implementations collapse to one exact-model review after Claude becomes limited", async () => {
+  const s = await setup(
+    [
+      call("SkipPlan", { reason: "Small" }),
+      call("Write", { path: "first.txt", content: "first" }),
+      { type: "rate_limited", retryAfterSec: 600 },
+    ],
+    [
+      call("Write", { path: "second.txt", content: "second" }),
+      call("RequestReview", { summary: "both" }),
+      text("[]"),
+      text("report"),
+    ],
+  );
+  let model = "claude-opus-5-5";
+  const result = await s.runtime.run(
+    {
+      provider: s.providers[0]!,
+      router: new Router(s.providers, { claude: "codex:astra" }),
+      model,
+      current: () => ({ model }),
+      onFallback: (route) => {
+        model = route.model;
+      },
+      system: "Test",
+      messages: [],
+      tools: defaultTools(s.cwd, false),
+      permission: async () => true,
+      maxRounds: 10,
+    },
+    new AbortController().signal,
+  );
+  expect(result.stopCause).toBe("workflow_complete");
+  expect(
+    s.requests
+      .filter((r) => r.system.startsWith("You are reviewer"))
+      .map((r) => r.model),
+  ).toEqual(["gpt-6-astra"]);
+}, 15000);
+
+it("a worker fallback is remembered without replacing its implementation model with the parent model", async () => {
+  const plan = item("P1");
+  plan.assignee.model = "claude:opus";
+  const s = await setup(
+    [{ type: "rate_limited", retryAfterSec: 600 }],
+    [
+      call("SubmitPlan", { items: [plan], notes: "Worker" }),
+      call("Write", { path: "P1.txt", content: "done" }),
+      call("ReportDone", {
+        summary: "done",
+        changedFiles: ["P1.txt"],
+        testsRun: [],
+      }),
+      call("RequestReview", { summary: "done" }),
+      text("[]"),
+      text("report"),
+    ],
+  );
+  const runtime = new WorkflowRuntime({
+    home: s.home,
+    cwd: s.cwd,
+    parentId: "worker-fallback",
+    config: s.config,
+    router: new Router(s.providers, { claude: "codex:astra" }),
+    createTools: (cwd) => defaultTools(cwd, false),
+    permission: async () => true,
+    approve: async () => true,
+  });
+  const result = await runtime.run(
+    {
+      provider: s.providers[1]!,
+      model: "gpt-6-luna",
+      system: "Test",
+      messages: [],
+      tools: defaultTools(s.cwd, false),
+      permission: async () => true,
+      maxRounds: 10,
+    },
+    new AbortController().signal,
+  );
+  expect(result.stopCause).toBe("workflow_complete");
+  expect(
+    s.requests
+      .filter((r) => r.system.startsWith("You are reviewer"))
+      .map((r) => r.model),
+  ).toEqual(["gpt-6-astra"]);
+}, 15000);
+
 it("child TodoWrite has its own history and never replaces the parent's list", async () => {
   const s = await setup(
     [
@@ -531,21 +664,55 @@ it("requires review even after a premature end_turn, then completes only after r
     ]),
   );
 });
-it("returns must findings to implement and stops for user judgment at the configured limit", async () => {
-  const finding = [{ severity: "must", file: "fix.txt", message: "Fix it" }];
+it.each(["must", "should"])(
+  "returns %s findings to implement and stops for user judgment at the configured limit",
+  async (severity) => {
+    const finding = [{ severity, file: "fix.txt", message: "Fix it" }];
+    const s = await setup(
+      [
+        call("SkipPlan", { reason: "Small" }),
+        call("Write", { path: "fix.txt", content: "fix" }),
+        call("RequestReview", { summary: "First" }),
+        call("RequestReview", { summary: "Still unchanged" }),
+      ],
+      [text(JSON.stringify(finding)), text(JSON.stringify(finding))],
+    );
+    const result = await s.run();
+    expect(result.stopCause).toBe("review_attention");
+    expect(s.runtime.state.reviewRound).toBe(2);
+    expect(s.runtime.state.findings).toEqual(finding);
+    const output = JSON.stringify(result.messages);
+    expect(output).toContain("Fix all must and should findings");
+    expect(output).toContain("remaining must and should findings");
+  },
+);
+it("fixes should findings and completes after re-review leaves only nit findings", async () => {
+  const should = [{ severity: "should", file: "fix.txt", message: "Fix it" }];
+  const nit = [
+    { severity: "nit", file: "fix.txt", message: "Optional polish" },
+  ];
   const s = await setup(
     [
       call("SkipPlan", { reason: "Small" }),
-      call("Write", { path: "fix.txt", content: "fix" }),
+      call("Write", { path: "fix.txt", content: "first" }),
       call("RequestReview", { summary: "First" }),
-      call("RequestReview", { summary: "Still unchanged" }),
+      call("Read", { path: "fix.txt" }),
+      call("Write", { path: "fix.txt", content: "corrected" }),
+      call("RequestReview", { summary: "Fixed should finding" }),
+      text("Final report: nit remains."),
+      text("must not send"),
     ],
-    [text(JSON.stringify(finding)), text(JSON.stringify(finding))],
+    [text(JSON.stringify(should)), text(JSON.stringify(nit))],
   );
   const result = await s.run();
-  expect(result.stopCause).toBe("review_attention");
+  expect(result.stopCause).toBe("workflow_complete");
   expect(s.runtime.state.reviewRound).toBe(2);
-  expect(s.runtime.state.findings).toEqual(finding);
+  expect(s.runtime.state.findings).toEqual(nit);
+  expect(await readFile(join(s.cwd, "fix.txt"), "utf8")).toBe("corrected");
+  expect(JSON.stringify(result.messages)).toContain(
+    "Final report: nit remains.",
+  );
+  expect(JSON.stringify(result.messages)).not.toContain("must not send");
 });
 it("rejects invalid reviewer output and zero-change completion", async () => {
   const s = await setup(

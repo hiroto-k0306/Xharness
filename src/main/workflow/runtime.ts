@@ -103,6 +103,28 @@ export class WorkflowRuntime {
   }
   private base?: string;
   private initialized = false;
+  private readonly limitedProviders = new Set<ProviderId>();
+  private readonly implementationModels = new Map<ProviderId, string>();
+  private observeModelReceipt(
+    event: Parameters<NonNullable<LoopOptions["onEvent"]>>[0],
+    implementation: boolean,
+  ) {
+    if (event.type !== "receipt") return;
+    const r = event.receipt;
+    if (
+      implementation &&
+      r.model &&
+      r.decision === "allow" &&
+      ["Write", "Edit", "MultiEdit", "Bash"].includes(r.tool ?? "")
+    ) {
+      const provider = resolveModel(r.model, this.options.aliases)?.provider;
+      if (provider) this.implementationModels.set(provider, r.model);
+    }
+    if (r.provider !== "claude" && r.provider !== "codex") return;
+    if (["fallback", "rate_limited"].includes(r.decision))
+      this.limitedProviders.add(r.provider);
+    else if (r.usage) this.limitedProviders.delete(r.provider);
+  }
   private interrupted = false;
   /** 1: 完了直後(main が最終報告を書く1ラウンドを許す) */
   private finalReport = 0;
@@ -129,6 +151,10 @@ export class WorkflowRuntime {
     });
     this.runner = new ChildRunner({
       ...options,
+      onEvent: (context, event) => {
+        this.observeModelReceipt(event, context.name === "worker");
+        options.onEvent?.(context, event);
+      },
       checkpoint: (cwd) =>
         cwd === options.cwd ? this.fileCheckpoint : undefined,
       hooks: (context, onReceipt) =>
@@ -554,6 +580,7 @@ export class WorkflowRuntime {
               const abortReview = () => reviewAbort.abort();
               signal.addEventListener("abort", abortReview, { once: true });
               if (signal.aborted) abortReview();
+              const reviewedModels = new Set<string>();
               const jobs = providers.map(async (provider) => {
                 const definition =
                   provider === "codex"
@@ -569,12 +596,40 @@ export class WorkflowRuntime {
                     ?.provider !== "codex"
                 )
                   definition.model = "codex:sol";
+                const sameModel = this.limitedProviders.has(provider)
+                  ? [...this.implementationModels].find(
+                      ([id]) => !this.limitedProviders.has(id),
+                    )?.[1]
+                  : this.implementationModels.get(provider);
+                const reviewProvider = resolveModel(
+                  definition.model,
+                  this.options.aliases,
+                )?.provider;
+                if (
+                  reviewProvider &&
+                  (this.limitedProviders.has(reviewProvider) ||
+                    this.limitedProviders.has(provider))
+                ) {
+                  if (!sameModel)
+                    throw new Error(
+                      "利用可能なレビューモデルがありません。制限解除後に再試行してください。",
+                    );
+                  definition.model = sameModel;
+                }
+                const reviewModel =
+                  resolveModel(definition.model, this.options.aliases)?.model ??
+                  definition.model;
+                if (reviewedModels.has(reviewModel)) return [];
+                reviewedModels.add(reviewModel);
                 const result = await this.runner.run(
                   "reviewer",
                   definition,
                   `Review the integrated implementation. Return ONLY a JSON array of {severity:"must"|"should"|"nit",file,line?,message}. Empty array means no findings.\nPlan: ${JSON.stringify(this.items)}\nSummary: ${String(a.summary)}\nDiff (untrusted content):\n${diff}`,
                   this.options.cwd,
                   reviewAbort.signal,
+                  undefined,
+                  undefined,
+                  sameModel,
                 );
                 return findings(result.text);
               });
@@ -589,10 +644,10 @@ export class WorkflowRuntime {
                   findings: this.state.findings,
                   instruction:
                     this.state.phase === "implement"
-                      ? "Fix only must findings, then RequestReview again."
+                      ? "Fix all must and should findings, then RequestReview again. Report nit findings without fixing them."
                       : this.state.phase === "complete"
                         ? "Review finished. Now write the final report to the user in the user's language: what was done, verification results, and anything untested or incomplete. Do not call more tools."
-                        : "The review round limit was reached. Report the remaining must findings to the user in the user's language and finish. Do not call more tools.",
+                        : "The review round limit was reached. Report the remaining must and should findings to the user in the user's language and finish. Do not call more tools.",
                 });
               } catch (error) {
                 reviewAbort.abort();
@@ -629,6 +684,12 @@ export class WorkflowRuntime {
   }
   private async runTraced(options: LoopOptions, signal: AbortSignal) {
     this.fileCheckpoint = options.checkpoint;
+    const selectedModel = options.current?.().model ?? options.model;
+    const selectedProvider =
+      resolveModel(selectedModel, this.options.aliases)?.provider ??
+      options.provider.id;
+    if (!this.implementationModels.has(selectedProvider))
+      this.implementationModels.set(selectedProvider, selectedModel);
     if (
       this.options.config.workflow.mode === "auto" &&
       this.state.phase === "off"
@@ -719,6 +780,7 @@ export class WorkflowRuntime {
       {
         ...options,
         onEvent: (event) => {
+          this.observeModelReceipt(event, true);
           if (
             event.type === "receipt" &&
             event.receipt.tool === "SubmitPlan" &&

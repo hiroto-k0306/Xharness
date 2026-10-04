@@ -59,7 +59,9 @@ export class WorkflowState {
     if (this.phase !== "review") throw new Error("Not reviewing");
     this.findings = structuredClone(result);
     this.reviewRound++;
-    this.phase = !result.some((f) => f.severity === "must")
+    this.phase = !result.some(
+      (f) => f.severity === "must" || f.severity === "should",
+    )
       ? "complete"
       : this.reviewRound >= this.reviewRounds
         ? "attention"

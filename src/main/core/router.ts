@@ -13,6 +13,18 @@ export class Router {
     private readonly fallbacks: Partial<Record<ProviderId, string>> = {},
     private readonly aliases?: Record<string, string>,
   ) {}
+  /** レビューで制限に達した場合は、実装に使った同じモデルへ退避する。 */
+  withFallback(from: ProviderId, model: string): Router {
+    const provider = this.provider(model);
+    return new Router(
+      this.providers,
+      {
+        ...this.fallbacks,
+        [from]: `${provider.id}:${model}`,
+      },
+      this.aliases,
+    );
+  }
   provider(model: string): Provider {
     const provider = this.providers.find((p) =>
       p.models().some((m) => m.id === model),

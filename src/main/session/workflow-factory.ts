@@ -14,7 +14,7 @@ import { waveChecks } from "../workflow/wave-checks.js";
 import { itemsFromMessages } from "./transcript.js";
 import { type StoredSession } from "./store.js";
 import { type PermissionGate } from "./permission-gate.js";
-import { type TurnEvents, updateQuota } from "./turn-events.js";
+import { type TurnEvents, usageEvent } from "./turn-events.js";
 import { type UiEvent } from "../../shared/ipc.js";
 import {
   defaultTools,
@@ -34,8 +34,8 @@ type WorkflowView = Omit<
 export function workflowNotice(workflow: WorkflowView): string {
   return (
     (workflow.phase === "complete"
-      ? "ワークフローが完了しました。レビューで修正必須の指摘はありません。"
-      : "レビューの往復上限に達しました。残る必須指摘を確認してください。") +
+      ? "ワークフローが完了しました。レビューで修正対象（must / should）の指摘はありません。"
+      : "レビューの往復上限に達しました。残る修正対象（must / should）の指摘を確認してください。") +
     workflow.items
       .map(
         (i) =>
@@ -204,10 +204,7 @@ export function createWorkflow(
           step: event.step,
           round: event.round,
         });
-      if (event.type === "usage") {
-        updateQuota(ctx, event);
-        emit({ ...event });
-      }
+      if (event.type === "usage") emit(usageEvent(ctx, event));
     },
     onPhase: (workflow) => {
       emit({ type: "workflow", sessionId, ...workflow });

@@ -93,6 +93,7 @@ export class ChildRunner {
     signal: AbortSignal,
     worker?: { files: string[]; reportTool: ToolRegistry },
     id?: string,
+    reviewFallbackModel?: string,
   ) {
     signal.throwIfAborted();
     const choice = resolveModel(definition.model, this.options.aliases);
@@ -125,7 +126,16 @@ export class ChildRunner {
         tools: definition.tools,
       },
       () =>
-        this.runChild(context, choice, definition, prompt, cwd, signal, worker),
+        this.runChild(
+          context,
+          choice,
+          definition,
+          prompt,
+          cwd,
+          signal,
+          worker,
+          reviewFallbackModel,
+        ),
       { agentId: context.id },
     );
   }
@@ -137,7 +147,11 @@ export class ChildRunner {
     cwd: string,
     signal: AbortSignal,
     worker?: { files: string[]; reportTool: ToolRegistry },
+    reviewFallbackModel?: string,
   ) {
+    const router = reviewFallbackModel
+      ? this.options.router.withFallback(choice.provider, reviewFallbackModel)
+      : this.options.router;
     const name = context.name;
     const clean = this.options.redact ?? ((text: string) => text);
     const home = join(this.options.home, "agents", this.options.parentId);
@@ -241,8 +255,8 @@ export class ChildRunner {
       const result = await runTurn(
         {
           checkpoint: this.options.checkpoint?.(cwd),
-          provider: this.options.router.provider(choice.model),
-          router: this.options.router,
+          provider: router.provider(choice.model),
+          router,
           onFallback: (route) =>
             this.options.onStatus?.(context, route.model, "running"),
           model: choice.model,

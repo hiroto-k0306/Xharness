@@ -273,12 +273,19 @@ describe("App wired to the real SessionController", () => {
       expect(document.querySelector("[data-status='denied']")).not.toBeNull(),
     );
   });
-  it("Esc interrupts a running turn", async () => {
+  it("Esc does not stop a turn; the button immediately left of the model picker does", async () => {
     render(<App />);
     await screen.findByText("+ new session");
     await userEvent.type(screen.getByLabelText("prompt"), "slow one{Enter}");
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeDisabled());
     await userEvent.keyboard("{Escape}");
+    expect(screen.queryByText("# 中断しました")).toBeNull();
+    expect(screen.getByLabelText("prompt")).toBeDisabled();
+    const stop = screen.getByRole("button", { name: "停止" });
+    expect(stop.nextElementSibling).toBe(
+      screen.getByRole("button", { name: "モデル切替" }),
+    );
+    await userEvent.click(stop);
     expect(await screen.findByText("# 中断しました")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
   });

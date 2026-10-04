@@ -132,8 +132,7 @@ export function App() {
       } else if (mod && key === "o") {
         e.preventDefault();
         s.setPrefs({ pickerOpen: !prefs.pickerOpen });
-      } else if (e.key === "Escape" && view?.running && !view.pending)
-        s.abort(); // 実行中の中断(権限待ちの Esc は PermissionInline が deny にする)
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

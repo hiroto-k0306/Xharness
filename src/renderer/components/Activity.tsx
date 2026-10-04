@@ -4,6 +4,7 @@ import { type SessionView } from "../state/store.js";
 import { STEPS, stepColor } from "../state/steps.js";
 import { Logo } from "./Logo.js";
 import styles from "./Activity.module.css";
+import { useFollowScroll } from "../hooks/useFollowScroll.js";
 import { buildReceiptReplay, type ReceiptReplay } from "../../shared/replay.js";
 import { ReceiptReplayDialog } from "./ReceiptReplay.js";
 import { TodoList } from "./TodoList.js";
@@ -92,6 +93,7 @@ export function Receipts({
   sessionId?: string;
   running?: boolean;
 }) {
+  const rows = useFollowScroll(receipts, sessionId);
   const [selected, setSelected] = useState<Receipt>();
   const [replay, setReplay] = useState<ReceiptReplay>();
   const [replayError, setReplayError] = useState("");
@@ -155,7 +157,7 @@ export function Receipts({
         </button>
         {replayError && <span role="status">{replayError}</span>}
       </div>
-      <div className={styles.rows}>
+      <div ref={rows} className={styles.rows} data-testid="receipt-rows">
         {receipts.slice(-100).map((r) => (
           <button
             key={r.id}
@@ -336,6 +338,7 @@ export function UsagePopover({
                   </div>
                 );
               })}
+              <small>使用率は最終取得値（ヘッダ欠損時は保持）</small>
               <small>fallback: {fallback?.[provider] ?? "off"}</small>
             </section>
           ))}

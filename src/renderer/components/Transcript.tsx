@@ -6,6 +6,7 @@ import { McpStatus } from "./McpStatus.js";
 import { TodoList } from "./TodoList.js";
 import { QuestionChoices } from "./QuestionChoices.js";
 import styles from "./Transcript.module.css";
+import { useFollowScroll } from "../hooks/useFollowScroll.js";
 
 const STATUS = {
   pending: { mark: "…", cls: "wait", label: "running" },
@@ -115,7 +116,7 @@ export function Transcript({
   blocked = false,
   onReply,
 }: TranscriptProps) {
-  const end = useRef<HTMLDivElement>(null);
+  const pane = useFollowScroll(items);
   const [zoom, setZoom] = useState<string | null>(null);
   const opener = useRef<HTMLElement | null>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -134,7 +135,7 @@ export function Transcript({
     };
     window.addEventListener("focusin", onFocus, true);
     closeButton.current?.focus();
-    // 拡大表示中のキーは、捕捉段階で止めて背後へ伝えない(App の Esc 中断や承認の y / a / n を押させない)
+    // 拡大表示中のキーは、捕捉段階で止めて背後へ伝えない(承認の y / a / n を押させない)
     const onKey = (e: KeyboardEvent) => {
       e.stopPropagation();
       if (e.key === "Escape") setZoom(null);
@@ -151,9 +152,6 @@ export function Transcript({
       if (opener.current?.isConnected) opener.current.focus();
     };
   }, [zoom, hasItems]);
-  useEffect(() => {
-    end.current?.scrollIntoView?.({ block: "end" });
-  }, [items]);
   // /mcp の表示は最新のものだけ操作できる(古い表示はその時点の状態)
   const latestMcp = items.findLast((i) => i.kind === "mcp")?.id;
   const latestQuestion = items.findLast(
@@ -163,7 +161,7 @@ export function Transcript({
   )?.id;
   if (!items.length)
     return (
-      <div className={styles.pane} data-testid="transcript">
+      <div ref={pane} className={styles.pane} data-testid="transcript">
         <div className={styles.empty}>
           <div className={styles.logo}>
             <Logo size={44} />
@@ -182,6 +180,7 @@ export function Transcript({
     );
   return (
     <div
+      ref={pane}
       className={styles.pane}
       data-testid="transcript"
       role="log"
@@ -273,7 +272,6 @@ export function Transcript({
         );
       })}
       {running && <span className={styles.cursor} aria-hidden />}
-      <div ref={end} />
       {zoom &&
         createPortal(
           <div

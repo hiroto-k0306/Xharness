@@ -54,7 +54,7 @@ export function matchSuggestions(
     .slice(0, 8);
 }
 
-/** `name ❯ ` 形式の入力欄。Enter 送信 / Shift+Enter 改行(実行中の Esc 中断は App が受ける) */
+/** `name ❯ ` 形式の入力欄。Enter 送信 / Shift+Enter 改行。中断は停止ボタン。 */
 export function PromptLine(p: PromptLineProps) {
   const [text, setText] = useState("");
   const [selected, setSelected] = useState(0);
@@ -221,7 +221,7 @@ export function PromptLine(p: PromptLineProps) {
           p.blocked
             ? "# 権限の確認待ち"
             : p.running
-              ? "# 実行中… Esc で中断"
+              ? "# 実行中… 停止ボタンで中断"
               : ""
         }
         onChange={(e) => {
@@ -277,6 +277,17 @@ export function PromptLine(p: PromptLineProps) {
           }
         }}
       />
+      {p.running && p.onStop && (
+        <button
+          type="button"
+          className={styles.stop}
+          onClick={p.onStop}
+          aria-label="停止"
+          title="停止"
+        >
+          <span aria-hidden="true">■</span>
+        </button>
+      )}
       <button
         type="button"
         className={styles.chip}
@@ -314,17 +325,6 @@ export function PromptLine(p: PromptLineProps) {
         >
           ask
         </span>
-      )}
-      {p.running && p.onStop && (
-        <button
-          type="button"
-          className={styles.stop}
-          onClick={p.onStop}
-          aria-label="停止"
-          title="停止（Esc）"
-        >
-          <span aria-hidden="true">■</span>
-        </button>
       )}
     </div>
   );

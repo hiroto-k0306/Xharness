@@ -1,4 +1,8 @@
 import { traceOperation } from "../core/trace.js";
+import {
+  CHILD_REPORT_GUIDANCE,
+  FILE_LINK_GUIDANCE,
+} from "../core/output-guidance.js";
 import { ChildHandoffs } from "./handoffs.js";
 import { randomUUID } from "node:crypto";
 import { join, relative, isAbsolute } from "node:path";
@@ -220,7 +224,7 @@ export class ChildRunner {
     this.options.onStatus?.(context, choice.model, "running");
     try {
       const project = await loadProjectConfig(this.options.home, cwd);
-      const system = `You are ${name}. Work in ${cwd}. You have no parent conversation history. Never launch child agents. ${worker ? "Stay inside your workspace. ReportDone is required." : "Read-only investigation/review. Do not modify files. Return only your final report."}${!worker && tools.has("Bash") ? " " + (await reviewerTestHint(cwd)) : ""}\nProject instructions:\n${clean(await projectMemory(this.options.home, cwd, project.context.memoryFiles))}`;
+      const system = `You are ${name}. Work in ${cwd}. You have no parent conversation history. Never launch child agents. ${worker ? "Stay inside your workspace. ReportDone is required." : "Read-only investigation/review. Do not modify files. Return only your final report."}${!worker && tools.has("Bash") ? " " + (await reviewerTestHint(cwd)) : ""}\n\n${FILE_LINK_GUIDANCE}\n\n${CHILD_REPORT_GUIDANCE}\nProject instructions:\n${clean(await projectMemory(this.options.home, cwd, project.context.memoryFiles))}`;
       const environment = await diagnoseEnvironment(cwd);
       for (const message of environment.warnings)
         this.options.onTraceWarning?.(message);

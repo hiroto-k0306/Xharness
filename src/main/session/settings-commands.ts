@@ -138,6 +138,7 @@ export async function compactNow(
                   session.cwd,
                   !session.workspaceId,
                   rt.config,
+                  session.fileLinkGuidanceVersion === 1,
                 )),
               tools:
                 rt.premises?.tools ??

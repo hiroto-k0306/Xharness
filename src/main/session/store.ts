@@ -21,6 +21,8 @@ import {
 export type StoredSession = Omit<SessionSummary, "status" | "branch"> & {
   /** Fingerprint only; no system text, tools, credentials or permissions. */
   premiseHash?: string;
+  /** 未指定は旧systemを維持する。新規会話だけ共通リンク指示を使う。 */
+  fileLinkGuidanceVersion?: 1;
   environment?: import("../tools/environment.js").EnvironmentReport;
 };
 

@@ -10,7 +10,8 @@ import {
 import { type Tool } from "../tools/registry.js";
 import { SessionController } from "./controller.js";
 import { SessionStore } from "./store.js";
-import { PREMISE_NOTICE } from "./premises.js";
+import { premiseHash, PREMISE_NOTICE } from "./premises.js";
+import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
 
 beforeEach(() =>
   vi.stubGlobal(
@@ -90,6 +91,8 @@ it("resumes an unchanged prefix and persists only its hash without restoring per
   await c.controller.shutdown();
   const raw = await readFile(join(c.home, "sessions", "index.json"), "utf8");
   expect(JSON.parse(raw)[0].premiseHash).toMatch(/^v1:[a-f0-9]{64}$/);
+  expect(JSON.parse(raw)[0].fileLinkGuidanceVersion).toBe(1);
+  expect(before.system).toContain(FILE_LINK_GUIDANCE);
   expect(raw).not.toContain("ORIGINAL-INSTRUCTIONS");
   expect(raw).not.toContain("inputSchema");
   await writeFile(
@@ -125,6 +128,57 @@ it("resumes an unchanged prefix and persists only its hash without restoring per
   expect(c.requests.mock.calls[1]![0].tools).toEqual(before.tools);
   await resumed.shutdown();
 });
+it.each([false, true])(
+  "preserves pre-guidance sessions without bypassing premise checks (changed instructions=%s)",
+  async (changed) => {
+    const c = await fixture();
+    await c.send(c.controller);
+    const request = c.requests.mock.calls[0]![0];
+    await c.controller.shutdown();
+    // 合成したアップグレード前のprefix。モデル本文・履歴は書き換えない。
+    const oldSystem = request.system.replace(`\n\n${FILE_LINK_GUIDANCE}`, "");
+    expect(oldSystem).not.toContain(FILE_LINK_GUIDANCE);
+    const oldHash = premiseHash({ system: oldSystem, tools: request.tools });
+    const store = new SessionStore(c.home);
+    await store.load();
+    const oldSession = { ...store.get(c.id)! };
+    expect(oldSession.fileLinkGuidanceVersion).toBe(1);
+    delete oldSession.fileLinkGuidanceVersion;
+    await store.save({ ...oldSession, premiseHash: oldHash });
+    const history = await readFile(
+      join(c.home, "sessions", `${c.id}.jsonl`),
+      "utf8",
+    );
+    if (changed)
+      await writeFile(join(c.cwd, "AGENTS.md"), "CHANGED-INSTRUCTIONS");
+    const resumed = c.make();
+    await resumed.init();
+    await c.send(resumed);
+    expect(c.requests).toHaveBeenCalledTimes(changed ? 1 : 2);
+    if (changed)
+      expect(c.events).toContainEqual(
+        expect.objectContaining({ message: PREMISE_NOTICE }),
+      );
+    else {
+      expect(c.requests.mock.calls[1]![0].system).toBe(oldSystem);
+      expect(c.requests.mock.calls[1]![0].tools).toEqual(request.tools);
+      expect(
+        c.requests.mock.calls[1]![0].messages.some(
+          (m: { role: string }) => m.role === "assistant",
+        ),
+      ).toBe(true);
+    }
+    const persisted = JSON.parse(
+      await readFile(join(c.home, "sessions", "index.json"), "utf8"),
+    )[0];
+    expect(persisted.premiseHash).toBe(oldHash);
+    expect(persisted.fileLinkGuidanceVersion).toBeUndefined();
+    expect(
+      await readFile(join(c.home, "sessions", `${c.id}.jsonl`), "utf8"),
+    ).toContain(history.trim());
+    await resumed.shutdown();
+  },
+);
 it.each(["instructions", "tools", "workflow"])(
   "stops before any provider/compaction request after %s changes",
   async (change) => {

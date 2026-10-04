@@ -555,6 +555,7 @@ export class SessionController {
         this.options.cliEffort ?? projectMain?.choice.effort ?? this.effort,
       createdAt: now,
       updatedAt: now,
+      fileLinkGuidanceVersion: 1,
       providers: [],
       ...(this.options.phase4
         ? {

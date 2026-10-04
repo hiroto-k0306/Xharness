@@ -1,5 +1,5 @@
 // A local Provider mock exercises Claude's path without any HTTP/SDK/auth calls.
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -9,6 +9,10 @@ import { reserveLlmCall } from "../core/llm-budget.js";
 import { SessionController } from "./controller.js";
 import { SessionStore } from "./store.js";
 import { PREMISE_NOTICE } from "./premises.js";
+import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
+import { systemPrompt } from "./turn.js";
+import { type ControllerContext } from "./context.js";
+import { type Message } from "../core/types.js";
 
 beforeEach(() =>
   vi.stubGlobal(
@@ -107,6 +111,73 @@ it("manual Claude compact uses the validated workflow prefix and leaves original
   expect(await readFile(path, "utf8")).toBe(history);
   await c.controller.shutdown();
 });
+it.each([false, true])(
+  "reconstructs the manual compact system before any normal turn (pre-guidance=%s)",
+  async (legacy) => {
+    const c = await fixture();
+    let resumed: SessionController | undefined;
+    try {
+      await c.controller.shutdown();
+      const store = new SessionStore(c.home);
+      await store.load();
+      const session = { ...store.get(c.id)! };
+      expect(session.fileLinkGuidanceVersion).toBe(1);
+      expect(session.premiseHash).toBeUndefined();
+      if (legacy) {
+        delete session.fileLinkGuidanceVersion;
+        await store.save(session);
+      }
+      // assistant が無いので前提検証guardを通過し、最初のuserを圧縮できる。
+      const messages: Message[] = [
+        {
+          role: "user",
+          content: [{ type: "text", text: "first pending user" }],
+        },
+        {
+          role: "user",
+          content: [{ type: "text", text: "latest pending user" }],
+        },
+      ];
+      await store.append(c.id, messages, (s) => s);
+      const path = join(c.home, "sessions", `${c.id}.jsonl`);
+      const indexPath = join(c.home, "sessions", "index.json");
+      const history = await readFile(path, "utf8");
+      const index = await readFile(indexPath, "utf8");
+      resumed = c.make();
+      await resumed.init();
+      // 通常ターンを送らない: rt.premises / rt.system の両方が未設定の経路。
+      expect(c.requests).toHaveLength(0);
+      expect(
+        await resumed.handle({
+          type: "send",
+          sessionId: c.id,
+          text: "/compact",
+        }),
+      ).toEqual({ ok: true });
+      expect(c.requests).toHaveLength(1);
+      const request = c.requests[0]!;
+      const ctx = {
+        options: { home: c.home },
+        clean: (s: string) => s,
+      } as ControllerContext;
+      expect(request.system).toBe(
+        await systemPrompt(ctx, session.cwd, true, undefined, !legacy),
+      );
+      if (legacy) expect(request.system).not.toContain(FILE_LINK_GUIDANCE);
+      else expect(request.system).toContain(FILE_LINK_GUIDANCE);
+      expect(request.compaction).toEqual({ type: "summarize" });
+      expect(request.tools).toEqual([]);
+      expect(request.messages).toEqual([messages[0]]);
+      expect(await readFile(path, "utf8")).toBe(history);
+      expect(await readFile(indexPath, "utf8")).toBe(index);
+      expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+    } finally {
+      await resumed?.shutdown();
+      await c.controller.shutdown();
+      await rm(c.home, { recursive: true, force: true });
+    }
+  },
+);
 it.each([false, true])(
   "does not compact an unvalidated restored Claude history (legacy=%s)",
   async (legacy) => {

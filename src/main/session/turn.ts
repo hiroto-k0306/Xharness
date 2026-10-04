@@ -1,5 +1,6 @@
 // 1ターン(ユーザーの1発言 → 応答の完了)を実行し、履歴とレシートを保存する。
 import { readFile } from "node:fs/promises";
+import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
 import { checkPremises } from "./premises.js";
 import { withSessionCalls } from "./llm-calls.js";
 import {
@@ -50,8 +51,10 @@ export async function systemPrompt(
   cwd: string,
   scratch = false,
   config?: ProjectConfig,
+  includeFileLinkGuidance = true,
 ): Promise<string> {
   let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7 and already runs in this working directory, so do not prefix commands with cd or Set-Location. Tool dates use ISO 8601. Respect project instructions. Reply in Japanese unless asked otherwise.`;
+  if (includeFileLinkGuidance) system += `\n\n${FILE_LINK_GUIDANCE}`;
   if (config)
     return (
       system +
@@ -384,7 +387,13 @@ async function runSessionBody(
     // preserved thinking: system は過去の thinking の前提として検査されるため、
     // セッションの最初に決めたら変えない(途中で AGENTS.md が編集されても次のセッションから反映)
     rt.system ??=
-      (await systemPrompt(ctx, session.cwd, !session.workspaceId, rt.config)) +
+      (await systemPrompt(
+        ctx,
+        session.cwd,
+        !session.workspaceId,
+        rt.config,
+        session.fileLinkGuidanceVersion === 1,
+      )) +
       "\n" +
       rt.environment.summary;
     const system = rt.system;

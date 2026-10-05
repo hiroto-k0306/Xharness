@@ -76,6 +76,96 @@ export function routeFake(
   request: ProviderRequest,
   provider: ProviderId = "claude",
 ): FakeStep {
+  const memoryPrompt =
+    [...request.messages]
+      .reverse()
+      .flatMap((message) =>
+        message.role === "user"
+          ? message.content.flatMap((block) =>
+              block.type === "text" ? [block.text] : [],
+            )
+          : [],
+      )
+      .at(0) ?? "";
+  const memoryDemo = /^memory-demo: ([\w-]+)\/(\d+)$/i.exec(memoryPrompt);
+  if (memoryDemo)
+    return endsWithToolResult(request)
+      ? {
+          type: "message",
+          stopReason: "end_turn",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "text", text: "Memory candidate saved for user review" },
+            ],
+          },
+        }
+      : {
+          type: "message",
+          stopReason: "tool_use",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "memory-demo",
+                name: "ProposeProjectMemory",
+                input: {
+                  kind: "decision",
+                  topic: "SQLite storage",
+                  content:
+                    "Use SQLite for the local storage decision; verify current requirements before reuse.",
+                  sources: [
+                    {
+                      sessionId: memoryDemo[1],
+                      messageLine: Number(memoryDemo[2]),
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        };
+  if (/^memory-search: /i.test(memoryPrompt))
+    return endsWithToolResult(request)
+      ? {
+          type: "message",
+          stopReason: "end_turn",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text:
+                  "Memory reference result: " +
+                  String(
+                    (
+                      request.messages
+                        .at(-1)
+                        ?.content.find((b) => b.type === "tool_result") as {
+                        content?: unknown;
+                      }
+                    )?.content,
+                  ),
+              },
+            ],
+          },
+        }
+      : {
+          type: "message",
+          stopReason: "tool_use",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "memory-search",
+                name: "SearchProjectMemory",
+                input: { query: memoryPrompt.slice(15) },
+              },
+            ],
+          },
+        };
   if (/^quota-demo\b/i.test(lastUserText(request)))
     return { type: "rate_limited", retryAfterSec: 120, scope: "5h" };
   const demo = phase5Demo(request);

@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, open } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  open,
+  realpath,
+} from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { type Message } from "../core/types.js";
 import { appendDurableLog } from "./durable-log.js";
@@ -381,6 +389,71 @@ export class SessionStore {
       }
     }
     return out;
+  }
+  /** Bounded, live lookup for history tools. Never follow a history/home alias. */
+  async historyRecords(id: string, expectedHome: string) {
+    if (!this.get(id)) return undefined;
+    const same = (a: string, b: string) =>
+      process.platform === "win32"
+        ? a.toLowerCase() === b.toLowerCase()
+        : a === b;
+    try {
+      const home = await realpath(this.home);
+      if (!same(home, expectedHome)) return undefined;
+      const directory = join(home, "sessions");
+      if (!same(await realpath(directory), directory)) return undefined;
+      const path = join(directory, `${id}.jsonl`);
+      if (!same(await realpath(this.history(id)), path)) return undefined;
+      const file = await open(path, "r");
+      try {
+        const before = await file.stat();
+        // Skip rather than returning pre-rewind text from an incomplete scan.
+        if (!before.isFile() || before.size > 1024 * 1024)
+          return { records: [], truncated: true };
+        const bytes = Buffer.alloc(before.size);
+        const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+        const after = await stat(path);
+        if (
+          bytesRead !== before.size ||
+          before.size !== after.size ||
+          before.mtimeMs !== after.mtimeMs ||
+          before.ino !== after.ino ||
+          !same(await realpath(path), path) ||
+          !same(await realpath(this.home), expectedHome) ||
+          !same(await realpath(directory), directory) ||
+          !this.get(id)
+        )
+          return undefined;
+        const records: { line: number; message: Message }[] = [];
+        for (const [index, line] of bytes
+          .toString("utf8")
+          .split("\n")
+          .entries()) {
+          try {
+            const message = JSON.parse(line) as Message;
+            if (!message || !Array.isArray(message.content)) continue;
+            const keep = message.meta?.rewind?.keep;
+            if (keep !== undefined) {
+              if (
+                !Number.isSafeInteger(keep) ||
+                keep < 0 ||
+                keep > records.length
+              )
+                return undefined; // Fail closed on an ambiguous rewind.
+              records.splice(keep);
+            }
+            records.push({ line: index + 1, message });
+          } catch {
+            /* Old/torn JSONL lines are not searchable. */
+          }
+        }
+        return this.get(id) ? { records, truncated: false } : undefined;
+      } finally {
+        await file.close();
+      }
+    } catch {
+      return undefined;
+    }
   }
   async evaluationTask(id: string): Promise<
     | {

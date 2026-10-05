@@ -87,7 +87,9 @@ export function parseMemoryDraft(value: unknown): MemoryDraft | undefined {
     !Array.isArray(v.sources) ||
     v.sources.length > 3 ||
     (v.expiresAt !== undefined &&
-      (!Number.isFinite(v.expiresAt) || Number(v.expiresAt) < 0)) ||
+      (!Number.isFinite(v.expiresAt) ||
+        Number(v.expiresAt) < 0 ||
+        !Number.isFinite(new Date(Number(v.expiresAt)).getTime()))) ||
     (v.mergeSuggested !== undefined &&
       (typeof v.mergeSuggested !== "string" ||
         !/^[\w-]{1,128}$/.test(v.mergeSuggested)))

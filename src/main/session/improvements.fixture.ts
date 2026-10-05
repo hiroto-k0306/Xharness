@@ -27,7 +27,7 @@ afterEach(async () => {
     await rm(f.base, { recursive: true, force: true });
   }
 });
-export async function fixture() {
+export async function fixture(quotaNow?: () => number) {
   const base = await mkdtemp(join(tmpdir(), "xh-improve-")),
     home = join(base, "home"),
     root = join(base, "project");
@@ -45,6 +45,7 @@ export async function fixture() {
       fake: true,
       version: "test",
       phase4: true,
+      quotaNow,
       provider: new FakeProvider({ onRequest: requests }),
       host: { pickFolder: async () => root },
       emit: (e) => events.push(e),
@@ -96,10 +97,12 @@ export async function fixture() {
     if (!made.ok || !made.sessionId) throw new Error("session");
     const id = made.sessionId;
     await c.handle({ type: "send", sessionId: id, text: p.preparedPrompt });
-    await vi.waitFor(async () =>
-      expect((await c.state()).sessions.find((s) => s.id === id)?.status).toBe(
-        "idle",
-      ),
+    await vi.waitFor(
+      async () =>
+        expect(
+          (await c.state()).sessions.find((s) => s.id === id)?.status,
+        ).toBe("idle"),
+      { timeout: 5000 },
     );
     const result = await action({
       action: "record",

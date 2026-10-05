@@ -8,6 +8,7 @@ import {
   type SkillUiRequest,
   type SkillListing,
   type SkillPreview,
+  type SkillReferenceInspection,
 } from "../../shared/project-skills.js";
 import { type CommandResult } from "../../shared/ipc.js";
 
@@ -23,9 +24,20 @@ export async function readSkillUi(
   const name =
     request.action === "list" ? "ListProjectSkills" : "LoadProjectSkill";
   const input =
-    request.action === "preview"
-      ? { source: request.source, hash: request.hash }
-      : {};
+    request.action === "list"
+      ? {}
+      : {
+          source: request.source,
+          hash: request.hash,
+          ...(request.action === "reference_inspect"
+            ? { inspectReference: request.referenceSource }
+            : request.action === "reference_preview"
+              ? {
+                  referenceSource: request.referenceSource,
+                  referenceHash: request.referenceHash,
+                }
+              : {}),
+        };
   const tool = projectSkillTools({
     home: ctx.options.home,
     sessions: ctx.sessions,
@@ -67,7 +79,8 @@ export async function readSkillUi(
       };
     return {
       ok: true,
-      skills: JSON.parse(output.content) as SkillListing | SkillPreview,
+      skills: JSON.parse(output.content) as
+        SkillListing | SkillPreview | SkillReferenceInspection,
     };
   });
 }

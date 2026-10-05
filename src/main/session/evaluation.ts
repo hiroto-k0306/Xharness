@@ -219,7 +219,10 @@ export function evaluateTrace(trace?: TraceReplay): TaskEvaluation[] {
           selection: start.label === "LoadProjectSkill" ? start.input : null,
           references:
             start.label === "LoadProjectSkill"
-              ? [metadata(result.entry)]
+              ? [
+                  metadata(result.entry),
+                  ...(result.reference ? [metadata(result.reference)] : []),
+                ]
               : list(result.entries).map(metadata),
           budget: result.budget ?? null,
           limits: result.limits ?? null,
@@ -376,7 +379,12 @@ export function evaluateUiSkillReads(trace?: TraceReplay) {
           r.phase === "start" &&
           r.kind === "tool" &&
           ["ListProjectSkills", "LoadProjectSkill"].includes(r.label) &&
-          ["list", "preview"].includes(String(object(r.input).uiAction)),
+          [
+            "list",
+            "preview",
+            "reference_inspect",
+            "reference_preview",
+          ].includes(String(object(r.input).uiAction)),
       )
       .map((r) => r.id),
   );

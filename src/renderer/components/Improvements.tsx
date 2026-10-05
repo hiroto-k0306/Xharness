@@ -343,6 +343,9 @@ export function ImprovementsPanel({
               </button>
               {prompt && (
                 <>
+                  <p>
+                    「新規会話で評価実行」は新規会話の通常既定値を使います。別のモデル・effortを測る場合は、固定評価依頼をコピーし、新規会話でモデルを明示選択してから同じ依頼を送信してください。候補適用は現在のセッションだけに保存します。
+                  </p>
                   <textarea aria-label="固定評価依頼" readOnly value={prompt} />
                   <button
                     disabled={busy || !confirmed}

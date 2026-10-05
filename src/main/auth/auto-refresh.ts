@@ -127,14 +127,13 @@ export class AutoRefresh {
       const after = await this.expiry(provider);
       await this.options.changed?.();
       if (result !== "success") return done(result);
-      return done(
-        after !== undefined &&
-          before !== undefined &&
-          after > before &&
-          after > now()
-          ? "success"
-          : "unchanged",
-      );
+      // Without a readable prior expiry (opaque token) the CLI's clean exit is the
+      // evidence; a readable expiry that did not move into the future is not success.
+      const renewed =
+        before === undefined
+          ? after === undefined || after > now()
+          : after !== undefined && after > before && after > now();
+      return done(renewed ? "success" : "unchanged");
     } catch {
       return done("failed");
     }

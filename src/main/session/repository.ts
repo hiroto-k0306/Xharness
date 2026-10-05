@@ -287,7 +287,25 @@ export class Repository {
         );
       if (await this.git(["status", "--porcelain"], root, signal))
         throw new Error("Original repository has uncommitted changes");
-      await this.git(["merge", "--no-edit", tree.branch], root, signal);
+      try {
+        await this.git(["merge", "--no-edit", tree.branch], root, signal);
+      } catch (error) {
+        // A conflicted merge leaves the original repository half-merged. The UI has
+        // no way to resolve it, so restore the pre-merge state and say why.
+        const merging = await this.git(
+          ["rev-parse", "-q", "--verify", "MERGE_HEAD"],
+          root,
+          signal,
+        ).then(
+          () => true,
+          () => false,
+        );
+        if (!merging) throw error;
+        await this.git(["merge", "--abort"], root, signal);
+        throw new Error(
+          "Worktree merge conflicts with the base branch; the merge was aborted and nothing changed",
+        );
+      }
       return;
     }
     if (!confirmed) throw new Error("Worktree removal requires confirmation");

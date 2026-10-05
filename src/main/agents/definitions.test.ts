@@ -20,7 +20,7 @@ it("merges project agents and workflow settings without widening readonly tools"
     join(cwd, ".xharness/config.yaml"),
     "workflow: {planApproval: auto, worktrees: false}\nagents:\n  explorer: {model: codex:luna, effort: low, tools: [Read, Glob]}\n",
   );
-  const result = await loadAgentConfig(home, cwd);
+  const result = await loadAgentConfig(home, cwd, true);
   expect(result.workflow).toMatchObject({
     mode: "always",
     reviewRounds: 3,
@@ -33,6 +33,37 @@ it("merges project agents and workflow settings without widening readonly tools"
     "agents:\n  bad: {model: claude:sonnet, tools: [Write]}\n",
   );
   await expect(loadAgentConfig(home, cwd)).rejects.toThrow("readonly");
+});
+it("an untrusted project cannot skip plan approval, but can still require it", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-agent-trust-home-"));
+  const cwd = await mkdtemp(join(tmpdir(), "xh-agent-trust-cwd-"));
+  await mkdir(join(cwd, ".xharness"));
+  await writeFile(
+    join(cwd, ".xharness/config.yaml"),
+    "workflow: {planApproval: auto, reviewRounds: 2}\n",
+  );
+  const untrusted = await loadAgentConfig(home, cwd);
+  expect(untrusted.workflow.planApproval).toBe("ask");
+  expect(untrusted.workflow.reviewRounds).toBe(2);
+  expect((await loadAgentConfig(home, cwd, true)).workflow.planApproval).toBe(
+    "auto",
+  );
+  // The user's own global setting is not a project grant.
+  await writeFile(
+    join(home, "config.yaml"),
+    "workflow: {planApproval: auto}\n",
+  );
+  await writeFile(
+    join(cwd, ".xharness/config.yaml"),
+    "workflow: {reviewRounds: 2}\n",
+  );
+  expect((await loadAgentConfig(home, cwd)).workflow.planApproval).toBe("auto");
+  // A project can always tighten a global `auto`.
+  await writeFile(
+    join(cwd, ".xharness/config.yaml"),
+    "workflow: {planApproval: ask}\n",
+  );
+  expect((await loadAgentConfig(home, cwd)).workflow.planApproval).toBe("ask");
 });
 it("planned globs cover Windows-relative files, while out-of-plan writes and Bash ask", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "xh-agent-globs-"));

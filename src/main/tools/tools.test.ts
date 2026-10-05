@@ -153,6 +153,40 @@ describe("PowerShell and ripgrep tools", () => {
       vi.unstubAllEnvs();
     }
   });
+  // rg 版と Node 版で、検索から除外する秘密ファイルの範囲をそろえる
+  it.each([
+    ["ripgrep", false],
+    ["node", true],
+  ])("excludes secret files from Grep (%s engine)", async (name, node) => {
+    if (name === "ripgrep" && !hasRg) return;
+    const secrets = [
+      "id_rsa",
+      "id_ed25519",
+      "id_ecdsa",
+      "id_dsa",
+      "server.pem",
+      "server.key",
+      "auth.json",
+      "x.credentials.json",
+    ];
+    for (const file of [...secrets, "plain.txt"])
+      await writeFile(join(directory, file), "SECRETMARK\n");
+    if (node) vi.stubEnv("PATH", directory);
+    try {
+      const result = JSON.parse(
+        (
+          await shellSearchTools(directory)
+            .get("Grep")!
+            .execute({ pattern: "SECRETMARK" }, signal())
+        ).content,
+      );
+      if (node) expect(result.engine).toBe("node");
+      expect(result.output).toContain("plain.txt");
+      for (const file of secrets) expect(result.output).not.toContain(file);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
   it.skipIf(!hasPowerShell)(
     "executes PowerShell and bounds timeout values",
     async () => {

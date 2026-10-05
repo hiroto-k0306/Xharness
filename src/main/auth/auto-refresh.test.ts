@@ -53,6 +53,25 @@ describe("official CLI auto refresh (offline)", () => {
     await f.manager.refresh("claude", 100);
     expect(f.execute).toHaveBeenCalledTimes(3);
   });
+  it.each([
+    ["stays unreadable", undefined, undefined, "success"],
+    ["becomes a future expiry", undefined, 5000, "success"],
+    ["becomes an already-past expiry", undefined, 500, "unchanged"],
+    ["does not move when readable", 100, 100, "unchanged"],
+    ["disappears when readable before", 100, undefined, "unchanged"],
+  ] as const)(
+    "judges a clean CLI exit when the expiry %s",
+    async (_name, before, after, expected) => {
+      const reads: (number | undefined)[] = [before, after];
+      const manager = new AutoRefresh({
+        settings: async () => ({ autoRefresh: true }),
+        expiry: async () => reads.shift(),
+        execute: async () => "success",
+        now: () => 1000,
+      });
+      expect((await manager.refresh("codex", before)).result).toBe(expected);
+    },
+  );
   it("does not launch when disabled", async () => {
     const execute = vi.fn();
     const manager = new AutoRefresh({

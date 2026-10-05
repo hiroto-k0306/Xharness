@@ -50,6 +50,32 @@ describe("repository / worktree isolation", { timeout: 30_000 }, () => {
       repo.open({ url: remote, branch: "main" }, signal()),
     ).rejects.toThrow("uncommitted");
   });
+  it("aborts a conflicting worktree merge and leaves the original repository clean", async () => {
+    const { root, home, repo } = await fixture();
+    const tree = await repo.createWorktree(
+      root,
+      "workspace",
+      "conflict",
+      signal(),
+    );
+    await writeFile(join(tree.path, "file.txt"), "from worktree");
+    await runGit(["commit", "-am", "isolated"], tree.path, signal());
+    await writeFile(join(root, "file.txt"), "from main");
+    await runGit(["commit", "-am", "main"], root, signal());
+    await expect(
+      repo.finish(root, tree, "merge", true, signal()),
+    ).rejects.toThrow("merge was aborted");
+    expect(await runGit(["status", "--porcelain"], root, signal())).toBe("");
+    expect(await readFile(join(root, "file.txt"), "utf8")).toBe("from main");
+    await expect(
+      runGit(["rev-parse", "-q", "--verify", "MERGE_HEAD"], root, signal()),
+    ).rejects.toThrow();
+    // The isolated work is kept so the user can resolve it another way.
+    expect(await readFile(join(tree.path, "file.txt"), "utf8")).toBe(
+      "from worktree",
+    );
+    expect(home).toBeTruthy();
+  });
   it("restores a missing managed worktree from its retained branch only after confirmation", async () => {
     const { root, home, repo } = await fixture();
     const tree = await repo.createWorktree(

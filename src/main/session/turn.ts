@@ -418,9 +418,13 @@ async function runSessionBody(
       "\n" +
       rt.environment.summary;
     const system = rt.system;
+    const trustRoot = ctx.workspaceRoot(session);
     const agentConfig = await loadAgentConfig(
       options.home,
       session.workspaceId ? session.cwd : undefined,
+      !trustRoot ||
+        !!rt.trustedSession ||
+        (await ctx.trust.isTrusted(trustRoot)),
     );
     if (needsNewWorkflow(rt))
       rt.workflow = createWorkflow(ctx, gate, {

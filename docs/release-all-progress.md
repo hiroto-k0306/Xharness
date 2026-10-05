@@ -25,11 +25,11 @@
 
 `D:\AIwork\XHarness-release\20261004-all-fixes\XHarness-0.0.0\`
 
-| ファイル | SHA-256 |
-|---|---|
-| XHarness-Setup-0.0.0.exe | `9d20d45a872e1c1d8878fa616dfca1eca42377e31caee498ffe7e012afb29bdf` |
+| ファイル                    | SHA-256                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| XHarness-Setup-0.0.0.exe    | `9d20d45a872e1c1d8878fa616dfca1eca42377e31caee498ffe7e012afb29bdf` |
 | XHarness-0.0.0-portable.exe | `c9f433d16b8d3a5d1045a4920b5eca9f68baa9af250c14d45defcfb6c52cfc92` |
-| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+| README.md                   | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
 
 ## 停止・未確認事項
 
@@ -60,11 +60,11 @@
 
 `D:\AIwork\XHarness-release\20261004-review-fixes\XHarness-0.0.0\`
 
-| ファイル | SHA-256 |
-|---|---|
-| XHarness-Setup-0.0.0.exe | `c23512e5ff604bfc28bc30e17471411f201b309303ea6439f684b1201ab981dd` |
+| ファイル                    | SHA-256                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| XHarness-Setup-0.0.0.exe    | `c23512e5ff604bfc28bc30e17471411f201b309303ea6439f684b1201ab981dd` |
 | XHarness-0.0.0-portable.exe | `e53f5447ce150bfb8f1440ca35258f12578e0f3c4aafc734f51d99df8a9b380b` |
-| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+| README.md                   | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
 
 ### 再レビューで見つかった引用符内の区切りの修正
 
@@ -76,11 +76,11 @@
 
 `D:\AIwork\XHarness-release\20261004-review-fixes-final\XHarness-0.0.0\`
 
-| ファイル | SHA-256 |
-|---|---|
-| XHarness-Setup-0.0.0.exe | `941f4d35755289f9fd20672bc14dbda384428a69b7ce112d140cfe3fdfacce2d` |
+| ファイル                    | SHA-256                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| XHarness-Setup-0.0.0.exe    | `941f4d35755289f9fd20672bc14dbda384428a69b7ce112d140cfe3fdfacce2d` |
 | XHarness-0.0.0-portable.exe | `ca55d8400a8e625ffa19622329597cb5e852718398a4c7c297b1a3fb5265c6e1` |
-| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+| README.md                   | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
 
 ## 再開後の引用符付き書き込みの修正（2026-10-04）
 
@@ -97,11 +97,11 @@
 
 `20261004-review-fixes-final` を含む以前の配布物には今回の残件修正が入っていない。既存フォルダは上書きしていない。
 
-| ファイル | SHA-256 |
-|---|---|
-| XHarness-Setup-0.0.0.exe | `9420b7b0cc5329210b899d073a8e1caf46dd00dd2b5fac29ebfbd0ecac32f875` |
+| ファイル                    | SHA-256                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| XHarness-Setup-0.0.0.exe    | `9420b7b0cc5329210b899d073a8e1caf46dd00dd2b5fac29ebfbd0ecac32f875` |
 | XHarness-0.0.0-portable.exe | `0d7e63cc95233122c0381f200b58b5195073665ff6d9a27b30ced0d993c3fc6b` |
-| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+| README.md                   | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
 
 ### 続けて見つかったトークン解析の修正
 
@@ -116,10 +116,10 @@
 
 `20261004-quoted-write-fix` を含む以前の配布物にはトークン解析の追加修正が入っていない。以前の配布物は上書きしていない。
 
-| ファイル | SHA-256 |
-|---|---|
-| XHarness-Setup-0.0.0.exe | `03de9fe4ea0015236ad473ec266a9056286a3796eddc666bd951c4b2ad5913e3` |
+| ファイル                    | SHA-256                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| XHarness-Setup-0.0.0.exe    | `03de9fe4ea0015236ad473ec266a9056286a3796eddc666bd951c4b2ad5913e3` |
 | XHarness-0.0.0-portable.exe | `61ff9683be220519247725d6876167a76f12e86ef5a83fbca31ddc01a0096f1c` |
-| README.md | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
+| README.md                   | `f9c1f831a722c28c2f6edddb334cc2ee4fbdc951908f28f95eeee99a2a4b4924` |
 
 この追記は最終の正式再レビュー前に作成した。再レビューの合否とmainへの統合・pushの最終状態は、最後の `RequestReview` 結果とGitのremote refで確認する。

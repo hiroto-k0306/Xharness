@@ -8,14 +8,14 @@ Windows 11 Home（10.0.26200）。Nodeはユーザーと同じシステムの24.
 
 `powershellArguments(command, true)` のC#型へ診断専用メソッドを挿入し、子が生きている間に `IsProcessInJob(process, XHarnessのjob, ...)` と `IsProcessInJob(process, NULL, ...)` を確認した。親自身の所属は全ケースtrue。起動した子のParentProcessIdは全ケースPowerShell親と一致した。親の終了後は `process.kill(pid, 0)` で生存を確認し、残存した試験用の子だけ終了した。
 
-| pwsh | 子の起動経路 | Node 22.23.3：同じJob／親終了後生存 | Node 24.16.0：同じJob／親終了後生存 |
-| --- | --- | --- | --- |
-| Codex同梱7.6.5 | Start-Process -WindowStyle Hidden -PassThru | true／false | true／false |
-| Codex同梱7.6.5 | Start-Process -NoNewWindow -PassThru | true／false | true／false |
-| Codex同梱7.6.5 | Process.Start（UseShellExecute=false、CreateNoWindow=true） | true／false | true／false |
-| WindowsApps 7.6.6 | Start-Process -WindowStyle Hidden -PassThru | false／true | false／true |
-| WindowsApps 7.6.6 | Start-Process -NoNewWindow -PassThru | false／true | false／true |
-| WindowsApps 7.6.6 | Process.Start（UseShellExecute=false、CreateNoWindow=true） | false／true | false／true |
+| pwsh              | 子の起動経路                                                | Node 22.23.3：同じJob／親終了後生存 | Node 24.16.0：同じJob／親終了後生存 |
+| ----------------- | ----------------------------------------------------------- | ----------------------------------- | ----------------------------------- |
+| Codex同梱7.6.5    | Start-Process -WindowStyle Hidden -PassThru                 | true／false                         | true／false                         |
+| Codex同梱7.6.5    | Start-Process -NoNewWindow -PassThru                        | true／false                         | true／false                         |
+| Codex同梱7.6.5    | Process.Start（UseShellExecute=false、CreateNoWindow=true） | true／false                         | true／false                         |
+| WindowsApps 7.6.6 | Start-Process -WindowStyle Hidden -PassThru                 | false／true                         | false／true                         |
+| WindowsApps 7.6.6 | Start-Process -NoNewWindow -PassThru                        | false／true                         | false／true                         |
+| WindowsApps 7.6.6 | Process.Start（UseShellExecute=false、CreateNoWindow=true） | false／true                         | false／true                         |
 
 Job外の6ケースはanyJobもfalseだった。Nodeの版だけでは差を説明できない。PowerShellの実体・配布形態を合わせていなかったため、前回の「Windowsで成功」はユーザー側の成功を意味しなかった。今回のWindowsApps版ではNoNewWindowと直接Process.Startも外れ、ユーザーの切り分け結果とはその点が異なる。7.6.5と7.6.6を同じ配布形態で比較した試験は未実施のため、配布形態とPowerShell版の影響を完全には分離していない。
 
@@ -61,14 +61,14 @@ WindowsApps版で修正後の所属を直接再確認した。Node 22.23.3のHid
 - 既存workflow/runtimeの2ターン試験も全体実行で2回5秒に達した。一方、同じNode・pwshの単独実行では約0.2秒で成功した。この試験はPowerShellを直接起動するものではなく、FakeProviderの2ターンとローカル差分検出を行う。負荷による不安定性として、この1ケースのテスト上限を15秒へ変更した。アプリのタイムアウトや失敗判定は変更していない。
 - Node 22の初回全体は792成功・2タイムアウト、自然終了テストの待機修正後は793成功・workflow試験1タイムアウトだった。該当workflow試験の待機修正後の最終結果は以下の通り。
 
-| 検証（pwshは全てWindowsApps 7.6.6） | 結果 |
-| --- | --- |
-| Node 22.23.3 `pnpm test` | 100ファイル・794成功、32.95秒 |
-| Node 24.16.0 `pnpm test`（rgあり） | 100ファイル・794成功、31.09秒 |
-| Node 24.16.0 `pnpm test`（rg無し） | 100ファイル・793成功・rg専用1スキップ、27.27秒 |
-| Node 24 `pnpm typecheck` / `pnpm lint` / `pnpm build` | 全て成功 |
-| Node 22 `tsc --noEmit` | 成功 |
-| 変更したTypeScriptのPrettier確認・`git diff --check` | 成功 |
+| 検証（pwshは全てWindowsApps 7.6.6）                   | 結果                                           |
+| ----------------------------------------------------- | ---------------------------------------------- |
+| Node 22.23.3 `pnpm test`                              | 100ファイル・794成功、32.95秒                  |
+| Node 24.16.0 `pnpm test`（rgあり）                    | 100ファイル・794成功、31.09秒                  |
+| Node 24.16.0 `pnpm test`（rg無し）                    | 100ファイル・793成功・rg専用1スキップ、27.27秒 |
+| Node 24 `pnpm typecheck` / `pnpm lint` / `pnpm build` | 全て成功                                       |
+| Node 22 `tsc --noEmit`                                | 成功                                           |
+| 変更したTypeScriptのPrettier確認・`git diff --check`  | 成功                                           |
 
 全体テストではworker数・全体タイムアウトの上書きをしていない。rg無しはrg.exeを含むPATHエントリを除去し、Get-Commandで見つからないことを確認した。pwshはWindowsApps版を維持した。pnpmの既存onlyBuiltDependencies設定に関する警告は継続して出るが、テスト・ビルドの失敗ではない。
 

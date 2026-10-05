@@ -40,6 +40,38 @@ async function setup(timeout = 5000) {
   return { ...f, browsers, action, observe, prepare, journal };
 }
 
+it("fences commands before awaiting browser close during shutdown", async () => {
+  const f = await setup();
+  await f.observe();
+  let release = () => {};
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const closing = vi
+    .spyOn(f.browsers[0]!, "close")
+    .mockImplementation(async () => {
+      await blocked;
+    });
+  const shutdown = f.c.shutdown();
+  try {
+    await vi.waitFor(() => expect(closing).toHaveBeenCalled());
+    for (const command of [
+      { type: "send", sessionId: f.sessionId, text: "must not execute" },
+      { type: "new_session", workspaceId: f.workspaceId },
+      { type: "set_mode", sessionId: f.sessionId, mode: "acceptEdits" },
+    ] as const) {
+      expect(await f.c.handle(command)).toMatchObject({
+        ok: false,
+        error: "アプリ終了処理中です。",
+      });
+    }
+    expect(f.requests).not.toHaveBeenCalled();
+  } finally {
+    release();
+    await shutdown;
+  }
+});
+
 it("observes, explicitly confirms one click, durably receipts and stops; duplicate/restart never repeat", async () => {
   const f = await setup(),
     o = await f.observe();

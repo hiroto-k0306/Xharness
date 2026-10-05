@@ -360,6 +360,7 @@ export class SessionController {
   }
 
   async handle(command: HarnessCommand): Promise<CommandResult> {
+    if (this.stopped) return { ok: false, error: "アプリ終了処理中です。" };
     try {
       switch (command.type) {
         case "local_browser": {
@@ -2008,12 +2009,11 @@ export class SessionController {
 
   /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
   async shutdown(timeoutMs = 3000): Promise<void> {
+    // Fence new commands and automatic work before the first asynchronous close.
+    this.stopped = true;
     for (const abort of this.browserJobs.values()) abort.abort();
-    await this.localBrowser.stopAll();
     this.handoffs.clear();
     this.candidatePreviews.clear();
-    this.stopped = true;
-    await this.handoffs.drain();
     const quotaClosed = this.quotaPauses.close();
     this.schedules.close();
     this.repositories.abort();
@@ -2026,6 +2026,8 @@ export class SessionController {
       this.release(rt);
       if (rt.done) running.push(rt.done);
     }
+    await this.localBrowser.stopAll();
+    await this.handoffs.drain();
     await quotaClosed;
     await Promise.race([
       Promise.all(running),

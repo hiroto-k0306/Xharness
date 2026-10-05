@@ -62,6 +62,17 @@ export interface TaskEvaluation {
   correctionRounds: number;
   evidence: QualityEvidence[];
   recordingIncomplete: boolean;
+  /** Local reference reads, separate from quality/test evidence and model usage. */
+  skillReads?: {
+    spanId: string;
+    tool: string;
+    success: boolean;
+    selection: unknown;
+    references: unknown;
+    budget: unknown;
+    limits: unknown;
+    error: unknown;
+  }[];
 }
 const keys: (keyof TokenTotals)[] = [
   "input",
@@ -181,11 +192,40 @@ export function evaluateTrace(trace?: TraceReplay): TaskEvaluation[] {
         };
       });
     const evidence: QualityEvidence[] = [];
+    const skillReads: NonNullable<TaskEvaluation["skillReads"]> = [];
     let reviewAttempts = 0;
     let correctionRounds = 0;
     for (const start of records) {
       const end = ends.get(start.id);
       const output = object(end?.output);
+      if (
+        start.kind === "tool" &&
+        ["ListProjectSkills", "LoadProjectSkill"].includes(start.label)
+      ) {
+        const result = object(parse(output.content));
+        const metadata = (v: unknown) => {
+          const e = object(v);
+          return {
+            name: e.name,
+            source: e.source,
+            hash: e.hash,
+            fileBytes: e.fileBytes,
+          };
+        };
+        skillReads.push({
+          spanId: start.id,
+          tool: start.label,
+          success: !!end && !output.isError && result.formatVersion === 1,
+          selection: start.label === "LoadProjectSkill" ? start.input : null,
+          references:
+            start.label === "LoadProjectSkill"
+              ? [metadata(result.entry)]
+              : list(result.entries).map(metadata),
+          budget: result.budget ?? null,
+          limits: result.limits ?? null,
+          error: result.error ?? null,
+        });
+      }
       if (start.kind === "tool" && start.label === "RequestReview") {
         reviewAttempts++;
         const result = object(parse(output.content));
@@ -277,6 +317,7 @@ export function evaluateTrace(trace?: TraceReplay): TaskEvaluation[] {
       reviewAttempts,
       correctionRounds,
       evidence,
+      skillReads,
       recordingIncomplete:
         !!trace.skipped ||
         !!trace.omittedFiles ||
@@ -395,7 +436,10 @@ export function renderEvaluation(trace?: TraceReplay): string {
             `<tr><td><a href="#trace-${escape(c.spanId)}">${escape(c.agentId)}</a></td><td>${escape(c.provider)} / ${escape(c.model ?? "不明")} / ${escape(c.effort ?? "不明")}</td><td>${escape(c.status)}${c.simulated ? "（模擬）" : ""}</td><td>${c.durationMs ?? "不明"} ms</td></tr>`,
         )
         .join("");
-      return `<article><h3>タスク ${escape(task.taskId)}</h3><p>品質結果: ${task.outcome} (${escape(task.stopCause ?? "不明")}) · 所要時間: ${task.elapsedMs ?? "不明"} ms · 経過時間（再開待ち含む）: ${task.wallClockMs ?? "不明"} ms</p><p>レビュー試行 ${task.reviewAttempts} · 指摘に戻った修正ラウンド ${task.correctionRounds}${task.recordingIncomplete ? " · 記録欠落あり" : ""}</p><table><thead><tr><th>項目</th><th>取得済み合計</th><th>測定カバー率（呼出数）</th></tr></thead><tbody>${metrics}</tbody></table><details><summary>呼出と測定の詳細</summary><p>親実行 ${task.runs} 回 · 呼出試行: ${task.calls.length} (模擬 ${task.simulatedCalls} / 実fetch送信記録 ${task.dispatchedCalls}) · 完全なusage: ${task.completeUsageCalls}/${task.calls.length}</p><table><thead><tr><th>根拠</th><th>provider / model / effort</th><th>結果</th><th>通信時間</th></tr></thead><tbody>${calls}</tbody></table><pre>${escape(JSON.stringify(task.calls, null, 2))}</pre></details><details><summary>品質の根拠（モデルレビュー・コマンド実行・終了理由）</summary><pre>${escape(JSON.stringify(task.evidence, null, 2))}</pre></details></article>`;
+      const skillReferences = task.skillReads?.length
+        ? `<details><summary>スキルの参照記録（品質の証明ではない）</summary><pre>${escape(JSON.stringify(task.skillReads, null, 2))}</pre></details>`
+        : "";
+      return `<article><h3>タスク ${escape(task.taskId)}</h3><p>品質結果: ${task.outcome} (${escape(task.stopCause ?? "不明")}) · 所要時間: ${task.elapsedMs ?? "不明"} ms · 経過時間（再開待ち含む）: ${task.wallClockMs ?? "不明"} ms</p><p>レビュー試行 ${task.reviewAttempts} · 指摘に戻った修正ラウンド ${task.correctionRounds}${task.recordingIncomplete ? " · 記録欠落あり" : ""}</p><table><thead><tr><th>項目</th><th>取得済み合計</th><th>測定カバー率（呼出数）</th></tr></thead><tbody>${metrics}</tbody></table><details><summary>呼出と測定の詳細</summary><p>親実行 ${task.runs} 回 · 呼出試行: ${task.calls.length} (模擬 ${task.simulatedCalls} / 実fetch送信記録 ${task.dispatchedCalls}) · 完全なusage: ${task.completeUsageCalls}/${task.calls.length}</p><table><thead><tr><th>根拠</th><th>provider / model / effort</th><th>結果</th><th>通信時間</th></tr></thead><tbody>${calls}</tbody></table><pre>${escape(JSON.stringify(task.calls, null, 2))}</pre></details><details><summary>品質の根拠（モデルレビュー・コマンド実行・終了理由）</summary><pre>${escape(JSON.stringify(task.evidence, null, 2))}</pre></details>${skillReferences}</article>`;
     })
     .join("");
   const common = evaluateSessionCommon(trace);

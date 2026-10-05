@@ -16,15 +16,16 @@ Windowsのexe作成・fake GUIの記録は [20261004配布記録](docs/release-2
 
 できることを一覧で探す場合は [機能一覧（FEATURES.md）](FEATURES.md) を参照する。用途・操作方法・デスクトップとheadlessの違いをまとめている。
 
-| 資料                                       | 内容                                                     |
-| ------------------------------------------ | -------------------------------------------------------- |
-| [SPEC.md](SPEC.md)                         | 現行仕様・既定値・機能差・検証範囲(作業前に担当節を読む) |
-| [DESIGN.md](DESIGN.md)                     | 過去の設計と検討経緯。現行仕様として使わない             |
-| [AGENTS.md](AGENTS.md)                     | 作業の規則(セキュリティ・コミット・クラウドでの制約)     |
-| [release/README.md](release/README.md)     | 利用者向けの README(配布物に同梱)                        |
-| [docs/](docs/)                             | 日付・対象リビジョンごとの進捗と検証記録                 |
-| [mockup/index.html](mockup/index.html)     | 初期の画面見本。現在の画面仕様はSPEC.mdを参照            |
-| [catalog/models.yaml](catalog/models.yaml) | モデルの一覧                                             |
+| 資料                                          | 内容                                                         |
+| --------------------------------------------- | ------------------------------------------------------------ |
+| [SPEC.md](SPEC.md)                            | 現行仕様・既定値・機能差・検証範囲(作業前に担当節を読む)     |
+| [DESIGN.md](DESIGN.md)                        | 過去の設計と検討経緯。現行仕様として使わない                 |
+| [AGENTS.md](AGENTS.md)                        | 作業の規則(セキュリティ・コミット・クラウドでの制約)         |
+| [release/README.md](release/README.md)        | 利用者向けの README(配布物に同梱)                            |
+| [docs/](docs/)                                | 日付・対象リビジョンごとの進捗と検証記録                     |
+| [品質・使用量の評価](docs/task-evaluation.md) | タスク評価、品質優先の同条件比較、固定オフライン課題の再実行 |
+| [mockup/index.html](mockup/index.html)        | 初期の画面見本。現在の画面仕様はSPEC.mdを参照                |
+| [catalog/models.yaml](catalog/models.yaml)    | モデルの一覧                                                 |
 
 ## 開発環境
 

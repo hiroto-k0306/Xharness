@@ -196,6 +196,8 @@ Codexの画像入りツール結果は、既定ではfunction_call_outputのinpu
 
 根拠: [文脈超過対応](docs/codex-context-overflow.md)、[ストリーム復旧](docs/codex-stream-recovery.md)、[画像の手元試験手順](docs/m-codex-image-local-check.md)。
 
+品質・使用量の評価では、usageの取得済み数値と測定カバー率をタスク単位で表示する。OpenAIのcache/reasoningはinput/outputの内数、Anthropicのcache-read/writeは別建てとして二重計上を避ける。旧フィールドに任意のmeasurementを追加し、欠測をゼロとみなさない。サブスク枠消費・API換算費用は未測定のままとする。詳細: [品質・使用量の評価基盤](docs/task-evaluation.md)。
+
 ## 8. 認証と自動更新
 
 公式CLIが管理する `~/.claude/.credentials.json` / `~/.codex/auth.json` をmain側で読む。未認証・更新失敗時はログインを案内する。手動ログインの起動は専用の許可操作を経て、公式CLIを使う。資格情報の場所は環境変数`CLAUDE_CONFIG_DIR` / `CODEX_HOME`があればそちらを優先する。
@@ -272,6 +274,10 @@ headlessの`--replay <sessionId> [--replay-parent <id>] [--replay-mode default|a
 ローカル成果物への案内はクリック可能なfile URLとし、開く際の確認・main側検証を維持する。リンクを開くことを任意コマンド実行の代替にしない。
 
 詳細: [レポート仕様とサンプル](docs/report-export.md)、[ローカルリンク](docs/local-links-progress.md)。
+
+HTMLレポートに品質・使用量の評価を表示する。親の実行にタスク境界を記録し、子・レビュー・修正・自動圧縮・失敗試行を同一タスクへ関連付ける。起動中の同じworkflowの継続ターンは同一ID、通常会話は実行1回、再起動後は別ID。終了理由・レビュー・コマンド・設定チェックの実行結果を根拠付きで示し、モデル自己申告を客観テスト合格と同一視しない。稼働時間と再開待ちを含む経過時間を分ける。旧記録・タスク外の通信は推測で補完しない。
+
+`evaluation:offline`で固定した3課題のfake/mock評価を再実行できる。`evaluation:compare`は保存済みタスクを明示した課題・種別・難度・評価基準・環境ごとに比較し、品質合格を先に確認する。モデル自動選択は変更しない。詳細・制約: [品質・使用量の評価基盤](docs/task-evaluation.md)。
 
 ## 11. コマンドと予約
 

@@ -91,7 +91,7 @@ TaskHistoryとpreviousChildIdで、同じ親の直近の完了・質問待ちの
 
 「作業場所を信頼した後に適用する」対象は、プロジェクト設定ファイルが指定するallowルールと自動モードである。利用者が画面や`/mode`で選んだ自動は利用者自身の選択であり、未信頼の作業場所でも適用される(信頼確認は挟まない)。信頼を拒否した場合も、プロジェクト設定のdeny / askは適用される。
 
-計画モードではWriteなどの書込を拒否する。TodoWrite、Task、WebFetchは拒否せず確認になる(許可ルールがあれば実行できる)。
+計画モードではWriteなどの書込を拒否する。WebFetchなどの読取系は拒否せず確認になる(許可ルールがあれば実行できる)。TodoWrite・BashOutput・KillShellは権限判定を通らず、どのモードでも確認なしで実行する。workflowの経路では、Task・SubmitPlan・SkipPlan・UpdatePlan・RequestReview・TaskList・TaskHistory・TaskOutput・TaskStopも権限確認を省く(計画の承認と子のBash・書込の確認は別の経路で行う)。
 
 明示denyとreadOnlyを優先する。プロジェクト設定のallowや自動モードは、作業場所を信頼した後に適用する。権限設定はglobal・project・保存した作業場所の許可を扱う。許可の期間は操作に応じて今回・セッション・常時から選ぶ。
 

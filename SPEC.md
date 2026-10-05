@@ -84,7 +84,7 @@ explorerの既定はClaude Sonnet、reviewerはCodex Sol / high。設定でエ�
 - AskUserQuestionは質問を表示して返答待ちにする。候補は任意、指定するなら2〜5件。画面の候補ボタンは本文を通常のユーザー入力として送る。
 - 子の質問に親画面から直接回答して子を継続する方式ではない。親への回答後に再委託する。子履歴の候補ボタンは操作できない。
 - taskIdは親ターンの中だけ有効で、ターンの開始時に動いている子が残っているとエラーにする。TaskOutputのwaitは既定30秒・最大60秒。TaskStopは待機中の承認も取り消す。Taskのpromptは64,000文字まで、agentは設定済みの名前だけ、modelで一時的に上書きできる。
-- 設定で定義するエージェントは読取専用で、使えるツールはRead / Grep / Glob / WebFetch / Bash(Bashは許可されたコマンドだけ)。名前`worker`と`main`は予約済み。
+- 設定で定義するエージェントは読取専用で、使えるツールはRead / Grep / Glob / WebFetch / Bash(Bashは許可されたコマンドだけ) / SearchProjectHistory / ReadProjectHistory。履歴ツールはtoolsへの明示指定が必要で、既定の子・workerへ自動追加しない。名前`worker`と`main`は予約済み。
 - StopTaskとAskUserQuestionは、同じ応答内の他のツール呼び出しをキャンセルする。理由・質問は4,000文字、候補は1件300文字まで。
 
 TaskHistoryとpreviousChildIdで、同じ親の直近の完了・質問待ちの子から結果と質問を引き継げる。新しい子の会話を作り、結果を参考データとして渡す方式であり、古いsystem・tools・権限を復元しない。結果は6,000文字、質問は直近5件・合計2,000文字に切り詰め、32件まで保持する。この引き継ぎ用一覧は起動中のみ有効で、保存された子のログとは別。
@@ -143,6 +143,16 @@ Read / Write / Edit / MultiEditは、`auth.json` / `.credentials.json`という�
 - Readの結果を含む通常のツール結果は、30,000文字を超えると先頭と末尾の約15,000文字ずつだけを返す(中略)。Readに範囲指定はないため、大きなファイルの中間はGrepやBashで読む。画像ReadはPNG / JPEG / GIF / WebP、5 MB、8000px以内で、縮小しない。
 
 TodoWriteで作業項目と進行状態を管理する。ツールエラーは種別を付けてモデルへ返し、繰り返し失敗を検出して停止する。同じツール名・種別の失敗が3回続くと、質問を返して停止する。ツールの失敗が連続5回でも停止する。完全に同一の呼び出しが4回続くと、4回目はエラーにして別の方法を促す。種別の集計はツール名・種別が基準であり、異なる引数での探索を必ず区別する仕組みではない。
+
+### 同プロジェクトの履歴検索
+
+SearchProjectHistoryはキーワードで同home・同プロジェクトの別セッションのuser／assistant通常テキストを検索し、ReadProjectHistoryはsessionIdと物理JSONL行messageLineを指定して取得する。sessionCreatedAt／sessionUpdatedAtはセッションの日時で、メッセージ送信日時を推定しない。結果は非信頼の参考データとしてtool resultにだけ返し、現在の指示・権限やsystemの接頭辞へ取り込まない。
+
+登録workspaceの実パスを固定して毎回再確認する。非Gitのcwdはその内側だけ、Gitでは最寄りrepositoryの実common git directoryを照合し、同workspaceのlinked worktreeを許す。別workspace root、nested repository、別home、scratch、忘れたworkspace、削除開始済みのセッションを除外する。過去のリンク先を持たない旧metadataも扱うため、workspace root自体がsymlink／junction経由の場合は拒否し、実体rootを登録する。履歴ディレクトリ・ファイルのリンクも拒否する。
+
+索引は新設せず、既存sessionstoreを読む。最大候補200件、実読取50セッション、1件1 MiB、検索結果1〜10件(既定5)、抜粋600文字、個別読取4,000文字。超過ファイルは全体を除外し、上限・省略・読取不能を表示する。巻き戻し後の有効履歴だけを返し、壊れたJSONL行は読み飛ばす。tool内容・画像・reasoning・compaction・任意metadataを返さず、既知秘密をredactし、資格情報らしい行・秘密鍵ブロックを除外する。任意の自然文に含まれる未知秘密を完全に識別する保証はない。
+
+通常モードとplanでは既定で権限確認。既存deny→ask→allowとセッションルール、通常ツールに対する自動モードの既存動作を適用する。子はtoolsに明示指定されたものだけを公開し、親のpermission gateを通る。確認欄・ツール結果・レシート・HTMLレポートで確認できる。検索・読取自体はプロバイダを呼ばないが、結果は次のモデル入力になり得る。新しいtools前提は§3の既存照合を適用し、旧会話を途中で書き換えない。手順と制約: [履歴検索](docs/project-history.md)。自動再開は本機能の範囲外。
 
 ### シェルと背景プロセス
 

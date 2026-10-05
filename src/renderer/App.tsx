@@ -18,6 +18,7 @@ import { PermissionInline } from "./components/PermissionInline.js";
 import { PromptLine } from "./components/PromptLine.js";
 import { QuotaPause } from "./components/QuotaPause.js";
 import { ProjectMemoryPanel } from "./components/ProjectMemory.js";
+import { ImprovementsPanel } from "./components/Improvements.js";
 import { SkillsManager } from "./components/SkillsManager.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { StepTabs } from "./components/StepTabs.js";
@@ -38,6 +39,7 @@ function modelLabel(model: string, effort: string): string {
 export function App() {
   const [modelOpen, setModelOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
+  const [improvementsOpen, setImprovementsOpen] = useState(false);
   const [skillDraft, setSkillDraft] = useState("");
   const [selectedAgents, setSelectedAgents] = useState<Record<string, string>>(
     {},
@@ -53,6 +55,7 @@ export function App() {
 
   const current = app?.currentSessionId ?? null;
   useEffect(() => setSkillsOpen(false), [current]);
+  useEffect(() => setImprovementsOpen(false), [current]);
   const view = current ? views[current] : undefined;
   const session = app?.sessions.find((x) => x.id === current);
   const workspace = app?.workspaces.find((w) => w.id === session?.workspaceId);
@@ -465,7 +468,8 @@ export function App() {
             />
           ) : (
             view?.pending &&
-            !skillsOpen && (
+            !skillsOpen &&
+            !improvementsOpen && (
               <PermissionInline
                 oneTime={view.pending.oneTime}
                 persistent={app.phase4}
@@ -552,6 +556,16 @@ export function App() {
           )}
           {current && session?.workspaceId && (
             <ProjectMemoryPanel key={current} sessionId={current} />
+          )}
+          {current && session?.workspaceId && (
+            <ImprovementsPanel
+              key={`improvements-${current}`}
+              sessionId={current}
+              workspaceId={session.workspaceId}
+              permission={view?.pending}
+              open={improvementsOpen}
+              onOpenChange={setImprovementsOpen}
+            />
           )}
           <PromptLine
             onDraftChange={setSkillDraft}

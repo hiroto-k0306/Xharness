@@ -16,7 +16,7 @@
 
 ## 整合性と記録
 
-`home/improvements.json` はversion1。既存home writer lock、memoryScope／履歴の実path・Git identity・home境界、秘密フィルター、JsonFileの一時ファイル・fsync・renameを再利用する。home全体20比較、1比較10版・3課題・60結果・40切替、本文8,000文字、課題prompt4,000文字、全体1 MiB。アーカイブ／削除・ページ送り・同じ版／課題の反復統計は今回未対応。再測定や誤入力訂正は新しい比較で明示的に行う。
+`home/improvements.json` はversion1。既存home writer lock、memoryScope／履歴の実path・Git identity・home境界、秘密フィルター、JsonFileの一時ファイル・fsync・renameを再利用する。home全体20比較、1比較10版・3課題・60結果・40切替、本文8,000文字、課題prompt4,000文字、全体1 MiB。アーカイブ／削除・ページ送り・反復統計は今回未対応。同じ版／課題を別の新規会話で測定して追記でき、同じsession/taskを重複登録できない。既存評価の改変はせず、誤入力は新しい評価で明示訂正する。参照版の採用・復帰は課題ごとの最新登録が有効・品質充足であることを要求する。
 
 本文hashは既存memoryHash（JSON文字列表現のSHA-256）、スキル出典hashは既存SKILL.mdファイルのSHA-256で、意味を区別する。評価のtask/session IDとtrace hash、明示合否・根拠を保存する。表示・採用時には履歴・trace・確定状態を再読取し、変更／削除／欠落は品質充足から外す。既存評価のprovider生usageとcache／reasoning重複防止・unknown／coverageをそのまま使い、サブスク枠消費やAPI換算費用へ読み替えない。観測モデル・effortが異なる記録を本文だけの効果と判断しない。
 

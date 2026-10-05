@@ -347,6 +347,11 @@ export class SessionController {
           if (this.stopped) return { ok: false, error: "Shutting down" };
           if (this.options.fake || !this.options.authentication)
             return { ok: false, error: "この起動では認証操作を利用できません" };
+          if (this.options.authentication.isAutoRefreshing())
+            return {
+              ok: false,
+              error: "認証の自動更新が終了してからログインしてください",
+            };
           if ([...this.runtimes.values()].some((rt) => rt.status !== "idle"))
             return {
               ok: false,
@@ -971,6 +976,11 @@ export class SessionController {
     const auth = this.options.authentication
       .snapshot()
       .find((v) => v.provider === provider);
+    if (
+      auth?.status === "expired" &&
+      this.options.authentication.canAutoRefresh()
+    )
+      return false;
     return !!auth && auth.status !== "available";
   }
 

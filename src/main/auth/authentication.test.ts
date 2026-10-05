@@ -69,6 +69,13 @@ function setup(approved = true) {
   };
   return { auth: new Authentication(options), options };
 }
+it("does not start manual login while a shared automatic refresh remains active", async () => {
+  const { options } = setup();
+  const auth = new Authentication({ ...options, autoRefreshBusy: () => true });
+  await auth.authenticate("claude");
+  expect(options.confirm).not.toHaveBeenCalled();
+  expect(options.launch).not.toHaveBeenCalled();
+});
 it("checks startup status without launching a CLI and cancellation leaves credentials untouched", async () => {
   const { auth, options } = setup(false);
   await auth.refresh();

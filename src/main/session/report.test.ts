@@ -9,6 +9,26 @@ import {
 } from "./report.js";
 import { buildReceiptReplay } from "../../shared/replay.js";
 
+it("labels authentication refresh in a static report", () => {
+  const replay = buildReceiptReplay([
+    {
+      id: "#1",
+      sessionId: "s",
+      ts: 1,
+      provider: "claude",
+      kind: "auth_refresh",
+      durationMs: 10,
+      summary: "認証を更新しました",
+      input: { result: "success" },
+    },
+  ]);
+  const html = renderExecutionReport([
+    { id: "s", replay, messages: [], skippedMessages: 0 },
+  ]);
+  expect(html).toContain("公式CLIによる認証更新");
+  expect(html).toContain("認証を更新しました");
+});
+
 it("exports recorded parent and child histories without changing source records", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-report-"));
   await mkdir(join(home, "receipts"));

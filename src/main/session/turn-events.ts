@@ -167,6 +167,29 @@ export class TurnEvents {
     const emit = ctx.options.emit;
     const clean = ctx.clean;
     switch (event.type) {
+      case "auth_refresh": {
+        const success = event.result === "success";
+        const message = success
+          ? "認証を更新しました"
+          : `認証を更新できませんでした（${event.result}）。公式CLIで ${event.provider === "claude" ? "claude auth login" : "codex login"} を実行してください。`;
+        this.record({
+          id: this.nextReceiptId(),
+          sessionId,
+          ts: Date.now(),
+          provider: event.provider,
+          kind: "auth_refresh",
+          durationMs: event.durationMs,
+          input: { result: event.result },
+          summary: message,
+        });
+        emit({
+          type: "notice",
+          sessionId,
+          tone: success ? "dim" : "warn",
+          message,
+        });
+        break;
+      }
       case "tool_progress":
         emit({ ...event, sessionId });
         break;

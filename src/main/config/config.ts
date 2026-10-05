@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { DEFAULT_IMAGES } from "../../shared/images.js";
+import { type AuthSettings } from "../auth/auto-refresh.js";
 import { type ProviderId } from "../core/types.js";
 import { type ReasoningEffort } from "../providers/provider.js";
 
@@ -156,6 +157,7 @@ export function mcpSettings(
 }
 
 export interface MainConfig {
+  auth: AuthSettings;
   images: typeof DEFAULT_IMAGES;
   providers: { codex: { toolImageMode: "output" | "user_message" } };
   web: WebSettings;
@@ -184,6 +186,21 @@ export async function loadMainConfig(
   } catch (error) {
     if ((error as NodeJS.ErrnoException)?.code !== "ENOENT")
       warnings.push("config.yaml を読めなかったため既定値を使います");
+  }
+  const auth: AuthSettings = { autoRefresh: true };
+  const globalAuth = (doc as { auth?: Record<string, unknown> } | undefined)
+    ?.auth;
+  if (globalAuth) {
+    if (typeof globalAuth.autoRefresh === "boolean")
+      auth.autoRefresh = globalAuth.autoRefresh;
+    else if (globalAuth.autoRefresh !== undefined)
+      warnings.push("config.yaml の auth.autoRefresh が不正です");
+    for (const key of ["claudeCliPath", "codexCliPath"] as const) {
+      if (typeof globalAuth[key] === "string" && globalAuth[key])
+        auth[key] = globalAuth[key];
+      else if (globalAuth[key] !== undefined)
+        warnings.push(`config.yaml の auth.${key} が不正です`);
+    }
   }
   let root = (doc && typeof doc === "object" ? doc : {}) as Record<
     string,
@@ -270,6 +287,7 @@ export async function loadMainConfig(
   }
   return {
     choice: { ...resolved, effort },
+    auth,
     aliases,
     warnings,
     fallback,
@@ -320,6 +338,7 @@ export async function resolveStartup(opts: {
     web: cfg.web,
     mcp: cfg.mcp,
     providers: cfg.providers,
+    auth: cfg.auth,
     images: cfg.images,
   };
 }

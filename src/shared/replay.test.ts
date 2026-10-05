@@ -12,6 +12,18 @@ const receipt = (ts = 2000) => ({
   input: { messages: ["original"] },
   usage: { inputTokens: 12, outputTokens: 3 },
 });
+it("keeps authentication refresh results in offline replay", () => {
+  const replay = buildReceiptReplay([
+    {
+      ...receipt(),
+      kind: "auth_refresh",
+      summary: "認証を更新しました",
+      input: { result: "success" },
+    },
+  ]);
+  expect(replay.skipped).toBe(0);
+  expect(replay.frames[0]?.receipt.kind).toBe("auth_refresh");
+});
 it("preserves append order, child ownership and duplicate ids in an independent snapshot", () => {
   const original = [receipt(), { ...receipt(1000), agentId: "worker" }];
   const replay = buildReceiptReplay(original);

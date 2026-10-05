@@ -205,6 +205,7 @@ export function createWorkflow(
           round: event.round,
         });
       if (event.type === "usage") emit(usageEvent(ctx, event));
+      if (event.type === "auth_refresh") events.onEvent(event);
     },
     onPhase: (workflow) => {
       emit({ type: "workflow", sessionId, ...workflow });

@@ -8,6 +8,10 @@ import { fileURLToPath } from "node:url";
 import { parseStartupArgs, resolveStartup } from "./config/config.js";
 import { readLocalSecrets } from "./auth/local-secrets.js";
 import { Authentication } from "./auth/authentication.js";
+import { AutoRefresh } from "./auth/auto-refresh.js";
+import { executeRefresh } from "./auth/refresh-cli.js";
+import { refreshCooldown } from "./auth/refresh-cooldown.js";
+import { RefreshingProvider } from "./providers/auth-refresh.js";
 import { launchOfficialLogin } from "./auth/cli-login.js";
 import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { CodexAdapter } from "./providers/codex/adapter.js";
@@ -111,6 +115,19 @@ async function start() {
     app.exit(1);
     return;
   }
+  let autoRefreshEnabled = main.auth.autoRefresh;
+  const autoRefresh = new AutoRefresh({
+    settings: async () => {
+      const settings = (await loadMainConfig(home)).auth;
+      autoRefreshEnabled = settings.autoRefresh;
+      return settings;
+    },
+    execute: executeRefresh,
+    claim: refreshCooldown(home),
+    changed: async () => {
+      await authentication?.refresh();
+    },
+  });
   const providers = fake
     ? [
         new FakeProvider({ fixturesDir: fixtures, quota: true }),
@@ -123,16 +140,21 @@ async function start() {
         }),
       ]
     : [
-        new ClaudeAdapter(),
-        new CodexAdapter({
-          toolImageMode: async () =>
-            (await loadMainConfig(home)).providers.codex.toolImageMode,
-        }),
+        new RefreshingProvider(new ClaudeAdapter(), autoRefresh),
+        new RefreshingProvider(
+          new CodexAdapter({
+            toolImageMode: async () =>
+              (await loadMainConfig(home)).providers.codex.toolImageMode,
+          }),
+          autoRefresh,
+        ),
       ];
   const secrets = fake ? [] : await readLocalSecrets();
   const authentication = fake
     ? undefined
     : new Authentication({
+        autoRefreshEnabled: () => autoRefreshEnabled,
+        autoRefreshBusy: () => autoRefresh.isBusy(),
         confirm: (provider) => confirmAuthentication(window, provider),
         launch: launchOfficialLogin,
         refreshSecrets: async () => {

@@ -203,6 +203,12 @@ async function prepareRuntime(
   session: StoredSession,
   rt: Runtime,
   signal: AbortSignal,
+  onAuthRefresh?: (
+    event: Extract<
+      import("../providers/provider.js").ProviderEvent,
+      { type: "auth_refresh" }
+    >,
+  ) => void,
 ) {
   const { options } = ctx;
   const root = ctx.workspaceRoot(session);
@@ -232,6 +238,7 @@ async function prepareRuntime(
         (event) => {
           // Web の要約・検索の通信でも枠を更新する(auto の選択が古い値を使わないように)
           if (event.type === "usage") options.emit(usageEvent(ctx, event));
+          if (event.type === "auth_refresh") onAuthRefresh?.(event);
         },
         {
           settings: web,
@@ -324,7 +331,14 @@ async function runSessionBody(
     // MCP のプロンプトは、接続を準備してから展開し、確認後に通常の発言として送る(§25.6)
     let expanded: Awaited<ReturnType<typeof expandMcpPrompt>>;
     try {
-      await prepareRuntime(ctx, gate, session, rt, abort.signal);
+      await prepareRuntime(
+        ctx,
+        gate,
+        session,
+        rt,
+        abort.signal,
+        events.onEvent,
+      );
       expanded = await expandMcpPrompt(
         ctx,
         gate,
@@ -362,7 +376,14 @@ async function runSessionBody(
   );
   let stopCause = "step_failed";
   try {
-    const { web } = await prepareRuntime(ctx, gate, session, rt, abort.signal);
+    const { web } = await prepareRuntime(
+      ctx,
+      gate,
+      session,
+      rt,
+      abort.signal,
+      events.onEvent,
+    );
     const files = new FileCheckpointStore(options.home);
     await files.purge(rt.config?.checkpoints?.retentionDays ?? 30);
     const fileCheckpoint = await files.begin(
@@ -434,6 +455,7 @@ async function runSessionBody(
             .models()
             .find((m) => m.id === route.model)?.contextTokens;
           const prepared = await prepareProviderHistory(messages, {
+            onAuthRefresh: events.onEvent,
             provider: route.provider,
             model: route.model,
             signal,

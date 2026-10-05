@@ -186,7 +186,9 @@ export function renderExecutionReport(
                     ? "圧縮"
                     : r.kind === "hook"
                       ? "フック"
-                      : "モデル切替";
+                      : r.kind === "auth_refresh"
+                        ? "公式CLIによる認証更新"
+                        : "モデル切替";
           const isModel =
             r.kind === "model_call" &&
             (r.provider === "claude" || r.provider === "codex");

@@ -271,6 +271,7 @@ export class ChildRunner {
           system: diagnosedSystem,
           prepareContext: async (messages, route, signal, loopContext) => {
             const prepared = await prepareProviderHistory(messages, {
+              onAuthRefresh: (event) => this.options.onEvent?.(context, event),
               provider: route.provider,
               model: route.model,
               signal,

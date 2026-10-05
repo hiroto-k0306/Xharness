@@ -1,0 +1,87 @@
+.area {
+  margin: 4px 20px;
+  font-size: 12px;
+}
+.dialog {
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 18px;
+  width: min(1000px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+.dialog::backdrop {
+  background: #0009;
+}
+.dialog header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.dialog h2 {
+  font-size: 18px;
+}
+.dialog p,
+.hash {
+  overflow-wrap: anywhere;
+}
+.dialog input {
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+}
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(0, 2fr);
+  gap: 18px;
+}
+.columns ul {
+  list-style: none;
+  padding: 0;
+  max-height: 55vh;
+  overflow: auto;
+}
+.columns li button {
+  width: 100%;
+  text-align: left;
+  padding: 10px;
+  border: 1px solid var(--line);
+  margin: 4px 0;
+}
+.columns li button[aria-pressed="true"] {
+  border-color: var(--claude);
+}
+.columns span,
+.columns small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.columns small {
+  color: var(--dim);
+}
+.dialog button {
+  margin: 4px;
+}
+.dialog pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  padding: 12px;
+}
+@media (max-width: 650px) {
+  .columns {
+    grid-template-columns: 1fr;
+  }
+  .columns ul {
+    max-height: 30vh;
+  }
+}

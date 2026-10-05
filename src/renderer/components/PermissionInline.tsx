@@ -21,6 +21,11 @@ export function PermissionInline({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      if (
+        e.target instanceof HTMLElement &&
+        e.target.closest("input,textarea,select,[contenteditable=true]")
+      )
+        return;
       const key = e.key.toLowerCase();
       const decision: PermissionDecision | undefined =
         key === "y"

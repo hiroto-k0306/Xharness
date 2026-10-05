@@ -52,4 +52,17 @@ it("never uses mock quota as production availability and treats stale or future 
   expect(q.view("codex", 1001).state).toBe("unknown");
   q.limited("codex", 1000, true, 600);
   expect(q.view("codex", 1001).state).toBe("simulated");
+  q.observe(
+    "codex",
+    [{ name: "primary", windowMinutes: 300, usedPercent: 100.5 }],
+    1000,
+    false,
+  );
+  q.limited("codex", 1000, false, 600, "5h");
+  const scope = q.view("codex", 1001);
+  expect(scope.state).toBe("exhausted");
+  expect(scope.reasons.join(" ")).toContain("primary (300分): 100.5%");
+  expect(scope.reasons.join(" ")).toContain("429 scope 5h");
+  q.limited("codex", 1000, false, Number.MAX_VALUE);
+  expect(q.view("codex", 1001).reasons.join(" ")).toContain("再確認hint 不明");
 });

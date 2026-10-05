@@ -116,7 +116,7 @@ export async function modelCandidates(
                 call.tokens.cacheRead,
                 call.provider === "claude"
                   ? call.tokens.cacheWrite
-                  : "included",
+                  : "別建て未提供",
               ]),
             )
           : "不明",

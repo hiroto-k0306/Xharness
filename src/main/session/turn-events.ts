@@ -314,6 +314,7 @@ export class TurnEvents {
               (p) => p.id === this.activeProvider,
             )?.offline,
           event.retryAfterSec,
+          event.scope,
         );
         this.quotaRate = {
           provider: this.activeProvider,

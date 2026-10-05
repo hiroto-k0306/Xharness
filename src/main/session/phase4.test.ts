@@ -350,13 +350,16 @@ it("persists an always grant, reopens receipts with masked details, and keeps se
   );
   expect(events.some((e) => e.type === "permission_request")).toBe(false);
   await reopened.shutdown();
-  const other = await reopened.handle({
+  const restarted = make();
+  await restarted.init();
+  const other = await restarted.handle({
     type: "new_session",
     workspaceId: null,
   });
   if (!other.ok) throw new Error("create failed");
   expect(
-    (await reopened.state()).sessions.find((s) => s.id === other.sessionId)
+    (await restarted.state()).sessions.find((s) => s.id === other.sessionId)
       ?.permissionMode,
   ).toBe("default");
+  await restarted.shutdown();
 });

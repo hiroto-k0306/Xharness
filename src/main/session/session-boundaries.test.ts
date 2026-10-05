@@ -83,7 +83,7 @@ async function fixture(worktree = false) {
   await first.shutdown();
   const controller = new SessionController(options);
   await controller.init();
-  return { home, root, id, controller, onRequest, store, events };
+  return { home, root, id, controller, onRequest, store, events, options };
 }
 it("reserves send preparation before history I/O so worktree removal cannot start", async () => {
   const c = await fixture(true);
@@ -173,8 +173,10 @@ it("refuses deletion during history loading, then deletes normally after cancell
   await send;
   await c.controller.handle({ type: "abort", sessionId: c.id });
   await c.controller.shutdown();
+  const restarted = new SessionController(c.options);
+  await restarted.init();
   expect(
-    await c.controller.handle({
+    await restarted.handle({
       type: "delete_session",
       sessionId: c.id,
       confirmed: true,
@@ -185,6 +187,7 @@ it("refuses deletion during history loading, then deletes normally after cancell
   await expect(
     readFile(join(c.home, "sessions", `${c.id}.jsonl`)),
   ).rejects.toMatchObject({ code: "ENOENT" });
+  await restarted.shutdown();
 });
 
 it("rejects new sends from deletion start until all disk cleanup completes", async () => {

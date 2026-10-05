@@ -1,0 +1,53 @@
+.area {
+  margin: 4px 20px;
+  font-size: 12px;
+  flex: none;
+}
+.panel {
+  position: fixed;
+  inset: 60px 40px 40px 280px;
+  z-index: 90;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: 16px;
+}
+.panel header,
+.panel form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.panel form {
+  flex-direction: column;
+}
+.panel p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.panel small {
+  display: block;
+  color: var(--dim);
+}
+.panel article {
+  border: 1px solid var(--line);
+  padding: 12px;
+  margin: 10px 0;
+}
+.panel button {
+  margin: 4px 8px 4px 0;
+}
+.panel textarea,
+.panel input {
+  display: block;
+  width: 100%;
+}
+.panel textarea {
+  min-height: 80px;
+}
+@media (max-width: 900px) {
+  .panel {
+    left: 20px;
+    right: 20px;
+  }
+}

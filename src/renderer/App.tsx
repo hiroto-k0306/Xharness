@@ -17,6 +17,7 @@ import {
 import { PermissionInline } from "./components/PermissionInline.js";
 import { PromptLine } from "./components/PromptLine.js";
 import { QuotaPause } from "./components/QuotaPause.js";
+import { ProjectMemoryPanel } from "./components/ProjectMemory.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { StepTabs } from "./components/StepTabs.js";
 import { TitleBar } from "./components/TitleBar.js";
@@ -530,6 +531,9 @@ export function App() {
           )}
           {session?.quotaPause && current && (
             <QuotaPause pause={session.quotaPause} sessionId={current} />
+          )}
+          {current && session?.workspaceId && (
+            <ProjectMemoryPanel key={current} sessionId={current} />
           )}
           <PromptLine
             maxImages={app.images?.maxPerMessage}

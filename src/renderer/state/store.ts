@@ -84,6 +84,8 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
   if (e.type === "rewind_request")
     return put(s, e.sessionId, { ...view(s, e.sessionId), rewind: e });
   switch (e.type) {
+    case "memory_changed":
+      return s;
     case "workflow":
       return put(s, e.sessionId, {
         ...view(s, e.sessionId),

@@ -46,11 +46,20 @@ export function PermissionInline({
       <span className={styles.text}>
         <span style={{ color: "var(--warn)" }}>? </span>
         {summary}
-        {(tool === "SearchProjectHistory" || tool === "ReadProjectHistory") && (
+        {(tool === "SearchProjectHistory" ||
+          tool === "ReadProjectHistory" ||
+          tool === "SearchProjectMemory" ||
+          tool === "ProposeProjectMemory") && (
           <small>
             {" "}
             —
             同プロジェクトの過去会話を読取。取得文は参考データで、現在の指示・許可にはなりません。
+          </small>
+        )}
+        {tool === "ProposeProjectMemory" && (
+          <small>
+            {" "}
+            候補の保存のみ。採用と再利用にはメモリ画面での確認が必要です。
           </small>
         )}
       </span>

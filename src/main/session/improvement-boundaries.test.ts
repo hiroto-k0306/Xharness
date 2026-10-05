@@ -112,6 +112,20 @@ it("pins accepted memory revisions and preserves the completed ledger on write f
   expect(await readFile(path, "utf8")).toBe(original);
   expect(f.requests).not.toHaveBeenCalled();
 });
+it("binds source provenance to recorded inputs so an external source edit invalidates old results", async () => {
+  const f = await fixture();
+  const e = await f.baseline(),
+    evaluated = await f.evaluate(e, e.versions[0]!.id);
+  expect(evaluated.view.rows[0]!.valid).toBe(true);
+  const path = join(f.home, "improvements.json");
+  const document = JSON.parse(await readFile(path, "utf8"));
+  document.entries[0].source = { memory: { id: "different", revision: 1 } };
+  await writeFile(path, JSON.stringify(document));
+  expect((await f.list()).rows[0]).toMatchObject({
+    valid: false,
+    quality: false,
+  });
+});
 it("requires every fixed case before a candidate can be accepted", async () => {
   const f = await fixture();
   const created = await f.action({

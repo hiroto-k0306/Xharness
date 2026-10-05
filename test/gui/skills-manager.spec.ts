@@ -75,6 +75,114 @@ test("empty manager handles denial, typing, cancellation, escape and narrow-wind
     await rm(root, { recursive: true, force: true });
   }
 });
+test("task suggestions use permitted metadata, cap results and invalidate old choices without automatic loading", async ({
+  gui,
+  electronApp,
+}, info) => {
+  const root = await mkdtemp(join(tmpdir(), "xh-skill-suggestions-"));
+  const path = join(root, ".agents/skills/review-0/SKILL.md");
+  const text = (body: string) =>
+    `---\nname: review-0\ndescription: 品質レビュー\n---\n${body}\n`;
+  try {
+    for (let i = 0; i < 6; i++) {
+      const folder = join(root, ".agents/skills", `review-${i}`);
+      await mkdir(folder, { recursive: true });
+      await writeFile(
+        join(folder, "SKILL.md"),
+        `---\nname: review-${i}\ndescription: 品質レビュー\n---\nDo not use this body to select cache candidates.\n`,
+      );
+    }
+    await gui
+      .getByRole("textbox", { name: "prompt", exact: true })
+      .fill("Please review quality");
+    const panel = await setup(gui, electronApp, root);
+    const suggestions = panel.getByRole("region", {
+      name: "依頼に関連するスキル候補",
+    });
+    const request = suggestions.getByRole("textbox", {
+      name: "候補を探す依頼内容",
+    });
+    const candidates = suggestions
+      .getByRole("list", { name: "スキル候補" })
+      .getByRole("button");
+    await suggestions
+      .getByRole("button", { name: "入力中の依頼を使う（先頭500文字）" })
+      .click();
+    await expect(request).toHaveValue("Please review quality");
+    await expect(candidates).toHaveCount(0);
+    const permission = (name: string) =>
+      panel.getByRole("alertdialog", { name: `${name} の実行確認` });
+    const allow = async (name: string) => {
+      await expect(permission(name)).toBeVisible();
+      await permission(name).getByRole("button", { name: /allow/ }).click();
+    };
+    const refresh = panel.getByRole("button", { name: "一覧を取得・更新" });
+    await refresh.click();
+    await permission("ListProjectSkills")
+      .getByRole("button", { name: /deny/ })
+      .click();
+    await expect(candidates).toHaveCount(0);
+    await refresh.click();
+    await panel.getByRole("button", { name: "読取を取消" }).click();
+    await expect(candidates).toHaveCount(0);
+    await refresh.click();
+    await allow("ListProjectSkills");
+    await expect(candidates).toHaveCount(3);
+    await expect(suggestions).toContainText("他3件は表示を省略");
+    await expect(suggestions).toContainText("名前の語一致");
+    await request.fill("cache");
+    await expect(candidates).toHaveCount(0); // matching text exists only in the body
+    await expect(suggestions).toContainText("語が一致する候補はありません");
+    await request.fill("品質をレビューしてください");
+    await expect(candidates).toHaveCount(3);
+    await expect(suggestions).toContainText("説明の語一致");
+    await candidates.first().evaluate((button) => {
+      (button as HTMLButtonElement).click();
+      (button as HTMLButtonElement).click();
+    });
+    await expect(panel.getByRole("alertdialog")).toHaveCount(0);
+    await expect(
+      panel.getByRole("button", { name: "会話でこの版を読み込む" }),
+    ).toBeDisabled();
+    await panel.getByRole("button", { name: "この版をプレビュー" }).click();
+    await allow("LoadProjectSkill");
+    const load = panel.getByRole("button", { name: "会話でこの版を読み込む" });
+    await expect(load).toBeEnabled();
+    await request.fill("cache");
+    await expect(load).toHaveCount(0); // changed task cannot retain the old selection/preview
+    await request.fill("review");
+    await candidates.first().click();
+    await writeFile(path, text("UPDATED PREVIEW"));
+    await panel.getByRole("button", { name: "この版をプレビュー" }).click();
+    await allow("LoadProjectSkill");
+    await expect(panel.getByRole("alert")).toContainText("再取得");
+    await expect(load).toBeDisabled();
+    await expect(candidates).toHaveCount(0);
+    await refresh.click();
+    await expect(candidates).toHaveCount(0);
+    await panel.getByRole("button", { name: "読取を取消" }).click();
+    await expect(candidates).toHaveCount(0); // stale snapshot is not re-used after cancellation
+    await refresh.click();
+    await allow("ListProjectSkills");
+    await candidates.first().click();
+    await panel.getByRole("button", { name: "この版をプレビュー" }).click();
+    await allow("LoadProjectSkill");
+    await expect(panel.getByLabel("スキル本文プレビュー")).toContainText(
+      "UPDATED PREVIEW",
+    );
+    await expect(panel).not.toContainText("会話に読込済み");
+    await load.click();
+    await allow("LoadProjectSkill");
+    await expect(panel.getByRole("list", { name: "スキル一覧" })).toContainText(
+      "会話に読込済み（この版）",
+    );
+    await expect(refresh).toBeEnabled();
+    await expect(candidates).toHaveCount(3);
+    await gui.screenshot({ path: info.outputPath("suggestions.png") });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 test("manager distinguishes preview from actual load and invalidates selection after updates and deletion", async ({
   gui,
   electronApp,

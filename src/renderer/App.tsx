@@ -19,6 +19,7 @@ import { PromptLine } from "./components/PromptLine.js";
 import { QuotaPause } from "./components/QuotaPause.js";
 import { ProjectMemoryPanel } from "./components/ProjectMemory.js";
 import { ImprovementsPanel } from "./components/Improvements.js";
+import { HandoffsPanel } from "./components/Handoffs.js";
 import { SkillsManager } from "./components/SkillsManager.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { StepTabs } from "./components/StepTabs.js";
@@ -552,6 +553,13 @@ export function App() {
               receipts={view?.receipts ?? []}
               permission={view?.pending}
               draft={skillDraft}
+            />
+          )}
+          {current && session?.workspaceId && (
+            <HandoffsPanel
+              key={`handoffs-${current}`}
+              session={session}
+              sessions={app.sessions}
             />
           )}
           {current && session?.workspaceId && (

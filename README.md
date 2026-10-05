@@ -4,23 +4,32 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 このファイルは**開発者向け**。アプリを使う人向けの説明(インストール・起動・使い方)は [release/README.md](release/README.md) にあり、配布物に同梱する。
 
+## 現在の仕様と状態
+
+作業前に [SPEC.md](SPEC.md) の担当節と [AGENTS.md](AGENTS.md) を読む。現行仕様はSPEC.mdへ集約し、DESIGN.mdは過去の設計資料として保存する。過去のフェーズ順や未実装案を、そのまま現在の実装要件にはしない。
+
+デスクトップ・headless、workflow、MCP、実行レポート、巻き戻し、画像、子の引き継ぎ・予約などを実装済み。デスクトップには公式CLIによる認証自動更新もあるが、headlessとは機能差がある。動作・設定・未確認事項は [SPEC.md](SPEC.md) を参照する。
+
+Windowsのexe作成・fake GUIの記録は [20261004配布記録](docs/release-20261004-integrated.md)。その後の [認証更新記録](docs/auth-refresh-progress.md) は型・lint・buildと150ファイル / 1445テストの成功を記録しているが、実際の期限切れでの更新は未確認。以前の配布物に最新ソースの変更が入っているとは限らない。
+
 ## 資料
 
-| 資料                                       | 内容                                                 |
-| ------------------------------------------ | ---------------------------------------------------- |
-| [DESIGN.md](DESIGN.md)                     | 全体設計(作業前に担当する節を読む)                   |
-| [AGENTS.md](AGENTS.md)                     | 作業の規則(セキュリティ・コミット・クラウドでの制約) |
-| [release/README.md](release/README.md)     | 利用者向けの README(配布物に同梱)                    |
-| [docs/](docs/)                             | フェーズごとの進捗と手元確認の記録                   |
-| [mockup/index.html](mockup/index.html)     | 画面の見本                                           |
-| [catalog/models.yaml](catalog/models.yaml) | モデルの一覧                                         |
+| 資料                                       | 内容                                                     |
+| ------------------------------------------ | -------------------------------------------------------- |
+| [SPEC.md](SPEC.md)                         | 現行仕様・既定値・機能差・検証範囲(作業前に担当節を読む) |
+| [DESIGN.md](DESIGN.md)                     | 過去の設計と検討経緯。現行仕様として使わない             |
+| [AGENTS.md](AGENTS.md)                     | 作業の規則(セキュリティ・コミット・クラウドでの制約)     |
+| [release/README.md](release/README.md)     | 利用者向けの README(配布物に同梱)                        |
+| [docs/](docs/)                             | 日付・対象リビジョンごとの進捗と検証記録                 |
+| [mockup/index.html](mockup/index.html)     | 初期の画面見本。現在の画面仕様はSPEC.mdを参照            |
+| [catalog/models.yaml](catalog/models.yaml) | モデルの一覧                                             |
 
 ## 開発環境
 
 - Node.js 24 LTS（基準24.16.0、`.node-version`）、pnpm 10(`packageManager`)。Node 22.20以降も互換確認対象
-- Windows で動かす場合: PowerShell 7(`pwsh`)、ripgrep(`rg`)、Git
+- Windowsのシェル実行にはPowerShell 7(`pwsh`)、リポジトリ操作にはGitが必要。ripgrep(`rg`)は推奨だが、省略時もGrep / GlobはNode検索へ切り替わる
 - Windowsの検証ではNodeとpwshの版・実体を確認する（`node --version`、`Get-Command node,pwsh`、`pwsh -NoProfile -Command '$PSVersionTable.PSVersion'`）。Codex同梱pwshとWindowsApps版は子プロセスのJob継承が異なる場合があるため、ユーザーと同じpwshをPATHの先頭に指定する。切り分けは [docs/h3-job-investigation.md](docs/h3-job-investigation.md)
-- 実際のモデルを使う確認には、公式 CLI(`claude` / `codex`)でのログインが要る。クラウド(Linux)では実 API を呼ばず、`--fake` と `test/fixtures/` で確認する(AGENTS.md)
+- 通常の検証はFakeProvider・モック・`test/fixtures/`を使う。実モデル・認証CLI・spikeの実行は別途承認された範囲のみ。公式CLIのログインが必要な実試験や、更新によるモデル通信を無断で行わない。クラウド(Linux)では実APIを呼ばない([AGENTS.md](AGENTS.md))
 
 ### この Windows 作業環境のローカル pnpm
 

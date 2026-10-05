@@ -6,19 +6,21 @@
 
 XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を直接使う、Windows 向けデスクトップ(Electron)の汎用コーディングエージェント。
 
-- 全体設計: [DESIGN.md](DESIGN.md)。**作業を始める前に、担当する節を必ず読むこと**
+- 現行仕様: [SPEC.md](SPEC.md)。**作業を始める前に、担当する節を必ず読むこと**
+- 過去資料: [DESIGN.md](DESIGN.md)。旧仕様・未実装案を含むため、現行の実装要件として扱わない
 - UI の見本: [mockup/index.html](mockup/index.html)(ブラウザで開くだけで見られる)
 - モデル一覧: [catalog/models.yaml](catalog/models.yaml)
 - ロゴ・アイコン: [brand/](brand/)
-- 状態: **Phase 0 のゲート完了（2026-10-01）、Phase 1 の headless 最小実装を検証済み、Phase 2 はクラウドで実装・検証済み(exe のビルドと起動確認は手元で未実施)**。Phase 2 の範囲は [docs/phase2-progress.md](docs/phase2-progress.md)、手元確認は [docs/phase2-local-check.md](docs/phase2-local-check.md)。Phase 1 の実装・確認範囲は [docs/phase1-progress.md](docs/phase1-progress.md)。Phase 0 の確認結果・未実測事項は [docs/phase0-findings.md](docs/phase0-findings.md)
+- 状態: デスクトップ・headless、workflow、MCP、レポート、汎用ツール、予約、認証自動更新まで実装が進んでいる。機能差・未確認事項は [SPEC.md](SPEC.md) を参照する。Windows配布物の作成記録は [docs/release-20261004-integrated.md](docs/release-20261004-integrated.md)、その後の認証更新の検証は [docs/auth-refresh-progress.md](docs/auth-refresh-progress.md)。過去の成功を現在のリビジョンで再検証したものと扱わない
 
 ## 作業の進め方
 
-1. 実装は DESIGN.md §13 のフェーズ順に進める。前のフェーズの完了条件を満たすまで次に進まない
+1. 現行仕様と依頼の対象を照合し、最新コードでも課題が残っているか確認してから作業する。DESIGN.mdの旧フェーズ順を現在の作業制約にしない
 2. 1つの作業は小さく区切る(目安: 1コミット = 1つの目的、差分 400 行以内)
-3. 設計と違うことをしたくなったら、**実装する前に**理由を書いて人間に確認する。確認が取れたら DESIGN.md も更新する
+3. SPEC.mdと違うことをしたくなったら、**実装する前に**理由と影響を書いて人間に確認する。確認が取れたらSPEC.mdも更新する。コードとの不一致を見つけても、無条件に仕様をコードへ合わせない
 4. 調べて分かった事実(ヘッダ名、エラー形式など)は推測で埋めず、実際の通信結果を記録してから使う
 5. 作業の最後に、何をして何が未完了かを短く報告する。テストが落ちている・試していないことは、そのまま書く
+6. 結果はdocs/へ対象リビジョン・環境・検証範囲とともに記録する。過去の記録内のDESIGN.md参照は当時の根拠として残し、新しい仕様説明ではSPEC.mdを参照する
 
 ## ユーザーへのファイル・フォルダー案内
 
@@ -28,20 +30,21 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - 成果物へのリンクは実在する最新の保存先を確認してから出す。この指定は、最終報告・途中報告・次の会話でも守る。
 - リンクを開く際の確認や main 側の検証は従来どおり維持する。自動実行や安全設定の緩和で代用しない。
 
-## 技術スタック(DESIGN.md §15-B で決定済み。勝手に変えない)
+## 技術スタック(SPEC.md §2。勝手に変えない)
 
 - Node.js 24 LTS（基準24.16.0、ユーザー環境に合わせて2026-10-03更新）/ TypeScript(`strict: true`)/ pnpm。Node 22.20以降も互換確認する
 - Electron + electron-vite + electron-builder
 - React + Zustand + CSS Modules
-- Vitest / ESLint / Prettier
+- Vitest / Playwright / ESLint / Prettier
 - 実行シェル: PowerShell 7(Windows)
 - Windows検証はユーザーが使うpwshの実体・配布形態まで合わせる。Codex同梱版だけで成功しても、WindowsApps / Store版での成功とみなさない。使用したNode・pwshの版と実体をdocs/へ記録する
-- MCP クライアント: 公式 `@modelcontextprotocol/sdk`(ユーザー承認 2026-10-02。DESIGN.md §25。モデルの API 呼び出しには引き続き SDK を使わない)
+- MCP クライアント: 公式 `@modelcontextprotocol/sdk`(ユーザー承認済み。SPEC.md §9。モデルの API 呼び出しには引き続き SDK を使わない)
+- Node代替検索: `ignore` と `node:path.matchesGlob` は採用承認済み。rgがない場合も動作を確認する
 
 ## コードのルール
 
-- `src/main/` の core・providers・auth・tools・workflow・hooks は **electron を import しない**(UI なしでテストできるようにするため。DESIGN.md §4)
-- プロバイダごとの違い(HTTP・SSE・形式変換)は `src/main/providers/<provider>/` の中に閉じ込める。Agent Loop は `ProviderEvent` だけを見る(§6)
+- `src/main/` の core・providers・auth・tools・workflow・hooks は **electron を import しない**(UI なしでテストできるようにするため。SPEC.md §2)
+- プロバイダごとの違い(HTTP・SSE・形式変換)は `src/main/providers/<provider>/` の中に閉じ込める。Agent Loop は `ProviderEvent` だけを見る(SPEC.md §2)
 - 外部 API の呼び出しには Node 標準の `fetch` を使う。SDK は使わない(サブスクの OAuth で呼ぶため)
 - 変換処理(内部形式 ⇄ 各 API)には必ず単体テストを書く。テストには `test/fixtures/` の実レスポンスを使う
 
@@ -49,14 +52,12 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 
 - **アクセストークン・リフレッシュトークン・アカウント ID を、ログ・標準出力・ファイル・コミット・エラーメッセージに出さない**。出す必要があるときは先頭 6 文字 + `…` にマスクする
 - `test/fixtures/` に保存するときは、リクエストヘッダの `Authorization` と `chatgpt-account-id` を必ず取り除く。保存前にマスク処理を通す
-- `~/.claude/.credentials.json` と `~/.codex/auth.json` は**読むだけ**。Phase 0 では書き換えない
-  - 例外（ユーザー承認 2026-10-01）: C5 / X7 の更新試験に限り、公式 CLI 自身による更新を許可する。XHarness のスクリプトは読み取りと変化の比較のみ行い、自前 refresh・資格情報編集・秘密値の保存は行わない
-  - 例外（ユーザー承認 2026-10-01）: Phase 3 の期限切れ解消にも公式 Claude CLI による更新を許可。XHarness の資格情報読み取りのみ・自前 refresh なしの制約は同じ。
-  - 例外（ユーザー承認 2026-10-02）: Phase 5 の追加確認にも公式 Claude CLI による更新を許可。通信予算は Claude 8枠へ拡張（CLI 1試行を1枠として記録）。資格情報の自前更新・秘密値保存は禁止のまま。
-  - 例外（ユーザー承認 2026-10-02）: stabilize のレビュー対応後の再確認に限り、通信予算を Claude 20回・Codex 8回追加（使用: Claude 12回・Codex 6回。記録は docs/stabilize-progress.md）。資格情報の自前更新・秘密値保存は禁止のまま。
-  - 例外（ユーザー承認 2026-10-02）: 初回認証・期限切れの解消は、アプリでユーザーが許可した場合に公式CLIのログイン処理を起動してよい（DESIGN.md §14.1）。書き込みは公式CLIのみ。自前refresh・資格情報編集・秘密値の保存は禁止。
+- `~/.claude/.credentials.json` と `~/.codex/auth.json` はXHarness・開発用スクリプトからは**読むだけ**。自前refresh、資格情報編集、期限の改変、秘密値の保存は禁止
+  - 承認済みの製品動作: アプリの許可操作を経た公式CLIログイン、およびSPEC.md §8の期限切れ・401時の公式CLI自動更新。書き込みは公式CLIのみ。自動更新CLIはモデル通信を伴う
+  - 製品機能の承認を、開発中の任意の実通信試験の許可に読み替えない。通常の検証はFakeProvider・モック・fixtureを使う。実通信は依頼で承認された範囲・回数だけ行い、結果を記録する
+  - Phase 0〜5やstabilizeの過去の試験許可・通信予算は各docsの履歴であり、新しい作業の恒常的な通信許可ではない（[Phase 0](docs/phase0-findings.md)、[stabilize](docs/stabilize-progress.md)）
 - トークンをレンダラプロセス(画面側)に渡さない
-- 使用量を無駄にしない: Phase 0 の試験リクエストは最小限にし、短いプロンプトと軽いモデルを使う(手順書の指定どおり)
+- 使用量を無駄にしない: 承認された実試験も、指定された回数・軽いモデル・短い入力に限定する。未確認なら未確認と記録する
 
 ## コマンド
 

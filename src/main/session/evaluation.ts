@@ -367,6 +367,43 @@ export function evaluateSessionCommon(
   return evaluation;
 }
 
+/** Local UI reads have no model/task run. Keep them visible without allocating usage or quality. */
+export function evaluateUiSkillReads(trace?: TraceReplay) {
+  const ids = new Set(
+    trace?.records
+      .filter(
+        (r) =>
+          r.phase === "start" &&
+          r.kind === "tool" &&
+          ["ListProjectSkills", "LoadProjectSkill"].includes(r.label) &&
+          ["list", "preview"].includes(String(object(r.input).uiAction)),
+      )
+      .map((r) => r.id),
+  );
+  if (!ids.size) return [];
+  const root: TraceRecord = {
+    id: "ui-skills",
+    sequence: 0,
+    phase: "start",
+    kind: "task",
+    agentId: "ui",
+    label: "ui",
+    at: "",
+  };
+  return (
+    evaluateTrace({
+      records: [
+        root,
+        ...trace!.records
+          .filter((r) => ids.has(r.id))
+          .map((r) => ({ ...r, taskId: root.id })),
+        { ...root, phase: "end" },
+      ],
+      skipped: trace?.skipped ?? 0,
+    })[0]?.skillReads ?? []
+  );
+}
+
 export interface ComparisonEntry {
   task: TaskEvaluation;
   /** Identical case and acceptance conditions are required for a useful comparison. */
@@ -442,6 +479,10 @@ export function renderEvaluation(trace?: TraceReplay): string {
       return `<article><h3>タスク ${escape(task.taskId)}</h3><p>品質結果: ${task.outcome} (${escape(task.stopCause ?? "不明")}) · 所要時間: ${task.elapsedMs ?? "不明"} ms · 経過時間（再開待ち含む）: ${task.wallClockMs ?? "不明"} ms</p><p>レビュー試行 ${task.reviewAttempts} · 指摘に戻った修正ラウンド ${task.correctionRounds}${task.recordingIncomplete ? " · 記録欠落あり" : ""}</p><table><thead><tr><th>項目</th><th>取得済み合計</th><th>測定カバー率（呼出数）</th></tr></thead><tbody>${metrics}</tbody></table><details><summary>呼出と測定の詳細</summary><p>親実行 ${task.runs} 回 · 呼出試行: ${task.calls.length} (模擬 ${task.simulatedCalls} / 実fetch送信記録 ${task.dispatchedCalls}) · 完全なusage: ${task.completeUsageCalls}/${task.calls.length}</p><table><thead><tr><th>根拠</th><th>provider / model / effort</th><th>結果</th><th>通信時間</th></tr></thead><tbody>${calls}</tbody></table><pre>${escape(JSON.stringify(task.calls, null, 2))}</pre></details><details><summary>品質の根拠（モデルレビュー・コマンド実行・終了理由）</summary><pre>${escape(JSON.stringify(task.evidence, null, 2))}</pre></details>${skillReferences}</article>`;
     })
     .join("");
+  const uiReads = evaluateUiSkillReads(trace);
+  const uiCard = uiReads.length
+    ? `<article><h3>UIのスキル確認（会話への読込・品質の証明ではない）</h3><pre>${escape(JSON.stringify(uiReads, null, 2))}</pre></article>`
+    : "";
   const common = evaluateSessionCommon(trace);
   const unassigned = new Set(
     trace?.records
@@ -457,5 +498,5 @@ export function renderEvaluation(trace?: TraceReplay): string {
   const commonCard = common
     ? `<article><h3>セッション共通分</h3><p>対象タスクのない手動圧縮・旧記録。タスクの品質結果には含めません。呼出試行 ${common.calls.length} · 通信時間合計 ${common.elapsedMs ?? "不明"} ms</p><table><thead><tr><th>項目</th><th>取得済み合計</th><th>測定カバー率（呼出数）</th></tr></thead><tbody>${(["input", "output"] as const).map((key) => `<tr><th>${key === "input" ? "In" : "Out"}</th><td>${common.metrics[key].known ?? "不明"}</td><td>${common.metrics[key].measuredCalls}/${common.calls.length}</td></tr>`).join("")}</tbody></table><details><summary>共通分の根拠</summary><pre>${escape(JSON.stringify(common.calls, null, 2))}</pre></details></article>`
     : "";
-  return `<section id="evaluation"><h2>品質・使用量の評価</h2><p>完了はハーネスの終了理由です。モデルの申告・レビューや任意コマンドの成功を、客観テスト合格とはみなしません。Inはcacheを含む総入力、Outはreasoningを含む総出力です。取得済み合計は部分値を含み、不明をゼロに置換しません。</p><p>未完了タスクのIDは再起動後も継承します。同じ試行IDの再配信は一度だけ数え、新しい再試行は別消費として集計します。境界欠落の通信 ${unassigned} 件はタスク合計に含めません。</p>${cards || "<p>評価タスク境界の記録がありません。旧レシート・トレースは下の詳細で確認できます。</p>"}${commonCard}</section>`;
+  return `<section id="evaluation"><h2>品質・使用量の評価</h2><p>完了はハーネスの終了理由です。モデルの申告・レビューや任意コマンドの成功を、客観テスト合格とはみなしません。Inはcacheを含む総入力、Outはreasoningを含む総出力です。取得済み合計は部分値を含み、不明をゼロに置換しません。</p><p>未完了タスクのIDは再起動後も継承します。同じ試行IDの再配信は一度だけ数え、新しい再試行は別消費として集計します。境界欠落の通信 ${unassigned} 件はタスク合計に含めません。</p>${cards || "<p>評価タスク境界の記録がありません。旧レシート・トレースは下の詳細で確認できます。</p>"}${commonCard}${uiCard}</section>`;
 }

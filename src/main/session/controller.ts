@@ -3,6 +3,7 @@ import { resolvePermissionMode } from "../../shared/permission-modes.js";
 import { SessionSchedules } from "./schedules.js";
 import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
 import { ProjectMemory } from "./project-memory.js";
+import { readSkillUi } from "./skill-ui.js";
 import { decidePermission } from "../core/permissions.js";
 import { captureQuotaPause } from "./quota-capture.js";
 import { resumeConditions, resumeHash } from "./resume-conditions.js";
@@ -82,6 +83,10 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private readonly skillReads = new Map<
+    string,
+    { requestId: string; abort: AbortController }
+  >();
   private readonly quotaPauses: QuotaPauses;
   private readonly schedules: SessionSchedules;
   private readonly runtimes = new Map<string, Runtime>();
@@ -325,6 +330,58 @@ export class SessionController {
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
       switch (command.type) {
+        case "project_skills": {
+          const request = command.request;
+          if (request.action === "cancel") {
+            const active = this.skillReads.get(command.sessionId);
+            if (active?.requestId !== request.requestId)
+              return { ok: false, error: "No such skill read" };
+            active.abort.abort();
+            return { ok: true };
+          }
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const rt = this.runtime(session.id);
+          if (this.ctx.sessionBusy.has(session.id) || rt.status !== "idle")
+            return {
+              ok: false,
+              error: "実行終了後にスキルを確認してください。",
+            };
+          const abort = new AbortController();
+          this.skillReads.set(session.id, {
+            requestId: request.requestId,
+            abort,
+          });
+          this.ctx.sessionBusy.add(session.id);
+          rt.abort = abort;
+          rt.status = "running";
+          const job = (async () => {
+            await this.load(session.id);
+            if (abort.signal.aborted)
+              return { ok: false as const, error: "取消しました。" };
+            return readSkillUi(
+              this.ctx,
+              this.gate,
+              session,
+              rt,
+              request,
+              abort.signal,
+            );
+          })().finally(async () => {
+            this.skillReads.delete(session.id);
+            this.ctx.sessionBusy.delete(session.id);
+            rt.status = "idle";
+            rt.abort = undefined;
+            await this.emitState();
+            if (rt.closing) this.ctx.dropRuntime(session.id);
+          });
+          rt.done = job.then(
+            () => undefined,
+            () => undefined,
+          );
+          return await job;
+        }
         case "project_memory": {
           const session = this.sessions.get(command.sessionId);
           if (!session || this.stopped)

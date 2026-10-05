@@ -9,6 +9,7 @@ import {
   type HistoryScope,
 } from "./project-history.js";
 import { type ToolRegistry } from "./registry.js";
+import { type SkillEntry } from "../../shared/project-skills.js";
 
 export const SKILL_TOOLS = ["ListProjectSkills", "LoadProjectSkill"];
 export const SKILL_LIMITS = {
@@ -27,17 +28,6 @@ const NOTICE =
 const same = (a: string, b: string) =>
   process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
 class SkillFault extends Error {}
-export interface SkillEntry {
-  name: string;
-  description: string;
-  source: string;
-  hash: string;
-  fileBytes: number;
-  frontmatterBytes: number;
-  ignoredFrontmatter: boolean;
-  redacted: boolean;
-  duplicateName?: boolean;
-}
 
 /** Fixed project roots only. No global-home discovery, cache, script execution or prefix mutation. */
 export class ProjectSkills {

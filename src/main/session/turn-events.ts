@@ -17,6 +17,15 @@ type UsageEvent = Extract<UiEvent, { type: "usage" }>;
 
 /** Router の割り当て判断に使う、プロバイダごとの5時間枠の使用率を更新する */
 export function updateQuota(ctx: ControllerContext, event: UsageEvent) {
+  ctx.candidateQuotas?.observe(
+    event.provider,
+    event.windows ?? [],
+    (ctx.options.quotaNow ?? Date.now)(),
+    !!ctx.options.fake ||
+      !!(ctx.options.providers ?? [ctx.options.provider]).find(
+        (p) => p.id === event.provider,
+      )?.offline,
+  );
   // 枠ごとに最新の値を残す(イベントに一部の枠しか無いときも、ほかの枠を消さない)
   const windows = new Map(
     (ctx.usage[event.provider] ?? []).map((w) => [
@@ -193,6 +202,7 @@ export class TurnEvents {
       this.resumeUnsafe = true;
     switch (event.type) {
       case "auth_refresh": {
+        ctx.candidateQuotas?.clear(event.provider);
         const success = event.result === "success";
         const message = success
           ? "認証を更新しました"
@@ -296,6 +306,15 @@ export class TurnEvents {
         break;
       }
       case "rate_limited":
+        ctx.candidateQuotas?.limited(
+          this.activeProvider,
+          (ctx.options.quotaNow ?? Date.now)(),
+          !!ctx.options.fake ||
+            !!(ctx.options.providers ?? [ctx.options.provider]).find(
+              (p) => p.id === this.activeProvider,
+            )?.offline,
+          event.retryAfterSec,
+        );
         this.quotaRate = {
           provider: this.activeProvider,
           model: (ctx.sessions.get(sessionId) ?? this.session).model,

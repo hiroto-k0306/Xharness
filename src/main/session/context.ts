@@ -199,6 +199,7 @@ export interface ControllerContext {
   readonly quota: Partial<Record<"claude" | "codex", number>>;
   /** 枠ごとの最新の使用率とリセット時刻(Web 検索の auto 用。§22.2) */
   readonly usage: ProviderUsage;
+  readonly candidateQuotas?: import("./candidate-quota.js").CandidateQuotas;
   readonly worktreeBusy: Set<string>;
   /** Synchronous reservation covering send preparation and session operations. */
   readonly sessionBusy: Set<string>;

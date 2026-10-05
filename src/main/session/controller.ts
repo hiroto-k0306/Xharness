@@ -4,6 +4,8 @@ import { SessionSchedules } from "./schedules.js";
 import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
 import { ProjectMemory } from "./project-memory.js";
 import { Improvements, ImprovementFault } from "./improvements.js";
+import { CandidateQuotas } from "./candidate-quota.js";
+import { modelCandidates } from "./model-candidates.js";
 import { readSkillUi } from "./skill-ui.js";
 import { decidePermission } from "../core/permissions.js";
 import { captureQuotaPause } from "./quota-capture.js";
@@ -84,6 +86,15 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private readonly candidatePreviews = new Map<
+    string,
+    {
+      snapshot: string;
+      fingerprint: string;
+      expiresAt: number;
+      operationId: string;
+    }
+  >();
   private readonly improvementReads = new Map<
     string,
     { operationId: string; abort: AbortController }
@@ -170,6 +181,7 @@ export class SessionController {
       trust: new WorkspaceTrust(options.home),
       quota: {},
       usage: {},
+      candidateQuotas: new CandidateQuotas(),
       worktreeBusy: new Set(),
       sessionBusy: new Set(),
       clean,
@@ -407,6 +419,11 @@ export class SessionController {
               improvements: await new Improvements(scope).list(),
             };
           if (command.request.action === "cancel") {
+            if (
+              this.candidatePreviews.get(session.id)?.operationId ===
+              command.operationId
+            )
+              this.candidatePreviews.delete(session.id);
             const current = this.improvementReads.get(session.id);
             if (current?.operationId === command.operationId)
               current.abort.abort();
@@ -469,6 +486,177 @@ export class SessionController {
               },
               abort.signal,
             );
+            if (
+              request.action === "model_candidates" ||
+              request.action === "select_model_candidate"
+            ) {
+              const prepared = await service.action({
+                ...request,
+                action: "prepare",
+              });
+              const providers = this.options.providers ?? [
+                this.options.provider,
+              ];
+              const models = loadModelCatalog()
+                .filter(
+                  (m) =>
+                    m.enabled &&
+                    providers.some(
+                      (p) =>
+                        p.id === m.provider &&
+                        p.models().some((x) => x.id === m.id),
+                    ),
+                )
+                .map((m) => ({
+                  id: m.id,
+                  provider: m.provider,
+                  efforts: Object.keys(m.efforts ?? {}) as Effort[],
+                }));
+              // Test/dev fake is an explicit separate configuration, never a live model.
+              if (
+                this.options.fake &&
+                providers.some((p) => p.models().some((m) => m.id === "fake"))
+              )
+                models.push({
+                  id: "fake",
+                  provider: providers[0]!.id,
+                  efforts: ["high"],
+                });
+              const candidates = await modelCandidates(
+                scope,
+                prepared.improvements,
+                request,
+                models,
+                this.ctx.candidateQuotas!,
+                (this.options.quotaNow ?? Date.now)(),
+              );
+              abort.signal.throwIfAborted();
+              if (request.action === "select_model_candidate") {
+                const chosen = candidates.candidates.find(
+                  (x) => x.id === request.candidateId,
+                );
+                const preview = this.candidatePreviews.get(session.id),
+                  now = (this.options.quotaNow ?? Date.now)();
+                if (
+                  preview?.snapshot !== request.snapshot ||
+                  preview.expiresAt <= now
+                )
+                  throw new ImprovementFault(
+                    "候補確認が期限切れ・取消・再起動で無効です。再取得して確認してください。",
+                  );
+                if (candidates.snapshot !== preview.fingerprint)
+                  throw new ImprovementFault(
+                    "根拠・枠・条件・時刻が変わりました。候補を再取得して確認してください。",
+                  );
+                candidates.snapshot = request.snapshot;
+                if (!chosen?.selectable || request.confirmed !== true)
+                  throw new ImprovementFault(
+                    "共有枠枯渇・未確認の候補は選択できません。枠待ちを確認してください。",
+                  );
+                await this.load(session.id);
+                abort.signal.throwIfAborted();
+                const latest = this.sessions.get(session.id);
+                if (
+                  latest?.model === chosen.model &&
+                  (!chosen.effort || latest.effort === chosen.effort)
+                )
+                  throw new ImprovementFault(
+                    "既にこのモデル・effortを選択済みです。再取得してください。",
+                  );
+                if (
+                  rt.receipts?.some(
+                    (r) =>
+                      r.tool === "SelectModelCandidate" &&
+                      (r.input as { snapshot?: string })?.snapshot ===
+                        request.snapshot,
+                  )
+                )
+                  throw new ImprovementFault(
+                    "この候補確認は選択済みです。再取得してください。",
+                  );
+                await this.quotaPauses.cancel(
+                  session.id,
+                  "明示モデル選択により以前の自動再開を取り消しました。",
+                );
+                this.schedules.cancel(session.id);
+                abort.signal.throwIfAborted();
+                const applied = await this.setModel(
+                  session.id,
+                  chosen.model,
+                  chosen.effort,
+                  abort.signal,
+                  { provider: chosen.provider, model: chosen.model },
+                );
+                if (!applied.ok) return applied;
+                this.candidatePreviews.delete(session.id);
+                await this.ctx.record(rt, {
+                  id: `candidates-${randomUUID()}`,
+                  sessionId: session.id,
+                  ts: (this.options.quotaNow ?? Date.now)(),
+                  provider: "harness",
+                  kind: "tool",
+                  durationMs: 0,
+                  tool: "SelectModelCandidate",
+                  summary: this.ctx.clean(
+                    `明示選択 ${chosen.id}: ${request.reason}`,
+                  ),
+                  input: {
+                    snapshot: request.snapshot,
+                    comparison: request.id,
+                    version: request.versionId,
+                    case: request.caseId,
+                  },
+                  output: this.ctx.clean(JSON.stringify(chosen)),
+                  decision: "allow",
+                });
+                this.options.emit({
+                  type: "notice",
+                  sessionId: session.id,
+                  message: this.ctx.clean(
+                    `明示選択 ${chosen.id}。既定値・fallback設定は変更しません。${chosen.reasons.join(" ")}`,
+                  ),
+                  tone: "dim",
+                });
+              } else {
+                await this.load(session.id);
+                abort.signal.throwIfAborted();
+                const fingerprint = candidates.snapshot;
+                candidates.snapshot = resumeHash({
+                  fingerprint,
+                  nonce: randomUUID(),
+                });
+                await this.ctx.record(rt, {
+                  id: `candidates-${randomUUID()}`,
+                  sessionId: session.id,
+                  ts: candidates.observedAt,
+                  provider: "harness",
+                  kind: "tool",
+                  durationMs: 0,
+                  tool: "ModelCandidates",
+                  summary: "同条件のモデル候補を確認（通信なし）",
+                  input: {
+                    comparison: request.id,
+                    version: request.versionId,
+                    case: request.caseId,
+                  },
+                  output: this.ctx.clean(JSON.stringify(candidates)),
+                  decision: "allow",
+                });
+                abort.signal.throwIfAborted();
+                for (const [id, preview] of this.candidatePreviews)
+                  if (preview.expiresAt <= candidates.observedAt)
+                    this.candidatePreviews.delete(id);
+                if (this.candidatePreviews.size >= 100)
+                  this.candidatePreviews.clear();
+                this.candidatePreviews.set(session.id, {
+                  snapshot: candidates.snapshot,
+                  fingerprint,
+                  expiresAt: candidates.expiresAt,
+                  operationId: command.operationId,
+                });
+              }
+              return { ok: true as const, modelCandidates: candidates };
+            }
             return { ok: true as const, ...(await service.action(request)) };
           })()
             .catch((error) => ({
@@ -617,6 +805,9 @@ export class SessionController {
           }
         }
         case "refresh_auth":
+          this.candidatePreviews.clear();
+          this.ctx.candidateQuotas?.clear("claude");
+          this.ctx.candidateQuotas?.clear("codex");
           if (!this.options.fake) await this.options.authentication?.refresh();
           await this.emitState();
           return { ok: true };
@@ -634,6 +825,8 @@ export class SessionController {
               ok: false,
               error: "すべての実行が終了してから認証してください",
             };
+          this.candidatePreviews.clear();
+          this.ctx.candidateQuotas?.clear(command.provider);
           await this.options.authentication.authenticate(command.provider);
           await this.emitState();
           return { ok: true };
@@ -649,6 +842,7 @@ export class SessionController {
         case "set_mode":
           return await setMode(this.ctx, command);
         case "ready": {
+          this.candidatePreviews.clear();
           // A reloaded renderer no longer owns local read promises. Cancel those
           // reads, without cancelling a paused task or granting its permissions.
           const reads = [...this.skillReads.entries()];
@@ -728,6 +922,11 @@ export class SessionController {
           await this.emitState();
           return { ok: true };
         case "set_model":
+          if (this.improvementReads.has(command.sessionId))
+            return {
+              ok: false,
+              error: "候補・改善操作の終了後にモデルを選択してください。",
+            };
           return await this.setModel(
             command.sessionId,
             command.model,
@@ -1478,6 +1677,8 @@ export class SessionController {
     sessionId: string,
     spec: string,
     effort?: Effort,
+    signal?: AbortSignal,
+    expected?: { provider: string; model: string },
   ): Promise<CommandResult> {
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, error: "Unknown session" };
@@ -1489,6 +1690,16 @@ export class SessionController {
         )
       : undefined;
     const resolved = resolveModel(spec, cfg?.aliases ?? this.options.aliases);
+    if (
+      expected &&
+      (resolved?.model !== expected.model ||
+        resolved?.provider !== expected.provider)
+    )
+      return {
+        ok: false,
+        error:
+          "aliasが候補のモデルを変更します。設定と候補を再確認してください。",
+      };
     const known =
       resolved &&
       (this.options.providers ?? [this.options.provider]).some((p) =>
@@ -1505,6 +1716,7 @@ export class SessionController {
       (!catalog || (effort && catalog.efforts && !catalog.efforts[effort]))
     )
       return { ok: false, error: "Unavailable model or effort" };
+    signal?.throwIfAborted();
     await this.sessions.save({
       ...session,
       model: resolved.model,
@@ -1519,6 +1731,7 @@ export class SessionController {
    * 履歴は残る(一覧からは消えない)。
    */
   private async closeSession(sessionId: string): Promise<CommandResult> {
+    this.candidatePreviews.delete(sessionId);
     this.preparations.get(sessionId)?.abort.abort();
     this.schedules.cancel(sessionId);
     await this.quotaPauses.cancel(
@@ -1549,6 +1762,7 @@ export class SessionController {
 
   /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
   async shutdown(timeoutMs = 3000): Promise<void> {
+    this.candidatePreviews.clear();
     this.stopped = true;
     const quotaClosed = this.quotaPauses.close();
     this.schedules.close();

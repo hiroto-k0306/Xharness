@@ -87,6 +87,49 @@ export function routeFake(
           : [],
       )
       .at(0) ?? "";
+  const skillDemo = /^skills-demo: (list|load ([^ ]+) ([a-f0-9]{64}))$/i.exec(
+    memoryPrompt,
+  );
+  if (skillDemo) {
+    const result = request.messages
+      .at(-1)
+      ?.content.find((b) => b.type === "tool_result");
+    return result?.type === "tool_result"
+      ? {
+          type: "message",
+          stopReason: "end_turn",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: `Skill reference data: ${String(result.content)}`,
+              },
+            ],
+          },
+        }
+      : {
+          type: "message",
+          stopReason: "tool_use",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "skill-demo",
+                name:
+                  skillDemo[1] === "list"
+                    ? "ListProjectSkills"
+                    : "LoadProjectSkill",
+                input:
+                  skillDemo[1] === "list"
+                    ? {}
+                    : { source: skillDemo[2], hash: skillDemo[3] },
+              },
+            ],
+          },
+        };
+  }
   const memoryDemo = /^memory-demo: ([\w-]+)\/(\d+)$/i.exec(memoryPrompt);
   if (memoryDemo)
     return endsWithToolResult(request)

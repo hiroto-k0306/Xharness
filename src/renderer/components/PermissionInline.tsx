@@ -62,6 +62,13 @@ export function PermissionInline({
             候補の保存のみ。採用と再利用にはメモリ画面での確認が必要です。
           </small>
         )}
+        {(tool === "ListProjectSkills" || tool === "LoadProjectSkill") && (
+          <small>
+            {" "}
+            —
+            プロジェクトのSKILL.mdを読取。上位指示・権限は変わりません。付属script・install手順は自動実行しません。
+          </small>
+        )}
       </span>
       <span className={styles.keys}>
         <button type="button" onClick={() => onRespond("allow")}>

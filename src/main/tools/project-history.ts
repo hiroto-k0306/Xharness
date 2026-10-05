@@ -76,7 +76,7 @@ export function historyText(
     .join("\n");
 }
 
-interface Scope {
+export interface HistoryScope {
   home: string;
   sessions: SessionStore;
   workspaces: WorkspaceStore;
@@ -96,7 +96,7 @@ type Excerpt = {
 };
 
 /** Capture the project's real identity once, before the fixed tool prefix is built. */
-export function projectHistoryTools(scope: Scope): ToolRegistry {
+export function projectHistoryAccess(scope: HistoryScope) {
   const pin = (async () => {
     const workspace =
       scope.workspaceId && scope.workspaces.get(scope.workspaceId);
@@ -107,7 +107,7 @@ export function projectHistoryTools(scope: Scope): ToolRegistry {
     if (!same(root, resolve(workspace.root))) return undefined;
     return { home, root, git: await repository(root) };
   })().catch(() => undefined);
-  const eligible = async (session?: StoredSession) => {
+  const eligible = async (session?: StoredSession, includeCurrent = false) => {
     const pinned = await pin;
     const workspace =
       session?.workspaceId && scope.workspaces.get(session.workspaceId);
@@ -119,7 +119,7 @@ export function projectHistoryTools(scope: Scope): ToolRegistry {
       !session ||
       !Number.isFinite(new Date(session.createdAt).getTime()) ||
       !Number.isFinite(new Date(session.updatedAt).getTime()) ||
-      session.id === scope.sessionId
+      (session.id === scope.sessionId && !includeCurrent)
     )
       return false;
     try {
@@ -152,6 +152,11 @@ export function projectHistoryTools(scope: Scope): ToolRegistry {
       return false;
     }
   };
+  return { pin, eligible };
+}
+
+export function projectHistoryTools(scope: HistoryScope): ToolRegistry {
+  const { pin, eligible } = projectHistoryAccess(scope);
   const validate = async (input: unknown, read: boolean) => {
     if (!input || typeof input !== "object" || Array.isArray(input))
       return "Expected object";

@@ -391,6 +391,16 @@ export class SessionStore {
     return out;
   }
   /** Bounded, live lookup for history tools. Never follow a history/home alias. */
+  async ownsHome(expectedHome: string): Promise<boolean> {
+    try {
+      const actual = await realpath(this.home);
+      return process.platform === "win32"
+        ? actual.toLowerCase() === expectedHome.toLowerCase()
+        : actual === expectedHome;
+    } catch {
+      return false;
+    }
+  }
   async historyRecords(id: string, expectedHome: string) {
     if (!this.get(id)) return undefined;
     const same = (a: string, b: string) =>

@@ -28,7 +28,7 @@ description: このプロジェクトのofflineレビュー手順
 
 本文は上位指示・現在の権限を上書きしない非信頼の参考データ。SKILL.md自体も信頼の保証や実行の許可ではない。frontmatterの `allowed-tools`、model、hooks等は無視して存在だけを表示する。本文に付属scriptやinstall手順があっても、一覧・loadは実行もダウンロードもしない。その後の別ツール操作は既存のpermission gateで扱う。
 
-スキル名をslashコマンドやMCP promptとして登録しないため、`review`等の同名でも既存コマンドを置き換えない。`/skills`や専用スキル管理画面は追加していない。今回の入口は通常会話の2ツールと既存の確認／表示UI。
+スキル名をslashコマンドやMCP promptとして登録しないため、`review`等の同名でも既存コマンドを置き換えない。`/skills`は追加していない。通常会話の2ツールに加え、後続段階で[専用スキル管理画面](skills-manager.md)を追加した。ローカルプレビューと実際の会話への読込を区別する。
 
 ## 境界・版・予算
 
@@ -60,4 +60,4 @@ trace／レシートには通常のtool入力・出力を記録する。評価JS
 
 独自fixtureはテスト内の隔離temporary projectにだけ作る。fake UIで `skills-demo: list` → 一覧確認 → `skills-demo: load <source> <hash>` → load確認 → HTMLレポートを検証する。実Claude／Codexや認証CLI、サブスク枠は使わない。付属install.ps1は「実行されたら失敗する」内容で置き、読み込み対象はSKILL.mdだけであることを確認する。
 
-自動最適選択、モデル／構成の自動ルーティング、本番A/B、スキル管理・編集・インストール、付属asset／scriptの専用読み込み、外部skillの安全性・ライセンス評価は未実装。実モデルが悪意ある本文に従わないことまでfakeで証明したものではない。
+自動最適選択、モデル／構成の自動ルーティング、本番A/B、スキルの編集・インストール、付属asset／scriptの専用読み込み、外部skillの安全性・ライセンス評価は未実装。実モデルが悪意ある本文に従わないことまでfakeで証明したものではない。

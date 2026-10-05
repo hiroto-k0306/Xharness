@@ -282,6 +282,8 @@ MCPはstdio / HTTP系接続、ツール・リソース・プロンプトを扱�
 
 一覧はdirectory候補100件・結果50件・読取上界512 KiB、1ファイル64 KiB・frontmatter4 KiB、load本文8,000文字。省略・除外理由を明示する。第三者skill導入、自動最適選択、本番A/B、付属asset／script処理、全件ページ送りは未対応。操作・制約・独自offline fixture: [プロジェクトスキル](docs/project-skills.md)。
 
+デスクトップの登録workspace会話には「スキル管理」を提供する。一覧検索・source／hash詳細・本文プレビューは既存2ツールのvalidator、permission gate、境界、予算、秘密フィルター、traceを通すローカル読取。プレビューだけでは会話に本文を追加せずモデル通信もしない。「会話でこの版を読み込む」は選択したsource／hashを固定した明示依頼として通常のsend経路へ送り、通常のモデル実行・許可確認を伴うことを画面で説明する。読込済み表示は成功したLoadProjectSkill receiptのsource／hashに基づき、モデル文言だけでは認定しない。更新・削除・不正・一覧範囲外では再取得と再選択を要求する。UI読取traceはHTML評価レポートの別欄に示し、会話読込・タスク品質・モデルusageと混同しない。拒否・取消・二重実行を扱い、headlessの既存ツール導線は維持する。ファイルの編集・インストールは行わない。操作: [スキル管理画面](docs/skills-manager.md)。
+
 ### MCP
 
 - 設定はリポジトリ直下の`.mcp.json`(`mcpServers`)。stdioとhttpのみで、sseは読まない。サーバー名は英数字・`_`・`-`の64文字以内で、`__`を含められない。`${VAR}` / `${VAR:-既定値}`を展開し、未定義の変数があるサーバーは無効にする。

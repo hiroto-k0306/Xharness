@@ -126,6 +126,7 @@ export function ProjectMemoryPanel({ sessionId }: { sessionId: string }) {
                 <strong>{e.topic}</strong> · {e.kind} · {e.status} ·{" "}
                 {e.confidence} · v{e.revision}
                 <p>{e.content}</p>
+                <small>記録ID {e.id}</small>
                 <small>
                   作成 {new Date(e.createdAt).toLocaleString()} · 更新{" "}
                   {new Date(e.updatedAt).toLocaleString()} · 期限{" "}

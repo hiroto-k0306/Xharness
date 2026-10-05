@@ -2,6 +2,8 @@ import { test, expect } from "./electron.fixture.js";
 import { _electron as electron } from "@playwright/test";
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 test("packaged restart preserves records and a killed process never replays pending work", async ({
   gui,
@@ -70,6 +72,7 @@ test("packaged restart preserves records and a killed process never replays pend
   };
   await electronApp.close();
   const restarted = await launch();
+  const restartedProcess = restarted.process();
   try {
     const page = await open(restarted);
     await expect(page.getByText("pong", { exact: true })).toBeVisible();
@@ -104,11 +107,17 @@ test("packaged restart preserves records and a killed process never replays pend
         evaluationTask: { id: "release-crash", active: true, settled: false },
       }) + "\n",
     );
+    const mainPid = await restarted.evaluate(() => process.pid);
     const exited = new Promise<void>((resolve) =>
-      restarted.process().once("exit", () => resolve()),
+      restartedProcess.once("exit", () => resolve()),
     );
-    // Kill only the process returned by this isolated launch; never by app name.
-    restarted.process().kill("SIGKILL");
+    // Windows packaged Electron may have a launcher PID distinct from its main.
+    // Kill only this verified isolated main and its descendants; never by name.
+    await promisify(execFile)(
+      "taskkill.exe",
+      ["/PID", String(mainPid), "/T", "/F"],
+      { windowsHide: true },
+    );
     await exited;
     const recovered = await launch();
     try {
@@ -154,6 +163,6 @@ test("packaged restart preserves records and a killed process never replays pend
       await recovered.close();
     }
   } finally {
-    if (restarted.process().exitCode === null) await restarted.close();
+    if (restartedProcess.exitCode === null) await restarted.close();
   }
 });

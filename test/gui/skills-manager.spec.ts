@@ -183,6 +183,114 @@ test("task suggestions use permitted metadata, cap results and invalidate old ch
     await rm(root, { recursive: true, force: true });
   }
 });
+test("linked Japanese documents require separate inspection, preview and explicit conversation load", async ({
+  gui,
+  electronApp,
+}, info) => {
+  const root = await mkdtemp(join(tmpdir(), "xh-reference-ui-"));
+  const source = ".agents/skills/example/references/日本語 手順.md";
+  const path = join(root, source);
+  try {
+    await mkdir(join(path, ".."), { recursive: true });
+    await writeFile(
+      join(root, ".agents/skills/example/SKILL.md"),
+      "---\nname: example\ndescription: References demo\n---\n[手順](<references/日本語 手順.md>)\n[script](install.ps1)\n",
+    );
+    await writeFile(path, "DOCUMENT ONLY BODY");
+    const panel = await setup(gui, electronApp, root);
+    const permission = () =>
+      panel.getByRole("alertdialog", { name: "LoadProjectSkill の実行確認" });
+    const allow = async () => {
+      await expect(permission()).toBeVisible();
+      await permission().getByRole("button", { name: /allow/ }).click();
+    };
+    await panel.getByRole("button", { name: "一覧を取得・更新" }).click();
+    await panel
+      .getByRole("alertdialog")
+      .getByRole("button", { name: /allow/ })
+      .click();
+    await panel
+      .getByRole("list", { name: "スキル一覧" })
+      .getByRole("button")
+      .click();
+    const parentPreview = panel.getByRole("button", {
+      name: "この版をプレビュー",
+      exact: true,
+    });
+    await parentPreview.click();
+    await allow();
+    const refs = panel.getByRole("region", { name: "スキル付属資料" });
+    const inspect = panel.getByRole("button", {
+      name: `資料の版を確認: ${source}`,
+      exact: true,
+    });
+    await expect(inspect).toBeVisible();
+    await expect(panel).not.toContainText("DOCUMENT ONLY BODY");
+    await inspect.click();
+    await permission().getByRole("button", { name: /deny/ }).click();
+    await expect(panel.getByRole("alert")).toContainText("拒否");
+    await parentPreview.click();
+    await allow();
+    await inspect.click();
+    await expect(permission()).toBeVisible();
+    await panel.getByRole("button", { name: "読取を取消" }).click();
+    await expect(permission()).toHaveCount(0);
+    await inspect.evaluate((e) => {
+      (e as HTMLButtonElement).click();
+      (e as HTMLButtonElement).click();
+    });
+    await allow();
+    await expect(refs).toContainText("資料SHA-256");
+    await expect(panel).not.toContainText("DOCUMENT ONLY BODY");
+    const preview = panel.getByRole("button", {
+      name: "資料をプレビュー",
+      exact: true,
+    });
+    const load = panel.getByRole("button", {
+      name: "会話でこの資料の版を読み込む",
+      exact: true,
+    });
+    await expect(load).toBeDisabled();
+    await preview.click();
+    await allow();
+    await expect(panel.getByLabel("付属資料本文プレビュー")).toContainText(
+      "DOCUMENT ONLY BODY",
+    );
+    await expect(panel).not.toContainText("会話に資料読込済み");
+    await writeFile(path, "DOCUMENT UPDATED BODY");
+    await load.click();
+    await allow();
+    await expect(panel.getByRole("alert")).toContainText("読込結果");
+    await expect(panel).not.toContainText("会話に資料読込済み");
+    await parentPreview.click();
+    await allow();
+    await inspect.click();
+    await allow();
+    await preview.click();
+    await allow();
+    await expect(panel.getByLabel("付属資料本文プレビュー")).toContainText(
+      "DOCUMENT UPDATED BODY",
+    );
+    await load.click();
+    await allow();
+    await expect(refs).toContainText("会話に資料読込済み（親と資料のこの版）");
+    await expect(
+      panel.getByRole("list", { name: "スキル一覧" }),
+    ).not.toContainText("会話に読込済み（この版）");
+    await expect(
+      panel.getByRole("button", { name: "一覧を取得・更新" }),
+    ).toBeEnabled();
+    await panel.getByLabel("付属資料本文プレビュー").scrollIntoViewIfNeeded();
+    await gui.screenshot({ path: info.outputPath("references.png") });
+    await rm(path);
+    await preview.click();
+    await allow();
+    await expect(panel.getByRole("alert")).toContainText("再取得");
+    await expect(load).toHaveCount(0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 test("manager distinguishes preview from actual load and invalidates selection after updates and deletion", async ({
   gui,
   electronApp,

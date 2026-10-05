@@ -12,6 +12,37 @@ const task = {
   criteria: "v1",
   environment: "fixed",
 };
+it("requires a bounded fixed selection, snapshot and explicit confirmation for model candidates", () => {
+  const query = {
+    action: "model_candidates",
+    id: "comparison",
+    revision: 1,
+    versionId: "baseline",
+    caseId: "one",
+  };
+  expect(parseImprovementAction(query)).toBeDefined();
+  expect(parseImprovementAction({ ...query, revision: 0 })).toBeUndefined();
+  const selection = {
+    ...query,
+    action: "select_model_candidate",
+    candidateId: "claude/model/high",
+    snapshot: "a".repeat(64),
+    reason: "manual",
+  };
+  expect(parseImprovementAction(selection)).toBeUndefined();
+  expect(
+    parseImprovementAction({ ...selection, confirmed: "true" }),
+  ).toBeUndefined();
+  expect(
+    parseImprovementAction({ ...selection, confirmed: true }),
+  ).toBeDefined();
+  expect(
+    parseImprovementAction({ ...selection, confirmed: true, snapshot: "old" }),
+  ).toBeUndefined();
+  expect(
+    parseImprovementAction({ ...selection, confirmed: true, reason: "" }),
+  ).toBeUndefined();
+});
 it("requires bounded fixed conditions and rejects hidden source/condition fields", () => {
   expect(validCases([task])).toBe(true);
   expect(validCases([task, task])).toBe(false);

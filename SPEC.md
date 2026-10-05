@@ -37,17 +37,22 @@ mainが資格情報、ファイル、シェル、モデル通信を扱い、rend
 
 ## 3. セッションと作業場所
 
-プロジェクトの作業フォルダー、scratch、Git worktreeを扱う。セッションには会話、選択モデル、作業場所、通信回数などを持ち、履歴を保存して再開できる。「閉じる」と保存履歴の「削除」は別操作。`/clear`は旧履歴を残して新しい会話を開始する。
+プロジェクトの作業フォルダー、scratch、Git worktreeを扱う。セッションには会話、選択モデル、作業場所、通信回数などを持ち、履歴を保存して再開できる。「閉じる」と保存履歴の「削除」は別操作。`/clear`は同じセッションを空にせず、旧セッションを一覧に残したまま、同じ作業場所の新しいセッション(別ID)を作る。worktreeのセッションでは新しいworktreeとブランチも作る。
 
-送信準備の最初からセッションを予約し、worktree操作・削除と排他する。履歴読み込みなどのawait中も、worktree削除と同じセッションのモデル開始を競合させない。削除開始後の新規送信を拒否し、保存処理の直列化と削除済み状態によって古いターンからの履歴復活を防ぐ。この排他は同一アプリプロセス内のもの。
+送信準備の最初からセッションを予約し、worktree操作・削除と排他する。履歴読み込みなどのawait中も、worktree削除と同じセッションのモデル開始を競合させない。削除開始後の新規送信を拒否し、保存処理の直列化と削除済み状態によって古いターンからの履歴復活を防ぐ。この排他は同一アプリプロセス内のもの。アプリは単一インスタンスで起動する(二重起動は終了する)ため、実質アプリ全体に及ぶ。別プロセスのGitや手動の変更とは排他しない。worktreeを使わない書き込みセッションは、同じ作業場所で同時に1つまで(他は「Workspace writer busy」で拒否する)。
 
 worktreeのマージは元リポジトリの記録済み基準ブランチとclean状態を確認し、確認操作を経て行う。別ブランチやdetached HEADへ無条件にマージしない。履歴削除を、作業フォルダーの無条件削除として扱わない。
+
+- worktreeは`~/.xharness/worktrees/<workspace>/<session>`に、ブランチ`xh/<sessionId>`(または指定名)で、基準ブランチ(既定は作成時のHEAD)から作る。終了操作はkeep・merge・remove・remove_branch。
+- mergeは、元リポジトリが記録済みの基準ブランチにあり、worktreeと元リポジトリの両方にコミットされていない変更がないときだけ、確認後に`git merge --no-edit`で行う(マージコミットができうる)。競合したらマージを中止して元の状態へ戻し、worktreeはそのまま残す。
+- removeはworktreeを削除する(未コミットの変更があれば確認のうえ強制削除)。remove_branchはさらにブランチを`branch -D`で削除するため、マージ前でも消える。いずれも確認操作が必要。restoreは、消えたworktreeをブランチから確認後に作り直す。
+- リポジトリの取得は、https / ssh / scp形式のURL(認証情報・クエリは拒否)を`~/.xharness/repos/<owner>/<name>`へcloneする。既存フォルダーは同じoriginのときだけ使い、fetchのみ行う(pullしない)。ブランチ指定のcheckoutは変更がないときだけ。同時に1件で、fakeモードでは無効。実際のネットワーク操作であり、通常の試験では使わない。
 
 ### 会話の前提を固定する
 
 セッションの有効なsystemとtoolsの前提をハッシュで保存・照合する。AGENTS.md、ツール定義、workflowなどが変わり、過去のassistant履歴と前提が一致しない場合は、再開送信・圧縮の前に止めて新規会話を案内する。assistant履歴がある旧形式で前提ハッシュがない場合も、安全側に停止する。
 
-保存する前提情報はハッシュであり、権限を過去の状態へ無条件に戻さない。この照合のためにsystem全文や資格情報を新たに保存しない。既存履歴と実行トレースの保存範囲は§10のとおり。前提不一致は模擬処理で確認済みだが、実Claudeが必ず400で拒否するとは断定しない。
+保存する前提情報はハッシュであり、権限を過去の状態へ無条件に戻さない。この照合のためにsystem全文や資格情報を新たに保存しない。workflowが有効なとき、systemには有効なモデルのカタログ一覧も含まれるため、カタログ(`models.yaml`)の変更後は、assistant履歴のある既存の会話が前提不一致で止まりうる(コード読みでの確認で、再現は未確認)。既存履歴と実行トレースの保存範囲は§10のとおり。前提不一致は模擬処理で確認済みだが、実Claudeが必ず400で拒否するとは断定しない。
 
 実装: [controller.ts](src/main/session/controller.ts)、[turn.ts](src/main/session/turn.ts)。根拠: [セッション境界の修正記録](docs/security-session-boundaries-progress.md)。
 
@@ -59,6 +64,18 @@ workflowの既定はauto、計画承認ask、レビュー上限5回、worktree�
 
 explorerの既定はClaude Sonnet、reviewerはCodex Sol / high。設定でエージェントや使用ツールを定義する。workerの依存やファイル競合を考慮して実行し、完了報告を親へ戻す。
 
+### workflowの進行
+
+- `workflow.mode`は`auto`(既定。分類から始める)・`always`(計画から始める)・`off`(workflowなし)。`reviewRounds`は1〜10。完了・要確認・offで終わると、次のターンで新しいworkflowを作る。計画・実装・レビューの途中で止まった場合だけ、次のターンへ引き継ぐ。
+- 分類(classify)でモデルが書込ツールまたはSubmitPlan / SkipPlanを呼ぶと計画へ進む。書込も計画もなく応答を終えれば、通常の会話(off)に戻る。書込系ツールは実装段階でだけ使える(Bashは分類・計画段階でも、計画モード相当の制限で使える)。ツールの集合は段階で変えない(§3の前提照合のため)。
+- 計画(SubmitPlan)の項目は、id・title・instructions・acceptance・files・dependsOn・担当(main / worker、モデル、effort、理由)を持つ。ID重複、循環、存在しない依存先、作業場所の外のfiles、無効または未対応のモデル・effortは拒否する。ファイルが重なる項目は依存関係で直列にさせる。5時間枠が90%を超えるプロバイダは警告する。無効な計画が3回続くと`plan_validation_failed`で停止する。
+- `planApproval: ask`(既定)では承認画面を出す。**未信頼の作業場所のプロジェクト設定は、`planApproval: auto`で承認を省けない**(askにする指定は有効)。利用者自身のグローバル設定のautoは有効。
+- 項目は1件ずつ直列に実行する。mainが担当する項目は、その項目のモデル・effortへ切り替えて実装し、UpdatePlanのcompletedで完了させる。失敗した項目は、mainがUpdatePlan(completed / retry)で解決するまで、以降の実行を止める。
+- worker: worktreeを使う設定(既定)でGitの作業場所なら、項目ごとに分離したworktree(`xh/<sessionId>-w<N>`)で動かす。開始時に作業場所にコミットされていない変更があると起動しない。使わない設定やGitでない場所では、作業場所で直接動く。ツールはRead / Write / Edit / MultiEdit / Bash / Grep / Globで、Bashと計画のfiles外への書込は毎回確認する(自動モードでは§5のとおり省かれる)。完了はReportDoneで報告する。
+- 統合: Gitが検出した実際の変更ファイルだけをコミットし(Gitフック・署名なし、作者はXHarness)、セッションのブランチへ`merge --no-edit`で取り込む。`auth.json`・`.credentials.json`・`.env*`・`id_rsa`・`id_ed25519`を含む変更、秘密値を含む変更、差分が約95万文字以上の変更は取り込まない。セッションのブランチが基準から変わっている、または汚れている場合も取り込まない。競合や、統合後のwaveチェック(実装段階の`receipt`後フック)の失敗は、worktreeと競合状態を残してmainに解決させる。競合が残る項目は完了にできない。
+- レビュー: 統合済みで実際の差分があるときだけRequestReviewできる。差分は基準(workflow開始時のHEAD)以降の変更と未コミットの変更で、秘密値を除き、90万文字を超えるとエラー。レビューは、実装したプロバイダとは別のプロバイダのモデルが、読取専用のreviewerとして行う。Claudeが実装したなら、reviewer設定のモデルがCodexならそれ、そうでなければCodex Sol。Codexが実装したなら、reviewer設定にかかわらずClaude Sonnet / high。両方が実装に関わったなら両方を並行して行う。一方が制限中なら実装に使ったモデルで代替し、使えるモデルがなければエラーにする。結果はseverity・file・line・messageのJSON配列で、形式が不正ならレビュー失敗として実装段階へ戻る。
+- 完了・要確認になると、mainが最終報告を書く1周だけを許し、ツールを呼ばないよう指示して止める(`workflow_complete` / `review_attention`)。計画・実装段階で、進捗(項目の状態・差分)が変わらないまま応答が3回続くと`workflow_stalled`で停止する。
+
 ### 委託と停止
 
 - Taskで委託し、背景実行ではTaskList / TaskOutput / TaskStopで一覧・状態・停止を扱う。同時3件、親ターン内32件を上限とする。
@@ -66,8 +83,11 @@ explorerの既定はClaude Sonnet、reviewerはCodex Sol / high。設定でエ�
 - StopTaskは理由付きで実行を終了する制御ツール。モデルが本文に「停止」と書くだけでは停止指示にならない。
 - AskUserQuestionは質問を表示して返答待ちにする。候補は任意、指定するなら2〜5件。画面の候補ボタンは本文を通常のユーザー入力として送る。
 - 子の質問に親画面から直接回答して子を継続する方式ではない。親への回答後に再委託する。子履歴の候補ボタンは操作できない。
+- taskIdは親ターンの中だけ有効で、ターンの開始時に動いている子が残っているとエラーにする。TaskOutputのwaitは既定30秒・最大60秒。TaskStopは待機中の承認も取り消す。Taskのpromptは64,000文字まで、agentは設定済みの名前だけ、modelで一時的に上書きできる。
+- 設定で定義するエージェントは読取専用で、使えるツールはRead / Grep / Glob / WebFetch / Bash(Bashは許可されたコマンドだけ)。名前`worker`と`main`は予約済み。
+- StopTaskとAskUserQuestionは、同じ応答内の他のツール呼び出しをキャンセルする。理由・質問は4,000文字、候補は1件300文字まで。
 
-TaskHistoryとpreviousChildIdで、同じ親の直近の完了・質問待ちの子から結果と質問を引き継げる。新しい子の会話を作り、結果を参考データとして渡す方式であり、古いsystem・tools・権限を復元しない。この引き継ぎ用一覧は起動中のみ有効で、保存された子のログとは別。
+TaskHistoryとpreviousChildIdで、同じ親の直近の完了・質問待ちの子から結果と質問を引き継げる。新しい子の会話を作り、結果を参考データとして渡す方式であり、古いsystem・tools・権限を復元しない。結果は6,000文字、質問は直近5件・合計2,000文字に切り詰め、32件まで保持する。この引き継ぎ用一覧は起動中のみ有効で、保存された子のログとは別。
 
 実装: [agents/](src/main/agents/)、[workflow/](src/main/workflow/)。詳細: [委託と予約](docs/delegation-and-schedules.md)、[質問ボタン](docs/m5-progress.md)。
 

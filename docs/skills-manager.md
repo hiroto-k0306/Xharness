@@ -16,6 +16,8 @@
 
 ## 記録と境界
 
+後続段階で[依頼内容からの候補提示](skill-suggestions.md)を追加した。許可済み一覧の名前・説明だけを使い、追加モデル通信なしで最大3件の一致候補と理由を表示する。入力変更や一覧更新開始時は選択・プレビューを解除する。最適性や品質は保証しない。
+
 UI読取はsession traceに`uiAction: list / preview`付きの既存tool spanとして残す。HTML評価レポートは「UIのスキル確認」の別欄にsource／hash、予算、結果を示す。モデルタスクの品質評価・使用量や会話へのload receiptとは別の記録で、UI読取だけでモデル通信や品質合格を作らない。
 
 UIにも既存deny／ask／allow、plan／readOnly、workspace trust、パス／Git identity境界が適用される。会話loadは既存の通常send経路とpermission gateを通す。frontmatterの権限・model・hooksは適用しない。本文は非信頼の参考データで、付属scriptやinstall手順を実行せず、固定prefixや自動ルーティングを変えない。

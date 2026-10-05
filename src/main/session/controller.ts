@@ -35,7 +35,12 @@ import { PermissionGate } from "./permission-gate.js";
 import { ReceiptStore } from "./receipts.js";
 import { Repository } from "./repository.js";
 import { compactNow, saveDefaultModel, setMode } from "./settings-commands.js";
-import { SessionStore, WorkspaceStore, type StoredSession } from "./store.js";
+import {
+  SessionStore,
+  WorkspaceStore,
+  RECOVERY_NOTICE,
+  type StoredSession,
+} from "./store.js";
 import { itemsFromMessages } from "./transcript.js";
 import { runMcpCommand, runSessionTurn } from "./turn.js";
 import { runRewind } from "./rewind-command.js";
@@ -907,6 +912,8 @@ export class SessionController {
     this.options.emit({ type: "turn", sessionId, status: "running" });
     // Resolve user definitions once. The expansion is a user message, never a second command.
     try {
+      if ((await this.sessions.evaluationTask(sessionId))?.recoveryRequired)
+        return { ok: false, error: RECOVERY_NOTICE };
       const expanded = expandCommand(
         text,
         await userCommands(

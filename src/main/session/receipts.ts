@@ -1,4 +1,5 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
+import { appendDurableLog } from "./durable-log.js";
 import { join } from "node:path";
 import { type Receipt } from "../../shared/ipc.js";
 import { traceJson } from "../core/trace.js";
@@ -11,7 +12,7 @@ export class ReceiptStore {
   }
   async read(id: string): Promise<Receipt[]> {
     try {
-      return (await readFile(this.path(id), "utf8"))
+      const receipts = (await readFile(this.path(id), "utf8"))
         .split(/\r?\n/)
         .flatMap((line) => {
           try {
@@ -21,6 +22,7 @@ export class ReceiptStore {
             return [];
           }
         });
+      return [...new Map(receipts.map((r) => [r.id, r])).values()];
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
@@ -36,7 +38,7 @@ export class ReceiptStore {
     const text = receipts.map((r) => traceJson(r, clean)).join("\n") + "\n";
     const job = (this.chains.get(id) ?? Promise.resolve()).then(async () => {
       await mkdir(join(this.home, "receipts"), { recursive: true });
-      await appendFile(path, text);
+      await appendDurableLog(path, text);
     });
     this.chains.set(
       id,

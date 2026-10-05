@@ -7,6 +7,7 @@ import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type ReceiptReplay } from "../../shared/replay.js";
 import { renderEvaluation } from "./evaluation.js";
+import { SessionStore, RECOVERY_NOTICE } from "./store.js";
 import { imageMetadata } from "../../shared/images.js";
 import { readReceiptReplay } from "./replay.js";
 import {
@@ -102,6 +103,7 @@ export interface ReportAgent {
   messages: unknown[];
   skippedMessages: number;
   trace?: TraceReplay;
+  recoveryRequired?: boolean;
 }
 
 /** Read-only snapshot: no model, tools, session initialization or replay execution. */
@@ -124,6 +126,10 @@ export async function readExecutionReport(
       messages: saved.messages,
       skippedMessages: saved.skipped,
       trace: parentId ? undefined : await readTraceReplay(home, agentId, clean),
+      recoveryRequired: parentId
+        ? undefined
+        : (await new SessionStore(home).evaluationTask(agentId))
+            ?.recoveryRequired,
     };
     size += JSON.stringify(agent).length;
     if (size > LIMIT) throw new Error("Report exceeds size limit");
@@ -224,7 +230,7 @@ body{margin:0;background:#10151f;color:#e5eaf2;font:15px/1.7 system-ui,sans-seri
  h4{margin:12px 0 6px;font-size:14px}.exchange{display:grid;grid-template-columns:1fr 1fr;gap:20px}.exchange>div{min-width:0}.readable-block pre{font:14px/1.7 system-ui,sans-serif;margin:0}.readable-block,.initial-request{padding:12px;background:#192231;border-radius:6px;margin:8px 0}.tool-request,.tool-result{border-left:2px solid #829ac2;padding-left:12px}.raw{margin-top:20px}article+article::before{content:'↓ 次の保存記録';display:block;color:#bac7d8;margin-bottom:12px}@media(max-width:760px){.exchange{grid-template-columns:1fr}}@media print{.readable-block,.initial-request{background:#eee}}
  .receipt-card{border-left-color:#354052;background:#141b26}.receipt-card.model{border-left-color:#ab9bff;background:#221f34}.receipt-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.receipt-heading h3{margin:0}.badge{border:1px solid #566176;border-radius:20px;padding:2px 10px;white-space:nowrap;font-size:12px}.model .badge{border-color:#ab9bff;color:#d3c9ff}.model .readable-block,.model details{background:#2b2741}.legend{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.legend .llm{border-left:4px solid #ab9bff;padding:4px 10px;background:#221f34}@media print{.receipt-card{background:white}.receipt-card.model{background:#f2efff}.model .readable-block,.model details{background:#eae6fa}.model .badge{color:#49317c}}
  .receipt-collapse{margin:0;padding:0;background:transparent!important}.receipt-collapse>summary{cursor:pointer;list-style:none}.receipt-collapse>summary::-webkit-details-marker{display:none}.receipt-collapse>summary::before{content:"▸";color:#bac7d8}.receipt-collapse[open]>summary::before{content:"▾"}.receipt-heading h3{flex:1}.report-overview{padding:14px;background:#192231;border-radius:6px}.receipt-body{padding-top:10px}
-#evaluation table{width:100%;border-collapse:collapse;margin:16px 0}#evaluation th,#evaluation td{text-align:left;border:1px solid #354052;padding:8px;overflow-wrap:anywhere}#evaluation h3{overflow-wrap:anywhere}</style></head><body><main><h1>XHarness 実行レポート</h1><p>セッション：${escape(root)} · 出力日時：${new Date().toISOString()}</p><p class="steps">1 context：入力構築 → 2 model：LLM → 3 tool_use：検証 → 4 gate：権限 → 5 act：実行・委託 → 6 receipt：記録</p><p class="legend"><span class="llm">紫：LLMのモデル呼び出し記録</span><span>通常色：ハーネスの処理</span></p><p class="note">すべての記録を「処理・入力・出力・詳細」の同じ形式で表示しています。各 # の見出しで個別に開閉できます。本文は原文のままです。全文は各項目の詳細JSONで確認できます。</p>${trace ? '<details><summary>記録の範囲と表示方法</summary><p class="note">実行トレースは実測の開始・終了と結果を表示します。LLMの簡易入力は内部共通形式です。詳細にはfetchに渡した送信JSONとデコード前の受信SSE（event/data）を保存しています。認証ヘッダ、HTTPエラー本文、SSEのコメント・改行形式・未解析の断片は保存しません。秘密値・暗号化reasoning・署名は伏せています。模擬呼び出しに実際の送信本文はありません。容量上限による省略は明示します。補足の従来レシートは保存順で、記載時間は通信単独の時間とは限りません。導入前の処理や未記録の処理は復元しません。</p></details>' : `<details><summary>記録の範囲と表示方法</summary><p class="note">${trace ? "実行トレースは開始・終了時刻と実行結果を記録します。LLM詳細には認証情報を除いた変換後の送信本文と受信SSEがあります。保存上限による省略は明示します。" : "保存済みデータの表示です。STEP説明は設計上の役割で、STEPごとの実測時系列ではありません。"}各エージェント内はレシートの保存順です。時刻・所要時間は保存値であり、通信開始時刻や通信単独の時間とは限りません。入力は API 変換前の内部共通形式、応答は組み立て後の内部共通形式です。${trace ? "下記の従来レシートは内部共通形式です。トレース導入前の処理や、受信を中断した後のデータは未記録です。" : "HTTP本文・生のSSE・再試行ごとの通信・補助LLM通信は網羅していません。"}圧縮やWeb要約、子の実行中にもLLM通信が発生し得ます。未記録の処理は復元しません。暗号化reasoningと署名は伏せています。</p></details>`}<nav>${safe.map((a, i) => `<a href="#agent-${i}">${i === 0 ? "親" : "子"} ${escape(a.id)}</a>`).join("")}</nav>${renderEvaluation(trace)}${trace ? renderTraceReplay(trace, root) + `<details><summary>保存会話と従来のレシート</summary>${sections}</details>` : sections}</main></body></html>`;
+#evaluation table{width:100%;border-collapse:collapse;margin:16px 0}#evaluation th,#evaluation td{text-align:left;border:1px solid #354052;padding:8px;overflow-wrap:anywhere}#evaluation h3{overflow-wrap:anywhere}</style></head><body><main><h1>XHarness 実行レポート</h1><p>セッション：${escape(root)} · 出力日時：${new Date().toISOString()}</p><p class="steps">1 context：入力構築 → 2 model：LLM → 3 tool_use：検証 → 4 gate：権限 → 5 act：実行・委託 → 6 receipt：記録</p><p class="legend"><span class="llm">紫：LLMのモデル呼び出し記録</span><span>通常色：ハーネスの処理</span></p><p class="note">すべての記録を「処理・入力・出力・詳細」の同じ形式で表示しています。各 # の見出しで個別に開閉できます。本文は原文のままです。全文は各項目の詳細JSONで確認できます。</p>${trace ? '<details><summary>記録の範囲と表示方法</summary><p class="note">実行トレースは実測の開始・終了と結果を表示します。LLMの簡易入力は内部共通形式です。詳細にはfetchに渡した送信JSONとデコード前の受信SSE（event/data）を保存しています。認証ヘッダ、HTTPエラー本文、SSEのコメント・改行形式・未解析の断片は保存しません。秘密値・暗号化reasoning・署名は伏せています。模擬呼び出しに実際の送信本文はありません。容量上限による省略は明示します。補足の従来レシートは保存順で、記載時間は通信単独の時間とは限りません。導入前の処理や未記録の処理は復元しません。</p></details>' : `<details><summary>記録の範囲と表示方法</summary><p class="note">${trace ? "実行トレースは開始・終了時刻と実行結果を記録します。LLM詳細には認証情報を除いた変換後の送信本文と受信SSEがあります。保存上限による省略は明示します。" : "保存済みデータの表示です。STEP説明は設計上の役割で、STEPごとの実測時系列ではありません。"}各エージェント内はレシートの保存順です。時刻・所要時間は保存値であり、通信開始時刻や通信単独の時間とは限りません。入力は API 変換前の内部共通形式、応答は組み立て後の内部共通形式です。${trace ? "下記の従来レシートは内部共通形式です。トレース導入前の処理や、受信を中断した後のデータは未記録です。" : "HTTP本文・生のSSE・再試行ごとの通信・補助LLM通信は網羅していません。"}圧縮やWeb要約、子の実行中にもLLM通信が発生し得ます。未記録の処理は復元しません。暗号化reasoningと署名は伏せています。</p></details>`}<nav>${safe.map((a, i) => `<a href="#agent-${i}">${i === 0 ? "親" : "子"} ${escape(a.id)}</a>`).join("")}</nav>${safe[0]?.recoveryRequired ? `<p role="alert">保存未確定：${escape(RECOVERY_NOTICE)} usage・receiptの欠測をゼロや成功に補いません。</p>` : ""}${renderEvaluation(trace)}${trace ? renderTraceReplay(trace, root) + `<details><summary>保存会話と従来のレシート</summary>${sections}</details>` : sections}</main></body></html>`;
   if (html.length > LIMIT * 6)
     throw new Error("Report HTML exceeds size limit");
   return html;

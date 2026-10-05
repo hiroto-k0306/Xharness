@@ -30,6 +30,7 @@ import {
   WorkspaceStore,
   JsonFile,
   type StoredSession,
+  RECOVERY_NOTICE,
 } from "./main/session/store.js";
 import {
   loadProjectConfig,
@@ -90,8 +91,22 @@ import {
   compareReplayPermissions,
 } from "./main/session/replay.js";
 import { exportExecutionReport } from "./main/session/report.js";
+import { acquireHomeWriter, HomeWriterBusy } from "./main/home-writer.js";
 
 export async function headless(args = process.argv.slice(2)) {
+  if (["--help", "--report", "--replay"].some((arg) => args.includes(arg)))
+    return headlessUnlocked(args);
+  const home =
+    process.env.XHARNESS_HOME ??
+    join(homedir(), args.includes("--fake") ? ".xharness-fake" : ".xharness");
+  const writer = await acquireHomeWriter(home);
+  try {
+    await headlessUnlocked(args);
+  } finally {
+    await writer.release();
+  }
+}
+async function headlessUnlocked(args: string[]) {
   if (args.includes("--help")) {
     process.stdout.write(
       "XHarness Phase 6\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\nnode dist/headless.js --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path] [--fake]\nnode dist/headless.js --report sessionId --output new-report.html [--fake]\n/model provider:model [effort] /mode default|acceptEdits|plan /phase plan|implement|review /review /compact /exit /clear · Ctrl+C interrupts a turn\n",
@@ -188,6 +203,8 @@ export async function headless(args = process.argv.slice(2)) {
     ? sessions.get(option("--resume", ""))
     : undefined;
   if (args.includes("--resume") && !resume) throw new Error("Unknown session");
+  if (resume && (await sessions.evaluationTask(resume.id))?.recoveryRequired)
+    throw new Error(RECOVERY_NOTICE);
   const cwd = resume?.cwd ?? resolve(option("--cwd", process.cwd()));
   if (!(await stat(cwd)).isDirectory())
     throw new Error("Working directory unavailable");
@@ -512,6 +529,17 @@ export async function headless(args = process.argv.slice(2)) {
         const compactAbort = new AbortController();
         try {
           const evaluationTask = await sessions.evaluationTask(session.id);
+          if (evaluationTask?.recoveryRequired) {
+            process.stdout.write(RECOVERY_NOTICE + "\n");
+            continue;
+          }
+          const operationId = evaluationTask?.id ?? randomUUID();
+          await sessions.recordEvaluationTask(
+            session.id,
+            operationId,
+            evaluationTask?.active ?? false,
+            false,
+          );
           const prepared = await withSessionCalls(
             {
               home,
@@ -558,6 +586,12 @@ export async function headless(args = process.argv.slice(2)) {
           );
           checkpoint = prepared.checkpoint;
           if (checkpoint) await checkpointFile().write(checkpoint);
+          await sessions.recordEvaluationTask(
+            session.id,
+            operationId,
+            evaluationTask?.active ?? false,
+            true,
+          );
           process.stdout.write(
             prepared.compacted
               ? "History compacted; original retained\n"
@@ -758,6 +792,10 @@ export async function headless(args = process.argv.slice(2)) {
         }
         return ["y", "s", "a"].includes(choice);
       };
+      if ((await sessions.evaluationTask(session.id))?.recoveryRequired) {
+        process.stdout.write(RECOVERY_NOTICE + "\n");
+        continue;
+      }
       if (
         !workflow ||
         (!workflow.manualReview &&
@@ -844,7 +882,10 @@ export async function headless(args = process.argv.slice(2)) {
         session.id,
         workflow.evaluationTaskId,
         true,
+        false,
       );
+      await sessions.append(session.id, messages.slice(persisted), clean);
+      persisted = messages.length;
       const turnAbort = controller;
       const result = await withSessionCalls(
         { home, id: session.id, limits: project.limits, abort: controller },
@@ -937,16 +978,6 @@ export async function headless(args = process.argv.slice(2)) {
         },
       );
       messages = result.messages;
-      await sessions.recordEvaluationTask(
-        session.id,
-        workflow.evaluationTaskId,
-        !(
-          result.stopCause === "workflow_complete" ||
-          result.stopCause === "reported_done" ||
-          (result.stopCause === "end_turn" &&
-            ["off", "complete"].includes(workflow.state.phase))
-        ),
-      );
       await receiptStore.append(
         session.id,
         [
@@ -961,6 +992,17 @@ export async function headless(args = process.argv.slice(2)) {
       persisted = messages.length;
       session = { ...session, model, effort, updatedAt: Date.now() };
       await sessions.save(session);
+      await sessions.recordEvaluationTask(
+        session.id,
+        workflow.evaluationTaskId,
+        !(
+          result.stopCause === "workflow_complete" ||
+          result.stopCause === "reported_done" ||
+          (result.stopCause === "end_turn" &&
+            ["off", "complete"].includes(workflow.state.phase))
+        ),
+        true,
+      );
       if (bufferedText) process.stdout.write(clean(bufferedText));
       controller = undefined;
       process.stdout.write(
@@ -979,16 +1021,18 @@ export async function headless(args = process.argv.slice(2)) {
         !["--resume", "--cwd", "--model", "--effort"].includes(args[i]!) &&
         !["--resume", "--cwd", "--model", "--effort"].includes(args[i - 1]!),
     );
-    await headless([...next, "--resume", resumeNext]);
+    await headlessUnlocked([...next, "--resume", resumeNext]);
   }
 }
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  headless().catch(() => {
+  headless().catch((error) => {
     process.stderr.write(
-      "Headless failed; check workspace, credentials and installed tools\n",
+      error instanceof HomeWriterBusy
+        ? error.message + "\n"
+        : "Headless failed; check workspace, credentials and installed tools\n",
     );
     process.exitCode = 1;
   });

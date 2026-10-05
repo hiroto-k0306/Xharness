@@ -1,5 +1,5 @@
 import { traceStream, captureTraceResponse } from "../../core/trace.js";
-import { reserveLlmCall } from "../../core/llm-budget.js";
+import { reserveLlmCall, flushLlmCalls } from "../../core/llm-budget.js";
 import { randomUUID } from "node:crypto";
 import {
   readCodexCredentials,
@@ -65,6 +65,8 @@ export class CodexAdapter implements Provider {
       signal.throwIfAborted();
       stage = "transport";
       reserveLlmCall(signal);
+      await flushLlmCalls();
+      signal.throwIfAborted();
       captureTraceResponse({ requestDispatched: true });
       const id = request.sessionId ?? this.threadId;
       const response = await (this.options.fetcher ?? fetch)(

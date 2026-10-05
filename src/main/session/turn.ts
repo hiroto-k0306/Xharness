@@ -430,11 +430,6 @@ async function runSessionBody(
     if (needsNewWorkflow(rt)) {
       const previous = await ctx.sessions.evaluationTask(sessionId);
       rt.evaluationTaskId = previous?.active ? previous.id : randomUUID();
-      await ctx.sessions.recordEvaluationTask(
-        sessionId,
-        rt.evaluationTaskId,
-        true,
-      );
       rt.workflow = createWorkflow(ctx, gate, {
         session,
         rt,
@@ -443,6 +438,19 @@ async function runSessionBody(
         events,
       });
     }
+    await ctx.sessions.recordEvaluationTask(
+      sessionId,
+      rt.evaluationTaskId!,
+      true,
+      false,
+    );
+    // Persist the accepted request before any provider/tool side effect.
+    await ctx.sessions.append(
+      sessionId,
+      rt.messages.slice(rt.persisted),
+      ctx.clean,
+    );
+    rt.persisted = rt.messages.length;
     // 自動圧縮に失敗したら、このターンでは再試行しない(次のターンで再試行する)
     let compactionFailure: string | undefined;
     const result = await rt.workflow!.run(
@@ -667,17 +675,6 @@ async function finishTurn(
   try {
     await flushLlmCalls();
     stopCause = llmStopCause() ?? stopCause;
-    if (rt.evaluationTaskId)
-      await ctx.sessions.recordEvaluationTask(
-        sessionId,
-        rt.evaluationTaskId,
-        !(
-          stopCause === "workflow_complete" ||
-          stopCause === "reported_done" ||
-          (stopCause === "end_turn" &&
-            ["off", "complete"].includes(rt.workflow?.state.phase ?? ""))
-        ),
-      );
     await Promise.all(events.receiptWrites);
     await ctx.sessions.append(
       sessionId,
@@ -692,6 +689,18 @@ async function finishTurn(
       updatedAt: Date.now(),
       providers: usedProviders(rt.messages, latest.providers),
     });
+    if (rt.evaluationTaskId)
+      await ctx.sessions.recordEvaluationTask(
+        sessionId,
+        rt.evaluationTaskId,
+        !(
+          stopCause === "workflow_complete" ||
+          stopCause === "reported_done" ||
+          (stopCause === "end_turn" &&
+            ["off", "complete"].includes(rt.workflow?.state.phase ?? ""))
+        ),
+        true,
+      );
   } catch {
     emit({ type: "error", sessionId, message: "履歴の保存に失敗しました" });
   }

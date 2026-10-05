@@ -68,6 +68,7 @@ export const EFFORT_VALUES: readonly Effort[] = [
 export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
+  quotaPause?: import("./quota-resume.js").QuotaPauseView;
   llmCalls?: import("./llm-calls.js").LlmCalls;
   imageBytes?: number;
   worktree?: { path: string; branch: string; baseBranch: string };
@@ -322,6 +323,11 @@ export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
   | {
+      type: "quota_resume";
+      sessionId: string;
+      action: "enable" | "cancel" | "now";
+    }
+  | {
       type: "rewind_response";
       sessionId: string;
       requestId: string;
@@ -418,6 +424,15 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "quota_resume":
+      return str(c.sessionId) &&
+        ["enable", "cancel", "now"].includes(String(c.action))
+        ? {
+            type: "quota_resume",
+            sessionId: c.sessionId,
+            action: c.action as "enable" | "cancel" | "now",
+          }
+        : undefined;
     case "rewind_response": {
       const choice = c.choice === null ? null : parseRewindChoice(c.choice);
       return str(c.sessionId) &&

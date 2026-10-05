@@ -61,6 +61,7 @@ export class PermissionGate {
     agentId,
   }: PermissionRequest): Promise<PermissionDecision> {
     const { ctx } = this;
+    forceAsk ||= !!rt.quotaContinuation;
     const fullCall = { ...call, id: "permission" };
     rt.asked = false;
     if (rt.config) {
@@ -84,6 +85,7 @@ export class PermissionGate {
       if (
         (latest.permissionMode ?? rt.config.permissions.mode) ===
           "acceptEdits" &&
+        !rt.quotaContinuation &&
         !latest.readOnly &&
         !session.readOnly &&
         !["ProjectSettings", "ProjectHooks", "McpServer", "McpPrompt"].includes(
@@ -98,7 +100,7 @@ export class PermissionGate {
     rt.status = "ask";
     ctx.options.emit({
       type: "permission_request",
-      oneTime: forceAsk && call.name === "Bash",
+      oneTime: !!rt.quotaContinuation || (forceAsk && call.name === "Bash"),
       agentId,
       ...(call.name === "SubmitPlan"
         ? {

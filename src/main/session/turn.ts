@@ -266,6 +266,7 @@ export async function runSessionTurn(
   text: string,
   images?: import("../../shared/images.js").ImageAttachment[],
   abort = new AbortController(),
+  continuation = false,
 ): Promise<void> {
   rt.abort = abort;
   try {
@@ -281,7 +282,17 @@ export async function runSessionTurn(
           void ctx.emitState();
         },
       },
-      () => runSessionBody(ctx, gate, session, rt, text, abort, images),
+      () =>
+        runSessionBody(
+          ctx,
+          gate,
+          session,
+          rt,
+          text,
+          abort,
+          images,
+          continuation,
+        ),
     );
   } catch (error) {
     const stopCause =
@@ -291,6 +302,7 @@ export async function runSessionTurn(
           ? "aborted"
           : "step_failed";
     rt.status = "idle";
+    rt.lastStopCause = stopCause;
     rt.abort = undefined;
     ctx.options.emit({
       type: "notice",
@@ -318,6 +330,7 @@ async function runSessionBody(
   text: string,
   abort: AbortController,
   images?: import("../../shared/images.js").ImageAttachment[],
+  continuation = false,
 ): Promise<void> {
   const { options } = ctx;
   const { emit } = options;
@@ -363,14 +376,19 @@ async function runSessionBody(
     }
     text = expanded.text;
   }
-  session = await beginTurn(
-    ctx,
-    session,
-    rt,
-    text,
-    mcpChangeNote(rt.mcp),
-    images,
-  );
+  if (!continuation)
+    session = await beginTurn(
+      ctx,
+      session,
+      rt,
+      text,
+      mcpChangeNote(rt.mcp),
+      images,
+    );
+  else {
+    emit({ type: "turn", sessionId, status: "running" });
+    await ctx.emitState();
+  }
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(
@@ -467,6 +485,11 @@ async function runSessionBody(
             ))
           )
             return { messages, stop: "premise_mismatch" };
+          if (rt.quotaGuard) {
+            const guard = rt.quotaGuard;
+            rt.quotaGuard = undefined;
+            if (!(await guard())) return { messages, stop: "premise_mismatch" };
+          }
           if (!options.phase4) return { messages };
           const limit = route.provider
             .models()
@@ -571,7 +594,7 @@ async function runSessionBody(
             rt,
             call,
             receiptId: events.receiptByCall.get(call.id),
-            forceAsk: context?.forceAsk,
+            forceAsk: !!context?.forceAsk || rt.quotaContinuation,
             signal,
           });
           if (options.phase4) {
@@ -668,6 +691,7 @@ async function finishTurn(
 ) {
   const { emit } = ctx.options;
   const sessionId = session.id;
+  let saved = false;
   try {
     await flushLlmCalls();
     stopCause = llmStopCause() ?? stopCause;
@@ -697,13 +721,29 @@ async function finishTurn(
         ),
         true,
       );
+    saved = true;
   } catch {
     emit({ type: "error", sessionId, message: "履歴の保存に失敗しました" });
   }
+  if (stopCause === "rate_limited" && events.quotaRate && ctx.quotaPaused)
+    await ctx
+      .quotaPaused(ctx.sessions.get(sessionId) ?? session, rt, {
+        rate: events.quotaRate,
+        unsafe: events.resumeUnsafe || !!rt.abort?.signal.aborted,
+        saved,
+      })
+      .catch(() =>
+        emit({
+          type: "error",
+          sessionId,
+          message: "枠待ちを安全に保存できません。自動再開しません。",
+        }),
+      );
   rt.abort = undefined;
   rt.pending = undefined;
   rt.status = "idle";
   const notice = STOP_NOTICE[stopCause];
+  rt.lastStopCause = stopCause;
   if (
     stopCause === "authentication" &&
     !ctx.options.fake &&

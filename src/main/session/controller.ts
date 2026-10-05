@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { resolvePermissionMode } from "../../shared/permission-modes.js";
 import { SessionSchedules } from "./schedules.js";
+import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
+import { captureQuotaPause } from "./quota-capture.js";
+import { resumeConditions, resumeHash } from "./resume-conditions.js";
+import { checkpointFile } from "./context.js";
 import { readLlmCalls } from "./llm-calls.js";
 import {
   attachmentInfo,
@@ -76,6 +80,7 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private readonly quotaPauses: QuotaPauses;
   private readonly schedules: SessionSchedules;
   private readonly runtimes = new Map<string, Runtime>();
   private readonly sessions: SessionStore;
@@ -143,6 +148,8 @@ export class SessionController {
     const receipts = new ReceiptStore(options.home);
     const clean = (text: string) => redact(text, options.secrets ?? []);
     this.ctx = {
+      quotaPaused: (session, rt, evidence) =>
+        captureQuotaPause(this.ctx, this.quotaPauses, session, rt, evidence),
       options,
       sessions: this.sessions,
       receipts,
@@ -176,6 +183,16 @@ export class SessionController {
     };
     this.gate = new PermissionGate(this.ctx);
     this.repositories = new RepositoryOpener(this.ctx);
+    this.quotaPauses = new QuotaPauses({
+      home: options.home,
+      now: options.quotaNow ?? Date.now,
+      timers: options.quotaTimers,
+      changed: () => this.emitState(),
+      busy: (id) =>
+        this.ctx.sessionBusy.has(id) ||
+        (this.runtimes.get(id)?.status ?? "idle") !== "idle",
+      resume: (pause, signal) => this.resumeQuota(pause, signal),
+    });
   }
 
   async init() {
@@ -198,6 +215,8 @@ export class SessionController {
     }
     // 壊れた索引を退避したことなどは、最初の新規セッションで知らせる
     this.warnings.push(...this.sessions.warnings, ...this.workspaces.warnings);
+    await this.quotaPauses.load();
+    this.warnings.push(...this.quotaPauses.warnings);
   }
 
   private runtime(id: string): Runtime {
@@ -261,6 +280,7 @@ export class SessionController {
         : this.options.fallback,
       sessions: this.sessions.list().map((s) => ({
         ...s,
+        quotaPause: this.quotaPauses.view(s.id),
         llmCalls: this.runtimes.get(s.id)?.llmCalls,
         imageBytes: sessionImageBytes(this.runtimes.get(s.id)?.messages),
         status: this.runtimes.get(s.id)?.status ?? "idle",
@@ -303,6 +323,15 @@ export class SessionController {
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
       switch (command.type) {
+        case "quota_resume": {
+          if (this.stopped || !this.sessions.get(command.sessionId))
+            return { ok: false, error: "Session unavailable" };
+          const error = await this.quotaPauses.action(
+            command.sessionId,
+            command.action,
+          );
+          return error ? { ok: false, error } : { ok: true };
+        }
         case "rewind_response": {
           const rt = this.runtimes.get(command.sessionId);
           if (
@@ -332,6 +361,10 @@ export class SessionController {
           this.ctx.sessionBusy.add(command.sessionId);
           try {
             this.schedules.cancel(command.sessionId);
+            await this.quotaPauses.cancel(
+              command.sessionId,
+              "会話を削除したため取消しました。",
+            );
             await this.sessions.delete(command.sessionId);
             this.ctx.dropRuntime(command.sessionId);
             if (this.current === command.sessionId) {
@@ -460,6 +493,10 @@ export class SessionController {
           this.schedules.cancel(command.sessionId);
           const rt = this.runtimes.get(command.sessionId);
           if (rt) this.release(rt);
+          await this.quotaPauses.cancel(
+            command.sessionId,
+            "明示停止により自動再開を取り消しました。",
+          );
           return { ok: true };
         }
         case "plan_response": {
@@ -721,6 +758,23 @@ export class SessionController {
     if (root && this.ctx.worktreeBusy.has(root))
       return { ok: false, error: "Workspace writer busy" };
     const command = text.trim();
+    if (/^\/quota-resume(?:\s|$)/.test(command)) {
+      const [, action, extra] = command.split(/\s+/);
+      if (!extra && ["enable", "cancel", "now"].includes(action ?? ""))
+        return this.handle({
+          type: "quota_resume",
+          sessionId,
+          action: action as "enable" | "cancel" | "now",
+        });
+      this.options.emit({
+        type: "notice",
+        sessionId,
+        tone: "dim",
+        message:
+          "枠待ち: UIで自動再開・取消・手動再確認を選択できます。/quota-resume enable|cancel|now。通常会話(off)のツール実行前だけ対象です。",
+      });
+      return { ok: true };
+    }
     if (/^\/(?:schedule|signal)(?:\s|$)/.test(command))
       return this.schedules.command(sessionId, command);
     const notice = (message: string): CommandResult => {
@@ -939,6 +993,10 @@ export class SessionController {
       // The reservation covers preparation too, so stop/close/shutdown can cancel it.
       if (await this.reportMissingCwd(session))
         return { ok: false, error: "Working directory not found" };
+      await this.quotaPauses.cancel(
+        sessionId,
+        "新しい指示を受けたため、以前の自動再開を取り消しました。",
+      );
       abort.signal.throwIfAborted();
       launched = true;
       void runSessionTurn(this.ctx, this.gate, session, rt, text, images, abort)
@@ -970,6 +1028,119 @@ export class SessionController {
         finish();
         await this.emitState();
       }
+    }
+  }
+
+  /** Testable clock tick; the desktop timer uses the same durable lease path. */
+  async tickQuotaResume() {
+    await this.quotaPauses.tick();
+  }
+
+  private async resumeQuota(
+    pause: QuotaPause,
+    signal: AbortSignal,
+  ): Promise<string | undefined> {
+    const id = pause.sessionId;
+    const session = this.sessions.get(id);
+    if (
+      this.stopped ||
+      signal.aborted ||
+      !session ||
+      this.ctx.sessionBusy.has(id) ||
+      (this.runtimes.get(id)?.status ?? "idle") !== "idle"
+    )
+      return "会話が利用できないため自動再開しません。";
+    if (
+      this.otherWriterRunning(session) ||
+      (this.ctx.workspaceRoot(session) &&
+        this.ctx.worktreeBusy.has(this.ctx.workspaceRoot(session)!))
+    )
+      return "作業場所が使用中です。手動で確認してください。";
+    this.ctx.sessionBusy.add(id);
+    const abort = new AbortController();
+    const cancel = () => abort.abort();
+    signal.addEventListener("abort", cancel, { once: true });
+    let rt: Runtime | undefined;
+    try {
+      if (
+        this.authenticationRequired(session) ||
+        this.options.authentication?.isBusy() ||
+        (!this.options.fake &&
+          this.options.authentication
+            ?.snapshot()
+            .some(
+              (auth) =>
+                auth.provider === pause.provider && auth.status !== "available",
+            ))
+      )
+        return "認証の確認が必要です。枠待ちとは別に認証欄で確認してください。";
+      const task = await this.sessions.evaluationTask(id);
+      if (
+        !task?.active ||
+        task.recoveryRequired ||
+        task.id !== pause.snapshot.taskId
+      )
+        return "保存・タスク境界が一致しません。レポートを確認してください。";
+      if (
+        session.model !== pause.model ||
+        session.effort !== pause.snapshot.effort ||
+        session.premiseHash !== pause.snapshot.premiseHash ||
+        session.readOnly !== pause.snapshot.readOnly ||
+        session.permissionMode !== pause.snapshot.permissionMode
+      )
+        return "モデル・effort・権限・前提が変わったため停止しました。";
+      if (
+        (await resumeConditions(this.ctx, session)) !==
+        pause.snapshot.conditionsHash
+      )
+        return "設定・作業場所・HEAD・前提が変わったため停止しました。";
+      this.ctx.dropRuntime(id); // Rebuild fresh tools/system; never restore temporary grants.
+      rt = await this.load(id);
+      rt.checkpoint = await checkpointFile(this.options.home, id).read(
+        undefined,
+      );
+      if (
+        rt.messages.length !== pause.snapshot.messageCount ||
+        resumeHash(rt.messages) !== pause.snapshot.messagesHash ||
+        resumeHash(rt.checkpoint ?? null) !== pause.snapshot.checkpointHash ||
+        rt.messages.at(-1)?.role !== "user"
+      )
+        return "会話または圧縮チェックポイントが変わったため停止しました。";
+      abort.signal.throwIfAborted();
+      rt.status = "running";
+      rt.quotaContinuation = true;
+      rt.abort = abort;
+      rt.quotaGuard = async () =>
+        (await resumeConditions(this.ctx, session)) ===
+        pause.snapshot.conditionsHash;
+      rt.done = runSessionTurn(
+        this.ctx,
+        this.gate,
+        session,
+        rt,
+        "",
+        undefined,
+        abort,
+        true,
+      );
+      await rt.done;
+      const settled = await this.sessions.evaluationTask(id);
+      if (settled?.id !== pause.snapshot.taskId || settled.settled !== true)
+        return "再開結果の保存が未確定です。レポートを確認してください。";
+      if (rt.lastStopCause === "rate_limited")
+        return "枠がまだ利用できません。新しい枠待ち情報を確認してください。";
+      return ["end_turn", "reported_done", "workflow_complete"].includes(
+        rt.lastStopCause ?? "",
+      )
+        ? undefined
+        : "再開が正常完了していません。権限・認証・前提・レポートを手動で確認してください。";
+    } catch {
+      return "再開の前提・保存・実行を確認できないため停止しました。";
+    } finally {
+      if (rt) rt.quotaContinuation = false;
+      signal.removeEventListener("abort", cancel);
+      this.ctx.sessionBusy.delete(id);
+      await this.emitState();
     }
   }
 
@@ -1073,6 +1244,10 @@ export class SessionController {
   private async closeSession(sessionId: string): Promise<CommandResult> {
     this.preparations.get(sessionId)?.abort.abort();
     this.schedules.cancel(sessionId);
+    await this.quotaPauses.cancel(
+      sessionId,
+      "会話を閉じたため、自動再開を取り消しました。",
+    );
     if (!this.sessions.get(sessionId))
       return { ok: false, error: "Unknown session" };
     const rt = this.runtimes.get(sessionId);
@@ -1098,6 +1273,7 @@ export class SessionController {
   /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
   async shutdown(timeoutMs = 3000): Promise<void> {
     this.stopped = true;
+    const quotaClosed = this.quotaPauses.close();
     this.schedules.close();
     this.repositories.abort();
     const running: Promise<void>[] = [];
@@ -1109,6 +1285,7 @@ export class SessionController {
       this.release(rt);
       if (rt.done) running.push(rt.done);
     }
+    await quotaClosed;
     await Promise.race([
       Promise.all(running),
       new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),

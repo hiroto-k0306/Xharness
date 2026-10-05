@@ -98,6 +98,16 @@ export function usageEvent(
 }
 
 export class TurnEvents {
+  quotaRate?: {
+    provider: string;
+    model: string;
+    receivedAt: number;
+    retryAfterSec?: number;
+    scope?: string;
+    windows?: import("../providers/provider.js").QuotaUsage["windows"];
+  };
+  resumeUnsafe = false;
+  private attemptWindows?: import("../providers/provider.js").QuotaUsage["windows"];
   /** ターン終了時に保存の完了を待つレシート書き込み */
   readonly receiptWrites: Promise<void>[] = [];
   /** tool_use の ID → 画面のツールカード番号 */
@@ -166,6 +176,21 @@ export class TurnEvents {
     const { ctx, sessionId } = this;
     const emit = ctx.options.emit;
     const clean = ctx.clean;
+    if (
+      event.type === "tool_use" ||
+      event.type === "tool_progress" ||
+      (event.type === "text_delta" && event.text.length > 0) ||
+      event.type === "error" ||
+      event.type === "auth_refresh" ||
+      (event.type === "message_done" &&
+        (event.message?.content?.length ?? 0) > 0) ||
+      (event.type === "receipt" &&
+        ((event.receipt.provider === "hook" &&
+          event.receipt.decision !== "continue") ||
+          event.receipt.tool ||
+          event.receipt.decision === "fallback"))
+    )
+      this.resumeUnsafe = true;
     switch (event.type) {
       case "auth_refresh": {
         const success = event.result === "success";
@@ -194,9 +219,11 @@ export class TurnEvents {
         emit({ ...event, sessionId });
         break;
       case "usage":
+        this.attemptWindows = event.windows;
         emit(usageEvent(ctx, event));
         break;
       case "step":
+        if (event.step === "model") this.attemptWindows = undefined;
         emit({
           type: "step",
           sessionId,
@@ -269,6 +296,15 @@ export class TurnEvents {
         break;
       }
       case "rate_limited":
+        this.quotaRate = {
+          provider: this.activeProvider,
+          model: (ctx.sessions.get(sessionId) ?? this.session).model,
+          receivedAt: (ctx.options.quotaNow ?? Date.now)(),
+          retryAfterSec: event.retryAfterSec,
+          scope: event.scope,
+          windows: this.attemptWindows,
+        };
+        this.attemptWindows = undefined;
         this.discardAttempt();
         emit({
           type: "error",

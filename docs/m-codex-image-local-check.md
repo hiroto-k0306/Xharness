@@ -44,19 +44,54 @@ async function main() {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 30000);
   try {
-    for await (const event of provider.stream({
-      model: "gpt-6-luna", system: "Answer the dominant image color in one word. Do not call tools.",
-      reasoning: { effort: "low" }, tools: [read.spec],
-      messages: [
-        { role: "assistant", content: [{ type: "tool_use", id: "call_read", name: "Read", input: { path } }] },
-        { role: "user", content: [{ type: "tool_result", toolUseId: "call_read", content: [{ type: "text", text: result.content }, ...result.blocks!] }] },
-      ],
-    }, abort.signal)) {
+    for await (const event of provider.stream(
+      {
+        model: "gpt-6-luna",
+        system:
+          "Answer the dominant image color in one word. Do not call tools.",
+        reasoning: { effort: "low" },
+        tools: [read.spec],
+        messages: [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "call_read",
+                name: "Read",
+                input: { path },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                toolUseId: "call_read",
+                content: [
+                  { type: "text", text: result.content },
+                  ...result.blocks!,
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      abort.signal,
+    )) {
       if (event.type === "message_done")
-        console.log(event.message.content.flatMap((b) => b.type === "text" ? [b.text] : []).join(""));
-      if (event.type === "error") console.log({ kind: event.error.kind, status: event.error.status });
+        console.log(
+          event.message.content
+            .flatMap((b) => (b.type === "text" ? [b.text] : []))
+            .join(""),
+        );
+      if (event.type === "error")
+        console.log({ kind: event.error.kind, status: event.error.status });
     }
-  } finally { clearTimeout(timer); }
+  } finally {
+    clearTimeout(timer);
+  }
 }
 void main().catch(() => console.log("確認失敗。再試行せず終了してください"));
 ```

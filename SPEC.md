@@ -341,6 +341,8 @@ HTMLレポートに品質結果／In／Out／所要時間を中心とする評�
 
 「結果の受け渡し」は最新の確定済み・完了タスクの最終回答1件を、同じprojectの別会話へ未信頼の参照として明示送信する。出典session/task・完了/受信日時・宛先・本文/hashを確認する。送信/受信を同じatomic台帳で確定し、二重送信・取消・出典/宛先変更・再起動・応答喪失を照合する。受信だけでモデルを実行せず、system・権限・認証・隠れた推論を移植しない。使用には受信側の通常入力と権限が必要。任意の双方向会話や自律ループは未対応。操作・headless・制約: [確定結果の受け渡し](docs/task-handoff.md)。
 
+「ローカル操作の土台」は内蔵固定ページと専用の非永続Electron profileだけで、観測→明示確認した固定DOMボタン1回→receipt→停止を行う。画像の世代/タブ/document/URL/DOM/対象を確認票に結び、遷移・変更・期限・停止・二重操作を拒否する。intentと開始を保存してから実行し、結果不明/pendingの再起動は再実行しない。通常profile・Cookie・認証情報をコピーせず、外部URL/download/追加window/permissionsを拒否する。画像やページ命令を権限にせず、readOnly/plan/write denyと既存session lease/receiptを使う。モデルへの画像送信、任意座標/キー入力、外部サイト、PC全体、自律操作は未対応の限定Computer Use土台。操作・制約・次のローカル実証: [限定Computer Use土台](docs/local-computer-use.md)。
+
 ## 11. コマンドと予約
 
 | 操作                 | コマンド                         |

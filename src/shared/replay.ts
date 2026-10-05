@@ -19,6 +19,7 @@ const kinds = [
   "fallback",
   "compact",
   "hook",
+  "auth_refresh",
 ];
 const decisions = ["allow", "deny", "ask→allow", "ask→deny"];
 const id = (v: unknown): v is string =>

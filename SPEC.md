@@ -196,7 +196,7 @@ Codexの画像入りツール結果は、既定ではfunction_call_outputのinpu
 
 根拠: [文脈超過対応](docs/codex-context-overflow.md)、[ストリーム復旧](docs/codex-stream-recovery.md)、[画像の手元試験手順](docs/m-codex-image-local-check.md)。
 
-品質・使用量の評価では、usageの取得済み数値と測定カバー率をタスク単位で表示する。OpenAIのcache/reasoningはinput/outputの内数、Anthropicのcache-read/writeは別建てとして二重計上を避ける。旧フィールドに任意のmeasurementを追加し、欠測をゼロとみなさない。サブスク枠消費・API換算費用は未測定のままとする。詳細: [品質・使用量の評価基盤](docs/task-evaluation.md)。
+品質・使用量の評価では、In（cacheを含む総入力）／Out（reasoningを含む総出力）の取得済み数値と測定カバー率をタスク単位で表示する。OpenAIはinput/outputをそのまま使い、AnthropicのInはinput＋cache-read＋cache-writeとして二重計上を避ける。旧フィールドに任意のmeasurementを追加し、必要な測定が欠ければ不明のままでゼロにしない。サブスク枠消費・API換算費用は評価画面の対象外。詳細: [品質・使用量の評価基盤](docs/task-evaluation.md)。
 
 ## 8. 認証と自動更新
 
@@ -275,7 +275,7 @@ headlessの`--replay <sessionId> [--replay-parent <id>] [--replay-mode default|a
 
 詳細: [レポート仕様とサンプル](docs/report-export.md)、[ローカルリンク](docs/local-links-progress.md)。
 
-HTMLレポートに品質・使用量の評価を表示する。親の実行にタスク境界を記録し、子・レビュー・修正・自動圧縮・失敗試行を同一タスクへ関連付ける。起動中の同じworkflowの継続ターンは同一ID、通常会話は実行1回、再起動後は別ID。終了理由・レビュー・コマンド・設定チェックの実行結果を根拠付きで示し、モデル自己申告を客観テスト合格と同一視しない。稼働時間と再開待ちを含む経過時間を分ける。旧記録・タスク外の通信は推測で補完しない。
+HTMLレポートに品質結果／In／Out／所要時間を中心とする評価を表示する。親の実行にタスク境界を記録し、子・レビュー・修正・自動圧縮・失敗試行を同一タスクへ関連付ける。タスクの開始・終了履歴は会話とは別の`<sessionId>.evaluation.jsonl`へ追記し、未完了IDを再起動後に継承、正常完了後の依頼は新IDにする（workflow段階の復元ではない）。LLM試行の`attemptId`（旧記録はspan ID）で重複排除し、実際の新規再試行は別消費。手動圧縮は未完了タスクがあれば帰属、なければセッション共通分として別表示する。完了タスクへの推測配賦はしない。終了理由・レビュー・コマンド・設定チェックを根拠付きで示し、モデル自己申告を客観テスト合格と同一視しない。稼働時間と再開待ちを含む経過時間を分ける。旧記録・境界欠落の通信は推測で補完しない。
 
 `evaluation:offline`で固定した3課題のfake/mock評価を再実行できる。`evaluation:compare`は保存済みタスクを明示した課題・種別・難度・評価基準・環境ごとに比較し、品質合格を先に確認する。モデル自動選択は変更しない。詳細・制約: [品質・使用量の評価基盤](docs/task-evaluation.md)。
 

@@ -58,6 +58,32 @@ const history: Message[] = [
 ];
 
 describe("provider routing and append-only history", () => {
+  it("does not try sibling models after an unknown/shared provider pool is rate limited", async () => {
+    const a = mock("claude", "claude-opus-5-5", [
+      [{ type: "rate_limited", retryAfterSec: 600 }],
+    ]);
+    a.provider.models = () => [
+      { id: "claude-opus-5-5", contextTokens: null },
+      { id: "claude-sonnet-5-5", contextTokens: null },
+    ];
+    const result = await runTurn(
+      {
+        provider: a.provider,
+        router: new Router([a.provider], { claude: "claude:sonnet" }),
+        model: "claude-opus-5-5",
+        system: "",
+        messages: history,
+        tools: new Map(),
+        permission: async () => true,
+      },
+      new AbortController().signal,
+    );
+    expect(a.requests).toHaveLength(1);
+    expect(result.stopCause).toBe("rate_limited");
+    expect(result.receipts.some((r) => r.output?.includes("見送り"))).toBe(
+      true,
+    );
+  });
   it("filters the outgoing view and restores each provider's exact opaque blocks", () => {
     const before = structuredClone(history);
     for (const provider of ["claude", "codex"] as const) {

@@ -84,7 +84,7 @@ explorerの既定はClaude Sonnet、reviewerはCodex Sol / high。設定でエ�
 - AskUserQuestionは質問を表示して返答待ちにする。候補は任意、指定するなら2〜5件。画面の候補ボタンは本文を通常のユーザー入力として送る。
 - 子の質問に親画面から直接回答して子を継続する方式ではない。親への回答後に再委託する。子履歴の候補ボタンは操作できない。
 - taskIdは親ターンの中だけ有効で、ターンの開始時に動いている子が残っているとエラーにする。TaskOutputのwaitは既定30秒・最大60秒。TaskStopは待機中の承認も取り消す。Taskのpromptは64,000文字まで、agentは設定済みの名前だけ、modelで一時的に上書きできる。
-- 設定で定義するエージェントは読取専用で、使えるツールはRead / Grep / Glob / WebFetch / Bash(Bashは許可されたコマンドだけ) / SearchProjectHistory / ReadProjectHistory / SearchProjectMemory。履歴・メモリ検索ツールはtoolsへの明示指定が必要で、既定の子・workerへ自動追加しない。名前`worker`と`main`は予約済み。
+- 設定で定義するエージェントは読取専用で、使えるツールはRead / Grep / Glob / WebFetch / Bash(Bashは許可されたコマンドだけ) / SearchProjectHistory / ReadProjectHistory / SearchProjectMemory / ListProjectSkills / LoadProjectSkill。履歴・メモリ・スキル読取ツールはtoolsへの明示指定が必要で、既定の子・workerへ自動追加しない。名前`worker`と`main`は予約済み。
 - StopTaskとAskUserQuestionは、同じ応答内の他のツール呼び出しをキャンセルする。理由・質問は4,000文字、候補は1件300文字まで。
 
 TaskHistoryとpreviousChildIdで、同じ親の直近の完了・質問待ちの子から結果と質問を引き継げる。新しい子の会話を作り、結果を参考データとして渡す方式であり、古いsystem・tools・権限を復元しない。結果は6,000文字、質問は直近5件・合計2,000文字に切り詰め、32件まで保持する。この引き継ぎ用一覧は起動中のみ有効で、保存された子のログとは別。
@@ -269,6 +269,18 @@ MCPはstdio / HTTP系接続、ツール・リソース・プロンプトを扱�
 - 取得できる種別は`text/*`・JSON・XML。本文は1 MBまで、タイムアウトは60秒。`maxChars`(既定10万、1,000〜100万)で切り詰め、`truncated`を返す。
 - 結果は(URL, prompt)単位で`cacheMinutes`(既定15、0でキャッシュなし)の間、最大100件まで保持する。
 - WebSearchは検索の回数をセッション単位(子を含む)で`maxSearchesPerSession`(既定100、1〜1000)まで数える。呼び出し1回を1と数え、`auto`で一方が失敗して他方で再試行しても1回。通信は2回になりうる。
+
+### プロジェクトスキル
+
+登録済みプロジェクトの`.agents/skills/<directory>/SKILL.md`と`.claude/skills/<directory>/SKILL.md`だけを、ListProjectSkillsで一覧(name / description / 相対source / SHA-256)にし、LoadProjectSkillでsourceとhashを指定して必要な版だけ読み込む。global homeや親ディレクトリは自動探索しない。専用slashコマンドは追加せず、スキル名を既存slash／MCP promptの名前空間へ登録しない。
+
+一覧は本文を返さず、読み込みは非信頼の参考データをtool resultとして返す。上位指示・既存permissionsを上書きせず、frontmatterの権限・モデル・hooks等は適用しない。付属script／install手順の実行やダウンロードは行わない。全スキルをsystem接頭辞へ常時注入せず、固定されたprefixとtoolsを保つ。既存会話への新toolsの追加は§3の前提照合に従う。
+
+履歴と同じhome／workspace実体／cwd／Git identity境界、秘密フィルターを使い、pathの各成分と有界file handleを確認する。symlink／junction／hard link／秘密path、サイズ超過、不正UTF-8・frontmatter・alias展開を除外する。同名はsource別に示す。現物のhashが変わった場合や削除時は旧選択のloadを拒否し、一覧の再取得を求める。キャッシュ・別索引は作らない。
+
+読取ツールとして既存permission gateを通す。子は設定toolsへの明示指定と親の許可が必要で、既定の子・workerには追加しない。headlessも同じ境界で対応する。trace／receiptにsource・hashと本文予算を記録し、評価のskillReadsとHTMLに参照要約を表示する。品質証拠やモデルusageとは別の記録とする。
+
+一覧はdirectory候補100件・結果50件・読取上界512 KiB、1ファイル64 KiB・frontmatter4 KiB、load本文8,000文字。省略・除外理由を明示する。第三者skill導入、自動最適選択、本番A/B、付属asset／script処理、全件ページ送りは未対応。操作・制約・独自offline fixture: [プロジェクトスキル](docs/project-skills.md)。
 
 ### MCP
 

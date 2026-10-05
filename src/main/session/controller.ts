@@ -532,10 +532,42 @@ export class SessionController {
         case "set_mode":
           return await setMode(this.ctx, command);
         case "ready": {
+          // A reloaded renderer no longer owns local read promises. Cancel those
+          // reads, without cancelling a paused task or granting its permissions.
+          const reads = [...this.skillReads.entries()];
+          for (const [, read] of reads) read.abort.abort();
+          await Promise.all(reads.map(([id]) => this.runtimes.get(id)?.done));
           await this.refreshCommands();
           await this.emitState();
+          for (const [id, rt] of this.runtimes) {
+            if (rt.status === "idle") continue;
+            this.options.emit({
+              type: "transcript",
+              sessionId: id,
+              items: itemsFromMessages(rt.messages),
+            });
+            this.options.emit({
+              type: "receipt_history",
+              sessionId: id,
+              receipts: rt.receipts ?? [],
+            });
+            this.options.emit({
+              type: "turn",
+              sessionId: id,
+              status: "running",
+            });
+            if (rt.pending?.event) this.options.emit(rt.pending.event);
+            if (rt.rewindPrompt?.event)
+              this.options.emit(rt.rewindPrompt.event);
+          }
           if (this.current) {
             await this.emitTranscript(this.current);
+            if ((this.runtimes.get(this.current)?.status ?? "idle") === "idle")
+              this.options.emit({
+                type: "turn",
+                sessionId: this.current,
+                status: "idle",
+              });
             const session = this.sessions.get(this.current);
             if (session) await this.reportMissingCwd(session);
           }

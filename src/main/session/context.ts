@@ -97,6 +97,7 @@ export interface Runtime {
   llmCalls?: import("../../shared/llm-calls.js").LlmCalls;
   rewindPrompt?: {
     requestId: string;
+    event?: Extract<UiEvent, { type: "rewind_request" }>;
     resolve(choice: import("../../shared/rewind.js").RewindChoice | null): void;
   };
   environment?: import("../tools/environment.js").EnvironmentReport;
@@ -118,6 +119,7 @@ export interface Runtime {
   abort?: AbortController;
   status: SessionStatus;
   pending?: {
+    event?: Extract<UiEvent, { type: "permission_request" }>;
     plan?: PlanItem[];
     requestId: string;
     resolve(decision: PermissionDecision): void;

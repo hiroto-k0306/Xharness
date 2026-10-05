@@ -137,6 +137,29 @@ it("restores an enabled waiting checkpoint after app restart", async () => {
   ).toBe("completed");
   expect(f.requests).toHaveLength(2);
 });
+it("renderer reconnect cancels a local permission wait without losing opted-in quota resume", async () => {
+  const f = await fixture();
+  await f.c.handle({ type: "quota_resume", sessionId: f.id, action: "enable" });
+  const job = f.c.handle({
+    type: "project_skills",
+    sessionId: f.id,
+    request: { action: "list", requestId: "local" },
+  });
+  await vi.waitFor(() =>
+    expect(f.events.some((e) => e.type === "permission_request")).toBe(true),
+  );
+  f.advance();
+  await f.c.tickQuotaResume();
+  expect(f.requests).toHaveLength(1);
+  expect(await f.pause()).toMatchObject({ state: "waiting" });
+  await f.c.handle({ type: "ready" });
+  expect(await job).toMatchObject({ ok: false });
+  expect(await f.pause()).toMatchObject({ state: "waiting" });
+  expect(f.requests).toHaveLength(1);
+  await f.c.tickQuotaResume();
+  expect(await f.pause()).toMatchObject({ state: "completed", attempts: 1 });
+  expect(f.requests).toHaveLength(2);
+});
 it.each([
   "config",
   "history",

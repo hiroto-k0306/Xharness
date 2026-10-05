@@ -18,6 +18,34 @@ const run = (
 ) => events.reduce(applyEvent, start);
 
 describe("applyEvent", () => {
+  it("does not let a stale permission resolution clear a newer request", () => {
+    const pending = (requestId: string): UiEvent => ({
+      type: "permission_request",
+      sessionId: "s1",
+      requestId,
+      tool: "Read",
+      summary: "Read file",
+    });
+    const s = run([
+      pending("old"),
+      pending("current"),
+      {
+        type: "permission_resolved",
+        sessionId: "s1",
+        requestId: "old",
+        decision: "deny",
+      },
+    ]);
+    expect(s.views.s1!.pending?.requestId).toBe("current");
+    expect(
+      applyEvent(s, {
+        type: "permission_resolved",
+        sessionId: "s1",
+        requestId: "current",
+        decision: "deny",
+      }).views.s1!.pending,
+    ).toBeUndefined();
+  });
   it("keeps the first user message when new-session IPC events arrive after its reply", () => {
     const s = run([
       { type: "transcript", sessionId: "s1", items: [] },

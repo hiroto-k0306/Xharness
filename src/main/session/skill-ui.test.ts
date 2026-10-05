@@ -167,6 +167,57 @@ it("duplicate requests are fenced and denial/cancellation release the runtime, i
   });
   expect((await f.list()).entries).toHaveLength(1);
 });
+it("renderer reconnect cancels orphaned local reads but replays active task permissions without approval", async () => {
+  const f = await fixture();
+  const job = f.c.handle({
+    type: "project_skills",
+    sessionId: f.id,
+    request: { action: "list", requestId: "orphan" },
+  });
+  await vi.waitFor(() =>
+    expect(f.events.some((e) => e.type === "permission_request")).toBe(true),
+  );
+  f.events.length = 0;
+  expect(await f.c.handle({ type: "ready" })).toMatchObject({ ok: true });
+  expect(await job).toMatchObject({ ok: false });
+  expect(f.events.some((e) => e.type === "permission_request")).toBe(false);
+  expect(f.requests()).toBe(0);
+  expect((await f.c.state()).sessions.find((s) => s.id === f.id)?.status).toBe(
+    "idle",
+  );
+  const e = (await f.list()).entries[0]!;
+  await f.c.handle({
+    type: "send",
+    sessionId: f.id,
+    text: skillLoadPrompt(e.source, e.hash),
+  });
+  await vi.waitFor(() =>
+    expect(f.events.some((e) => e.type === "permission_request")).toBe(true),
+  );
+  const pending = f.events.find((e) => e.type === "permission_request")!;
+  const calls = f.requests();
+  f.events.length = 0;
+  await f.c.handle({ type: "ready" });
+  expect(f.events.find((e) => e.type === "permission_request")).toEqual(
+    pending,
+  );
+  expect(f.events.find((e) => e.type === "transcript")).toMatchObject({
+    sessionId: f.id,
+  });
+  expect(f.events.find((e) => e.type === "turn")).toMatchObject({
+    status: "running",
+  });
+  expect(f.requests()).toBe(calls);
+  await f.respond("deny");
+  await vi.waitFor(async () =>
+    expect(
+      (await f.c.state()).sessions.find((s) => s.id === f.id)?.status,
+    ).toBe("idle"),
+  );
+  const trace = await readTraceReplay(f.home, f.id, (s) => s);
+  expect(evaluateUiSkillReads(trace)).toHaveLength(2);
+  expect(evaluateTrace(trace)).toHaveLength(1);
+});
 it("a changed or deleted preview fails and a new listing is needed; IPC cannot load or escape paths", async () => {
   const f = await fixture(),
     e = (await f.list()).entries[0]!;

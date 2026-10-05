@@ -240,6 +240,7 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
       });
     case "permission_resolved": {
       const v = view(s, e.sessionId);
+      if (v.pending?.requestId !== e.requestId) return s;
       const receiptId = v.pending?.receiptId;
       return put(s, e.sessionId, {
         ...v,

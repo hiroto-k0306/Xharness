@@ -124,6 +124,11 @@ it("tracks real Write calls, previews locally, cancels safely, and rewinds both 
   };
   const cancelled = await preview();
   expect(cancelled.preview.files).toHaveLength(1);
+  events.length = 0;
+  await controller.handle({ type: "ready" });
+  expect(events.find((e) => e.type === "rewind_request")).toEqual(cancelled);
+  expect(await readFile(path, "utf8")).toBe("created");
+  expect(request).toHaveBeenCalledTimes(calls);
   expect(
     await controller.handle({
       type: "rewind_response",

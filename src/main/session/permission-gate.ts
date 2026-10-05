@@ -8,7 +8,7 @@ import {
   normalizeCall,
 } from "../core/permissions.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
-import { type PermissionDecision } from "../../shared/ipc.js";
+import { type PermissionDecision, type UiEvent } from "../../shared/ipc.js";
 import { summarizeInput } from "../../shared/summary.js";
 import { type StoredSession } from "./store.js";
 import { safeInput, type ControllerContext, type Runtime } from "./context.js";
@@ -98,7 +98,7 @@ export class PermissionGate {
     const requestId = randomUUID().slice(0, 8);
     rt.asked = true;
     rt.status = "ask";
-    ctx.options.emit({
+    const event: Extract<UiEvent, { type: "permission_request" }> = {
       type: "permission_request",
       oneTime: !!rt.quotaContinuation || (forceAsk && call.name === "Bash"),
       agentId,
@@ -135,7 +135,8 @@ export class PermissionGate {
         ].includes(call.name)
           ? ctx.clean(JSON.stringify(call.input))
           : summarizeInput(call.name, call.input, ctx.clean, 300)),
-    });
+    };
+    ctx.options.emit(event);
     void ctx.emitState();
     const decision = await new Promise<PermissionDecision>(
       (resolveDecision) => {
@@ -146,6 +147,7 @@ export class PermissionGate {
         };
         const onAbort = () => done("deny");
         rt.pending = {
+          event,
           requestId,
           resolve: done,
           ...(call.name === "SubmitPlan"

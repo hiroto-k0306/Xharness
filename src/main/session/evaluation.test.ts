@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, it } from "vitest";
 import {
   evaluateTrace,
+  evaluateSessionCommon,
   compareEvaluations,
   renderEvaluation,
   type ComparisonEntry,
@@ -38,6 +39,96 @@ const record = (
   at: phase === "start" ? "2026-10-05T00:00:00Z" : "2026-10-05T00:00:01Z",
   ...extra,
 });
+it("deduplicates replayed attempts and roots while counting a genuine retry separately", () => {
+  const root = record("root", "task", "start");
+  const start = record("a", "llm", "start", {
+    taskId: "root",
+    attemptId: "attempt-a",
+    label: "codex",
+  });
+  const end = record("a", "llm", "end", {
+    taskId: "root",
+    output: {
+      usageComplete: true,
+      tokenMeasurement: tokenMeasurement("codex", {
+        input_tokens: 12,
+        output_tokens: 4,
+      }),
+    },
+  });
+  const retry = { ...start, id: "b", attemptId: "attempt-b" };
+  const records = [
+    root,
+    root,
+    start,
+    end,
+    start,
+    end,
+    retry,
+    { ...end, id: "b" },
+    record("root", "task", "end", { output: { stopCause: "end_turn" } }),
+  ];
+  const task = evaluateTrace({ records, skipped: 0 })[0]!;
+  expect(task.runs).toBe(1);
+  expect(task.calls.map((c) => c.attemptId)).toEqual([
+    "attempt-a",
+    "attempt-b",
+  ]);
+  expect(task.metrics.input).toEqual({ known: 24, measuredCalls: 2 });
+  expect(task.metrics.output.known).toBe(8);
+  expect(evaluateTrace({ records, skipped: 0 })).toEqual(
+    evaluateTrace({ records, skipped: 0 }),
+  );
+});
+it("keeps common compaction and missing usage separate from completed tasks", () => {
+  const records = [
+    record("t", "task", "start"),
+    record("t", "task", "end", { output: { stopCause: "end_turn" } }),
+    record("common", "llm", "start"),
+    record("common", "llm", "end", {
+      output: {
+        tokenMeasurement: tokenMeasurement("codex", { output_tokens: 7 }),
+      },
+    }),
+  ];
+  expect(evaluateTrace({ records, skipped: 0 })[0]!.calls).toHaveLength(0);
+  expect(
+    evaluateSessionCommon({ records: [...records, ...records], skipped: 0 }),
+  ).toMatchObject({
+    metrics: {
+      input: { known: null, measuredCalls: 0 },
+      output: { known: 7, measuredCalls: 1 },
+    },
+    completeUsageCalls: 0,
+  });
+  expect(renderEvaluation({ records, skipped: 0 })).toContain(
+    "セッション共通分",
+  );
+  expect(renderEvaluation({ records, skipped: 0 })).not.toContain("API換算");
+});
+it("includes attributed manual compaction without changing task quality or counting its wait gap", () => {
+  const records = [
+    record("t", "task", "start"),
+    record("t", "task", "end", { output: { stopCause: "aborted" } }),
+    record("compact", "step", "start", {
+      taskId: "t",
+      label: "manual_compact",
+      at: "2026-10-05T00:01:00Z",
+    }),
+    record("compact", "step", "end", {
+      taskId: "t",
+      label: "manual_compact",
+      at: "2026-10-05T00:01:02Z",
+    }),
+    record("usage", "llm", "start", { taskId: "t" }),
+  ];
+  expect(evaluateTrace({ records, skipped: 0 })[0]).toMatchObject({
+    outcome: "interrupted",
+    elapsedMs: 3000,
+    recordingIncomplete: true,
+  });
+  expect(evaluateSessionCommon({ records, skipped: 0 })).toBeUndefined();
+});
 it("aggregates parent and children, failed retry, and receipts only once through the real offline loop", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-evaluation-"));
   const { id } = await runReportDemo(home);
@@ -50,7 +141,7 @@ it("aggregates parent and children, failed retry, and receipts only once through
   expect(task.calls.some((c) => c.status === "利用制限")).toBe(true);
   expect(new Set(task.calls.map((c) => c.agentId)).size).toBe(2);
   expect(task.simulatedCalls).toBe(4);
-  expect(task.metrics.input).toEqual({ known: 3, measuredCalls: 3 });
+  expect(task.metrics.input).toEqual({ known: null, measuredCalls: 0 });
   expect(task.metrics.total).toEqual({ known: null, measuredCalls: 0 });
   expect(task.elapsedMs).toBeGreaterThanOrEqual(0);
   expect(renderExecutionReport(await readExecutionReport(home, id))).toContain(

@@ -34,7 +34,7 @@ it("adds separate Anthropic cache and retains iterations once", () => {
       tokenMeasurement("claude", { ...raw, iterations: [raw, raw] }),
     ),
   ).toEqual({
-    input: 20,
+    input: 320,
     output: 40,
     cacheRead: 200,
     cacheWrite: 100,

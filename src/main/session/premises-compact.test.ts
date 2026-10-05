@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type UiEvent } from "../../shared/ipc.js";
 import { type Provider, type ProviderRequest } from "../providers/provider.js";
 import { reserveLlmCall } from "../core/llm-budget.js";
+import { traceStream } from "../core/trace.js";
 import { SessionController } from "./controller.js";
 import { SessionStore } from "./store.js";
 import { PREMISE_NOTICE } from "./premises.js";
@@ -13,6 +14,8 @@ import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
 import { systemPrompt } from "./turn.js";
 import { type ControllerContext } from "./context.js";
 import { type Message } from "../core/types.js";
+import { evaluateTrace, evaluateSessionCommon } from "./evaluation.js";
+import { readTraceReplay } from "./report-trace.js";
 
 beforeEach(() =>
   vi.stubGlobal(
@@ -55,6 +58,14 @@ async function fixture() {
       };
     },
   };
+  const mockStream = provider.stream.bind(provider);
+  provider.stream = (request, signal) =>
+    traceStream(
+      "claude",
+      { internal: request },
+      mockStream(request, signal),
+      true,
+    );
   const make = () =>
     new SessionController({
       home,
@@ -109,7 +120,45 @@ it("manual Claude compact uses the validated workflow prefix and leaves original
   expect(c.requests[2]!.tools).toEqual(c.requests[1]!.tools);
   expect(c.requests[2]!.tools.some((t) => t.name === "Task")).toBe(true);
   expect(await readFile(path, "utf8")).toBe(history);
+  const trace = await readTraceReplay(c.home, c.id, (s) => s);
+  expect(evaluateTrace(trace).every((task) => task.calls.length === 1)).toBe(
+    true,
+  );
+  expect(evaluateSessionCommon(trace)?.calls).toHaveLength(1);
   await c.controller.shutdown();
+});
+it("attributes manual compact to a persisted unfinished task after restart without completing it", async () => {
+  const c = await fixture();
+  // Persist an interrupted task and legacy history with no assistant-prefix requirements.
+  const store = new SessionStore(c.home);
+  await store.append(
+    c.id,
+    [
+      { role: "user", content: [{ type: "text", text: "old" }] },
+      { role: "user", content: [{ type: "text", text: "latest" }] },
+    ],
+    (s) => s,
+  );
+  await store.recordEvaluationTask(c.id, "interrupted-task", true);
+  await c.controller.shutdown();
+  const resumed = c.make();
+  await resumed.init();
+  expect(
+    await resumed.handle({ type: "send", sessionId: c.id, text: "/compact" }),
+  ).toEqual({ ok: true });
+  const trace = await readTraceReplay(c.home, c.id, (s) => s);
+  const calls = trace!.records.filter(
+    (r) => r.kind === "llm" && r.phase === "start",
+  );
+  expect(calls).toHaveLength(1);
+  expect(calls[0]?.taskId).toBe("interrupted-task");
+  expect(await store.evaluationTask(c.id)).toEqual({
+    id: "interrupted-task",
+    active: true,
+  });
+  expect(evaluateSessionCommon(trace)).toBeUndefined();
+  expect(vi.mocked(fetch)).not.toHaveBeenCalled();
+  await resumed.shutdown();
 });
 it.each([false, true])(
   "reconstructs the manual compact system before any normal turn (pre-guidance=%s)",

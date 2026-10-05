@@ -1,4 +1,8 @@
-import { withSessionTrace } from "../core/trace.js";
+import {
+  withSessionTrace,
+  withTraceFields,
+  traceOperation,
+} from "../core/trace.js";
 import { TurnEvents } from "./turn-events.js";
 import { permissionModeLabels } from "../../shared/permission-modes.js";
 import { withSessionCalls } from "./llm-calls.js";
@@ -96,6 +100,7 @@ export async function compactNow(
   ctx.options.emit({ type: "turn", sessionId, status: "running" });
   const events = new TurnEvents(ctx, session, rt);
   try {
+    const evaluationTask = await ctx.sessions.evaluationTask(sessionId);
     const file = checkpointFile(ctx.options.home, sessionId);
     rt.checkpoint ??= await file.read(undefined);
     abort.signal.throwIfAborted();
@@ -128,28 +133,36 @@ export async function compactNow(
           sessionId,
           ctx.clean,
           async () =>
-            prepareProviderHistory(rt.messages, {
-              onAuthRefresh: events.onEvent,
-              provider,
-              model: session.model,
-              signal: abort.signal,
-              system:
-                rt.premises?.system ??
-                rt.system ??
-                (await systemPrompt(
-                  ctx,
-                  session.cwd,
-                  !session.workspaceId,
-                  rt.config,
-                  session.fileLinkGuidanceVersion === 1,
-                )),
-              tools:
-                rt.premises?.tools ??
-                [...(rt.tools?.values() ?? [])].map((t) => t.spec),
-              checkpoint: rt.checkpoint,
-              threshold: 0.8,
-              force: true,
-            }),
+            withTraceFields(
+              {
+                taskId: evaluationTask?.active ? evaluationTask.id : undefined,
+              },
+              () =>
+                traceOperation("step", "manual_compact", {}, async () =>
+                  prepareProviderHistory(rt.messages, {
+                    onAuthRefresh: events.onEvent,
+                    provider,
+                    model: session.model,
+                    signal: abort.signal,
+                    system:
+                      rt.premises?.system ??
+                      rt.system ??
+                      (await systemPrompt(
+                        ctx,
+                        session.cwd,
+                        !session.workspaceId,
+                        rt.config,
+                        session.fileLinkGuidanceVersion === 1,
+                      )),
+                    tools:
+                      rt.premises?.tools ??
+                      [...(rt.tools?.values() ?? [])].map((t) => t.spec),
+                    checkpoint: rt.checkpoint,
+                    threshold: 0.8,
+                    force: true,
+                  }),
+                ),
+            ),
           {
             onWarning: (message) =>
               ctx.options.emit({

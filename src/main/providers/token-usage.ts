@@ -68,7 +68,7 @@ export function normalizeTokens(measurement: TokenMeasurement): TokenTotals {
       ),
     ) as unknown as TokenTotals;
   }
-  const input = count(raw.input_tokens);
+  const baseInput = count(raw.input_tokens);
   const output = count(raw.output_tokens);
   const cacheRead =
     provider === "claude"
@@ -77,6 +77,8 @@ export function normalizeTokens(measurement: TokenMeasurement): TokenTotals {
   const cacheWrite =
     provider === "claude" ? count(raw.cache_creation_input_tokens) : null;
   const reasoning = count(object(raw.output_tokens_details).reasoning_tokens);
+  const input =
+    provider === "claude" ? sum([baseInput, cacheRead, cacheWrite]) : baseInput;
   return {
     input,
     output,
@@ -84,10 +86,6 @@ export function normalizeTokens(measurement: TokenMeasurement): TokenTotals {
     cacheWrite,
     reasoning,
     // OpenAI cache/reasoning are subsets; Anthropic cache is additional input.
-    total: sum(
-      provider === "claude"
-        ? [input, cacheRead, cacheWrite, output]
-        : [input, output],
-    ),
+    total: sum([input, output]),
   };
 }

@@ -26,6 +26,7 @@ export interface Metric {
   measuredCalls: number;
 }
 export interface EvaluationCall {
+  attemptId: string;
   spanId: string;
   agentId: string;
   provider: string;
@@ -94,7 +95,16 @@ function outcome(reason: unknown): TaskEvaluation["outcome"] {
 /** Trace spans are authoritative; receipts are never added again as token usage. */
 export function evaluateTrace(trace?: TraceReplay): TaskEvaluation[] {
   if (!trace) return [];
-  const starts = trace.records.filter((r) => r.phase === "start");
+  const starts = [
+    ...new Map(
+      trace.records
+        .filter((r) => r.phase === "start")
+        .map((r) => [
+          `${r.kind}:${r.agentId}:${r.kind === "llm" ? (r.attemptId ?? r.id) : r.id}`,
+          r,
+        ]),
+    ).values(),
+  ];
   const ends = new Map(
     trace.records.filter((r) => r.phase === "end").map((r) => [r.id, r]),
   );
@@ -136,12 +146,22 @@ export function evaluateTrace(trace?: TraceReplay): TaskEvaluation[] {
               : null;
           tokens = {
             ...tokens,
-            input: valid(usage.inputTokens),
+            input:
+              start.label === "claude"
+                ? normalizeTokens(
+                    tokenMeasurement("claude", {
+                      input_tokens: usage.inputTokens,
+                      cache_read_input_tokens: usage.cacheReadTokens,
+                      cache_creation_input_tokens: usage.cacheWriteTokens,
+                    }),
+                  ).input
+                : valid(usage.inputTokens),
             output: valid(usage.outputTokens),
           };
         }
         const request = object(object(start.input).internal);
         return {
+          attemptId: start.attemptId ?? start.id,
           spanId: start.id,
           agentId: start.agentId,
           provider: start.label,
@@ -193,6 +213,15 @@ export function evaluateTrace(trace?: TraceReplay): TaskEvaluation[] {
         });
     }
     const end = ends.get(last.id);
+    const latestTimedEnd = [
+      end,
+      ...records
+        .filter((r) => r.label === "manual_compact")
+        .map((r) => ends.get(r.id)),
+    ]
+      .filter((r): r is TraceRecord => !!r)
+      .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+      .at(-1);
     const stopCause = object(end?.output).stopCause;
     evidence.unshift(
       ...runs.map((r): QualityEvidence => ({
@@ -225,10 +254,16 @@ export function evaluateTrace(trace?: TraceReplay): TaskEvaluation[] {
           ? "interrupted"
           : outcome(stopCause),
       stopCause: typeof stopCause === "string" ? stopCause : null,
-      elapsedMs: runs.every((r) => duration(r, ends.get(r.id)) !== null)
-        ? runs.reduce((n, r) => n + duration(r, ends.get(r.id))!, 0)
+      elapsedMs: [
+        ...runs,
+        ...records.filter((r) => r.label === "manual_compact"),
+      ].every((r) => duration(r, ends.get(r.id)) !== null)
+        ? [
+            ...runs,
+            ...records.filter((r) => r.label === "manual_compact"),
+          ].reduce((n, r) => n + duration(r, ends.get(r.id))!, 0)
         : null,
-      wallClockMs: duration(root, end),
+      wallClockMs: duration(root, latestTimedEnd),
       runs: runs.length,
       calls,
       metrics,
@@ -253,6 +288,42 @@ export function evaluateTrace(trace?: TraceReplay): TaskEvaluation[] {
         ),
     };
   });
+}
+
+/** Unassigned session work is never guessed into the last completed task. */
+export function evaluateSessionCommon(
+  trace?: TraceReplay,
+): TaskEvaluation | undefined {
+  const records =
+    trace?.records.filter((r) => !r.taskId && r.kind !== "task") ?? [];
+  if (!records.some((r) => r.kind === "llm" && r.phase === "start"))
+    return undefined;
+  const taskId = "session-common";
+  const root: TraceRecord = {
+    id: taskId,
+    sequence: 1,
+    phase: "start",
+    kind: "task",
+    agentId: taskId,
+    label: taskId,
+    at: "",
+    input: { taskId },
+  };
+  const evaluation = evaluateTrace({
+    ...trace!,
+    records: [
+      root,
+      { ...root, phase: "end" },
+      ...records.map((r) => ({ ...r, taskId })),
+    ],
+  })[0]!;
+  evaluation.elapsedMs = evaluation.calls.every((c) => c.durationMs !== null)
+    ? evaluation.calls.reduce((n, c) => n + c.durationMs!, 0)
+    : null;
+  evaluation.recordingIncomplete ||= evaluation.calls.some(
+    (c) => c.durationMs === null,
+  );
+  return evaluation;
 }
 
 export interface ComparisonEntry {
@@ -312,10 +383,10 @@ export function renderEvaluation(trace?: TraceReplay): string {
   const tasks = evaluateTrace(trace);
   const cards = tasks
     .map((task) => {
-      const metrics = keys
+      const metrics = (["input", "output"] as const)
         .map(
           (key) =>
-            `<tr><th>${key}</th><td>${task.metrics[key].known ?? "不明"}</td><td>${task.metrics[key].measuredCalls}/${task.calls.length}</td></tr>`,
+            `<tr><th>${key === "input" ? "In" : "Out"}</th><td>${task.metrics[key].known ?? "不明"}</td><td>${task.metrics[key].measuredCalls}/${task.calls.length}</td></tr>`,
         )
         .join("");
       const calls = task.calls
@@ -324,15 +395,23 @@ export function renderEvaluation(trace?: TraceReplay): string {
             `<tr><td><a href="#trace-${escape(c.spanId)}">${escape(c.agentId)}</a></td><td>${escape(c.provider)} / ${escape(c.model ?? "不明")} / ${escape(c.effort ?? "不明")}</td><td>${escape(c.status)}${c.simulated ? "（模擬）" : ""}</td><td>${c.durationMs ?? "不明"} ms</td></tr>`,
         )
         .join("");
-      return `<article><h3>タスク ${escape(task.taskId)}</h3><p>終了: ${task.outcome} (${escape(task.stopCause ?? "不明")}) · 稼働時間: ${task.elapsedMs ?? "不明"} ms · 経過時間（再開待ち含む）: ${task.wallClockMs ?? "不明"} ms · 親実行 ${task.runs} 回 · 呼出試行: ${task.calls.length} (模擬 ${task.simulatedCalls} / 実fetch送信記録 ${task.dispatchedCalls}) · 完全なusage: ${task.completeUsageCalls}/${task.calls.length}</p><p>レビュー試行 ${task.reviewAttempts} · 指摘に戻った修正ラウンド ${task.correctionRounds}${task.recordingIncomplete ? " · 記録欠落あり" : ""}</p><table><thead><tr><th>項目</th><th>取得済み合計</th><th>測定カバー率（呼出数）</th></tr></thead><tbody>${metrics}</tbody></table><table><thead><tr><th>根拠</th><th>provider / model / effort</th><th>結果</th><th>通信時間</th></tr></thead><tbody>${calls}</tbody></table><details><summary>品質の根拠（モデルレビュー・コマンド実行・終了理由）</summary><pre>${escape(JSON.stringify(task.evidence, null, 2))}</pre></details></article>`;
+      return `<article><h3>タスク ${escape(task.taskId)}</h3><p>品質結果: ${task.outcome} (${escape(task.stopCause ?? "不明")}) · 所要時間: ${task.elapsedMs ?? "不明"} ms · 経過時間（再開待ち含む）: ${task.wallClockMs ?? "不明"} ms</p><p>レビュー試行 ${task.reviewAttempts} · 指摘に戻った修正ラウンド ${task.correctionRounds}${task.recordingIncomplete ? " · 記録欠落あり" : ""}</p><table><thead><tr><th>項目</th><th>取得済み合計</th><th>測定カバー率（呼出数）</th></tr></thead><tbody>${metrics}</tbody></table><details><summary>呼出と測定の詳細</summary><p>親実行 ${task.runs} 回 · 呼出試行: ${task.calls.length} (模擬 ${task.simulatedCalls} / 実fetch送信記録 ${task.dispatchedCalls}) · 完全なusage: ${task.completeUsageCalls}/${task.calls.length}</p><table><thead><tr><th>根拠</th><th>provider / model / effort</th><th>結果</th><th>通信時間</th></tr></thead><tbody>${calls}</tbody></table><pre>${escape(JSON.stringify(task.calls, null, 2))}</pre></details><details><summary>品質の根拠（モデルレビュー・コマンド実行・終了理由）</summary><pre>${escape(JSON.stringify(task.evidence, null, 2))}</pre></details></article>`;
     })
     .join("");
-  const unassigned =
-    trace?.records.filter(
-      (r) =>
-        r.phase === "start" &&
-        r.kind === "llm" &&
-        !tasks.some((t) => t.taskId === r.taskId),
-    ).length ?? 0;
-  return `<section id="evaluation"><h2>品質・使用量の評価</h2><p>完了はハーネスの終了理由です。モデルの申告・レビューや任意コマンドの成功を、客観テスト合格とはみなしません。取得済み合計は部分値を含み、不明をゼロに置換しません。OpenAI cache/reasoningは内数、Anthropic cacheは別建てです。サブスク枠消費とAPI換算費用は未測定です。</p><p>同じ起動中のワークフローの継続・修正を同一タスクに集計します。通常会話は親の実行1回です。アプリ再起動後や新規ワークフローは別タスクになります。未関連通信 ${unassigned} 件（手動圧縮・旧記録など）は合計に含めません。</p>${cards || "<p>評価タスク境界の記録がありません。旧レシート・トレースは下の詳細で確認できます。</p>"}</section>`;
+  const common = evaluateSessionCommon(trace);
+  const unassigned = new Set(
+    trace?.records
+      .filter(
+        (r) =>
+          r.phase === "start" &&
+          r.kind === "llm" &&
+          !!r.taskId &&
+          !tasks.some((t) => t.taskId === r.taskId),
+      )
+      .map((r) => r.attemptId ?? r.id) ?? [],
+  ).size;
+  const commonCard = common
+    ? `<article><h3>セッション共通分</h3><p>対象タスクのない手動圧縮・旧記録。タスクの品質結果には含めません。呼出試行 ${common.calls.length} · 通信時間合計 ${common.elapsedMs ?? "不明"} ms</p><table><thead><tr><th>項目</th><th>取得済み合計</th><th>測定カバー率（呼出数）</th></tr></thead><tbody>${(["input", "output"] as const).map((key) => `<tr><th>${key === "input" ? "In" : "Out"}</th><td>${common.metrics[key].known ?? "不明"}</td><td>${common.metrics[key].measuredCalls}/${common.calls.length}</td></tr>`).join("")}</tbody></table><details><summary>共通分の根拠</summary><pre>${escape(JSON.stringify(common.calls, null, 2))}</pre></details></article>`
+    : "";
+  return `<section id="evaluation"><h2>品質・使用量の評価</h2><p>完了はハーネスの終了理由です。モデルの申告・レビューや任意コマンドの成功を、客観テスト合格とはみなしません。Inはcacheを含む総入力、Outはreasoningを含む総出力です。取得済み合計は部分値を含み、不明をゼロに置換しません。</p><p>未完了タスクのIDは再起動後も継承します。同じ試行IDの再配信は一度だけ数え、新しい再試行は別消費として集計します。境界欠落の通信 ${unassigned} 件はタスク合計に含めません。</p>${cards || "<p>評価タスク境界の記録がありません。旧レシート・トレースは下の詳細で確認できます。</p>"}${commonCard}</section>`;
 }

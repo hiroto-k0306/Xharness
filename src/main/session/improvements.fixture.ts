@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, vi } from "vitest";
-import { SessionController } from "./controller.js";
+import { SessionController, type ControllerOptions } from "./controller.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
 import { type UiEvent } from "../../shared/ipc.js";
 import {
@@ -27,7 +27,10 @@ afterEach(async () => {
     await rm(f.base, { recursive: true, force: true });
   }
 });
-export async function fixture(quotaNow?: () => number) {
+export async function fixture(
+  quotaNow?: () => number,
+  extra: Partial<ControllerOptions> = {},
+) {
   const base = await mkdtemp(join(tmpdir(), "xh-improve-")),
     home = join(base, "home"),
     root = join(base, "project");
@@ -49,6 +52,7 @@ export async function fixture(quotaNow?: () => number) {
       provider: new FakeProvider({ onRequest: requests }),
       host: { pickFolder: async () => root },
       emit: (e) => events.push(e),
+      ...extra,
     });
     controllers.push(c);
     return c;

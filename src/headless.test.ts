@@ -1,10 +1,50 @@
 import { readTraceReplay } from "./main/session/report-trace.js";
 import { spawn } from "node:child_process";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { SessionStore } from "./main/session/store.js";
+import { SessionStore, WorkspaceStore } from "./main/session/store.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+it("fake headless explicitly searches same-project history through a tool result", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-headless-history-"));
+  const cwd = await mkdtemp(join(tmpdir(), "xh-headless-history-project-"));
+  const workspaces = new WorkspaceStore(home);
+  await workspaces.load();
+  const workspaceId = await workspaces.add(cwd);
+  const store = new SessionStore(home);
+  await store.load();
+  await store.save({
+    id: "past",
+    title: "past",
+    cwd,
+    workspaceId,
+    readOnly: false,
+    model: "fake",
+    effort: "high",
+    createdAt: 1,
+    updatedAt: 2,
+    providers: [],
+  });
+  await store.append(
+    "past",
+    [{ role: "user", content: [{ type: "text", text: "SQLite decision" }] }],
+    (s) => s,
+  );
+  const output = await repl(
+    home,
+    ["history-demo: SQLite", "y", "/exit"],
+    ["--cwd", cwd],
+  );
+  expect(output).toContain("SearchProjectHistory");
+  expect(output).toContain("SQLite decision");
+  expect(output).toContain('"untrusted":true');
+  expect(output).toContain('"messageLine":1');
+  const id = /session ([\w-]+)/.exec(output)![1]!;
+  const replay = await readTraceReplay(home, id, (s) => s);
+  expect(
+    replay!.records.filter((r) => r.kind === "llm").every((r) => r.simulated),
+  ).toBe(true);
+}, 30000);
 it("expands user commands once and handles init, cost and model locally", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-headless-commands-"));
   const cwd = await mkdtemp(join(tmpdir(), "xh-headless-command-ws-"));
@@ -124,6 +164,7 @@ function repl(
       if (
         (pending.endsWith("❯ ") ||
           pending.endsWith("既定code] ") ||
+          pending.endsWith("[y: once / s: session / a: always / N] ") ||
           pending.endsWith("確認して復元しますか？ [y/N] ")) &&
         commands.length
       ) {

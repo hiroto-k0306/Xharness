@@ -1048,11 +1048,13 @@ export class SessionController {
         case "set_mode":
           if (
             this.handoffBusy.has(command.sessionId) ||
-            this.browserJobs.has(command.sessionId)
+            this.browserJobs.has(command.sessionId) ||
+            this.improvementReads.has(command.sessionId)
           )
             return {
               ok: false,
-              error: "受け渡し終了後に権限を変更してください。",
+              error:
+                "受け渡し・ローカル操作・改善操作の終了後に権限を変更してください。",
             };
           return await setMode(this.ctx, command);
         case "ready": {

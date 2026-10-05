@@ -1,7 +1,52 @@
 import { writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { fixture, cases } from "./improvements.fixture.js";
+import { Improvements } from "./improvements.js";
+it("holds permission mode while an already authorized improvement is awaiting IO", async () => {
+  const f = await fixture(),
+    e = await f.baseline();
+  let release = () => {};
+  const blocked = new Promise<void>((done) => {
+    release = done;
+  });
+  const action = Improvements.prototype.action;
+  const entered = vi
+    .spyOn(Improvements.prototype, "action")
+    .mockImplementationOnce(async function (this: Improvements, request) {
+      await blocked;
+      return action.call(this, request);
+    });
+  const saving = f.action({
+    action: "candidate",
+    id: e.id,
+    revision: e.revision,
+    parent: e.versions[0]!.id,
+    name: "lease",
+    body: "fixed recipe",
+  });
+  try {
+    await vi.waitFor(() => expect(entered).toHaveBeenCalled());
+    expect(
+      await f.c.handle({
+        type: "set_mode",
+        sessionId: f.sessionId,
+        mode: "plan",
+      }),
+    ).toMatchObject({ ok: false });
+  } finally {
+    release();
+  }
+  expect(await saving).toMatchObject({ ok: true });
+  expect(
+    await f.c.handle({
+      type: "set_mode",
+      sessionId: f.sessionId,
+      mode: "plan",
+    }),
+  ).toMatchObject({ ok: true });
+  expect(f.requests).not.toHaveBeenCalled();
+});
 it("keeps readonly/plan/deny and foreign workspace boundaries for explicit UI operations", async () => {
   const f = await fixture(),
     e = await f.baseline();

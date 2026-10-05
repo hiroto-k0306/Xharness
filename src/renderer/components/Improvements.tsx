@@ -1,5 +1,7 @@
 import { ImprovementEvaluation } from "./ImprovementEvaluation.js";
 import { ImprovementBaseline } from "./ImprovementBaseline.js";
+import { ModelCandidates } from "./ModelCandidates.js";
+import { type ModelCandidateView } from "../../shared/model-candidates.js";
 import { useEffect, useRef, useState } from "react";
 import { type PendingPermission } from "../state/store.js";
 import {
@@ -26,6 +28,10 @@ export function ImprovementsPanel({
   const [view, setView] = useState<ImprovementView>(),
     [error, setError] = useState<string>(),
     [busy, setBusy] = useState(false);
+  const [candidates, setCandidates] = useState<{
+    context: string;
+    view: ModelCandidateView;
+  }>();
   const [selected, setSelected] = useState(""),
     [versionId, setVersion] = useState(""),
     [caseId, setCase] = useState(""),
@@ -59,6 +65,15 @@ export function ImprovementsPanel({
       else {
         if (r.improvements) setView(r.improvements);
         if (r.preparedPrompt) setPrompt(r.preparedPrompt);
+        if (
+          r.modelCandidates &&
+          (request.action === "model_candidates" ||
+            request.action === "select_model_candidate")
+        )
+          setCandidates({
+            context: `${request.id}/${request.revision}/${request.versionId}/${request.caseId}`,
+            view: r.modelCandidates,
+          });
         setConfirmed(false);
       }
     } catch {
@@ -343,6 +358,23 @@ export function ImprovementsPanel({
                 versionId={versionId}
                 caseId={caseId}
                 rows={view?.rows ?? []}
+                busy={busy}
+                command={command}
+              />
+              <ModelCandidates
+                key={`model-${e.id}/${e.revision}/${versionId}/${caseId}`}
+                selection={{
+                  id: e.id,
+                  revision: e.revision,
+                  versionId,
+                  caseId,
+                }}
+                view={
+                  candidates?.context ===
+                  `${e.id}/${e.revision}/${versionId}/${caseId}`
+                    ? candidates.view
+                    : undefined
+                }
                 busy={busy}
                 command={command}
               />

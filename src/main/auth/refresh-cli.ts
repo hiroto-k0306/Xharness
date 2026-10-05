@@ -93,6 +93,10 @@ export async function executeRefresh(
       command = (await resolveCli("pwsh", env)) ?? "";
       if (!command) return "cli_missing";
       const quote = (s: string) => "'" + s.replaceAll("'", "''") + "'";
+      // PowerShell uses legacy native argument passing for npm .cmd shims.
+      // Preserve TOML string quotes through cmd.exe and the shim's Node process.
+      if (/\.(cmd|bat)$/i.test(executable))
+        args = args.map((arg) => arg.replaceAll('"', '\\"'));
       args = powershellArguments(
         `& ${quote(executable)} ${args.map(quote).join(" ")}; exit $LASTEXITCODE`,
         true,

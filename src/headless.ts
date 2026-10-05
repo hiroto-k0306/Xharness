@@ -55,6 +55,7 @@ import { type Message } from "./main/core/types.js";
 import { redact } from "./main/core/redact.js";
 import { projectHistoryTools } from "./main/tools/project-history.js";
 import { projectMemoryTools } from "./main/tools/project-memory.js";
+import { projectSkillTools } from "./main/tools/project-skills.js";
 import { WorkspaceTrust } from "./main/config/trust.js";
 import { McpApprovals } from "./main/mcp/approvals.js";
 import {
@@ -319,6 +320,15 @@ async function headlessUnlocked(args: string[]) {
       clean,
     }),
     ...projectMemoryTools({
+      home,
+      sessions,
+      workspaces,
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      cwd,
+      clean,
+    }),
+    ...projectSkillTools({
       home,
       sessions,
       workspaces,
@@ -855,6 +865,15 @@ async function headlessUnlocked(args: string[]) {
                 clean,
               }),
               ...projectMemoryTools({
+                home,
+                sessions,
+                workspaces,
+                sessionId: session.id,
+                workspaceId: session.workspaceId,
+                cwd: directory,
+                clean,
+              }),
+              ...projectSkillTools({
                 home,
                 sessions,
                 workspaces,

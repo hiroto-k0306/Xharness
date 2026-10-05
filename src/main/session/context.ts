@@ -23,6 +23,7 @@ import { lifecycleTools } from "../tools/lifecycle.js";
 import { todoTools } from "../tools/todos.js";
 import { projectHistoryTools } from "../tools/project-history.js";
 import { projectMemoryTools } from "../tools/project-memory.js";
+import { projectSkillTools } from "../tools/project-skills.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
 import {
@@ -366,5 +367,14 @@ export function sessionTools(
       !session.readOnly,
       () => ctx.options.emit({ type: "memory_changed", sessionId: session.id }),
     ),
+    ...projectSkillTools({
+      home: ctx.options.home,
+      sessions: ctx.sessions,
+      workspaces: ctx.workspaces,
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      cwd,
+      clean: (text) => ctx.clean(text),
+    }),
   ]);
 }

@@ -10,6 +10,7 @@ import { isEffort } from "../config/config.js";
 import { type ReasoningEffort } from "../providers/provider.js";
 import { HISTORY_TOOLS } from "../tools/project-history.js";
 import { MEMORY_READ_TOOLS } from "../tools/project-memory.js";
+import { SKILL_TOOLS } from "../tools/project-skills.js";
 
 export interface AgentDefinition {
   model: string;
@@ -112,6 +113,7 @@ export async function loadAgentConfig(
                 "Bash",
                 ...HISTORY_TOOLS,
                 ...MEMORY_READ_TOOLS,
+                ...SKILL_TOOLS,
               ].includes(t),
           ) ||
           (agent.effort !== undefined && !isEffort(agent.effort))

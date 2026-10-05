@@ -1,4 +1,5 @@
 import { withSessionTrace } from "../core/trace.js";
+import { TurnEvents } from "./turn-events.js";
 import { permissionModeLabels } from "../../shared/permission-modes.js";
 import { withSessionCalls } from "./llm-calls.js";
 import { LlmBudgetError } from "../core/llm-budget.js";
@@ -93,6 +94,7 @@ export async function compactNow(
   rt.status = "running";
   let stopCause: string | undefined;
   ctx.options.emit({ type: "turn", sessionId, status: "running" });
+  const events = new TurnEvents(ctx, session, rt);
   try {
     const file = checkpointFile(ctx.options.home, sessionId);
     rt.checkpoint ??= await file.read(undefined);
@@ -127,6 +129,7 @@ export async function compactNow(
           ctx.clean,
           async () =>
             prepareProviderHistory(rt.messages, {
+              onAuthRefresh: events.onEvent,
               provider,
               model: session.model,
               signal: abort.signal,
@@ -202,6 +205,7 @@ export async function compactNow(
     }
     return { ok: false, error: "圧縮に失敗しました。元の履歴を維持しています" };
   } finally {
+    await Promise.all(events.receiptWrites);
     rt.status = "idle";
     rt.abort = undefined;
     ctx.options.emit({ type: "turn", sessionId, status: "idle", stopCause });

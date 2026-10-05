@@ -1,7 +1,7 @@
 import { traceOperation } from "../core/trace.js";
 import { imageMetadata } from "../../shared/images.js";
 import { type Message, type ToolSpec } from "../core/types.js";
-import { type Provider } from "../providers/provider.js";
+import { type Provider, type ProviderEvent } from "../providers/provider.js";
 import {
   contextView,
   estimateTokens,
@@ -24,6 +24,9 @@ export async function prepareProviderHistory(
     /** このターンですでに自動圧縮に失敗した。同じターンでは再試行しない */
     skipCompaction?: boolean;
     signal: AbortSignal;
+    onAuthRefresh?(
+      event: Extract<ProviderEvent, { type: "auth_refresh" }>,
+    ): void;
   },
 ): Promise<{
   messages: Message[];
@@ -199,6 +202,7 @@ async function compactNow(
     options.signal,
   )) {
     options.signal.throwIfAborted();
+    if (event.type === "auth_refresh") options.onAuthRefresh?.(event);
     if (event.type === "error" || event.type === "rate_limited")
       throw new Error(
         "Context summarization failed; original history retained",

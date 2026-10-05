@@ -44,6 +44,10 @@ export interface ProviderError {
 export type StopReason =
   "end_turn" | "tool_use" | "max_tokens" | "refusal" | "compaction" | "other";
 export type ProviderEvent =
+  | ({
+      type: "auth_refresh";
+      provider: ProviderId;
+    } & import("../auth/auto-refresh.js").RefreshResult)
   | ({ type: "usage"; provider: ProviderId } & QuotaUsage)
   | { type: "text_delta"; text: string }
   | { type: "reasoning_delta"; text: string }

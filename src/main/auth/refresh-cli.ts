@@ -74,7 +74,12 @@ export async function executeRefresh(
   let cwd: string | undefined;
   try {
     const env = refreshEnvironment();
-    const executable = configuredPath ?? (await resolveCli(provider, env));
+    const executable =
+      configuredPath ??
+      (await resolveCli(provider, env)) ??
+      (process.platform === "win32"
+        ? await resolveCli(provider + ".cmd", env)
+        : undefined);
     if (!executable || !isAbsolute(executable)) return "cli_missing";
     await access(executable);
     let command = executable;

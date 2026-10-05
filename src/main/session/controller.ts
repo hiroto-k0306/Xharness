@@ -971,6 +971,11 @@ export class SessionController {
     const auth = this.options.authentication
       .snapshot()
       .find((v) => v.provider === provider);
+    if (
+      auth?.status === "expired" &&
+      this.options.authentication.canAutoRefresh()
+    )
+      return false;
     return !!auth && auth.status !== "available";
   }
 

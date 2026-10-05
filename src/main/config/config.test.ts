@@ -15,6 +15,24 @@ async function homeWith(yaml?: string) {
   return home;
 }
 
+it("defaults auto refresh on and accepts only global CLI settings", async () => {
+  expect((await loadMainConfig(await homeWith())).auth).toEqual({
+    autoRefresh: true,
+  });
+  const cfg = await loadMainConfig(
+    "global",
+    async (path) =>
+      path.includes(".xharness")
+        ? "auth: {autoRefresh: true, claudeCliPath: evil.exe}"
+        : "auth: {autoRefresh: false, claudeCliPath: C:/official/claude.exe}",
+    "project",
+  );
+  expect(cfg.auth).toEqual({
+    autoRefresh: false,
+    claudeCliPath: "C:/official/claude.exe",
+  });
+});
+
 describe("main model from config (DESIGN §12)", () => {
   it("merges project model, aliases, web and fallback without dropping global fields", async () => {
     const home = await homeWith(

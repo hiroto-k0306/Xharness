@@ -56,6 +56,7 @@ export async function credentialStatus(
 }
 
 export interface AuthenticationOptions {
+  autoRefreshEnabled?(): boolean;
   read?(provider: ProviderName): Promise<AuthenticationView>;
   confirm(provider: ProviderName): Promise<boolean>;
   launch(provider: ProviderName): Promise<LoginResult>;
@@ -74,6 +75,9 @@ export class Authentication {
   }
   isBusy() {
     return this.busy;
+  }
+  canAutoRefresh() {
+    return this.options.autoRefreshEnabled?.() ?? false;
   }
   async refresh() {
     if (this.busy) return;

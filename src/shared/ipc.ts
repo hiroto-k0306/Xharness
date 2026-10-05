@@ -41,7 +41,14 @@ export interface Receipt {
   ts: number;
   provider: ProviderName | "harness" | "hook";
   model?: string;
-  kind: "model_call" | "tool" | "permission" | "fallback" | "compact" | "hook";
+  kind:
+    | "model_call"
+    | "tool"
+    | "permission"
+    | "fallback"
+    | "compact"
+    | "hook"
+    | "auth_refresh";
   tool?: string;
   decision?: "allow" | "deny" | "ask→allow" | "ask→deny";
   durationMs: number;

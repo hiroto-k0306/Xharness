@@ -280,11 +280,13 @@ MCPはstdio / HTTP系接続、ツール・リソース・プロンプトを扱�
 
 読取ツールとして既存permission gateを通す。子は設定toolsへの明示指定と親の許可が必要で、既定の子・workerには追加しない。headlessも同じ境界で対応する。trace／receiptにsource・hashと本文予算を記録し、評価のskillReadsとHTMLに参照要約を表示する。品質証拠やモデルusageとは別の記録とする。
 
-一覧はdirectory候補100件・結果50件・読取上界512 KiB、1ファイル64 KiB・frontmatter4 KiB、load本文8,000文字。省略・除外理由を明示する。第三者skill導入、自動最適選択、本番A/B、付属asset／script処理、全件ページ送りは未対応。操作・制約・独自offline fixture: [プロジェクトスキル](docs/project-skills.md)。
+一覧はdirectory候補100件・結果50件・読取上界512 KiB、1ファイル64 KiB・frontmatter4 KiB、load本文8,000文字。省略・除外理由を明示する。第三者skill導入、自動最適選択、本番A/B、バイナリasset読取・script実行、全件ページ送りは未対応。操作・制約・独自offline fixture: [プロジェクトスキル](docs/project-skills.md)。
 
 デスクトップの登録workspace会話には「スキル管理」を提供する。一覧検索・source／hash詳細・本文プレビューは既存2ツールのvalidator、permission gate、境界、予算、秘密フィルター、traceを通すローカル読取。プレビューだけでは会話に本文を追加せずモデル通信もしない。「会話でこの版を読み込む」は選択したsource／hashを固定した明示依頼として通常のsend経路へ送り、通常のモデル実行・許可確認を伴うことを画面で説明する。読込済み表示は成功したLoadProjectSkill receiptのsource／hashに基づき、モデル文言だけでは認定しない。更新・削除・不正・一覧範囲外では再取得と再選択を要求する。UI読取traceはHTML評価レポートの別欄に示し、会話読込・タスク品質・モデルusageと混同しない。拒否・取消・二重実行を扱い、headlessの既存ツール導線は維持する。ファイルの編集・インストールは行わない。操作: [スキル管理画面](docs/skills-manager.md)。
 
 管理画面では、許可済み一覧の名前・説明と依頼内容／明示キーワードの語一致から候補を最大3件提示する。本文・追加frontmatter・sourceの文字列を候補選定の命令や検索内容に使わず、追加モデル通信・自動読込は行わない。名前の一致を説明より優先し、簡易関連度と一致語の理由を示す。一致がなければ0件とする。依頼は先頭500文字・16語、一覧50件、説明表示160文字・理由3件まで。入力変更・一覧更新開始で選択とプレビューを解除し、更新失敗／拒否／取消やプレビュー失敗後は一覧再取得まで候補を隠す。選択後は既存のsource／hash確認・許可・予算・trace・明示load導線を通す。最適性や品質は保証しない。操作と限界: [スキル候補提示](docs/skill-suggestions.md)。
+
+SKILL.md内のローカルinline Markdownリンクから同じスキル配下の`.md`／`.txt`／`.rst`資料を段階的に参照する。親loadの任意追加フィールドreferencesはリンク元の有界本文から最大40リンク・20出典を示し、資料ファイル自体は読まない。LoadProjectSkillの`source/hash`に`inspectReference`を加えると選択した1資料のhash・サイズだけを返す。本文には`referenceSource/referenceHash`も必須とし、親と資料の版・リンク所属・path／scope・前後statを再確認する。親を前後2回・資料を1回読む上界192 KiB、各64 KiB、本文8,000文字。日本語・空白の相対パスに対応し、越境・symlink／junction／hard link・秘密path・巨大／バイナリ／不正UTF-8・制御文字を拒否する。外部URL・script・画像・HTMLリンク・参照形式リンク・資料からの再帰参照は取得しない。UIでは版確認→プレビュー→通常会話への明示loadを分け、成功receiptの親・資料hashに一致する資料だけ読込済み表示にする。全操作は既存LoadProjectSkillの許可・予算・秘密フィルター・traceに従い、品質証拠やモデルusageと区別する。ツール名と保存形式は維持し、既存会話のツール契約変更は§3の前提照合を通す。操作: [スキル付属資料](docs/skill-references.md)。
 
 ### MCP
 

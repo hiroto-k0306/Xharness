@@ -60,4 +60,6 @@ trace／レシートには通常のtool入力・出力を記録する。評価JS
 
 独自fixtureはテスト内の隔離temporary projectにだけ作る。fake UIで `skills-demo: list` → 一覧確認 → `skills-demo: load <source> <hash>` → load確認 → HTMLレポートを検証する。実Claude／Codexや認証CLI、サブスク枠は使わない。付属install.ps1は「実行されたら失敗する」内容で置き、読み込み対象はSKILL.mdだけであることを確認する。
 
-自動最適選択、モデル／構成の自動ルーティング、本番A/B、スキルの編集・インストール、付属asset／scriptの専用読み込み、外部skillの安全性・ライセンス評価は未実装。実モデルが悪意ある本文に従わないことまでfakeで証明したものではない。
+後続段階で[同一スキル内の付属テキスト資料](skill-references.md)を1件ずつ版確認・プレビュー・明示loadする機能を追加した。親sourceは従来どおりSKILL.mdで、資料sourceは別の追加引数に持つ。付属資料は親の前後検証も含めて予算を表示する。
+
+自動最適選択、モデル／構成の自動ルーティング、本番A/B、スキルの編集・インストール、バイナリasset読取・付属script実行、外部skillの安全性・ライセンス評価は未実装。実モデルが悪意ある本文に従わないことまでfakeで証明したものではない。

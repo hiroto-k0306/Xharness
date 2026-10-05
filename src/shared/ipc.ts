@@ -1,5 +1,6 @@
 // main / preload / renderer が共有する契約。electron を import しない。
 import { parseRewindChoice } from "./rewind.js";
+import { parseMemoryAction } from "./project-memory.js";
 import { attachmentInfo, type ImageAttachment } from "./images.js";
 // DESIGN.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
 // §14.2のローカルリンク専用IPCはpreload内部だけで使用し、公開APIには含めない。
@@ -177,6 +178,7 @@ export type TranscriptItem =
  * "state" / "transcript" / "user_message" / "turn" / "tool_result" / "permission_resolved" も追加分。
  */
 export type UiEvent =
+  | { type: "memory_changed"; sessionId: string }
   | {
       type: "rewind_request";
       sessionId: string;
@@ -323,6 +325,11 @@ export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
   | {
+      type: "project_memory";
+      sessionId: string;
+      request: import("./project-memory.js").MemoryAction;
+    }
+  | {
       type: "quota_resume";
       sessionId: string;
       action: "enable" | "cancel" | "now";
@@ -399,7 +406,12 @@ export const REPORTED_ERRORS: readonly string[] = [
 ];
 
 export type CommandResult =
-  | { ok: true; workspaceId?: string; sessionId?: string }
+  | {
+      ok: true;
+      workspaceId?: string;
+      sessionId?: string;
+      memory?: import("./project-memory.js").MemoryList;
+    }
   | { ok: false; error: string };
 
 /** preload が window.harness として公開する型付き API。これ以外は渡さない。 */
@@ -424,6 +436,12 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "project_memory": {
+      const request = parseMemoryAction(c.request);
+      return str(c.sessionId) && request && jsonFits(c.request)
+        ? { type: "project_memory", sessionId: c.sessionId, request }
+        : undefined;
+    }
     case "quota_resume":
       return str(c.sessionId) &&
         ["enable", "cancel", "now"].includes(String(c.action))

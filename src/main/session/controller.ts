@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { resolvePermissionMode } from "../../shared/permission-modes.js";
 import { SessionSchedules } from "./schedules.js";
 import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
+import { ProjectMemory } from "./project-memory.js";
+import { decidePermission } from "../core/permissions.js";
 import { captureQuotaPause } from "./quota-capture.js";
 import { resumeConditions, resumeHash } from "./resume-conditions.js";
 import { checkpointFile } from "./context.js";
@@ -323,6 +325,69 @@ export class SessionController {
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
       switch (command.type) {
+        case "project_memory": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const memory = new ProjectMemory(
+            {
+              home: this.options.home,
+              sessions: this.sessions,
+              workspaces: this.workspaces,
+              sessionId: session.id,
+              workspaceId: session.workspaceId,
+              cwd: session.cwd,
+              clean: this.ctx.clean,
+            },
+            () =>
+              this.options.emit({
+                type: "memory_changed",
+                sessionId: session.id,
+              }),
+          );
+          if (command.request.action === "list")
+            return { ok: true, memory: await memory.list() };
+          if (
+            this.ctx.sessionBusy.has(session.id) ||
+            (this.runtimes.get(session.id)?.status ?? "idle") !== "idle"
+          )
+            return {
+              ok: false,
+              error: "実行終了後にメモリを確認・編集してください。",
+            };
+          this.ctx.sessionBusy.add(session.id);
+          try {
+            const root = this.ctx.workspaceRoot(session);
+            const config = await loadProjectConfig(this.options.home, root, {
+              trusted: !root || (await this.ctx.trust.isTrusted(root)),
+            });
+            if (
+              (await decidePermission(
+                {
+                  id: "memory-ui",
+                  name: "ProposeProjectMemory",
+                  input: command.request,
+                },
+                {
+                  ...config.permissions,
+                  mode: session.permissionMode ?? config.permissions.mode,
+                },
+                session.cwd,
+                { readOnly: session.readOnly },
+              )) === "deny"
+            )
+              return {
+                ok: false,
+                error: "現在の権限ではメモリを変更できません。",
+              };
+            // Each explicit UI action authorizes this bounded edit, never a lasting tool grant.
+            if (this.stopped || !this.sessions.get(session.id))
+              return { ok: false, error: "Session unavailable" };
+            return { ok: true, memory: await memory.action(command.request) };
+          } finally {
+            this.ctx.sessionBusy.delete(session.id);
+          }
+        }
         case "quota_resume": {
           if (this.stopped || !this.sessions.get(command.sessionId))
             return { ok: false, error: "Session unavailable" };

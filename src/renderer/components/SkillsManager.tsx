@@ -168,6 +168,15 @@ export function SkillsManager({
     const generation = ++serial.current,
       requestId = `skills-${Date.now()}-${generation}`;
     active.current = requestId;
+    // A new confirmation invalidates the old body even if it is cancelled.
+    if (entry) {
+      if (ref) setReferencePreview(undefined);
+      else {
+        setPreview(undefined);
+        setReference(undefined);
+        setReferencePreview(undefined);
+      }
+    }
     if (!entry) {
       setListFresh(false);
       setSelected(undefined);

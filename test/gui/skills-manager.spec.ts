@@ -30,6 +30,50 @@ async function setup(
     exact: true,
   });
 }
+
+test("renderer reload cancels orphaned manager reads and restores normal task permission waits", async ({
+  gui,
+  electronApp,
+}) => {
+  const root = await mkdtemp(join(tmpdir(), "xh-skills-reload-"));
+  try {
+    const folder = join(root, ".agents/skills/example");
+    await mkdir(folder, { recursive: true });
+    await writeFile(
+      join(folder, "SKILL.md"),
+      "---\nname: example\ndescription: Reload fixture\n---\nBODY\n",
+    );
+    const panel = await setup(gui, electronApp, root);
+    await panel.getByRole("button", { name: "一覧を取得・更新" }).click();
+    await expect(panel.getByRole("alertdialog")).toBeVisible();
+    await gui.reload();
+    await expect(gui.getByRole("alertdialog")).toHaveCount(0);
+    await gui.getByRole("button", { name: "スキル管理", exact: true }).click();
+    await panel.getByRole("button", { name: "一覧を取得・更新" }).click();
+    await panel
+      .getByRole("alertdialog")
+      .getByRole("button", { name: /allow/ })
+      .click();
+    await expect(panel.getByRole("list", { name: "スキル一覧" })).toContainText(
+      "example",
+    );
+    await gui.keyboard.press("Escape");
+    const prompt = gui.getByRole("textbox", { name: "prompt", exact: true });
+    await prompt.fill("skills-demo: list");
+    await prompt.press("Enter");
+    const permission = gui.getByRole("alertdialog", {
+      name: "ListProjectSkills の実行確認",
+    });
+    await expect(permission).toBeVisible();
+    await gui.reload();
+    await expect(permission).toBeVisible();
+    await permission.getByRole("button", { name: /deny/ }).click();
+    await expect(permission).toHaveCount(0);
+    await expect(prompt).toBeEnabled();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 test("empty manager handles denial, typing, cancellation, escape and narrow-window focus", async ({
   gui,
   electronApp,
@@ -171,6 +215,14 @@ test("task suggestions use permitted metadata, cap results and invalidate old ch
       "UPDATED PREVIEW",
     );
     await expect(panel).not.toContainText("会話に読込済み");
+    await panel.getByRole("button", { name: "この版をプレビュー" }).click();
+    await expect(panel.getByLabel("スキル本文プレビュー")).toHaveCount(0);
+    await panel.getByRole("button", { name: "読取を取消" }).click();
+    await expect(load).toBeDisabled();
+    await expect(panel.getByLabel("スキル本文プレビュー")).toHaveCount(0);
+    await panel.getByRole("button", { name: "この版をプレビュー" }).click();
+    await allow("LoadProjectSkill");
+    await expect(load).toBeEnabled();
     await load.click();
     await allow("LoadProjectSkill");
     await expect(panel.getByRole("list", { name: "スキル一覧" })).toContainText(

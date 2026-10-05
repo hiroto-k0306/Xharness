@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type MemoryAction,
   type MemoryDraft,
@@ -25,6 +25,8 @@ const draftOf = (entry: MemoryView): MemoryDraft => ({
   expiresAt: entry.expiresAt,
 });
 export function ProjectMemoryPanel({ sessionId }: { sessionId: string }) {
+  const generation = useRef(0),
+    mutating = useRef(false);
   const [open, setOpen] = useState(false),
     [list, setList] = useState<MemoryList>(),
     [error, setError] = useState<string>(),
@@ -34,15 +36,22 @@ export function ProjectMemoryPanel({ sessionId }: { sessionId: string }) {
     [target, setTarget] = useState(""),
     [deleteId, setDeleteId] = useState<string>();
   const refresh = useCallback(async () => {
-    const r = await window.harness.command({
-      type: "project_memory",
-      sessionId,
-      request: { action: "list" },
-    });
-    if (r.ok) {
-      setList(r.memory);
-      setError(undefined);
-    } else setError(r.error);
+    if (mutating.current) return;
+    const request = ++generation.current;
+    try {
+      const r = await window.harness.command({
+        type: "project_memory",
+        sessionId,
+        request: { action: "list" },
+      });
+      if (generation.current !== request) return;
+      if (r.ok) {
+        setList(r.memory);
+        setError(undefined);
+      } else setError(r.error);
+    } catch {
+      if (generation.current === request) setError("メモリを読み取れません。");
+    }
   }, [sessionId]);
   useEffect(() => {
     if (open) void refresh().catch(() => setError("メモリを読み取れません。"));
@@ -58,6 +67,9 @@ export function ProjectMemoryPanel({ sessionId }: { sessionId: string }) {
     [sessionId, refresh],
   );
   const send = async (request: MemoryAction) => {
+    if (mutating.current) return;
+    mutating.current = true;
+    generation.current++;
     setBusy(true);
     try {
       const r = await window.harness.command({
@@ -76,6 +88,7 @@ export function ProjectMemoryPanel({ sessionId }: { sessionId: string }) {
     } catch {
       setError("保存結果を確認できません。再読み込みしてください。");
     } finally {
+      mutating.current = false;
       setBusy(false);
     }
   };

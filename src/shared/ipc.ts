@@ -419,7 +419,8 @@ export type CommandResult =
       memory?: import("./project-memory.js").MemoryList;
       skills?:
         | import("./project-skills.js").SkillListing
-        | import("./project-skills.js").SkillPreview;
+        | import("./project-skills.js").SkillPreview
+        | import("./project-skills.js").SkillReferenceInspection;
     }
   | { ok: false; error: string };
 

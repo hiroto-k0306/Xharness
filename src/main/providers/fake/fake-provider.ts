@@ -76,6 +76,8 @@ export function routeFake(
   request: ProviderRequest,
   provider: ProviderId = "claude",
 ): FakeStep {
+  if (/^quota-demo\b/i.test(lastUserText(request)))
+    return { type: "rate_limited", retryAfterSec: 120, scope: "5h" };
   const demo = phase5Demo(request);
   if (demo) return demo;
   if (request.webSearch)

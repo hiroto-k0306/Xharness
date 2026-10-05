@@ -1029,6 +1029,10 @@ async function headlessUnlocked(args: string[]) {
       process.stdout.write(
         `\n[stopped: ${result.stopCause}; receipts: ${result.receipts.length}]\n`,
       );
+      if (result.stopCause === "rate_limited")
+        process.stdout.write(
+          "[quota resume: manual only; headless does not restore an automatic quota-wait schedule]\n",
+        );
     }
   } finally {
     controller?.abort();

@@ -1,0 +1,22 @@
+.panel {
+  margin: 8px 20px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--panel);
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  flex: none;
+}
+.panel p {
+  margin: 0;
+}
+.panel small {
+  display: block;
+  color: var(--dim);
+}
+.panel button {
+  margin-right: 12px;
+}

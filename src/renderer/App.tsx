@@ -16,6 +16,7 @@ import {
 } from "./components/Activity.js";
 import { PermissionInline } from "./components/PermissionInline.js";
 import { PromptLine } from "./components/PromptLine.js";
+import { QuotaPause } from "./components/QuotaPause.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { StepTabs } from "./components/StepTabs.js";
 import { TitleBar } from "./components/TitleBar.js";
@@ -526,6 +527,9 @@ export function App() {
               セッションの画像合計が警告値を超えています。再送する履歴を減らすには
               /compact を実行してください（保存済み画像は残ります）。
             </div>
+          )}
+          {session?.quotaPause && current && (
+            <QuotaPause pause={session.quotaPause} sessionId={current} />
           )}
           <PromptLine
             maxImages={app.images?.maxPerMessage}

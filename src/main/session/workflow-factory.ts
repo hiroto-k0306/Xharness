@@ -95,6 +95,7 @@ export function createWorkflow(
         );
   rt.hookApproval = { fingerprint, approve: approveHooks };
   return new WorkflowRuntime({
+    evaluationTaskId: rt.evaluationTaskId,
     handoffs: (rt.childHandoffs ??= new ChildHandoffs()),
     approveHooks: (_hooks, signal) => approveHooks(signal),
     home: options.home,

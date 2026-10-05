@@ -315,6 +315,54 @@ export class SessionStore {
     }
     return out;
   }
+  async evaluationTask(
+    id: string,
+  ): Promise<{ id: string; active: boolean } | undefined> {
+    let raw: string;
+    try {
+      raw = await readFile(
+        this.history(id).replace(/\.jsonl$/, ".evaluation.jsonl"),
+        "utf8",
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
+    let latest: { id: string; active: boolean } | undefined;
+    for (const line of raw.split("\n")) {
+      try {
+        const value = JSON.parse(line)?.evaluationTask;
+        if (
+          value &&
+          typeof value.id === "string" &&
+          /^[\w-]{1,512}$/.test(value.id) &&
+          typeof value.active === "boolean"
+        )
+          latest = { id: value.id, active: value.active };
+      } catch {
+        /* A partial final journal line must not hide earlier lifecycle records. */
+      }
+    }
+    return latest;
+  }
+  async recordEvaluationTask(sessionId: string, id: string, active: boolean) {
+    if (!/^[\w-]{1,512}$/.test(id))
+      throw new Error("Invalid evaluation task id");
+    await this.write(sessionId, async () => {
+      if (this.deleted.has(sessionId)) return;
+      await mkdir(join(this.home, "sessions"), { recursive: true });
+      await appendFile(
+        this.history(sessionId).replace(/\.jsonl$/, ".evaluation.jsonl"),
+        "\n" +
+          JSON.stringify({
+            evaluationTask: { id, active },
+            at: new Date().toISOString(),
+          }) +
+          "\n",
+        "utf8",
+      );
+    });
+  }
   async delete(id: string) {
     // Fence stale turns/saves and remove from lookup BEFORE any await.
     this.deleted.add(id);
@@ -322,6 +370,9 @@ export class SessionStore {
     return this.write(id, async () => {
       await new FileCheckpointStore(this.home).remove(id);
       await rm(this.history(id), { force: true });
+      await rm(this.history(id).replace(/\.jsonl$/, ".evaluation.jsonl"), {
+        force: true,
+      });
       await rm(this.history(id).replace(/\.jsonl$/, ".llm-calls.json"), {
         force: true,
       });

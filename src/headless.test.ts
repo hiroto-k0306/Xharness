@@ -47,9 +47,10 @@ it("resumes a selected session with its own cwd and keeps both histories", async
     updatedAt: 0,
     providers: [],
   });
+  await store.recordEvaluationTask("existing", "persisted-interrupted", true);
   const output = await repl(
     home,
-    ["/resume", "/resume existing", "/mode plan", "/init", "/exit"],
+    ["/resume", "/resume existing", "ping", "/mode plan", "/init", "/exit"],
     ["--cwd", first],
   );
   expect(output).toContain("existing · saved");
@@ -57,6 +58,15 @@ it("resumes a selected session with its own cwd and keeps both histories", async
   expect(output).toContain("planモードでは");
   await store.load();
   expect(store.list()).toHaveLength(2);
+  expect(await store.evaluationTask("existing")).toEqual({
+    id: "persisted-interrupted",
+    active: false,
+  });
+  expect(
+    (await readTraceReplay(home, "existing", (s) => s))?.records.find(
+      (r) => r.kind === "task" && r.phase === "start",
+    )?.input,
+  ).toMatchObject({ taskId: "persisted-interrupted" });
   await expect(readFile(join(second, "AGENTS.md"))).rejects.toMatchObject({
     code: "ENOENT",
   });

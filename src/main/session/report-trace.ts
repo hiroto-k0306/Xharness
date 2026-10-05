@@ -83,9 +83,14 @@ export async function readTraceReplay(
           typeof r.at !== "string" ||
           !Number.isSafeInteger(r.sequence) ||
           r.sequence < 1 ||
-          [r.status, r.parentSpan, r.step, r.callId, r.taskId].some(
-            (v) => v !== undefined && typeof v !== "string",
-          ) ||
+          [
+            r.status,
+            r.parentSpan,
+            r.step,
+            r.callId,
+            r.taskId,
+            r.attemptId,
+          ].some((v) => v !== undefined && typeof v !== "string") ||
           (r.round !== undefined &&
             (!Number.isSafeInteger(r.round) || r.round < 1)) ||
           (r.simulated !== undefined && typeof r.simulated !== "boolean")

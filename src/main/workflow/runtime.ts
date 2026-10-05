@@ -28,6 +28,7 @@ import { lifecycleTools } from "../tools/lifecycle.js";
 import { todoTools } from "../tools/todos.js";
 
 export interface RuntimeOptions extends ChildOptions {
+  evaluationTaskId?: string;
   approveHooks?(
     hooks: readonly ShellHook[],
     signal: AbortSignal,
@@ -173,7 +174,7 @@ function implementationCommand(command: string): boolean {
 }
 
 export class WorkflowRuntime {
-  private readonly evaluationTaskId = randomUUID();
+  readonly evaluationTaskId: string;
   private fileCheckpoint?: LoopOptions["checkpoint"];
   manualReview = false;
   private queuedPhase?: string;
@@ -249,6 +250,7 @@ export class WorkflowRuntime {
   /** 1: 完了直後(main が最終報告を書く1ラウンドを許す) */
   private finalReport = 0;
   constructor(private readonly options: RuntimeOptions) {
+    this.evaluationTaskId = options.evaluationTaskId ?? randomUUID();
     this.state = new WorkflowState(
       options.config.workflow.mode,
       options.config.workflow.reviewRounds,

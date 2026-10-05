@@ -82,6 +82,7 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  evaluationTaskId?: string;
   childHandoffs?: import("../agents/handoffs.js").ChildHandoffs;
   llmCalls?: import("../../shared/llm-calls.js").LlmCalls;
   rewindPrompt?: {

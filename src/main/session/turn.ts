@@ -1,5 +1,6 @@
 // 1ターン(ユーザーの1発言 → 応答の完了)を実行し、履歴とレシートを保存する。
 import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
 import { checkPremises } from "./premises.js";
 import { withSessionCalls } from "./llm-calls.js";
@@ -426,7 +427,14 @@ async function runSessionBody(
         !!rt.trustedSession ||
         (await ctx.trust.isTrusted(trustRoot)),
     );
-    if (needsNewWorkflow(rt))
+    if (needsNewWorkflow(rt)) {
+      const previous = await ctx.sessions.evaluationTask(sessionId);
+      rt.evaluationTaskId = previous?.active ? previous.id : randomUUID();
+      await ctx.sessions.recordEvaluationTask(
+        sessionId,
+        rt.evaluationTaskId,
+        true,
+      );
       rt.workflow = createWorkflow(ctx, gate, {
         session,
         rt,
@@ -434,6 +442,7 @@ async function runSessionBody(
         web,
         events,
       });
+    }
     // 自動圧縮に失敗したら、このターンでは再試行しない(次のターンで再試行する)
     let compactionFailure: string | undefined;
     const result = await rt.workflow!.run(
@@ -658,6 +667,17 @@ async function finishTurn(
   try {
     await flushLlmCalls();
     stopCause = llmStopCause() ?? stopCause;
+    if (rt.evaluationTaskId)
+      await ctx.sessions.recordEvaluationTask(
+        sessionId,
+        rt.evaluationTaskId,
+        !(
+          stopCause === "workflow_complete" ||
+          stopCause === "reported_done" ||
+          (stopCause === "end_turn" &&
+            ["off", "complete"].includes(rt.workflow?.state.phase ?? ""))
+        ),
+      );
     await Promise.all(events.receiptWrites);
     await ctx.sessions.append(
       sessionId,

@@ -1,4 +1,8 @@
-import { withSessionTrace } from "./main/core/trace.js";
+import {
+  withSessionTrace,
+  withTraceFields,
+  traceOperation,
+} from "./main/core/trace.js";
 import { readLlmCalls, withSessionCalls } from "./main/session/llm-calls.js";
 import {
   costSummary,
@@ -507,6 +511,7 @@ export async function headless(args = process.argv.slice(2)) {
       if (input.trim() === "/compact") {
         const compactAbort = new AbortController();
         try {
+          const evaluationTask = await sessions.evaluationTask(session.id);
           const prepared = await withSessionCalls(
             {
               home,
@@ -520,19 +525,29 @@ export async function headless(args = process.argv.slice(2)) {
                 session.id,
                 clean,
                 () =>
-                  prepareProviderHistory(messages, {
-                    provider: router.provider(model!),
-                    model: model!,
-                    system,
-                    tools: [...tools.values()].map((t) => t.spec),
-                    signal: AbortSignal.any([
-                      compactAbort.signal,
-                      AbortSignal.timeout(60000),
-                    ]),
-                    checkpoint,
-                    force: true,
-                    threshold: project.context.compactThreshold,
-                  }),
+                  withTraceFields(
+                    {
+                      taskId: evaluationTask?.active
+                        ? evaluationTask.id
+                        : undefined,
+                    },
+                    () =>
+                      traceOperation("step", "manual_compact", {}, () =>
+                        prepareProviderHistory(messages, {
+                          provider: router.provider(model!),
+                          model: model!,
+                          system,
+                          tools: [...tools.values()].map((t) => t.spec),
+                          signal: AbortSignal.any([
+                            compactAbort.signal,
+                            AbortSignal.timeout(60000),
+                          ]),
+                          checkpoint,
+                          force: true,
+                          threshold: project.context.compactThreshold,
+                        }),
+                      ),
+                  ),
                 {
                   onWarning: (message) => process.stderr.write(message + "\n"),
                 },
@@ -754,7 +769,11 @@ export async function headless(args = process.argv.slice(2)) {
           (hooks, signal) =>
             ask({ name: "ProjectHooks", input: { hooks } }, signal, cwd, true),
         );
+        const previousTask = await sessions.evaluationTask(session.id);
         workflow = new WorkflowRuntime({
+          evaluationTaskId: previousTask?.active
+            ? previousTask.id
+            : randomUUID(),
           approveHooks: (_hooks, signal) => approveHooks(signal),
           home,
           cwd,
@@ -821,6 +840,11 @@ export async function headless(args = process.argv.slice(2)) {
         });
       }
       let compactionFailure: string | undefined;
+      await sessions.recordEvaluationTask(
+        session.id,
+        workflow.evaluationTaskId,
+        true,
+      );
       const turnAbort = controller;
       const result = await withSessionCalls(
         { home, id: session.id, limits: project.limits, abort: controller },
@@ -913,6 +937,16 @@ export async function headless(args = process.argv.slice(2)) {
         },
       );
       messages = result.messages;
+      await sessions.recordEvaluationTask(
+        session.id,
+        workflow.evaluationTaskId,
+        !(
+          result.stopCause === "workflow_complete" ||
+          result.stopCause === "reported_done" ||
+          (result.stopCause === "end_turn" &&
+            ["off", "complete"].includes(workflow.state.phase))
+        ),
+      );
       await receiptStore.append(
         session.id,
         [

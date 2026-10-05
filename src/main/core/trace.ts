@@ -10,6 +10,8 @@ export interface TraceRecord {
   phase: "start" | "end";
   kind: "step" | "llm" | "tool" | "delegation" | "task";
   taskId?: string;
+  /** Stable identity of one dispatched model attempt; retries receive a new UUID. */
+  attemptId?: string;
   agentId: string;
   parentSpan?: string;
   step?: string;
@@ -172,6 +174,7 @@ export function beginTrace(
     simulated,
     at: new Date().toISOString(),
   };
+  if (kind === "llm") record.attemptId = record.id;
   scope.writer.write(record);
   return {
     fields: { parentSpan: record.id },

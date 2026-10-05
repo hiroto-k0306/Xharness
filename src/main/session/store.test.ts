@@ -16,6 +16,45 @@ const session = (id: string): StoredSession => ({
   updatedAt: 0,
   providers: [],
 });
+it("persists lifecycle separately from legacy history, survives restart and partial lines, and serializes sessions", async () => {
+  const home = await mkdtemp(join(tmpdir(), "xh-eval-history-"));
+  const store = new SessionStore(home);
+  expect(await store.evaluationTask("legacy")).toBeUndefined();
+  await Promise.all(
+    ["a", "b"].map(async (id) => {
+      await store.append(
+        id,
+        [{ role: "user", content: [{ type: "text", text: id }] }],
+        (s) => s,
+      );
+      await store.recordEvaluationTask(id, `task-${id}`, true);
+    }),
+  );
+  const restarted = new SessionStore(home);
+  expect(await restarted.evaluationTask("a")).toEqual({
+    id: "task-a",
+    active: true,
+  });
+  expect(await restarted.evaluationTask("b")).toEqual({
+    id: "task-b",
+    active: true,
+  });
+  expect(await restarted.messages("a")).toHaveLength(1);
+  await restarted.recordEvaluationTask("a", "task-a", false);
+  const path = join(home, "sessions", "a.evaluation.jsonl");
+  await writeFile(path, (await readFile(path, "utf8")) + '{"evaluationTask":');
+  expect(await new SessionStore(home).evaluationTask("a")).toEqual({
+    id: "task-a",
+    active: false,
+  });
+  await restarted.recordEvaluationTask("a", "next-a", true);
+  expect(await new SessionStore(home).evaluationTask("a")).toEqual({
+    id: "next-a",
+    active: true,
+  });
+  await restarted.delete("b");
+  expect(await restarted.evaluationTask("b")).toBeUndefined();
+});
 it("warns once about invalid rewind positions while retaining all original messages", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-invalid-rewind-"));
   const store = new SessionStore(home);

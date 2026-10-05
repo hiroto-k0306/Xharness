@@ -37,10 +37,12 @@ export class RefreshingProvider implements Provider {
   ): AsyncGenerator<ProviderEvent> {
     signal.throwIfAborted();
     const before = await this.refresh.expiry(this.id);
+    signal.throwIfAborted();
+    const pending = this.refresh.pending(this.id);
     let refreshed = false;
-    if (before !== undefined && before <= Date.now()) {
+    if (pending || (before !== undefined && before <= Date.now())) {
       const result = await waitForRefresh(
-        this.refresh.refresh(this.id, before),
+        pending ?? this.refresh.refresh(this.id, before),
         signal,
       );
       signal.throwIfAborted();

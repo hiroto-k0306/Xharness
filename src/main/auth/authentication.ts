@@ -57,6 +57,7 @@ export async function credentialStatus(
 
 export interface AuthenticationOptions {
   autoRefreshEnabled?(): boolean;
+  autoRefreshBusy?(): boolean;
   read?(provider: ProviderName): Promise<AuthenticationView>;
   confirm(provider: ProviderName): Promise<boolean>;
   launch(provider: ProviderName): Promise<LoginResult>;
@@ -78,6 +79,9 @@ export class Authentication {
   }
   canAutoRefresh() {
     return this.options.autoRefreshEnabled?.() ?? false;
+  }
+  isAutoRefreshing() {
+    return this.options.autoRefreshBusy?.() ?? false;
   }
   async refresh() {
     if (this.busy) return;
@@ -110,7 +114,7 @@ export class Authentication {
     this.options.changed();
   }
   async authenticate(provider: ProviderName) {
-    if (this.busy) return;
+    if (this.busy || this.isAutoRefreshing()) return;
     this.busy = true;
     let original = this.views.find((v) => v.provider === provider) ?? {
       provider,

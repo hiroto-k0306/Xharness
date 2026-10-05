@@ -82,6 +82,52 @@ it("does not refresh on 403", async () => {
   expect((await collect(f.provider))[0]?.type).toBe("error");
   expect(f.execute).not.toHaveBeenCalled();
 });
+it("waits for an existing 401 refresh before sending another request", async () => {
+  let expiry = Date.now() + 3600000;
+  let finish!: () => void;
+  let ready = false;
+  const execute = vi.fn(
+    () =>
+      new Promise<"success">((resolve) => {
+        finish = () => {
+          expiry += 3600000;
+          ready = true;
+          resolve("success");
+        };
+      }),
+  );
+  const refresh = new AutoRefresh({
+    settings: async () => ({ autoRefresh: true }),
+    expiry: async () => expiry,
+    execute,
+  });
+  const stream = vi.fn(async function* () {
+    yield ready
+      ? ({ type: "text_delta", text: "ok" } as ProviderEvent)
+      : ({
+          type: "error",
+          error: {
+            kind: "authentication",
+            status: 401,
+            retryable: false,
+            message: "denied",
+          },
+        } as ProviderEvent);
+  });
+  const provider = new RefreshingProvider(
+    { id: "claude", models: () => [], stream },
+    refresh,
+  );
+  const first = collect(provider);
+  await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+  const second = collect(provider);
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(stream).toHaveBeenCalledTimes(1);
+  finish();
+  await Promise.all([first, second]);
+  expect(stream).toHaveBeenCalledTimes(3);
+  expect(execute).toHaveBeenCalledTimes(1);
+});
 it("stops without sending if expired credentials were not updated", async () => {
   const f = fixture(Date.now() - 1000, undefined, false);
   expect((await collect(f.provider)).map((e) => e.type)).toEqual([

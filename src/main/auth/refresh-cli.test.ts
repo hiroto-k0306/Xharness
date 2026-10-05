@@ -49,11 +49,18 @@ it.skipIf(process.platform !== "win32")(
     mocks.resolveCli.mockResolvedValue(process.execPath);
     const processChild = child();
     const killer = child();
-    mocks.spawn.mockReturnValueOnce(processChild).mockReturnValueOnce(killer);
+    let started!: () => void;
+    const startup = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    mocks.spawn
+      .mockImplementationOnce(() => {
+        started();
+        return processChild;
+      })
+      .mockReturnValueOnce(killer);
     const pending = executeRefresh("codex");
-    // Filesystem promises remain real; allow them to settle without advancing the deadline.
-    for (let i = 0; i < 100 && mocks.spawn.mock.calls.length === 0; i++)
-      await new Promise((resolve) => setImmediate(resolve));
+    await startup;
     expect(mocks.spawn).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(59999);
     expect(mocks.spawn).toHaveBeenCalledTimes(1);

@@ -154,6 +154,7 @@ async function start() {
     ? undefined
     : new Authentication({
         autoRefreshEnabled: () => autoRefreshEnabled,
+        autoRefreshBusy: () => autoRefresh.isBusy(),
         confirm: (provider) => confirmAuthentication(window, provider),
         launch: launchOfficialLogin,
         refreshSecrets: async () => {

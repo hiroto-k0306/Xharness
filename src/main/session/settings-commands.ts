@@ -205,7 +205,14 @@ export async function compactNow(
     }
     return { ok: false, error: "圧縮に失敗しました。元の履歴を維持しています" };
   } finally {
-    await Promise.all(events.receiptWrites);
+    await Promise.all(events.receiptWrites).catch(() => {
+      ctx.options.emit({
+        type: "notice",
+        sessionId,
+        tone: "warn",
+        message: "認証更新レシートの保存に失敗しました。",
+      });
+    });
     rt.status = "idle";
     rt.abort = undefined;
     ctx.options.emit({ type: "turn", sessionId, status: "idle", stopCause });

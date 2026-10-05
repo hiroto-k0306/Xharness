@@ -73,6 +73,12 @@ export class AutoRefresh {
   expiry(provider: ProviderName) {
     return (this.options.expiry ?? credentialExpiry)(provider);
   }
+  isBusy() {
+    return this.flights.size > 0;
+  }
+  pending(provider: ProviderName) {
+    return this.flights.get(provider);
+  }
   refresh(
     provider: ProviderName,
     observedExpiry: number | undefined,
@@ -105,8 +111,10 @@ export class AutoRefresh {
         before !== undefined &&
         current > before &&
         current > now()
-      )
+      ) {
+        await this.options.changed?.();
         return done("success");
+      }
       const last = this.lastAttempt.get(provider);
       if (last !== undefined && now() - last < 600_000) return done("limited");
       this.lastAttempt.set(provider, now());

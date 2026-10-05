@@ -48,6 +48,8 @@ export interface Host {
   saveReport?(filename: string): Promise<string | undefined>;
 }
 export interface ControllerOptions {
+  localBrowserFactory?: import("../computer-use/adapter.js").LocalBrowserFactory;
+  localBrowserTimeoutMs?: number;
   /** Offline tests may control quota scheduling without advancing global timers. */
   quotaNow?(): number;
   quotaTimers?: boolean;

@@ -235,9 +235,13 @@ export async function decidePermission(
     if (restricted("ask")) return "ask";
     return allowed ? "allow" : "ask";
   }
-  const write = ["Write", "Edit", "MultiEdit", "ProposeProjectMemory"].includes(
-    call.name,
-  );
+  const write = [
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "ProposeProjectMemory",
+    "LocalBrowserClick",
+  ].includes(call.name);
   if (mode === "plan" && write) return "deny";
   if (call.name === "Bash") {
     const shape = analyzeCommand(subject);

@@ -18,6 +18,7 @@ import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
+import { createLocalBrowser } from "./local-browser-electron.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
 import {
   confirmAuthentication,
@@ -200,6 +201,7 @@ async function start() {
     // --fake では資格情報ファイルを読まない
     secrets,
     host: createHost(() => window),
+    localBrowserFactory: createLocalBrowser,
     emit: (event) => sendEvent(window, event),
     // MCP の OAuth トークンは OS の暗号化(Windows では DPAPI)で保存する。使えなければ OAuth を使わない
     ...(!fake && safeStorage.isEncryptionAvailable()

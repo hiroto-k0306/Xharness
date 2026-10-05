@@ -5,6 +5,10 @@ import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
 import { ProjectMemory } from "./project-memory.js";
 import { Improvements, ImprovementFault } from "./improvements.js";
 import { Handoffs, HandoffFault } from "./handoffs.js";
+import {
+  LocalBrowserSessions,
+  LocalBrowserFault,
+} from "../computer-use/session.js";
 import { CandidateQuotas } from "./candidate-quota.js";
 import { modelCandidates } from "./model-candidates.js";
 import { readSkillUi } from "./skill-ui.js";
@@ -87,6 +91,8 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private readonly localBrowser: LocalBrowserSessions;
+  private readonly browserJobs = new Map<string, AbortController>();
   private readonly handoffs: Handoffs;
   private readonly handoffBusy = new Set<string>();
   private readonly candidatePreviews = new Map<
@@ -131,6 +137,11 @@ export class SessionController {
   private imageSettings = { ...DEFAULT_IMAGES };
 
   constructor(private readonly options: ControllerOptions) {
+    this.localBrowser = new LocalBrowserSessions(
+      options.localBrowserFactory,
+      Date.now,
+      options.localBrowserTimeoutMs,
+    );
     this.handoffs = new Handoffs(options.home);
     this.schedules = new SessionSchedules({
       now: () => Date.now(),
@@ -351,6 +362,112 @@ export class SessionController {
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
       switch (command.type) {
+        case "local_browser": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          if (command.request.action === "stop") {
+            this.browserJobs.get(session.id)?.abort();
+            return {
+              ok: true,
+              localBrowser: await this.localBrowser.run(
+                {
+                  home: this.options.home,
+                  sessions: this.sessions,
+                  workspaces: this.workspaces,
+                  sessionId: session.id,
+                  workspaceId: session.workspaceId,
+                  cwd: session.cwd,
+                  clean: this.ctx.clean,
+                },
+                command.request,
+                async () => {},
+                (receipt) => this.ctx.record(this.runtime(session.id), receipt),
+              ),
+            };
+          }
+          const rt = this.runtime(session.id);
+          if (this.ctx.sessionBusy.has(session.id) || rt.status !== "idle")
+            return {
+              ok: false,
+              error: "会話の実行終了後にローカル観測を確認してください。",
+            };
+          const abort = new AbortController();
+          this.browserJobs.set(session.id, abort);
+          this.ctx.sessionBusy.add(session.id);
+          rt.abort = abort;
+          rt.status = "running";
+          const job = (async () => {
+            try {
+              await this.load(session.id);
+              await this.emitState();
+              abort.signal.throwIfAborted();
+              const localBrowser = await this.localBrowser.run(
+                {
+                  home: this.options.home,
+                  sessions: this.sessions,
+                  workspaces: this.workspaces,
+                  sessionId: session.id,
+                  workspaceId: session.workspaceId,
+                  cwd: session.cwd,
+                  clean: this.ctx.clean,
+                },
+                command.request,
+                async (tool) => {
+                  const current = this.sessions.get(session.id),
+                    root =
+                      current?.workspaceId &&
+                      this.workspaces.get(current.workspaceId)?.root;
+                  if (!current || abort.signal.aborted || this.stopped)
+                    throw new LocalBrowserFault("停止・取消しました。");
+                  const config = await loadProjectConfig(
+                    this.options.home,
+                    root || undefined,
+                    {
+                      trusted: !root || (await this.ctx.trust.isTrusted(root)),
+                    },
+                  );
+                  if (
+                    (await decidePermission(
+                      {
+                        id: "local-browser-ui",
+                        name: tool,
+                        input: command.request,
+                      },
+                      {
+                        ...config.permissions,
+                        mode: current.permissionMode ?? config.permissions.mode,
+                      },
+                      current.cwd,
+                      { readOnly: current.readOnly },
+                    )) === "deny"
+                  )
+                    throw new LocalBrowserFault(
+                      "現在の権限ではこの観測・操作を許可できません。",
+                    );
+                },
+                (receipt) => this.ctx.record(rt, receipt),
+              );
+              return { ok: true as const, localBrowser };
+            } catch (error) {
+              return {
+                ok: false as const,
+                error:
+                  error instanceof LocalBrowserFault
+                    ? error.message
+                    : "観測・実行・保存の結果を確認できません。一覧を確認してください。",
+              };
+            } finally {
+              rt.abort = undefined;
+              rt.status = "idle";
+              this.browserJobs.delete(session.id);
+              this.ctx.sessionBusy.delete(session.id);
+              await this.emitState();
+            }
+          })();
+          rt.done = job.then(() => undefined);
+          return job;
+        }
         case "handoffs": {
           const session = this.sessions.get(command.sessionId);
           if (!session || this.stopped)
@@ -880,6 +997,7 @@ export class SessionController {
               "会話を削除したため取消しました。",
             );
             await this.sessions.delete(command.sessionId);
+            await this.localBrowser.stop(command.sessionId);
             this.ctx.dropRuntime(command.sessionId);
             if (this.current === command.sessionId) {
               this.current = null;
@@ -927,13 +1045,23 @@ export class SessionController {
           this.repositories.abort();
           return { ok: true };
         case "set_mode":
-          if (this.handoffBusy.has(command.sessionId))
+          if (
+            this.handoffBusy.has(command.sessionId) ||
+            this.browserJobs.has(command.sessionId)
+          )
             return {
               ok: false,
               error: "受け渡し終了後に権限を変更してください。",
             };
           return await setMode(this.ctx, command);
         case "ready": {
+          for (const abort of this.browserJobs.values()) abort.abort();
+          await this.localBrowser.stopAll();
+          await Promise.all(
+            [...this.browserJobs.keys()].map(
+              (id) => this.runtimes.get(id)?.done,
+            ),
+          );
           this.handoffs.clear();
           this.candidatePreviews.clear();
           // A reloaded renderer no longer owns local read promises. Cancel those
@@ -1012,6 +1140,16 @@ export class SessionController {
         }
         case "forget_workspace":
           if (
+            [...this.browserJobs.keys()].some(
+              (id) =>
+                this.sessions.get(id)?.workspaceId === command.workspaceId,
+            )
+          )
+            return {
+              ok: false,
+              error: "ローカル操作の終了後にprojectを変更してください。",
+            };
+          if (
             [...this.handoffBusy].some(
               (id) =>
                 this.sessions.get(id)?.workspaceId === command.workspaceId,
@@ -1036,6 +1174,8 @@ export class SessionController {
             command.effort,
           );
         case "close_session":
+          this.browserJobs.get(command.sessionId)?.abort();
+          await this.localBrowser.stop(command.sessionId);
           return await this.closeSession(command.sessionId);
         case "export_report": {
           if (!this.sessions.get(command.sessionId))
@@ -1068,6 +1208,8 @@ export class SessionController {
         case "send":
           return this.send(command.sessionId, command.text, command.images);
         case "abort": {
+          this.browserJobs.get(command.sessionId)?.abort();
+          await this.localBrowser.stop(command.sessionId);
           this.preparations.get(command.sessionId)?.abort.abort();
           this.schedules.cancel(command.sessionId);
           const rt = this.runtimes.get(command.sessionId);
@@ -1270,6 +1412,7 @@ export class SessionController {
     };
     this.preparations.set(sessionId, preparation);
     try {
+      await this.localBrowser.stop(sessionId);
       return await this.sendPrepared(sessionId, text, images, scheduled, abort);
     } catch (error) {
       if (abort.signal.aborted)
@@ -1865,6 +2008,8 @@ export class SessionController {
 
   /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
   async shutdown(timeoutMs = 3000): Promise<void> {
+    for (const abort of this.browserJobs.values()) abort.abort();
+    await this.localBrowser.stopAll();
     this.handoffs.clear();
     this.candidatePreviews.clear();
     this.stopped = true;

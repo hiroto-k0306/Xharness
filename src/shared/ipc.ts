@@ -4,6 +4,7 @@ import { parseMemoryAction } from "./project-memory.js";
 import { parseSkillUiRequest } from "./project-skills.js";
 import { parseImprovementAction } from "./improvements.js";
 import { parseHandoffAction } from "./handoffs.js";
+import { parseLocalBrowserAction } from "./local-browser.js";
 import { attachmentInfo, type ImageAttachment } from "./images.js";
 // DESIGN.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
 // §14.2のローカルリンク専用IPCはpreload内部だけで使用し、公開APIには含めない。
@@ -328,6 +329,11 @@ export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
   | {
+      type: "local_browser";
+      sessionId: string;
+      request: import("./local-browser.js").LocalBrowserAction;
+    }
+  | {
       type: "handoffs";
       sessionId: string;
       request: import("./handoffs.js").HandoffAction;
@@ -432,6 +438,7 @@ export type CommandResult =
       memory?: import("./project-memory.js").MemoryList;
       improvements?: import("./improvements.js").ImprovementView;
       handoffs?: import("./handoffs.js").HandoffView;
+      localBrowser?: import("./local-browser.js").LocalBrowserView;
       preparedPrompt?: string;
       modelCandidates?: import("./model-candidates.js").ModelCandidateView;
       skills?:
@@ -463,6 +470,15 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "local_browser": {
+      const request = parseLocalBrowserAction(c.request);
+      return str(c.sessionId) &&
+        /^[\w-]{1,128}$/.test(c.sessionId) &&
+        request &&
+        jsonFits(c.request)
+        ? { type: "local_browser", sessionId: c.sessionId, request }
+        : undefined;
+    }
     case "handoffs": {
       const request = parseHandoffAction(c.request);
       return str(c.sessionId) && /^[\w-]{1,128}$/.test(c.sessionId) && request

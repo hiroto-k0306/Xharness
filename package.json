@@ -8,6 +8,7 @@
     "node": "^22.20.0 || ^24.16.0"
   },
   "scripts": {
+    "handoff": "tsx scripts/handoff.ts",
     "postinstall": "node node_modules/electron/install.js",
     "test": "vitest run --exclude=spike/.out/** --exclude=.tools/** --exclude=dist/** --maxWorkers=1 --testTimeout=30000",
     "test:gui": "pnpm build && playwright test",

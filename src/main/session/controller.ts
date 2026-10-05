@@ -4,6 +4,7 @@ import { SessionSchedules } from "./schedules.js";
 import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
 import { ProjectMemory } from "./project-memory.js";
 import { Improvements, ImprovementFault } from "./improvements.js";
+import { Handoffs, HandoffFault } from "./handoffs.js";
 import { CandidateQuotas } from "./candidate-quota.js";
 import { modelCandidates } from "./model-candidates.js";
 import { readSkillUi } from "./skill-ui.js";
@@ -86,6 +87,8 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private readonly handoffs: Handoffs;
+  private readonly handoffBusy = new Set<string>();
   private readonly candidatePreviews = new Map<
     string,
     {
@@ -128,6 +131,7 @@ export class SessionController {
   private imageSettings = { ...DEFAULT_IMAGES };
 
   constructor(private readonly options: ControllerOptions) {
+    this.handoffs = new Handoffs(options.home);
     this.schedules = new SessionSchedules({
       now: () => Date.now(),
       busy: (id) =>
@@ -347,6 +351,89 @@ export class SessionController {
   async handle(command: HarnessCommand): Promise<CommandResult> {
     try {
       switch (command.type) {
+        case "handoffs": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const held = new Set<string>();
+          try {
+            const handoffs = await this.handoffs.run(
+              {
+                home: this.options.home,
+                sessions: this.sessions,
+                workspaces: this.workspaces,
+                sessionId: session.id,
+                workspaceId: session.workspaceId,
+                cwd: session.cwd,
+                clean: this.ctx.clean,
+              },
+              command.request,
+              async (ids) => {
+                for (const id of ids) {
+                  const target = this.sessions.get(id);
+                  if (
+                    !target ||
+                    this.ctx.sessionBusy.has(id) ||
+                    this.runtime(id).status !== "idle"
+                  )
+                    throw new HandoffFault(
+                      "送信元と宛先の実行終了後に確認してください。",
+                    );
+                  this.ctx.sessionBusy.add(id);
+                  this.handoffBusy.add(id);
+                  held.add(id);
+                }
+                for (const id of ids) {
+                  const target = this.sessions.get(id)!;
+                  const root =
+                    target.workspaceId &&
+                    this.workspaces.get(target.workspaceId)?.root;
+                  const config = await loadProjectConfig(
+                    this.options.home,
+                    root || undefined,
+                    {
+                      trusted: !root || (await this.ctx.trust.isTrusted(root)),
+                    },
+                  );
+                  if (
+                    this.stopped ||
+                    target.permissionMode === "plan" ||
+                    (await decidePermission(
+                      {
+                        id: "handoff-ui",
+                        name: "ProposeProjectMemory",
+                        input: command.request,
+                      },
+                      {
+                        ...config.permissions,
+                        mode: target.permissionMode ?? config.permissions.mode,
+                      },
+                      target.cwd,
+                      { readOnly: target.readOnly },
+                    )) === "deny"
+                  )
+                    throw new HandoffFault(
+                      "現在の権限では受け渡しできません。",
+                    );
+                }
+              },
+            );
+            return { ok: true, handoffs };
+          } catch (e) {
+            return {
+              ok: false,
+              error:
+                e instanceof HandoffFault
+                  ? e.message
+                  : "配送状態を確認できません。受信一覧を再取得してください。",
+            };
+          } finally {
+            for (const id of held) {
+              this.ctx.sessionBusy.delete(id);
+              this.handoffBusy.delete(id);
+            }
+          }
+        }
         case "project_skills": {
           const request = command.request;
           if (request.action === "cancel") {
@@ -840,8 +927,14 @@ export class SessionController {
           this.repositories.abort();
           return { ok: true };
         case "set_mode":
+          if (this.handoffBusy.has(command.sessionId))
+            return {
+              ok: false,
+              error: "受け渡し終了後に権限を変更してください。",
+            };
           return await setMode(this.ctx, command);
         case "ready": {
+          this.handoffs.clear();
           this.candidatePreviews.clear();
           // A reloaded renderer no longer owns local read promises. Cancel those
           // reads, without cancelling a paused task or granting its permissions.
@@ -918,6 +1011,16 @@ export class SessionController {
           return { ok: true, workspaceId };
         }
         case "forget_workspace":
+          if (
+            [...this.handoffBusy].some(
+              (id) =>
+                this.sessions.get(id)?.workspaceId === command.workspaceId,
+            )
+          )
+            return {
+              ok: false,
+              error: "受け渡し終了後にprojectを変更してください。",
+            };
           await this.workspaces.forget(command.workspaceId);
           await this.emitState();
           return { ok: true };
@@ -1762,8 +1865,10 @@ export class SessionController {
 
   /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
   async shutdown(timeoutMs = 3000): Promise<void> {
+    this.handoffs.clear();
     this.candidatePreviews.clear();
     this.stopped = true;
+    await this.handoffs.drain();
     const quotaClosed = this.quotaPauses.close();
     this.schedules.close();
     this.repositories.abort();

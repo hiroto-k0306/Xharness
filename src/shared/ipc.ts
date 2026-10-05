@@ -3,6 +3,7 @@ import { parseRewindChoice } from "./rewind.js";
 import { parseMemoryAction } from "./project-memory.js";
 import { parseSkillUiRequest } from "./project-skills.js";
 import { parseImprovementAction } from "./improvements.js";
+import { parseHandoffAction } from "./handoffs.js";
 import { attachmentInfo, type ImageAttachment } from "./images.js";
 // DESIGN.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
 // §14.2のローカルリンク専用IPCはpreload内部だけで使用し、公開APIには含めない。
@@ -327,6 +328,11 @@ export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
   | {
+      type: "handoffs";
+      sessionId: string;
+      request: import("./handoffs.js").HandoffAction;
+    }
+  | {
       type: "improvements";
       sessionId: string;
       operationId: string;
@@ -425,6 +431,7 @@ export type CommandResult =
       sessionId?: string;
       memory?: import("./project-memory.js").MemoryList;
       improvements?: import("./improvements.js").ImprovementView;
+      handoffs?: import("./handoffs.js").HandoffView;
       preparedPrompt?: string;
       modelCandidates?: import("./model-candidates.js").ModelCandidateView;
       skills?:
@@ -456,6 +463,12 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "handoffs": {
+      const request = parseHandoffAction(c.request);
+      return str(c.sessionId) && /^[\w-]{1,128}$/.test(c.sessionId) && request
+        ? { type: "handoffs", sessionId: c.sessionId, request }
+        : undefined;
+    }
     case "project_skills": {
       const request = parseSkillUiRequest(c.request);
       return str(c.sessionId) && request

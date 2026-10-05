@@ -20,6 +20,7 @@ import { QuotaPause } from "./components/QuotaPause.js";
 import { ProjectMemoryPanel } from "./components/ProjectMemory.js";
 import { ImprovementsPanel } from "./components/Improvements.js";
 import { HandoffsPanel } from "./components/Handoffs.js";
+import { LocalBrowserPanel } from "./components/LocalBrowser.js";
 import { SkillsManager } from "./components/SkillsManager.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { StepTabs } from "./components/StepTabs.js";
@@ -553,6 +554,12 @@ export function App() {
               receipts={view?.receipts ?? []}
               permission={view?.pending}
               draft={skillDraft}
+            />
+          )}
+          {current && session?.workspaceId && (
+            <LocalBrowserPanel
+              key={`local-browser-${current}`}
+              sessionId={current}
             />
           )}
           {current && session?.workspaceId && (

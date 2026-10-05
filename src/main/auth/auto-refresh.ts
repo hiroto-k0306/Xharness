@@ -67,6 +67,7 @@ export class AutoRefresh {
       ): Promise<RefreshResult["result"]>;
       now?: () => number;
       changed?(): Promise<void>;
+      claim?(provider: ProviderName, now: number): Promise<boolean>;
     },
   ) {}
   expiry(provider: ProviderName) {
@@ -109,6 +110,8 @@ export class AutoRefresh {
       const last = this.lastAttempt.get(provider);
       if (last !== undefined && now() - last < 600_000) return done("limited");
       this.lastAttempt.set(provider, now());
+      if (this.options.claim && !(await this.options.claim(provider, now())))
+        return done("limited");
       const result = await this.options.execute(
         provider,
         provider === "claude" ? settings.claudeCliPath : settings.codexCliPath,

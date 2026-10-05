@@ -81,7 +81,11 @@ export async function executeRefresh(
         ? await resolveCli(provider + ".cmd", env)
         : undefined);
     if (!executable || !isAbsolute(executable)) return "cli_missing";
-    await access(executable);
+    try {
+      await access(executable);
+    } catch {
+      return "cli_missing";
+    }
     let command = executable;
     cwd = await mkdtemp(join(tmpdir(), "xh-auth-refresh-"));
     let args = refreshArguments(provider, cwd);

@@ -10,6 +10,7 @@ import { readLocalSecrets } from "./auth/local-secrets.js";
 import { Authentication } from "./auth/authentication.js";
 import { AutoRefresh } from "./auth/auto-refresh.js";
 import { executeRefresh } from "./auth/refresh-cli.js";
+import { refreshCooldown } from "./auth/refresh-cooldown.js";
 import { RefreshingProvider } from "./providers/auth-refresh.js";
 import { launchOfficialLogin } from "./auth/cli-login.js";
 import { ClaudeAdapter } from "./providers/claude/adapter.js";
@@ -122,6 +123,7 @@ async function start() {
       return settings;
     },
     execute: executeRefresh,
+    claim: refreshCooldown(home),
     changed: async () => {
       await authentication?.refresh();
     },

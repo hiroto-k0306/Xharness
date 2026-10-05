@@ -87,9 +87,23 @@ export function routeFake(
           : [],
       )
       .at(0) ?? "";
-  const skillDemo = /^skills-demo: (list|load ([^ ]+) ([a-f0-9]{64}))$/i.exec(
-    memoryPrompt,
-  );
+  let skillDemo: string[] | null =
+    /^skills-demo: (list|load ([^ ]+) ([a-f0-9]{64}))$/i.exec(memoryPrompt);
+  const managerLoad =
+    /^選択したプロジェクトスキルを読み込んでください。\n(\{[^\n]+\})\n/.exec(
+      memoryPrompt,
+    );
+  if (managerLoad) {
+    try {
+      const input = JSON.parse(managerLoad[1]!) as {
+        source: string;
+        hash: string;
+      };
+      skillDemo = ["", "load", input.source, input.hash];
+    } catch {
+      /* Invalid fake fixture does not become a tool call. */
+    }
+  }
   if (skillDemo) {
     const result = request.messages
       .at(-1)

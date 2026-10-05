@@ -88,7 +88,7 @@ export function ImprovementEvaluation({
                 x.versionId === r.versionId,
             );
             return (
-              <tr key={`${r.versionId}/${r.caseId}`}>
+              <tr key={`${r.sessionId}/${r.taskId}`}>
                 <td>
                   {e.versions.find((v) => v.id === r.versionId)?.name} /{" "}
                   {r.caseId}

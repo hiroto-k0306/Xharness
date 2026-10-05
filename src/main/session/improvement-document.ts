@@ -49,7 +49,7 @@ export const validImprovementDocument = (
         (!e.adopted || e.versions.some((v) => v.id === e.adopted)) &&
         Array.isArray(e.results) &&
         e.results.length <= 60 &&
-        new Set(e.results.map((r) => `${r.versionId}/${r.caseId}`)).size ===
+        new Set(e.results.map((r) => `${r.sessionId}/${r.taskId}`)).size ===
           e.results.length &&
         e.results.every(
           (r) =>

@@ -129,7 +129,15 @@ export class Improvements {
     const { data, pin } = await this.document();
     return this.view(data, pin.key);
   }
-  async action(a: Exclude<ImprovementAction, { action: "list" | "cancel" }>) {
+  async action(
+    a: Exclude<
+      ImprovementAction,
+      {
+        action:
+          "list" | "cancel" | "model_candidates" | "select_model_candidate";
+      }
+    >,
+  ) {
     const pin = await this.access.identity(),
       key = pin.home.toLowerCase();
     const previous = Improvements.transactions.get(key) ?? Promise.resolve();
@@ -225,15 +233,8 @@ export class Improvements {
               };
             }
             if (a.action === "record") {
-              if (
-                e.results.length >= 60 ||
-                e.results.some(
-                  (r) => r.versionId === a.versionId && r.caseId === a.caseId,
-                )
-              )
-                throw new ImprovementFault(
-                  "この版・課題の評価は登録済みです。再測定は新しい比較で行ってください。",
-                );
+              if (e.results.length >= 60)
+                throw new ImprovementFault("結果登録は比較ごと60件までです。");
               const sessionId =
                 a.sessionId === "current" ? this.scope.sessionId : a.sessionId;
               const taskId =
@@ -242,6 +243,14 @@ export class Improvements {
                   : a.taskId;
               if (!taskId)
                 throw new ImprovementFault("保存済みタスクがありません。");
+              if (
+                e.results.some(
+                  (r) => r.sessionId === sessionId && r.taskId === taskId,
+                )
+              )
+                throw new ImprovementFault(
+                  "同じ保存済みタスクは登録済みです。再評価は新規会話で行ってください。",
+                );
               const record = {
                 versionId: a.versionId,
                 caseId: a.caseId,
@@ -266,9 +275,10 @@ export class Improvements {
                 throw new ImprovementFault("以前採用した版だけ復帰できます。");
               await this.checkSource(e);
               for (const c of e.cases) {
-                const r = e.results.find(
+                const results = e.results.filter(
                   (r) => r.versionId === a.versionId && r.caseId === c.id,
                 );
+                const r = results.at(-1);
                 if (!r || !(await improvementRow(this.scope, e, r)).quality)
                   throw new ImprovementFault(
                     "全固定課題の完了と有効な明示評価の合格が必要です。模擬は本番品質を保証しません。",

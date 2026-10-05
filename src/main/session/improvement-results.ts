@@ -70,7 +70,16 @@ export async function loadImprovementTask(
         },
       },
     ])[0]!.runs[0]!;
-  return { task, compared, traceHash: memoryHash(trace) };
+  const endings = trace!.records
+    .filter((r) => r.kind === "task" && r.phase === "end")
+    .map((r) => Date.parse(r.at));
+  const measuredAt = Math.max(...endings);
+  return {
+    task,
+    compared,
+    traceHash: memoryHash(trace),
+    measuredAt: Number.isFinite(measuredAt) ? measuredAt : null,
+  };
 }
 export async function improvementRow(
   scope: HistoryScope,

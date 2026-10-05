@@ -426,6 +426,7 @@ export type CommandResult =
       memory?: import("./project-memory.js").MemoryList;
       improvements?: import("./improvements.js").ImprovementView;
       preparedPrompt?: string;
+      modelCandidates?: import("./model-candidates.js").ModelCandidateView;
       skills?:
         | import("./project-skills.js").SkillListing
         | import("./project-skills.js").SkillPreview

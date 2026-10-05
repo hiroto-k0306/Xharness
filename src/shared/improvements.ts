@@ -62,6 +62,24 @@ export interface ImprovementView {
   limit: number;
 }
 export type ImprovementAction =
+  | {
+      action: "model_candidates";
+      id: string;
+      revision: number;
+      versionId: string;
+      caseId: string;
+    }
+  | {
+      action: "select_model_candidate";
+      id: string;
+      revision: number;
+      versionId: string;
+      caseId: string;
+      snapshot: string;
+      candidateId: string;
+      confirmed: true;
+      reason: string;
+    }
   | { action: "list" }
   | { action: "cancel" }
   | {
@@ -195,6 +213,15 @@ export function parseImprovementAction(
   )
     return v as unknown as ImprovementAction;
   if (!id(v.caseId)) return;
+  if (v.action === "model_candidates") return v as unknown as ImprovementAction;
+  if (
+    v.action === "select_model_candidate" &&
+    hash(v.snapshot) &&
+    improvementText(v.candidateId) &&
+    v.confirmed === true &&
+    improvementText(v.reason, 1000)
+  )
+    return v as unknown as ImprovementAction;
   if (v.action === "prepare") return v as unknown as ImprovementAction;
   if (
     v.action === "record" &&

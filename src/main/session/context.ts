@@ -46,6 +46,9 @@ export interface Host {
   saveReport?(filename: string): Promise<string | undefined>;
 }
 export interface ControllerOptions {
+  /** Offline tests may control quota scheduling without advancing global timers. */
+  quotaNow?(): number;
+  quotaTimers?: boolean;
   authentication?: Authentication;
   cliModel?: string;
   cliEffort?: Effort;
@@ -83,6 +86,10 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  /** A resumed request never inherits automatic tool confirmation. */
+  quotaContinuation?: boolean;
+  quotaGuard?: () => Promise<boolean>;
+  lastStopCause?: string;
   evaluationTaskId?: string;
   childHandoffs?: import("../agents/handoffs.js").ChildHandoffs;
   llmCalls?: import("../../shared/llm-calls.js").LlmCalls;
@@ -162,6 +169,22 @@ export function createRuntime(): Runtime {
  * controller 自身がこれを実装し、モジュールはこの型だけに依存する。
  */
 export interface ControllerContext {
+  quotaPaused?(
+    session: StoredSession,
+    rt: Runtime,
+    evidence: {
+      rate: {
+        provider: string;
+        model: string;
+        receivedAt: number;
+        retryAfterSec?: number;
+        scope?: string;
+        windows?: import("../providers/provider.js").QuotaUsage["windows"];
+      };
+      unsafe: boolean;
+      saved: boolean;
+    },
+  ): Promise<void>;
   readonly options: ControllerOptions;
   readonly sessions: SessionStore;
   readonly receipts: ReceiptStore;

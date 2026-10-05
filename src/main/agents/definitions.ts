@@ -30,9 +30,14 @@ export interface AgentConfig {
     worktrees: boolean;
   };
 }
+/**
+ * `trusted` is whether the user trusted the workspace. An untrusted project's
+ * `.xharness/config.yaml` may only tighten the plan approval (`ask`), never skip it.
+ */
 export async function loadAgentConfig(
   home: string,
   cwd?: string,
+  trusted = false,
 ): Promise<AgentConfig> {
   const config: AgentConfig = {
     waveChecks: [],
@@ -54,9 +59,10 @@ export async function loadAgentConfig(
       worktrees: true,
     },
   };
+  const projectConfig = cwd ? join(cwd, ".xharness/config.yaml") : undefined;
   for (const path of [
     join(home, "config.yaml"),
-    ...(cwd ? [join(cwd, ".xharness/config.yaml")] : []),
+    ...(projectConfig ? [projectConfig] : []),
   ]) {
     let doc: Record<string, unknown>;
     try {
@@ -111,7 +117,11 @@ export async function loadAgentConfig(
     if (w) {
       if (w.mode && ["auto", "always", "off"].includes(w.mode))
         config.workflow.mode = w.mode;
-      if (w.planApproval && ["ask", "auto"].includes(w.planApproval))
+      if (
+        w.planApproval &&
+        ["ask", "auto"].includes(w.planApproval) &&
+        (w.planApproval === "ask" || trusted || path !== projectConfig)
+      )
         config.workflow.planApproval = w.planApproval;
       if (
         Number.isSafeInteger(w.reviewRounds) &&

@@ -197,3 +197,90 @@ it("a changed or deleted preview fails and a new listing is needed; IPC cannot l
       parseCommand({ type: "project_skills", sessionId: f.id, request }),
     ).toBeUndefined();
 });
+it("reference UI inspection/preview remain local and actual reference load has separate versioned trace evidence", async () => {
+  const f = await fixture();
+  await writeFile(
+    f.path,
+    "---\nname: example\ndescription: Reference fixture\n---\n[手順](<references/日本語.md>)\n",
+  );
+  const referenceSource = ".agents/skills/example/references/日本語.md";
+  await mkdir(join(f.root, ".agents/skills/example/references"));
+  await writeFile(join(f.root, referenceSource), "LOCAL DOCUMENT BODY");
+  const e = (await f.list()).entries[0]!;
+  const inspectJob = f.c.handle({
+    type: "project_skills",
+    sessionId: f.id,
+    request: {
+      action: "reference_inspect",
+      requestId: "ref-inspect",
+      source: e.source,
+      hash: e.hash,
+      referenceSource,
+    },
+  });
+  await f.respond();
+  const inspect = await inspectJob;
+  if (!inspect.ok || inspect.skills?.operation !== "reference_inspect")
+    throw new Error("Reference missing");
+  expect("body" in inspect.skills).toBe(false);
+  const referenceHash = inspect.skills.reference.hash;
+  const previewRequest = {
+    action: "reference_preview" as const,
+    requestId: "ref-preview",
+    source: e.source,
+    hash: e.hash,
+    referenceSource,
+    referenceHash,
+  };
+  const denied = f.c.handle({
+    type: "project_skills",
+    sessionId: f.id,
+    request: previewRequest,
+  });
+  await f.respond("deny");
+  expect(await denied).toMatchObject({ ok: false });
+  const previewJob = f.c.handle({
+    type: "project_skills",
+    sessionId: f.id,
+    request: previewRequest,
+  });
+  await f.respond();
+  const preview = await previewJob;
+  expect(
+    preview.ok && preview.skills?.operation === "load" && preview.skills.body,
+  ).toBe("LOCAL DOCUMENT BODY");
+  expect(f.requests()).toBe(0);
+  const trace = await readTraceReplay(f.home, f.id, (s) => s);
+  expect(evaluateTrace(trace)).toHaveLength(0);
+  const uiReads = evaluateUiSkillReads(trace);
+  expect(uiReads).toHaveLength(4);
+  expect(JSON.stringify(uiReads)).toContain(referenceSource);
+  expect(JSON.stringify(uiReads)).not.toContain("LOCAL DOCUMENT BODY");
+  await f.c.handle({
+    type: "send",
+    sessionId: f.id,
+    text: skillLoadPrompt(e.source, e.hash, inspect.skills.reference),
+  });
+  await f.respond();
+  await vi.waitFor(async () =>
+    expect(
+      (await f.c.state()).sessions.find((s) => s.id === f.id)?.status,
+    ).toBe("idle"),
+  );
+  expect(f.requests()).toBe(2);
+  const tasks = evaluateTrace(await readTraceReplay(f.home, f.id, (s) => s));
+  expect(JSON.stringify(tasks[0]?.skillReads)).toContain(referenceSource);
+  expect(JSON.stringify(tasks[0]?.skillReads)).not.toContain(
+    "LOCAL DOCUMENT BODY",
+  );
+  expect(
+    parseCommand({
+      type: "project_skills",
+      sessionId: f.id,
+      request: {
+        ...previewRequest,
+        referenceSource: ".agents/skills/other/doc.md",
+      },
+    }),
+  ).toBeUndefined();
+});

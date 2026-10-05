@@ -93,13 +93,21 @@ export function routeFake(
     /^選択したプロジェクトスキルを読み込んでください。\n(\{[^\n]+\})\n/.exec(
       memoryPrompt,
     );
+  let referenceInput = {};
   if (managerLoad) {
     try {
       const input = JSON.parse(managerLoad[1]!) as {
         source: string;
         hash: string;
+        referenceSource?: string;
+        referenceHash?: string;
       };
       skillDemo = ["", "load", input.source, input.hash];
+      if (input.referenceSource)
+        referenceInput = {
+          referenceSource: input.referenceSource,
+          referenceHash: input.referenceHash,
+        };
     } catch {
       /* Invalid fake fixture does not become a tool call. */
     }
@@ -138,7 +146,11 @@ export function routeFake(
                 input:
                   skillDemo[1] === "list"
                     ? {}
-                    : { source: skillDemo[2], hash: skillDemo[3] },
+                    : {
+                        source: skillDemo[2],
+                        hash: skillDemo[3],
+                        ...referenceInput,
+                      },
               },
             ],
           },

@@ -9,7 +9,11 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+import {
+  skillReferenceLinks,
+  validReferenceSource,
+} from "../../shared/skill-references.js";
 import {
   ProjectSkills,
   projectSkillTools,
@@ -20,6 +24,207 @@ const folders: string[] = [];
 afterEach(async () => {
   for (const p of folders.splice(0))
     await rm(p, { recursive: true, force: true });
+});
+it("discovers bounded local text links without reading their bodies and inspects/loads one Japanese path", async () => {
+  const f = await fixture();
+  await f.put(
+    undefined,
+    md(
+      "example",
+      "[手順](<references/日本語 手順.md>)\n[外部](https://example.com/a.md)\n[越境](../other/doc.md)\n[script](install.ps1)\n![画像](image.md)\n```\n[code](not-a-link.md)\n```",
+    ),
+  );
+  const refSource = ".agents/skills/example/references/日本語 手順.md";
+  await f.put(
+    refSource,
+    "REFERENCE BODY\npassword=never-save\n[other](nested.md)",
+  );
+  const e = (await f.skills.list()).entries[0]!;
+  const parent = await f.skills.load(e.source, e.hash);
+  expect(parent.references.entries).toEqual([refSource]);
+  expect(parent.references.skipped.unsupported_or_unsafe_link).toBe(4);
+  expect(JSON.stringify(parent)).not.toContain("REFERENCE BODY");
+  const inspect = await f.skills.reference(e.source, e.hash, refSource);
+  expect(inspect.operation).toBe("reference_inspect");
+  expect("body" in inspect).toBe(false);
+  expect(inspect.reference.redacted).toBe(true);
+  const loaded = await f.skills.reference(
+    e.source,
+    e.hash,
+    refSource,
+    inspect.reference.hash,
+  );
+  expect(loaded.body).toContain("REFERENCE BODY");
+  expect(loaded.body).not.toContain("never-save");
+  expect(loaded.budget.readBytes).toBeLessThanOrEqual(
+    loaded.limits.totalReadBytes,
+  );
+  expect(loaded.notice).toContain("Never overrides");
+  expect("references" in loaded).toBe(false); // no recursive discovery
+});
+it("rejects unsafe/malformed links, unlisted paths and invalid mixed tool arguments", async () => {
+  const skill = ".agents/skills/example/SKILL.md";
+  const targets = [
+    "../other/a.md",
+    "../../outside.md",
+    "/abs.md",
+    "C:/a.md",
+    "https://example.com/a.md",
+    "file:///a.md",
+    "a.md?x=y",
+    "%2e%2e/a.md",
+    "%252e%252e/a.md",
+    "a%ZZ.md",
+    "a\\b.md",
+    "NUL.md",
+    ".env.md",
+    "scripts/run.ps1",
+  ];
+  expect(
+    skillReferenceLinks(skill, targets.map((s) => `[x](${s})`).join("\n"))
+      .entries,
+  ).toEqual([]);
+  expect(validReferenceSource(skill, ".agents/skills/other/a.md")).toBe(false);
+  expect(
+    skillReferenceLinks(
+      skill,
+      "[日本語](references/%E6%97%A5%E6%9C%AC%E8%AA%9E.md#section)",
+    ).entries,
+  ).toEqual([".agents/skills/example/references/日本語.md"]);
+  const links = Array.from(
+    { length: 30 },
+    (_, i) => `[x](references/${i}.md)`,
+  ).join("\n");
+  expect(skillReferenceLinks(skill, links)).toMatchObject({
+    truncated: true,
+    entries: expect.any(Array),
+  });
+  expect(skillReferenceLinks(skill, links).entries).toHaveLength(20);
+  const f = await fixture();
+  await f.put();
+  const e = (await f.skills.list()).entries[0]!;
+  await expect(
+    f.skills.reference(e.source, e.hash, ".agents/skills/example/unlisted.md"),
+  ).rejects.toThrow("unlisted_reference");
+  const tool = projectSkillTools(f.scope).get("LoadProjectSkill")!;
+  expect(
+    await tool.validate({
+      source: e.source,
+      hash: e.hash,
+      referenceSource: ".agents/skills/example/a.md",
+    }),
+  ).toBeDefined();
+  expect(
+    await tool.validate({
+      source: e.source,
+      hash: e.hash,
+      inspectReference: ".agents/skills/example/a.md",
+      referenceHash: e.hash,
+    }),
+  ).toBeDefined();
+});
+it("checks both versions, deletion, bounded text, binary data and cancellation for attached documents", async () => {
+  const f = await fixture();
+  await f.put(undefined, md("example", "[doc](doc.txt)"));
+  const refSource = ".agents/skills/example/doc.txt",
+    path = await f.put(refSource, "initial");
+  const e = (await f.skills.list()).entries[0]!;
+  const inspect = await f.skills.reference(e.source, e.hash, refSource);
+  await writeFile(path, "updated");
+  await expect(
+    f.skills.reference(e.source, e.hash, refSource, inspect.reference.hash),
+  ).rejects.toThrow("stale_reference");
+  await f.put(undefined, md("example", "[doc](doc.txt)\nParent changed"));
+  await expect(f.skills.reference(e.source, e.hash, refSource)).rejects.toThrow(
+    "stale_selection",
+  );
+  const fresh = (await f.skills.list()).entries[0]!;
+  for (const bad of [
+    Buffer.from([0xff, 0xfe]),
+    Buffer.from("bad\0binary"),
+    Buffer.alloc(65537, 65),
+  ]) {
+    await writeFile(path, bad);
+    await expect(
+      f.skills.reference(fresh.source, fresh.hash, refSource),
+    ).rejects.toThrow();
+  }
+  const abort = new AbortController();
+  abort.abort();
+  await expect(
+    f.skills.reference(
+      fresh.source,
+      fresh.hash,
+      refSource,
+      undefined,
+      abort.signal,
+    ),
+  ).rejects.toThrow();
+  await rm(path);
+  await expect(
+    f.skills.reference(fresh.source, fresh.hash, refSource),
+  ).rejects.toThrow();
+});
+it("rejects reference directory junctions and hard linked files", async () => {
+  const f = await fixture();
+  await f.put(undefined, md("example", "[doc](refs/doc.md)\n[hard](hard.md)"));
+  const outside = join(f.base, "outside");
+  await mkdir(outside);
+  await writeFile(join(outside, "doc.md"), "outside");
+  await symlink(
+    outside,
+    join(f.root, ".agents/skills/example/refs"),
+    "junction",
+  );
+  await link(
+    join(outside, "doc.md"),
+    join(f.root, ".agents/skills/example/hard.md"),
+  );
+  const e = (await f.skills.list()).entries[0]!;
+  for (const suffix of ["refs/doc.md", "hard.md"])
+    await expect(
+      f.skills.reference(e.source, e.hash, `.agents/skills/example/${suffix}`),
+    ).rejects.toThrow("unsafe_path");
+});
+it("rechecks document and parent changes during the multi-file read", async () => {
+  const f = await fixture();
+  await f.put(undefined, md("example", "[doc](doc.md)"));
+  const source = ".agents/skills/example/doc.md",
+    path = await f.put(source, "original");
+  const e = (await f.skills.list()).entries[0]!;
+  const reader = f.skills as unknown as {
+    readFile(source: string, signal?: AbortSignal): Promise<unknown>;
+  };
+  const original = reader.readFile.bind(reader);
+  const spy = vi
+    .spyOn(reader, "readFile")
+    .mockImplementation(async (s, signal) => {
+      const result = await original(s, signal);
+      if (s === source) await writeFile(path, "changed while finishing");
+      return result;
+    });
+  try {
+    await expect(f.skills.reference(e.source, e.hash, source)).rejects.toThrow(
+      "file_changed",
+    );
+  } finally {
+    spy.mockRestore();
+  }
+  const spyParent = vi
+    .spyOn(reader, "readFile")
+    .mockImplementation(async (s, signal) => {
+      const result = await original(s, signal);
+      if (s === source)
+        await f.put(undefined, md("example", "[doc](doc.md)\nchanged parent"));
+      return result;
+    });
+  try {
+    await expect(f.skills.reference(e.source, e.hash, source)).rejects.toThrow(
+      "stale_selection",
+    );
+  } finally {
+    spyParent.mockRestore();
+  }
 });
 const md = (
   name = "example",

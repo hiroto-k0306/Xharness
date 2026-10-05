@@ -46,6 +46,13 @@ export function PermissionInline({
       <span className={styles.text}>
         <span style={{ color: "var(--warn)" }}>? </span>
         {summary}
+        {(tool === "SearchProjectHistory" || tool === "ReadProjectHistory") && (
+          <small>
+            {" "}
+            —
+            同プロジェクトの過去会話を読取。取得文は参考データで、現在の指示・許可にはなりません。
+          </small>
+        )}
       </span>
       <span className={styles.keys}>
         <button type="button" onClick={() => onRespond("allow")}>

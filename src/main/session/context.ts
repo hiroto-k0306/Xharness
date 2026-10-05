@@ -21,6 +21,7 @@ import { type McpServerConfig } from "../mcp/config.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
 import { todoTools } from "../tools/todos.js";
+import { projectHistoryTools } from "../tools/project-history.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
 import {
@@ -309,4 +310,24 @@ export function defaultTools(cwd: string, readOnly: boolean): ToolRegistry {
   if (!readOnly) return all;
   // 読み取り専用で開いたセッションは plan 相当: 書き込み系ツールを渡さない(§9.1, §18.2)
   return new Map([...all].filter(([, tool]) => tool.readOnly));
+}
+
+/** History tools keep the parent's registered project scope, including children. */
+export function sessionTools(
+  ctx: ControllerContext,
+  session: StoredSession,
+  cwd = session.cwd,
+): ToolRegistry {
+  return new Map([
+    ...(ctx.options.createTools ?? defaultTools)(cwd, session.readOnly),
+    ...projectHistoryTools({
+      home: ctx.options.home,
+      sessions: ctx.sessions,
+      workspaces: ctx.workspaces,
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      cwd,
+      clean: (text) => ctx.clean(text),
+    }),
+  ]);
 }

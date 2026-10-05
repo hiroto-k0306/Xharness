@@ -31,7 +31,7 @@ import { TurnEvents, usageEvent } from "./turn-events.js";
 import { createWorkflow, needsNewWorkflow } from "./workflow-factory.js";
 import {
   checkpointFile,
-  defaultTools,
+  sessionTools,
   safeInput,
   STOP_NOTICE,
   type ControllerContext,
@@ -213,11 +213,7 @@ async function prepareRuntime(
 ) {
   const { options } = ctx;
   const root = ctx.workspaceRoot(session);
-  rt.tools ??= (options.createTools ?? defaultTools)(
-    // Per-session policies are evaluated at the permission gate.
-    session.cwd,
-    session.readOnly,
-  );
+  rt.tools ??= sessionTools(ctx, session);
   if (options.phase4) {
     rt.config = await loadTrustedConfig(ctx, gate, session, rt, root, signal);
     rt.mainConfig = await loadMainConfig(options.home, undefined, root);

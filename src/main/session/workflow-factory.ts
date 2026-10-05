@@ -17,7 +17,7 @@ import { type PermissionGate } from "./permission-gate.js";
 import { type TurnEvents, usageEvent } from "./turn-events.js";
 import { type UiEvent } from "../../shared/ipc.js";
 import {
-  defaultTools,
+  sessionTools,
   safeInput,
   toReceipt,
   type ControllerContext,
@@ -110,10 +110,7 @@ export function createWorkflow(
       rt.mainConfig?.aliases ?? options.aliases,
     ),
     createTools: (cwd) => {
-      const tools = (options.createTools ?? defaultTools)(
-        cwd,
-        session.readOnly,
-      );
+      const tools = sessionTools(ctx, session, cwd);
       if (web?.enabled)
         for (const [name, tool] of webTools(
           () => options.provider,

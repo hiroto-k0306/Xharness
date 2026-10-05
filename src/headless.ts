@@ -53,6 +53,7 @@ import { defaultTools } from "./main/session/controller.js";
 import { childNeedsAsk } from "./main/agents/permissions.js";
 import { type Message } from "./main/core/types.js";
 import { redact } from "./main/core/redact.js";
+import { projectHistoryTools } from "./main/tools/project-history.js";
 import { WorkspaceTrust } from "./main/config/trust.js";
 import { McpApprovals } from "./main/mcp/approvals.js";
 import {
@@ -306,6 +307,16 @@ async function headlessUnlocked(args: string[]) {
   };
   session = { ...session, environment };
   await sessions.save(session);
+  for (const [name, tool] of projectHistoryTools({
+    home,
+    sessions,
+    workspaces,
+    sessionId: session.id,
+    workspaceId: session.workspaceId,
+    cwd,
+    clean,
+  }))
+    tools.set(name, tool);
   let messages: Message[] = resume ? await sessions.messages(session.id) : [];
   let persisted = messages.length;
   const fileCheckpoints = new FileCheckpointStore(home);
@@ -821,6 +832,16 @@ async function headlessUnlocked(args: string[]) {
           router,
           createTools: (directory) => {
             const available = defaultTools(directory, false);
+            for (const [name, tool] of projectHistoryTools({
+              home,
+              sessions,
+              workspaces,
+              sessionId: session.id,
+              workspaceId: session.workspaceId,
+              cwd: directory,
+              clean,
+            }))
+              available.set(name, tool);
             if (config.web.enabled)
               for (const [name, tool] of webTools(
                 () => router.provider(model!),

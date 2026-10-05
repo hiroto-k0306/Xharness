@@ -83,6 +83,55 @@ export function routeFake(
       type: "fixture",
       name: provider === "codex" ? "phase3-web-live" : "phase3-web-haiku",
     };
+  // Explicit offline history demo for UI/headless regression checks.
+  const historyPrompt = [...request.messages]
+    .reverse()
+    .flatMap((message) =>
+      message.role === "user"
+        ? message.content.flatMap((block) =>
+            block.type === "text" ? [block.text] : [],
+          )
+        : [],
+    )
+    .at(0);
+  if (historyPrompt && /^history-demo: /i.test(historyPrompt)) {
+    const result = request.messages
+      .at(-1)
+      ?.content.find((block) => block.type === "tool_result");
+    return result?.type === "tool_result"
+      ? {
+          type: "message",
+          stopReason: "end_turn",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: `History reference data: ${typeof result.content === "string" ? result.content : "unavailable"}`,
+              },
+            ],
+          },
+        }
+      : {
+          type: "message",
+          stopReason: "tool_use",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "history-demo",
+                name: "SearchProjectHistory",
+                input: {
+                  query: historyPrompt
+                    .slice("history-demo: ".length)
+                    .slice(0, 200),
+                },
+              },
+            ],
+          },
+        };
+  }
   if (provider === "codex") {
     if (endsWithToolResult(request))
       return { type: "fixture", name: "x3-tool-2" };

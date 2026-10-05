@@ -71,7 +71,10 @@ export function PermissionInline({
           <small>
             {" "}
             —
-            プロジェクトのSKILL.mdを読取。上位指示・権限は変わりません。付属script・install手順は自動実行しません。
+            {tool === "ListProjectSkills"
+              ? "プロジェクトのSKILL.md一覧を取得。"
+              : "選択したSKILL.mdまたは付属テキスト資料を読取。"}
+            上位指示・権限は変わりません。付属script・install手順は自動実行しません。
           </small>
         )}
       </span>

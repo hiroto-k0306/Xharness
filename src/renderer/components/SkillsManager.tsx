@@ -3,6 +3,8 @@ import {
   type SkillEntry,
   type SkillListing,
   type SkillPreview,
+  type SkillReferenceEntry,
+  type SkillReferenceInspection,
   skillLoadPrompt,
 } from "../../shared/project-skills.js";
 import { type PermissionDecision, type Receipt } from "../../shared/ipc.js";
@@ -41,6 +43,8 @@ export function SkillsManager({
   const [list, setList] = useState<SkillListing>(),
     [selected, setSelected] = useState<SkillEntry>(),
     [preview, setPreview] = useState<SkillPreview>(),
+    [reference, setReference] = useState<SkillReferenceInspection>(),
+    [referencePreview, setReferencePreview] = useState<SkillPreview>(),
     [query, setQuery] = useState(""),
     [request, setRequest] = useState(""),
     [listFresh, setListFresh] = useState(false),
@@ -48,6 +52,11 @@ export function SkillsManager({
     [error, setError] = useState<string>(),
     [pendingLoad, setPendingLoad] = useState(false);
   const loadPending = useRef(false);
+  const expectedReference = useRef<SkillReferenceEntry | undefined>(undefined);
+  useEffect(() => {
+    setReference(undefined);
+    setReferencePreview(undefined);
+  }, [selected?.source, selected?.hash]);
   const loaded = receipts.flatMap((r) => {
     if (
       r.tool !== "LoadProjectSkill" ||
@@ -57,7 +66,9 @@ export function SkillsManager({
       return [];
     try {
       const result = JSON.parse(r.output ?? "") as SkillPreview;
-      return result.operation === "load" && result.entry ? [result.entry] : [];
+      return result.operation === "load" && result.entry && !result.reference
+        ? [result.entry]
+        : [];
     } catch {
       return [];
     }
@@ -114,6 +125,7 @@ export function SkillsManager({
           loadPending.current = false;
           setPendingLoad(false);
           setPreview(undefined);
+          setReferencePreview(undefined);
           setError(
             "会話での読込結果を確認してください。成功した版だけを読込済みと表示します。",
           );
@@ -128,8 +140,14 @@ export function SkillsManager({
             const result = JSON.parse(e.receipt.output ?? "") as SkillPreview;
             if (
               !e.receipt.error &&
+              result.operation === "load" &&
               result.entry?.source === selected?.source &&
-              result.entry.hash === selected.hash
+              result.entry.hash === selected.hash &&
+              (expectedReference.current
+                ? result.reference?.source ===
+                    expectedReference.current.source &&
+                  result.reference.hash === expectedReference.current.hash
+                : !result.reference)
             ) {
               loadPending.current = false;
               setPendingLoad(false);
@@ -142,7 +160,10 @@ export function SkillsManager({
       }),
     [sessionId, selected],
   );
-  const read = async (entry?: SkillEntry) => {
+  const read = async (
+    entry?: SkillEntry,
+    ref?: { source: string; hash?: string },
+  ) => {
     if (active.current || running || loading.current) return;
     const generation = ++serial.current,
       requestId = `skills-${Date.now()}-${generation}`;
@@ -151,6 +172,8 @@ export function SkillsManager({
       setListFresh(false);
       setSelected(undefined);
       setPreview(undefined);
+      setReference(undefined);
+      setReferencePreview(undefined);
     }
     setBusy(true);
     setError(undefined);
@@ -160,7 +183,18 @@ export function SkillsManager({
         sessionId,
         request: entry
           ? {
-              action: "preview",
+              ...(ref
+                ? ref.hash
+                  ? {
+                      action: "reference_preview" as const,
+                      referenceSource: ref.source,
+                      referenceHash: ref.hash,
+                    }
+                  : {
+                      action: "reference_inspect" as const,
+                      referenceSource: ref.source,
+                    }
+                : { action: "preview" as const }),
               requestId,
               source: entry.source,
               hash: entry.hash,
@@ -172,12 +206,23 @@ export function SkillsManager({
         setError(r.error);
         if (entry) {
           setPreview(undefined);
+          setReference(undefined);
+          setReferencePreview(undefined);
           setListFresh(false);
         }
         return;
       }
-      if (r.skills?.operation === "load") setPreview(r.skills);
-      else if (r.skills?.operation === "list") {
+      if (r.skills?.operation === "reference_inspect") {
+        setReference(r.skills);
+        setReferencePreview(undefined);
+      } else if (r.skills?.operation === "load") {
+        if (r.skills.reference) setReferencePreview(r.skills);
+        else {
+          setPreview(r.skills);
+          setReference(undefined);
+          setReferencePreview(undefined);
+        }
+      } else if (r.skills?.operation === "list") {
         setList(r.skills);
         setListFresh(true);
         if (
@@ -188,6 +233,8 @@ export function SkillsManager({
         ) {
           setSelected(undefined);
           setPreview(undefined);
+          setReference(undefined);
+          setReferencePreview(undefined);
           setError(
             "選択したスキルが更新・削除・不正、または一覧範囲外です。再選択してください。",
           );
@@ -198,6 +245,8 @@ export function SkillsManager({
         setError("読取結果を確認できません。再取得してください。");
         if (entry) {
           setPreview(undefined);
+          setReference(undefined);
+          setReferencePreview(undefined);
           setListFresh(false);
         }
       }
@@ -208,11 +257,14 @@ export function SkillsManager({
       }
     }
   };
-  const load = async () => {
+  const load = async (ref?: SkillReferenceEntry) => {
     if (
       !selected ||
       !preview ||
       preview.entry.hash !== selected.hash ||
+      (ref &&
+        (referencePreview?.reference?.source !== ref.source ||
+          referencePreview.reference.hash !== ref.hash)) ||
       loading.current ||
       loadPending.current ||
       active.current ||
@@ -221,13 +273,14 @@ export function SkillsManager({
       return;
     loading.current = true;
     loadPending.current = true;
+    expectedReference.current = ref;
     setPendingLoad(true);
     setError(undefined);
     try {
       const r = await window.harness.command({
         type: "send",
         sessionId,
-        text: skillLoadPrompt(selected.source, selected.hash),
+        text: skillLoadPrompt(selected.source, selected.hash, ref),
       });
       if (!r.ok) {
         setError(r.error);
@@ -428,6 +481,103 @@ export function SkillsManager({
                       {preview.truncated && "· 省略あり"}
                     </p>
                     <pre aria-label="スキル本文プレビュー">{preview.body}</pre>
+                    <section aria-label="スキル付属資料">
+                      <h3>付属テキスト資料（1件ずつ選択）</h3>
+                      <p>
+                        同じスキル内のMarkdownリンクだけを扱います。資料の版確認とプレビューも既存の許可を通し、会話への読込は通常のモデル実行です。
+                      </p>
+                      <p>
+                        除外:{" "}
+                        {JSON.stringify(preview.references?.skipped ?? {})}
+                        {preview.references?.truncated &&
+                          " · リンク一覧の上限で省略あり"}
+                      </p>
+                      {!preview.references?.entries.length && (
+                        <p>対応する付属資料リンクはありません。</p>
+                      )}
+                      <ul aria-label="付属資料一覧">
+                        {preview.references?.entries.map((source) => (
+                          <li key={source}>
+                            <button
+                              disabled={disabled}
+                              onClick={() => {
+                                setReference(undefined);
+                                setReferencePreview(undefined);
+                                void read(selected, { source });
+                              }}
+                            >
+                              資料の版を確認: {source}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      {reference && (
+                        <>
+                          <p>資料: {reference.reference.source}</p>
+                          <p className={styles.hash}>
+                            資料SHA-256: {reference.reference.hash}
+                          </p>
+                          <p>
+                            {reference.reference.fileBytes} bytes · 版確認読取{" "}
+                            {reference.budget.readBytes}{" "}
+                            bytes（親の前後確認を含む）
+                            {reference.reference.redacted &&
+                              " · 秘密フィルター適用"}
+                          </p>
+                          <button
+                            disabled={disabled}
+                            onClick={() =>
+                              void read(selected, reference.reference)
+                            }
+                          >
+                            資料をプレビュー
+                          </button>
+                          <button
+                            disabled={disabled || !referencePreview}
+                            onClick={() => void load(reference.reference)}
+                          >
+                            会話でこの資料の版を読み込む
+                          </button>
+                          {referencePreview && (
+                            <>
+                              <p>
+                                資料プレビューのみ。本文{" "}
+                                {referencePreview.budget.returnedCharacters} /{" "}
+                                {referencePreview.limits.bodyCharacters}
+                                文字、読取 {
+                                  referencePreview.budget.readBytes
+                                }{" "}
+                                bytes
+                                {referencePreview.truncated && " · 省略あり"}
+                              </p>
+                              <pre aria-label="付属資料本文プレビュー">
+                                {referencePreview.body}
+                              </pre>
+                            </>
+                          )}
+                          {receipts.some((r) => {
+                            if (r.tool !== "LoadProjectSkill" || r.error)
+                              return false;
+                            try {
+                              const result = JSON.parse(
+                                r.output ?? "",
+                              ) as SkillPreview;
+                              return (
+                                result.operation === "load" &&
+                                result.entry?.source === selected.source &&
+                                result.entry.hash === selected.hash &&
+                                result.reference?.source ===
+                                  reference.reference.source &&
+                                result.reference.hash ===
+                                  reference.reference.hash
+                              );
+                            } catch {
+                              return false;
+                            }
+                          }) && <p>会話に資料読込済み（親と資料のこの版）</p>}
+                        </>
+                      )}
+                    </section>
                   </>
                 )}
               </>

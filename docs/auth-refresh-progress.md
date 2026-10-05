@@ -15,3 +15,20 @@
 - 401の更新中に受理した送信も、古い資格情報を使わず共有Promiseの完了を待つ。追加のプロバイダテスト8件と、認証・SessionControllerの関連8ファイル39件が成功。
 - 保存済みの `auth_refresh` をオフライン再生でも省略しないよう、レシート種別の検証を更新。
 - WindowsApps版pwshとダミーnpm `.cmd` の実行ではTOML値の引用符が失われることを確認。`.cmd/.bat` に限って引用符を保護し、ダミーへの `model_reasoning_effort="low"`・read-onlyの引き渡しに成功。公式CLI・実資格情報を使わない回帰テストも追加。
+
+## 最終検証
+
+- Node 24.16.0: `C:/Program Files/nodejs/node.exe`。WindowsApps / Store版PowerShell 7.6.6: `C:/Users/ahwri/AppData/Local/Microsoft/WindowsApps/pwsh.exe`。Windows検証時だけプロセスのPATH先頭にWindowsAppsを指定し、永続PATHは変更していない。
+- リポジトリの `scripts/pnpm.ps1` とローカルpnpmを使用。package.json、Vitest設定、electron-vite設定を確認してから実行。postinstall・疎通spike・実プロバイダ試験・アプリ起動は実行していない。
+- 最終状態で typecheck / lint / build 成功。`pnpm test` は **150ファイル・1,445テスト成功、失敗・スキップなし**（2026-10-05 10:21 JST開始、166.21秒）。停止、/compact、worktree統合、子の引き継ぎ・予約の既存テストも含む。
+- 途中の全体検証中に再生種別の対応とテストを追加した回は、変換キャッシュ内の旧コードと新テストが混在して2件失敗した。変更を固定して新プロセスで再実行し、全件成功を確認。レポートテストの型不足（skippedMessages）も修正し、最終型チェックは成功。
+- 実モデル通信・公式CLIのログイン/更新起動は **0回**。実資格情報への書き込みも0回。Windowsの実プロセス確認は、空の作業フォルダーと独自のダミー `.cmd` / Nodeプログラムだけで実施。
+- 作業ブランチは `auth-refresh`。目的ごとに400行以内でコミット。push・mainへのマージ・インストーラー作成は行っていない。
+
+## 手元で実施が必要
+
+1. このブランチのアプリで、資格情報が自然に期限切れになった後、短い通常送信を1回行う。期限の偽造、資格情報のコピー・編集は行わない。
+2. 更新CLIが1回だけ起動し、資格情報の新しい期限を確認後、画面の「認証を更新しました」と `auth_refresh` レシート（結果・所要時間）が残ることを確認する。失敗時は公式ログイン案内で止まることを確認する。
+3. 確認は期限切れになったプロバイダについて1回に限り、成功/失敗と所要時間のみ本書に追記する。CLI出力・Authorization・資格情報の秘密値をfixtureへ保存しない。現在はClaude/Codexとも期限前で、この確認は **未確認**。
+
+アプリ内のプロバイダ別排他であり、別アプリや別XHarnessプロセスのCLI更新との競合は防げない。CLI内部のHTTP試行回数は出力を破棄するため観測せず、XHarnessが起動するCLIを1回に制限する。

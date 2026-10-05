@@ -87,6 +87,8 @@ it("inherits an interrupted task after restart, then starts a new task after com
   expect(await store.evaluationTask(sessionId)).toEqual({
     id: original!.id,
     active: false,
+    settled: true,
+    recoveryRequired: false,
   });
   const tasks = evaluateTrace(await readTraceReplay(home, sessionId, (s) => s));
   expect(tasks).toHaveLength(1);

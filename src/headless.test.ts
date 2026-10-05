@@ -61,6 +61,8 @@ it("resumes a selected session with its own cwd and keeps both histories", async
   expect(await store.evaluationTask("existing")).toEqual({
     id: "persisted-interrupted",
     active: false,
+    settled: true,
+    recoveryRequired: false,
   });
   expect(
     (await readTraceReplay(home, "existing", (s) => s))?.records.find(

@@ -155,6 +155,8 @@ it("attributes manual compact to a persisted unfinished task after restart witho
   expect(await store.evaluationTask(c.id)).toEqual({
     id: "interrupted-task",
     active: true,
+    settled: true,
+    recoveryRequired: false,
   });
   expect(evaluateSessionCommon(trace)).toBeUndefined();
   expect(vi.mocked(fetch)).not.toHaveBeenCalled();

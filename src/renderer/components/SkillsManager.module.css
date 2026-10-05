@@ -27,7 +27,8 @@
 .hash {
   overflow-wrap: anywhere;
 }
-.dialog input {
+.dialog input,
+.dialog textarea {
   display: block;
   width: 100%;
   margin: 8px 0;
@@ -60,6 +61,10 @@
 }
 .columns span,
 .columns small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.dialog section small {
   display: block;
   overflow-wrap: anywhere;
 }

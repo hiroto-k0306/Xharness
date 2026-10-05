@@ -38,6 +38,7 @@ function modelLabel(model: string, effort: string): string {
 export function App() {
   const [modelOpen, setModelOpen] = useState(false);
   const [skillsOpen, setSkillsOpen] = useState(false);
+  const [skillDraft, setSkillDraft] = useState("");
   const [selectedAgents, setSelectedAgents] = useState<Record<string, string>>(
     {},
   );
@@ -546,12 +547,14 @@ export function App() {
               persistent={app.phase4}
               receipts={view?.receipts ?? []}
               permission={view?.pending}
+              draft={skillDraft}
             />
           )}
           {current && session?.workspaceId && (
             <ProjectMemoryPanel key={current} sessionId={current} />
           )}
           <PromptLine
+            onDraftChange={setSkillDraft}
             maxImages={app.images?.maxPerMessage}
             sessionId={current}
             imageInput={app.models?.find((m) => m.id === model)?.imageInput}

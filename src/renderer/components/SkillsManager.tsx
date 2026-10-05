@@ -7,6 +7,7 @@ import {
 } from "../../shared/project-skills.js";
 import { type PermissionDecision, type Receipt } from "../../shared/ipc.js";
 import { PermissionInline } from "./PermissionInline.js";
+import { SkillSuggestions } from "./SkillSuggestions.js";
 import styles from "./SkillsManager.module.css";
 interface Props {
   sessionId: string;
@@ -15,6 +16,7 @@ interface Props {
   running: boolean;
   persistent?: boolean;
   receipts: Receipt[];
+  draft?: string;
   permission?: {
     requestId: string;
     tool: string;
@@ -29,6 +31,7 @@ export function SkillsManager({
   running,
   persistent,
   receipts,
+  draft,
   permission,
 }: Props) {
   const dialog = useRef<HTMLDialogElement>(null),
@@ -39,6 +42,8 @@ export function SkillsManager({
     [selected, setSelected] = useState<SkillEntry>(),
     [preview, setPreview] = useState<SkillPreview>(),
     [query, setQuery] = useState(""),
+    [request, setRequest] = useState(""),
+    [listFresh, setListFresh] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string>(),
     [pendingLoad, setPendingLoad] = useState(false);
@@ -142,6 +147,11 @@ export function SkillsManager({
     const generation = ++serial.current,
       requestId = `skills-${Date.now()}-${generation}`;
     active.current = requestId;
+    if (!entry) {
+      setListFresh(false);
+      setSelected(undefined);
+      setPreview(undefined);
+    }
     setBusy(true);
     setError(undefined);
     try {
@@ -160,12 +170,16 @@ export function SkillsManager({
       if (serial.current !== generation) return;
       if (!r.ok) {
         setError(r.error);
-        if (entry) setPreview(undefined);
+        if (entry) {
+          setPreview(undefined);
+          setListFresh(false);
+        }
         return;
       }
       if (r.skills?.operation === "load") setPreview(r.skills);
       else if (r.skills?.operation === "list") {
         setList(r.skills);
+        setListFresh(true);
         if (
           selected &&
           !r.skills.entries.some(
@@ -331,6 +345,23 @@ export function SkillsManager({
             onChange={(e) => setQuery(e.target.value)}
           />
         </label>
+        <SkillSuggestions
+          entries={listFresh && !disabled ? list?.entries : undefined}
+          request={request}
+          draft={draft}
+          disabled={disabled}
+          onRequest={(text) => {
+            setRequest(text);
+            setSelected(undefined);
+            setPreview(undefined);
+            setError(undefined);
+          }}
+          onSelect={(entry) => {
+            setSelected(entry);
+            setPreview(undefined);
+            setError(undefined);
+          }}
+        />
         <div className={styles.columns}>
           <ul aria-label="スキル一覧">
             {entries.map((e) => (

@@ -1,5 +1,6 @@
 import { type AgentConfig } from "../agents/definitions.js";
 import { type Tool } from "../tools/registry.js";
+import { traceOperation } from "../core/trace.js";
 /** Integration checks share project approval with the generic STEP dispatcher. */
 export function waveChecks(
   hooks: AgentConfig["waveChecks"],
@@ -30,7 +31,12 @@ export function waveChecks(
       const error = await bash.validate(input);
       if (error) return { ok: false, output: error };
       const started = Date.now();
-      const result = await bash.execute(input, signal);
+      const result = await traceOperation(
+        "tool",
+        "WaveCheck",
+        { id: hook.id, ...input },
+        () => bash.execute(input, signal),
+      );
       signal.throwIfAborted();
       onResult?.(hook, result.content, !result.isError, Date.now() - started);
       if (result.isError) return { ok: false, output: result.content };

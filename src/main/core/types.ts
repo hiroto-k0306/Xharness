@@ -16,6 +16,8 @@ export type ContentBlock =
   | { type: "compaction"; provider: "claude"; payload: unknown };
 
 export interface Usage {
+  measurement?: import("../providers/token-usage.js").TokenMeasurement;
+  reasoningTokens?: number;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens?: number;

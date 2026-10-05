@@ -76,14 +76,14 @@ export async function readTraceReplay(
         if (
           !r ||
           !["start", "end"].includes(r.phase) ||
-          !["step", "llm", "tool", "delegation"].includes(r.kind) ||
+          !["step", "llm", "tool", "delegation", "task"].includes(r.kind) ||
           typeof r.id !== "string" ||
           typeof r.agentId !== "string" ||
           typeof r.label !== "string" ||
           typeof r.at !== "string" ||
           !Number.isSafeInteger(r.sequence) ||
           r.sequence < 1 ||
-          [r.status, r.parentSpan, r.step, r.callId].some(
+          [r.status, r.parentSpan, r.step, r.callId, r.taskId].some(
             (v) => v !== undefined && typeof v !== "string",
           ) ||
           (r.round !== undefined &&

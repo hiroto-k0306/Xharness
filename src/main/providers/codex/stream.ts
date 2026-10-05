@@ -5,6 +5,8 @@ import {
 } from "../../core/types.js";
 import { type ProviderEvent, type StopReason } from "../provider.js";
 import { readSse } from "../sse.js";
+import { tokenMeasurement } from "../token-usage.js";
+import { captureTraceUsage } from "../../core/trace.js";
 
 type Obj = Record<string, unknown>;
 function object(value: unknown): Obj {
@@ -58,15 +60,25 @@ export function codexOutput(items: unknown[]): ContentBlock[] {
 }
 function usage(value: unknown): Usage {
   const native = object(value);
+  captureTraceUsage(tokenMeasurement("codex", native));
   const count = (v: unknown) => {
     if (!Number.isSafeInteger(v) || (v as number) < 0)
       throw new Error("Invalid token count");
     return v as number;
   };
   return {
+    measurement: tokenMeasurement("codex", native),
     inputTokens: count(native.input_tokens),
     outputTokens: count(native.output_tokens),
-    ...(native.input_tokens_details
+    ...(object(native.output_tokens_details ?? {}).reasoning_tokens !==
+    undefined
+      ? {
+          reasoningTokens: count(
+            object(native.output_tokens_details).reasoning_tokens,
+          ),
+        }
+      : {}),
+    ...(object(native.input_tokens_details ?? {}).cached_tokens !== undefined
       ? {
           cacheReadTokens: count(
             object(native.input_tokens_details).cached_tokens,
@@ -205,6 +217,8 @@ export async function* decodeCodexStream(
       case "response.failed":
       case "error": {
         const envelope = data.type === "response.failed" ? data.response : data;
+        if (envelope && typeof envelope === "object" && "usage" in envelope)
+          captureTraceUsage(tokenMeasurement("codex", envelope.usage));
         const failure =
           envelope && typeof envelope === "object" && !Array.isArray(envelope)
             ? (envelope as Obj).error

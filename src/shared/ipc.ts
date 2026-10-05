@@ -52,7 +52,7 @@ export interface Receipt {
   tool?: string;
   decision?: "allow" | "deny" | "ask→allow" | "ask→deny";
   durationMs: number;
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: import("../main/core/types.js").Usage;
   summary: string;
 }
 

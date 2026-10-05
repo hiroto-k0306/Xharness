@@ -216,7 +216,9 @@ it("records an aborted context step and receipt without inventing unexecuted mod
   );
   const replay = (await readTraceReplay(home, "aborted", (s) => s))!;
   expect(
-    replay.records.filter((r) => r.phase === "start").map((r) => r.label),
+    replay.records
+      .filter((r) => r.phase === "start" && r.kind === "step")
+      .map((r) => r.label),
   ).toEqual(["context", "receipt"]);
   expect(replay.records.some((r) => r.status === "aborted")).toBe(true);
 });

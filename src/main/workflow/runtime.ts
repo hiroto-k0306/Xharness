@@ -1,4 +1,9 @@
-import { withSessionTrace } from "../core/trace.js";
+import {
+  withSessionTrace,
+  withTaskTrace,
+  traceOperation,
+} from "../core/trace.js";
+import { randomUUID } from "node:crypto";
 import { type LoopOptions, runTurn } from "../core/loop.js";
 import { planItemsSchema } from "./plan-schema.js";
 import { type Tool, type ToolRegistry } from "../tools/registry.js";
@@ -168,6 +173,7 @@ function implementationCommand(command: string): boolean {
 }
 
 export class WorkflowRuntime {
+  private readonly evaluationTaskId = randomUUID();
   private fileCheckpoint?: LoopOptions["checkpoint"];
   manualReview = false;
   private queuedPhase?: string;
@@ -786,13 +792,22 @@ export class WorkflowRuntime {
       this.options.home,
       this.options.parentId,
       this.options.redact ?? ((s) => s),
-      async () => {
-        try {
-          return await this.runTraced(options, signal);
-        } finally {
-          await this.tasks.close();
-        }
-      },
+      () =>
+        withTaskTrace(
+          {
+            model: options.current?.().model ?? options.model,
+            effort: options.reasoning?.effort,
+            taskId: this.evaluationTaskId,
+          },
+          async () => {
+            try {
+              return await this.runTraced(options, signal);
+            } finally {
+              await this.tasks.close();
+            }
+          },
+          () => this.state.phase,
+        ),
       { onWarning: this.options.onTraceWarning },
     );
   }
@@ -826,9 +841,11 @@ export class WorkflowRuntime {
       this.manualReview = false;
       const tool = this.registry(options.tools).get("RequestReview");
       if (!tool) throw new Error("Review is unavailable");
-      const result = await tool.execute(
+      const result = await traceOperation(
+        "tool",
+        "RequestReview",
         { summary: "User requested review" },
-        signal,
+        () => tool.execute({ summary: "User requested review" }, signal),
       );
       options.onEvent?.({ type: "text_delta", text: result.content });
       const messages = [
@@ -1008,9 +1025,15 @@ export class WorkflowRuntime {
               this.manualPhase(phase);
               if (phase === "review") {
                 this.manualReview = false;
-                const reviewed = await this.registry(base)
-                  .get("RequestReview")!
-                  .execute({ summary: "User requested review" }, signal);
+                const reviewed = await traceOperation(
+                  "tool",
+                  "RequestReview",
+                  { summary: "User requested review" },
+                  () =>
+                    this.registry(base)
+                      .get("RequestReview")!
+                      .execute({ summary: "User requested review" }, signal),
+                );
                 extra += "\n" + reviewed.content;
               }
               custom = {

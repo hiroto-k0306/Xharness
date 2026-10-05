@@ -275,10 +275,7 @@ export function toReceipt(
     tool: r.tool,
     decision: isTool ? (r.decision === "error" ? "deny" : "allow") : undefined,
     durationMs,
-    usage: r.usage && {
-      inputTokens: r.usage.inputTokens,
-      outputTokens: r.usage.outputTokens,
-    },
+    usage: r.usage,
     summary:
       r.provider === "hook"
         ? `hook ${r.timing}:${r.step} → ${r.tool ?? "workflow"} ${r.decision}`

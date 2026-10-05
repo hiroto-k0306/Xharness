@@ -194,8 +194,13 @@ export function SkillsManager({
         }
       }
     } catch {
-      if (serial.current === generation)
+      if (serial.current === generation) {
         setError("読取結果を確認できません。再取得してください。");
+        if (entry) {
+          setPreview(undefined);
+          setListFresh(false);
+        }
+      }
     } finally {
       if (serial.current === generation) {
         active.current = undefined;

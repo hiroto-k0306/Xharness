@@ -180,6 +180,14 @@ WindowsではJobとStart-Processの追跡を使い、WindowStyle HiddenでJobを
 
 429で`retry-after`が無い・60秒を超える・再試行を使い切った場合は、`fallback`設定の別モデルへ切り替える。既定はClaude→`codex:sol`、Codex→`claude:sonnet`で、設定で変更でき、nullで無効にできる。同じモデルは一度しか試さない。**切り替えるとセッションのモデルと推論強度が保存され、元には戻らない**(「↻ fallback: モデル名」と通知する)。切り替え先がなければ`rate_limited`で停止する。
 
+### 利用枠回復後の再開（desktop・既定OFF）
+
+`rate_limited`停止を`quota-pauses.json`に別記録する。観測したRetry-After／枯渇windowのresetから次回確認を決め、短期・週次・provider共有枠不明を区別する。不明resetは推測せず手動扱い。同providerの他の待機も考慮し、時刻到達を回復成功とはみなさない。画面で理由・タスク・段階・次回・期限・試行数を確認し、対象ごとに明示有効化・取消・今再確認を選ぶ（`/quota-resume enable|cancel|now`）。
+
+自動対応は通常会話`workflow.mode: off`で、停止したターンにツール呼出・途中応答・fallback・認証更新・有効hook・一時的許可がなく、会話保存が確定した境界に限定する。元のuserメッセージを追加せず、同タスクの保存履歴から続行。model/effort・権限・system/tools・設定/指示・実cwd・worktree/HEAD/index・会話/圧縮checkpointの照合が変わると手動確認へ停止する。再開後のツール（子を含む）は自動モードでも都度許可を求め、既存deny/readOnlyを維持する。
+
+再開claimを通信前に同期保存し、同homeの既存single-writerと単一leaseで重複を防ぐ。実行中に終了したclaimは再送しない。未実行waitingのみアプリ再起動で復元し、OS常駐はしない。取消・明示停止・閉じる・新しいモデル依頼・削除で解除。期限は元停止から14日、続行は最大3回。workflow途中、結果不明の操作、保存未確定、MCP/Web使用済みの状態、headlessは自動復元対象外。詳細・再実行手順: [枠待ち再開](docs/quota-resume.md)。
+
 ### 圧縮
 
 保存履歴と送信用の文脈を分ける。古い範囲を要約へ置き換えても、保存した元メッセージは残す。Claudeのpreserved thinkingを壊さないよう、送信のたびに過去の接頭辞を書き換えない。system / toolsの整合は§3の前提照合で守る。

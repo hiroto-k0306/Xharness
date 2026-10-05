@@ -3,6 +3,7 @@ import { resolvePermissionMode } from "../../shared/permission-modes.js";
 import { SessionSchedules } from "./schedules.js";
 import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
 import { ProjectMemory } from "./project-memory.js";
+import { Improvements, ImprovementFault } from "./improvements.js";
 import { readSkillUi } from "./skill-ui.js";
 import { decidePermission } from "../core/permissions.js";
 import { captureQuotaPause } from "./quota-capture.js";
@@ -83,6 +84,10 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private readonly improvementReads = new Map<
+    string,
+    { operationId: string; abort: AbortController }
+  >();
   private readonly skillReads = new Map<
     string,
     { requestId: string; abort: AbortController }
@@ -382,6 +387,118 @@ export class SessionController {
           );
           return await job;
         }
+        case "improvements": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const rt = this.runtime(session.id),
+            scope = {
+              home: this.options.home,
+              sessions: this.sessions,
+              workspaces: this.workspaces,
+              sessionId: session.id,
+              workspaceId: session.workspaceId,
+              cwd: session.cwd,
+              clean: this.ctx.clean,
+            };
+          if (command.request.action === "list")
+            return {
+              ok: true,
+              improvements: await new Improvements(scope).list(),
+            };
+          if (command.request.action === "cancel") {
+            const current = this.improvementReads.get(session.id);
+            if (current?.operationId === command.operationId)
+              current.abort.abort();
+            return { ok: true };
+          }
+          if (this.ctx.sessionBusy.has(session.id) || rt.status !== "idle")
+            return {
+              ok: false,
+              error: "実行終了後に改善版を確認してください。",
+            };
+          const abort = new AbortController(),
+            request = command.request;
+          this.improvementReads.set(session.id, {
+            operationId: command.operationId,
+            abort,
+          });
+          this.ctx.sessionBusy.add(session.id);
+          rt.abort = abort;
+          rt.status = "running";
+          const job = (async () => {
+            const root = this.ctx.workspaceRoot(session),
+              config = await loadProjectConfig(this.options.home, root, {
+                trusted: !root || (await this.ctx.trust.isTrusted(root)),
+              });
+            if (
+              (await decidePermission(
+                {
+                  id: "improvement-ui",
+                  name: "ProposeProjectMemory",
+                  input: request,
+                },
+                {
+                  ...config.permissions,
+                  mode: session.permissionMode ?? config.permissions.mode,
+                },
+                session.cwd,
+                { readOnly: session.readOnly },
+              )) === "deny"
+            )
+              return {
+                ok: false as const,
+                error: "現在の権限では改善版を操作できません。",
+              };
+            const service = new Improvements(
+              scope,
+              async (source) => {
+                rt.config = config;
+                if (
+                  !(await this.gate.ask({
+                    session,
+                    rt,
+                    call: { name: "LoadProjectSkill", input: source },
+                    signal: abort.signal,
+                    forceAsk: true,
+                  }))
+                )
+                  throw new ImprovementFault(
+                    "出典の確認を拒否・取消しました。",
+                  );
+              },
+              abort.signal,
+            );
+            return { ok: true as const, ...(await service.action(request)) };
+          })()
+            .catch((error) => ({
+              ok: false as const,
+              error:
+                error instanceof ImprovementFault
+                  ? error.message
+                  : abort.signal.aborted
+                    ? "取消しました。再取得して保存状態を確認してください。"
+                    : "改善操作に失敗しました。出典・保存状態を確認して再取得してください。",
+            }))
+            .finally(async () => {
+              this.improvementReads.delete(session.id);
+              this.ctx.sessionBusy.delete(session.id);
+              rt.status = "idle";
+              rt.pending = undefined;
+              rt.abort = undefined;
+              this.options.emit({
+                type: "turn",
+                sessionId: session.id,
+                status: "idle",
+              });
+              await this.emitState();
+            });
+          rt.done = job.then(
+            () => undefined,
+            () => undefined,
+          );
+          return await job;
+        }
         case "project_memory": {
           const session = this.sessions.get(command.sessionId);
           if (!session || this.stopped)
@@ -536,7 +653,13 @@ export class SessionController {
           // reads, without cancelling a paused task or granting its permissions.
           const reads = [...this.skillReads.entries()];
           for (const [, read] of reads) read.abort.abort();
-          await Promise.all(reads.map(([id]) => this.runtimes.get(id)?.done));
+          const improvements = [...this.improvementReads.entries()];
+          for (const [, read] of improvements) read.abort.abort();
+          await Promise.all(
+            [...reads, ...improvements].map(
+              ([id]) => this.runtimes.get(id)?.done,
+            ),
+          );
           await this.refreshCommands();
           await this.emitState();
           for (const [id, rt] of this.runtimes) {

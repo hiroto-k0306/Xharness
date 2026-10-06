@@ -18,6 +18,7 @@ import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
+import { developmentUiConnections } from "./connections/ui-registry.js";
 import { createLocalBrowser } from "./local-browser-electron.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
 import {
@@ -182,6 +183,9 @@ async function start() {
         },
       });
   controller = new SessionController({
+    ...(!app.isPackaged
+      ? { connections: developmentUiConnections(home, fake) }
+      : {}),
     authentication,
     phase4: true,
     cliModel: startup.model,

@@ -1,6 +1,8 @@
 // 1ターン(ユーザーの1発言 → 応答の完了)を実行し、履歴とレシートを保存する。
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { runConnectedTurnOwned } from "../connections/integration.js";
+import { withSessionTrace, withTaskTrace } from "../core/trace.js";
 import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
 import { checkPremises } from "./premises.js";
 import { withSessionCalls } from "./llm-calls.js";
@@ -390,6 +392,119 @@ async function runSessionBody(
     await ctx.emitState();
   }
   let stopCause = "step_failed";
+  if (session.connection && session.connection !== "legacy") {
+    let featureReason: string | undefined;
+    try {
+      const selection = options.connections?.selection(
+        session.connection,
+        session.cwd,
+      );
+      if (!selection) throw new Error("Connection unavailable");
+      rt.tools ??= sessionTools(ctx, session);
+      rt.config = await loadTrustedConfig(
+        ctx,
+        gate,
+        session,
+        rt,
+        ctx.workspaceRoot(session),
+        abort.signal,
+      );
+      const trustRoot = ctx.workspaceRoot(session);
+      const agentConfig = await loadAgentConfig(
+        options.home,
+        session.workspaceId ? session.cwd : undefined,
+        !trustRoot ||
+          !!rt.trustedSession ||
+          (await ctx.trust.isTrusted(trustRoot)),
+      );
+      if (agentConfig.hooks?.length || agentConfig.waveChecks?.length) {
+        featureReason =
+          "新接続は設定済みのXフック・wave checkに未対応です。保護設定を無視せず停止します。既存方式の新規セッションを使用してください。";
+        throw new Error("Unsupported hooks");
+      }
+      const checkpoint = await new FileCheckpointStore(options.home).begin(
+        sessionId,
+        session.cwd,
+        rt.messages.length - 1,
+        clean,
+        (message) => emit({ type: "notice", sessionId, tone: "warn", message }),
+      );
+      const previous = await ctx.sessions.evaluationTask(sessionId);
+      rt.evaluationTaskId = previous?.active ? previous.id : randomUUID();
+      await ctx.sessions.recordEvaluationTask(
+        sessionId,
+        rt.evaluationTaskId,
+        true,
+        false,
+      );
+      await ctx.sessions.append(
+        sessionId,
+        rt.messages.slice(rt.persisted),
+        clean,
+      );
+      rt.persisted = rt.messages.length;
+      const model =
+        resolveModel(session.model, options.aliases)?.model ?? session.model;
+      rt.system ??= await systemPrompt(
+        ctx,
+        session.cwd,
+        !session.workspaceId,
+        rt.config,
+        session.fileLinkGuidanceVersion === 1,
+      );
+      const result = await withSessionTrace(
+        options.home,
+        sessionId,
+        clean,
+        () =>
+          withTaskTrace(
+            { taskId: rt.evaluationTaskId!, model, effort: session.effort },
+            () =>
+              runConnectedTurnOwned(
+                options.home,
+                {
+                  provider: options.provider,
+                  sessionId,
+                  model,
+                  reasoning: { effort: session.effort },
+                  system: rt.system!,
+                  messages: rt.messages,
+                  tools: rt.tools!,
+                  checkpoint,
+                  redact: clean,
+                  maxRounds: 4,
+                  permission: (call, signal) =>
+                    gate.ask({
+                      session,
+                      rt,
+                      call,
+                      receiptId: events.receiptByCall.get(call.id),
+                      signal,
+                    }),
+                  onEvent: events.onEvent,
+                },
+                { ...selection, taskId: rt.evaluationTaskId! },
+                abort.signal,
+              ),
+          ),
+      );
+      rt.messages = result.messages;
+      stopCause = result.stopCause;
+    } catch {
+      stopCause = abort.signal.aborted ? "aborted" : "step_failed";
+      if (!abort.signal.aborted)
+        emit({
+          type: "error",
+          sessionId,
+          message:
+            featureReason ??
+            "新接続を開始できませんでした。公式認証・Usage設定と実行台帳を確認してください。自動切替は行いません。",
+        });
+    }
+    events.flush();
+    await finishTurn(ctx, session, rt, events, llmStopCause() ?? stopCause);
+    return;
+  }
   try {
     const { web } = await prepareRuntime(
       ctx,
@@ -717,7 +832,8 @@ async function finishTurn(
           stopCause === "workflow_complete" ||
           stopCause === "reported_done" ||
           (stopCause === "end_turn" &&
-            ["off", "complete"].includes(rt.workflow?.state.phase ?? ""))
+            ((!!session.connection && session.connection !== "legacy") ||
+              ["off", "complete"].includes(rt.workflow?.state.phase ?? "")))
         ),
         true,
       );
@@ -746,6 +862,7 @@ async function finishTurn(
   rt.lastStopCause = stopCause;
   if (
     stopCause === "authentication" &&
+    (!session.connection || session.connection === "legacy") &&
     !ctx.options.fake &&
     (events.activeProvider === "claude" || events.activeProvider === "codex")
   )

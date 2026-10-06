@@ -242,6 +242,7 @@ export async function runConnectedTurnOwned(
       return;
     }
     const proposal = outcome.proposal!;
+    if (proposal.answer) yield { type: "text_delta", text: proposal.answer };
     yield {
       type: "message_done",
       message: {

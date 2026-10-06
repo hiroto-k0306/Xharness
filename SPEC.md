@@ -459,3 +459,9 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 | §26             | §4〜7、§11（汎用ツール・画像・巻き戻し・引き継ぎ・予約）        |
 
 過去のdocs内のDESIGN.md参照は、その作業当時の根拠として残す。新しい仕様変更はこの文書へ反映し、過去の試験結果を遡って書き換えない。
+
+## 15. 公式エージェント単一タスク実験
+
+ユーザー承認済みの追加経路として、開発用の固定synthetic workflowを実装する。Claude SDKで読み取り専用のOpus計画、利用可能な公式model/effort/枠の検証、利用者の計画承認、SDKまたはCodex公式App Serverによるnative実装、実プロセスのテスト、実装と別providerによる固定base/head全diffレビュー、最大2修正を行う。Codexは公式App Server自身のChatGPT認証を使い、SIWC登録を条件にしない。Xが権限・取消・保存intent・commit・証跡・評価を管理する。既存routingやstage5の通常テキスト経路は変更しない。
+
+単一タスク・開発入口のみで、DAG並列実行、完全checkpoint再開、通常UI接続、一般プロジェクト適用は未実装。新しい実通信は都度明示許可が必要。既存§8の新接続workflow未対応という制約は通常アプリに引き続き適用し、この別入口だけを例外とする。SDK利用例外もこの経路に限定する。詳細と再実行・制約は[公式workflow単一タスク](docs/official-workflow-single-task.md)。

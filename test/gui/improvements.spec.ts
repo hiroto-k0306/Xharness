@@ -56,7 +56,17 @@ test("fixed fake evaluations require explicit quality and support candidate adop
         panel.getByRole("textbox", { name: "固定評価依頼" }),
       ).toContainText("XHarness fixed evaluation");
       await panel.getByRole("checkbox", { name: "操作を明示確認" }).check();
+      const previous = await gui
+        .locator("main")
+        .getAttribute("data-session-id");
       await panel.getByRole("button", { name: "新規会話で評価実行" }).click();
+      // IPC completion and the session state event are independent. Wait for
+      // the evaluated session and its answer before reopening the keyed panel.
+      await expect(gui.locator("main")).not.toHaveAttribute(
+        "data-session-id",
+        previous!,
+      );
+      await expect(gui.getByText("pong", { exact: true })).toBeVisible();
       await expect(
         gui.getByRole("textbox", { name: "prompt", exact: true }),
       ).toBeEnabled();

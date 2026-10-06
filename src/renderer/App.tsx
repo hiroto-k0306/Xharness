@@ -281,7 +281,7 @@ export function App() {
             onSort={(sort) => s.setPrefs({ sort })}
           />
         )}
-        <main className={styles.content}>
+        <main className={styles.content} data-session-id={current ?? ""}>
           {!app.fake && app.authentication && (
             <AuthenticationPanel
               views={app.authentication}

@@ -137,6 +137,8 @@ export function ImprovementsPanel({
         throw new Error(
           fresh.ok ? "評価依頼を再準備してください。" : fresh.error,
         );
+      // Close before creating the session, whose state event can arrive after IPC.
+      setOpen(false);
       const created = await window.harness.command({
         type: "new_session",
         workspaceId,

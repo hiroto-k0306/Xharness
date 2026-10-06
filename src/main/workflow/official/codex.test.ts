@@ -220,6 +220,26 @@ it("never interprets a reset time or low utilization as authoritative recovery",
     }).allowed,
   ).toBeNull();
 });
+it("stops when an in-flight native quota update no longer proves included usage", async () => {
+  const mock = fakeServer();
+  const subscribe = mock.server.subscribe;
+  mock.server.subscribe = (listener) =>
+    subscribe((method, params) => {
+      if (method === "turn/started")
+        listener("account/rateLimits/updated", {
+          ordinaryUsageAllowed: null,
+          rateLimits: { credits: { hasCredits: false, unlimited: false } },
+        });
+      listener(method, params);
+    });
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    request(),
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("quota-paused");
+  expect(result.dispatched).toBe(true);
+  expect(mock.close).toHaveBeenCalled();
+});
 it("cancels an uncooperative server without retrying or substituting another provider", async () => {
   const mock = fakeServer(),
     original = mock.server.request;

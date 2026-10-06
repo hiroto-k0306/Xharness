@@ -204,7 +204,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
     const unsubscribe = server.subscribe((method, params) => {
       if (method === "account/rateLimits/updated") {
         quota = codexQuota(params);
-        if (quota.allowed === false) {
+        if (quota.allowed !== true) {
           stopped = "quota-paused";
           controller.abort();
         }

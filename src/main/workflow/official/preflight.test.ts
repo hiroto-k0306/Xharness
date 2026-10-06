@@ -45,6 +45,20 @@ it("does not run configured clean filters or refresh the index during inspection
   expect(await readFile(config, "utf8")).toBe(original);
   expect((await stat(join(root, ".git/index"))).mtimeMs).toBe(index.mtimeMs);
 });
+it("recognizes normalized conditional-include keys without following their targets", async () => {
+  const root = await fixture();
+  await appendFile(
+    join(root, ".git/config"),
+    '\n[includeIf "gitdir:**"]\n\tpath = ../does-not-exist.conf\n',
+  );
+  const result = await projectPreflight(
+    root,
+    ["add.mjs"],
+    new AbortController().signal,
+  );
+  expect(result.clean).toBeNull();
+  expect(result.blockers).toContain("local-git-execution-configuration");
+});
 it("inspects a general project without enabling native DAG or changing HEAD/files", async () => {
   const root = await fixture(),
     before = await readFile(join(root, "add.mjs"), "utf8");

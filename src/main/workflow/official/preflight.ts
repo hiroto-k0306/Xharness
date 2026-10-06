@@ -87,8 +87,6 @@ export async function projectPreflight(
         },
       ),
     );
-  if (/(^|\0)(120000|160000) /.test(await git(["ls-files", "--stage", "-z"])))
-    blockers.add("tracked-link-or-submodule");
   if (
     (
       await git([
@@ -97,16 +95,25 @@ export async function projectPreflight(
         "--local",
         "--name-only",
         "--get-regexp",
-        "^(filter\\.|core\\.(hooksPath|fsmonitor)|include\\.|includeIf\\.)",
+        "^(filter\\.|core\\.(hookspath|fsmonitor)|include\\.|includeif\\.)",
       ])
     ).trim()
   )
     blockers.add("local-git-execution-configuration");
-  const head = (await git(["rev-parse", "HEAD"])).trim();
-  if (!/^[a-f0-9]{40,64}$/.test(head)) throw new Error("invalid-git-head");
+  // Even rev-parse follows include paths; inspect names with --no-includes first.
+  const unsafeGit = blockers.has("local-git-execution-configuration");
+  const head = unsafeGit ? null : (await git(["rev-parse", "HEAD"])).trim();
+  if (head !== null && !/^[a-f0-9]{40,64}$/.test(head))
+    throw new Error("invalid-git-head");
   if (
+    !unsafeGit &&
+    /(^|\0)(120000|160000) /.test(await git(["ls-files", "--stage", "-z"]))
+  )
+    blockers.add("tracked-link-or-submodule");
+  if (
+    !unsafeGit &&
     normalizeFile((await git(["rev-parse", "--show-toplevel"])).trim()) !==
-    normalizeFile(root)
+      normalizeFile(root)
   )
     blockers.add("project-must-be-repository-root");
   // status can execute clean filters: skip it when configuration is uncertain.

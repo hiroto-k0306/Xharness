@@ -5,6 +5,7 @@ import { AgentsPanel } from "./components/AgentsPanel.js";
 import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
 import { PhaseBar } from "./components/PhaseBar.js";
 import { ModelPicker } from "./components/ModelPicker.js";
+import { ConnectionPicker } from "./components/ConnectionPicker.js";
 import { PlanApproval } from "./components/PlanApproval.js";
 import { RewindApproval } from "./components/RewindApproval.js";
 import { useEffect, useState } from "react";
@@ -493,6 +494,25 @@ export function App() {
                   choice,
                 });
               }}
+            />
+          )}
+          {app.connections && current && (
+            <ConnectionPicker
+              key={current}
+              views={app.connections}
+              current={session?.connection ?? "legacy"}
+              disabled={session?.status !== "idle"}
+              command={(action, connection) =>
+                window.harness.command(
+                  action === "apply"
+                    ? { type: "set_connection", sessionId: current, connection }
+                    : {
+                        type: "check_connection",
+                        sessionId: current,
+                        cancel: action === "cancel",
+                      },
+                )
+              }
             />
           )}
           {modelOpen && current && (

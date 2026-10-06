@@ -1,0 +1,42 @@
+.panel {
+  position: fixed;
+  right: 16px;
+  top: 60px;
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 90px);
+  overflow: auto;
+  background: #171d29;
+  color: #e2e8f0;
+  border: 1px solid #526181;
+  padding: 20px;
+  z-index: 100;
+  box-shadow: 0 12px 40px #0008;
+}
+.panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.panel article {
+  padding: 16px 0;
+  border-top: 1px solid #526181;
+  margin-top: 20px;
+}
+.panel button,
+.panel select {
+  padding: 8px;
+  margin: 4px;
+  border: 1px solid #657da3;
+  border-radius: 4px;
+  background: #202e43;
+  color: #edf4ff;
+}
+.panel button:disabled {
+  opacity: 0.45;
+}
+.panel pre,
+.panel p,
+.panel small {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}

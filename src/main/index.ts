@@ -32,6 +32,8 @@ import {
   connectionTestTools,
 } from "./connections/test-profile.js";
 import { createLocalBrowser } from "./local-browser-electron.js";
+import { OfficialWorkflowService } from "./workflow/official/service.js";
+import { registerOfficialWorkflowIpc } from "./official-workflow-ipc.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
 import {
   confirmAuthentication,
@@ -74,6 +76,7 @@ let quitting = false;
 
 let window: BrowserWindow | null = null;
 let controller: SessionController | undefined;
+let officialWorkflow: OfficialWorkflowService | undefined;
 
 function createWindow() {
   window = new BrowserWindow({
@@ -283,6 +286,12 @@ async function start() {
     () => controller!,
     () => window,
   );
+  officialWorkflow = new OfficialWorkflowService({
+    home,
+    fake,
+    codexPath: main.auth.codexCliPath,
+  });
+  registerOfficialWorkflowIpc(() => window, officialWorkflow);
   createWindow();
 }
 
@@ -306,7 +315,10 @@ else {
     if (quitting || !controller) return;
     quitting = true;
     event.preventDefault();
-    void controller.shutdown().finally(() => app.quit());
+    void Promise.allSettled([
+      controller.shutdown(),
+      officialWorkflow?.close(),
+    ]).finally(() => app.quit());
   });
   app.on("activate", () => {
     if (!BrowserWindow.getAllWindows().length) createWindow();

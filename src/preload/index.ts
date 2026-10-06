@@ -9,6 +9,7 @@ import {
 } from "../shared/ipc.js";
 
 import { LOCAL_LINK_CHANNEL, isFileLink } from "../shared/local-links.js";
+import { OFFICIAL_WORKFLOW_CHANNEL } from "../shared/official-workflow.js";
 
 // fileリンクは公開APIにしない。隔離されたpreloadで実際のクリックだけを受ける。
 window.addEventListener(
@@ -29,6 +30,8 @@ window.addEventListener(
 // 画面側へ渡すのは、型付きの command() と onEvent() だけ。
 // ipcRenderer 本体・トークン・ファイルパスの読み取り手段は公開しない。
 const api: HarnessApi = {
+  officialWorkflow: (command) =>
+    ipcRenderer.invoke(OFFICIAL_WORKFLOW_CHANNEL, command),
   command: (command: HarnessCommand): Promise<CommandResult> =>
     ipcRenderer.invoke(COMMAND_CHANNEL, command),
   onEvent(listener) {

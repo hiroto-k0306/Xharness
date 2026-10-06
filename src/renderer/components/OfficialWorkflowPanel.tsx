@@ -1,0 +1,235 @@
+import { useEffect, useState } from "react";
+import type {
+  OfficialWorkflowCommand,
+  OfficialWorkflowView,
+} from "../../shared/official-workflow.js";
+import styles from "./OfficialWorkflowPanel.module.css";
+export function OfficialWorkflowPanel() {
+  const [open, setOpen] = useState(false),
+    [view, setView] = useState<OfficialWorkflowView>(),
+    [error, setError] = useState(""),
+    [provider, setProvider] = useState<"claude" | "codex">("claude"),
+    [pending, setPending] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    const poll = () =>
+      void window.harness
+        .officialWorkflow?.({ action: "list" })
+        .then((v) => {
+          if (live) setView(v);
+        })
+        .catch(() => {
+          if (live) setError("保存状態を取得できません");
+        });
+    poll();
+    const timer = setInterval(poll, 500);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [open]);
+  const send = async (command: OfficialWorkflowCommand) => {
+    setPending(true);
+    setError("");
+    try {
+      const result = await window.harness.officialWorkflow?.(command);
+      if (result) setView(result);
+    } catch {
+      setError("操作を完了できませんでした。自動再送はしていません。");
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
+        公式workflow
+      </button>
+      {open && (
+        <section className={styles.panel} aria-label="公式単一タスクworkflow">
+          <header>
+            <h2>公式単一タスクworkflow</h2>
+            <button
+              onClick={() => setOpen(false)}
+              aria-label="workflowパネルを閉じる"
+            >
+              閉じる
+            </button>
+          </header>
+          <p>
+            固定合成課題で、計画 → 実装 → 実テスト →
+            別provider全差分レビューを確認します。元のプロジェクトは変更しません。
+          </p>
+          <p>
+            {view?.simulated
+              ? "FAKE：モデルは模擬、受入テストは実プロセスです。"
+              : "公式SDK / App Serverの既存サブスクを使用します。計画生成も枠を使用します。追加課金へ切り替えません。"}
+          </p>
+          <label>
+            実装候補{" "}
+            <select
+              aria-label="公式workflow実装候補"
+              value={provider}
+              onChange={(e) =>
+                setProvider(e.target.value as "claude" | "codex")
+              }
+            >
+              <option value="claude">Claude → Codexレビュー</option>
+              <option value="codex">Codex → Claudeレビュー</option>
+            </select>
+          </label>
+          <button
+            disabled={!view?.available || !!view.activeId || pending}
+            onClick={() => void send({ action: "create", provider })}
+          >
+            合成課題の計画を作成
+          </button>
+          {!view?.available && (
+            <p>
+              公式workflowは未設定です。通常画面の設定で公式Codex実行パスを指定してください。
+            </p>
+          )}
+          {(error || view?.error) && <p role="alert">{error || view?.error}</p>}
+          {view?.records.map(({ record: r, resumeBlocked, reportHref }) => (
+            <article key={r.id}>
+              <h3>
+                {r.status} / 修正 {r.correctionRounds}回
+              </h3>
+              <a href={reportHref}>HTMLレポートを開く</a>
+              <p>保全した作業領域：{r.cwd}</p>
+              <p>{r.goal}</p>
+              <small>
+                task {r.id} / 次の段階 {r.next} / 再開 {r.resumed ?? 0}回
+              </small>
+              <p>
+                base {r.base.slice(0, 12)} → head {r.head.slice(0, 12)}
+              </p>
+              {r.plan && (
+                <>
+                  <h4>確認する計画</h4>
+                  <p>{r.plan.summary}</p>
+                  {r.plan.tasks.map((t) => (
+                    <div key={t.id}>
+                      <strong>{t.title}</strong>
+                      <p>{t.instructions}</p>
+                      <p>
+                        対象 {t.files.join(", ")} / テスト{" "}
+                        {t.acceptance.join(", ")} / 依存{" "}
+                        {t.dependsOn.join(", ") || "なし"}
+                      </p>
+                      <p>
+                        {t.assignee.provider} / {t.assignee.model} /{" "}
+                        {t.assignee.effort ?? "server default"}
+                      </p>
+                      <p>選択理由：{t.assignee.reason}</p>
+                    </div>
+                  ))}
+                </>
+              )}
+              {view.approval?.id === r.id && (
+                <>
+                  <p>承認digest：{view.approval.digest}</p>
+                  <button
+                    disabled={pending}
+                    onClick={() =>
+                      void send({
+                        action: "approve",
+                        id: r.id,
+                        digest: view.approval!.digest,
+                      })
+                    }
+                  >
+                    この計画を承認
+                  </button>
+                </>
+              )}
+              {view.activeId === r.id ? (
+                <button
+                  onClick={() => void send({ action: "cancel", id: r.id })}
+                >
+                  workflowを中断
+                </button>
+              ) : (
+                r.status !== "completed" && (
+                  <>
+                    <button
+                      disabled={!!resumeBlocked || pending || !!view.activeId}
+                      onClick={() => void send({ action: "resume", id: r.id })}
+                    >
+                      安全な段階から再開
+                    </button>
+                    {resumeBlocked && (
+                      <p>
+                        自動再送を停止：{resumeBlocked}
+                        。不確定な副作用と作業は保全されています。
+                      </p>
+                    )}
+                  </>
+                )
+              )}
+              <h4>実テストとレビューの証跡</h4>
+              {r.checks.map((c, i) => (
+                <p key={i}>
+                  {c.head.slice(0, 12)}：
+                  {c.tests
+                    .map(
+                      (t) =>
+                        `${t.id} ${t.passed ? "合格" : "不合格"} (exit ${t.exitCode ?? "不明"}, ${t.source})`,
+                    )
+                    .join(" / ")}
+                </p>
+              ))}
+              {r.reviews.map((review, i) => (
+                <div key={i}>
+                  <p>
+                    全差分レビュー {i + 1}：
+                    {review.findings.length
+                      ? `${review.findings.length}件の指摘`
+                      : "指摘なし（モデルレビュー）"}
+                  </p>
+                  {review.findings.map((f, n) => (
+                    <p key={n}>
+                      {f.severity} {f.file}:{f.line} {f.message} / 根拠：
+                      {f.evidence}
+                    </p>
+                  ))}
+                </div>
+              ))}
+              <details>
+                <summary>使用量・native状態・保存証跡</summary>
+                <pre>
+                  {JSON.stringify(
+                    {
+                      startedAt: r.startedAt,
+                      finishedAt: r.finishedAt,
+                      pendingEffect: r.pendingEffect,
+                      calls: r.calls,
+                      commits: r.commits,
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+              {r.error && <p role="status">停止理由：{r.error}</p>}
+            </article>
+          ))}
+          {view?.activeId &&
+            !view.records.some((v) => v.record.id === view.activeId) && (
+              <p>
+                公式接続と利用可能な枠を確認しています。
+                <button
+                  onClick={() =>
+                    void send({ action: "cancel", id: view.activeId! })
+                  }
+                >
+                  接続確認を中断
+                </button>
+              </p>
+            )}
+        </section>
+      )}
+    </>
+  );
+}

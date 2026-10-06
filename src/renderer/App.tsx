@@ -3,6 +3,7 @@ import { DEFAULT_IMAGES } from "../shared/images.js";
 import { builtinCommands } from "../shared/commands.js";
 import { AgentsPanel } from "./components/AgentsPanel.js";
 import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
+import { OfficialWorkflowPanel } from "./components/OfficialWorkflowPanel.js";
 import { PhaseBar } from "./components/PhaseBar.js";
 import { ModelPicker } from "./components/ModelPicker.js";
 import { ConnectionPicker } from "./components/ConnectionPicker.js";
@@ -632,6 +633,7 @@ export function App() {
               onOpenChange={setImprovementsOpen}
             />
           )}
+          <OfficialWorkflowPanel />
           <PromptLine
             onDraftChange={setSkillDraft}
             maxImages={app.images?.maxPerMessage}

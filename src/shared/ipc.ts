@@ -470,6 +470,9 @@ export type CommandResult =
 
 /** preload が window.harness として公開する型付き API。これ以外は渡さない。 */
 export interface HarnessApi {
+  officialWorkflow?(
+    command: import("./official-workflow.js").OfficialWorkflowCommand,
+  ): Promise<import("./official-workflow.js").OfficialWorkflowView>;
   command(command: HarnessCommand): Promise<CommandResult>;
   onEvent(listener: (event: UiEvent) => void): () => void;
 }

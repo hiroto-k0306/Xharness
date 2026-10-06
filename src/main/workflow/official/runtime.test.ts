@@ -33,6 +33,81 @@ const workspace = async () => {
   return cwd;
 };
 const signal = () => new AbortController().signal;
+it.each([undefined, "", "Here is a plan", { summary: "Nothing", tasks: [] }])(
+  "stops after one invalid plan without retrying or approving: %j",
+  async (output) => {
+    const cwd = await workspace(),
+      fake = fixtureAgents(),
+      approve = vi.fn(async () => true);
+    const run = fake.agents.claude.run;
+    fake.agents.claude.run = async (request, s) => ({
+      ...(await run(request, s)),
+      output,
+    });
+    const result = await runOfficialSingleTask(
+      fixtureWorkflowOptions(cwd, { agents: fake.agents, approve }),
+      signal(),
+    );
+    expect(result.status).toBe("failed");
+    expect(fake.requests.map((r) => r.phase)).toEqual(["plan"]);
+    expect(approve).not.toHaveBeenCalled();
+    expect(result.commits).toEqual([]);
+    expect(resumeBlockReason(result)).toBeTruthy();
+  },
+);
+it("stops a no-change implementation without tests, review or replay", async () => {
+  const cwd = await workspace(),
+    fake = fixtureAgents(),
+    run = fake.agents.claude.run;
+  let implementations = 0;
+  fake.agents.claude.run = async (request, s) => {
+    if (request.phase === "plan") return run(request, s);
+    implementations++;
+    return {
+      status: "completed",
+      dispatched: true,
+      output: { summary: "No edits needed" },
+      observedModels: [request.model.model],
+      usage: null,
+      elapsedMs: 1,
+    };
+  };
+  const result = await runOfficialSingleTask(
+    fixtureWorkflowOptions(cwd, { agents: fake.agents }),
+    signal(),
+  );
+  expect(result).toMatchObject({
+    status: "failed",
+    error: "no-changes",
+    checks: [],
+    reviews: [],
+    commits: [],
+  });
+  expect(implementations).toBe(1);
+  expect(result.calls.map((c) => c.phase)).toEqual(["plan", "implement"]);
+  expect(resumeBlockReason(result)).toBe("phase-not-checkpointed");
+});
+it("preserves a concrete provider stop reason in the record and HTML", async () => {
+  const cwd = await workspace(),
+    fake = fixtureAgents();
+  const error =
+    "使用量の再取得に失敗しました。枠切れとは断定せず停止しました。";
+  fake.agents.claude.run = async () => ({
+    status: "quota-paused",
+    dispatched: false,
+    observedModels: [],
+    usage: null,
+    elapsedMs: 1,
+    error,
+  });
+  const result = await runOfficialSingleTask(
+    fixtureWorkflowOptions(cwd, { agents: fake.agents }),
+    signal(),
+  );
+  expect(result.status).toBe("quota-paused");
+  expect(result.error).toBe(error);
+  expect(officialWorkflowReport(result)).toContain(error);
+});
 it.each(["verify", "review"] as const)(
   "resumes %s checkpoint without replaying completed model work",
   async (next) => {
@@ -97,6 +172,17 @@ it.each(["claude", "codex"] as const)(
     );
     expect(result.status).toBe("completed");
     expect(result.correctionRounds).toBe(1);
+    expect(fake.requests[0]!.outputSchema).toMatchObject({
+      properties: {
+        tasks: {
+          items: {
+            properties: {
+              acceptance: { items: { type: "string", enum: ["arithmetic"] } },
+            },
+          },
+        },
+      },
+    });
     expect(result.commits).toHaveLength(2);
     expect(result.checks.map((r) => r.tests[0]?.passed)).toEqual([false, true]);
     expect(fake.requests.map((r) => [r.phase, r.model.provider])).toEqual([

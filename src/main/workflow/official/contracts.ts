@@ -89,6 +89,8 @@ export interface ModelCandidate {
 export interface QuotaSnapshot {
   source: "sdk-control" | "sdk-event" | "app-server";
   allowed: boolean | null;
+  reason?: string;
+  rechecks?: number;
   windows: {
     kind: string;
     usedPercent: number | null;
@@ -103,6 +105,26 @@ export interface TestSpec {
   /** Exact native-agent Bash command preapproved with the plan. */
   command: string;
   timeoutMs: number;
+}
+/** The planner returns registered test IDs, never commands or prose criteria. */
+export function planOutputSchema(tests: TestSpec[]) {
+  return z.toJSONSchema(
+    planContract.extend({
+      tasks: z
+        .array(
+          planContract.shape.tasks.element.extend({
+            acceptance: z
+              .array(z.enum(tests.map((test) => test.id)))
+              .min(1)
+              .max(20)
+              .describe("Exact IDs from acceptanceTests; not shell commands"),
+          }),
+        )
+        .min(1)
+        .max(16),
+    }),
+    { target: "draft-7" },
+  );
 }
 export interface ToolEvidence {
   actionId: string;

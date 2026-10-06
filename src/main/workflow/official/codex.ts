@@ -5,6 +5,7 @@ import { codexUsage, object, modelName } from "./usage.js";
 import { scopedPath } from "./workspace.js";
 import { digest } from "./runtime.js";
 import { diagnostics } from "./diagnostics.js";
+import { commandApproval } from "./command-approval.js";
 import {
   normalizeFile,
   WorkflowFailure,
@@ -357,19 +358,40 @@ export class CodexWorkflowAgent implements OfficialAgent {
             : "unknown";
       }
     });
+    const approvalsSeen = new Set<string>();
     server.approve(async (method, params) => {
       if (
         params.threadId !== nativeSessionId ||
+        (nativeTurnId != null && params.turnId !== nativeTurnId) ||
         readonly ||
         controller.signal.aborted
       )
         return { decision: "decline" };
       await waitQuota();
+      const snapshot = structuredClone(params);
+      const fingerprint = digest(snapshot);
+      const approvalKey = digest([
+        method,
+        params.threadId,
+        params.turnId,
+        params.itemId,
+      ]);
+      if (approvalsSeen.has(approvalKey)) return { decision: "decline" };
+      approvalsSeen.add(approvalKey);
       let allowed = false;
+      let explicit = false;
       if (method === "item/commandExecution/requestApproval") {
-        allowed =
-          normalizeFile(String(params.cwd)) === normalizeFile(request.cwd) &&
-          request.tests.some((t) => t.command === params.command);
+        const operation = await commandApproval(request, snapshot);
+        allowed = operation === "test";
+        if (operation && operation !== "test") {
+          explicit = true;
+          allowed = await request.approve(method, operation, controller.signal);
+          // A grant belongs to this immutable request, never a later changed command.
+          if (allowed)
+            allowed =
+              digest(params) === fingerprint &&
+              !!(await commandApproval(request, snapshot));
+        }
       } else if (method === "item/fileChange/requestApproval") {
         const item = id(params.itemId) ? items.get(params.itemId) : undefined;
         const changes = item?.changes;
@@ -395,9 +417,9 @@ export class CodexWorkflowAgent implements OfficialAgent {
       await request.tool({
         actionId: id(params.itemId) ? params.itemId : request.requestId,
         name: method,
-        inputDigest: digest([params.itemId, params.command]),
+        inputDigest: fingerprint,
         status: allowed ? "allowed" : "denied",
-        source: "plan",
+        source: explicit ? "explicit" : "plan",
       });
       diagnostic.tool({
         name: method,
@@ -408,7 +430,24 @@ export class CodexWorkflowAgent implements OfficialAgent {
       });
       // Persistence/path checks above can yield while a new quota update arrives.
       await waitQuota();
-      return { decision: allowed ? "accept" : "decline" };
+      if (allowed && explicit)
+        allowed = !!(await commandApproval(request, snapshot));
+      if (allowed && digest(params) !== fingerprint) allowed = false;
+      if (!allowed) {
+        stopReason = explicit
+          ? "今回の操作が拒否・取消・期限切れになりました。自動再試行はしません。"
+          : "許可範囲外または安全に解釈できない操作のため停止しました。";
+        stopped = "failed";
+        controller.abort();
+      }
+      return {
+        decision:
+          allowed &&
+          !controller.signal.aborted &&
+          digest(params) === fingerprint
+            ? "accept"
+            : "decline",
+      };
     });
     const result = (
       status: AgentResult["status"],

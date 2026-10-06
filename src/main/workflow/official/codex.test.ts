@@ -1,5 +1,8 @@
 import { expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { CodexWorkflowAgent, codexQuota } from "./codex.js";
 import type { AppServerPort } from "./app-server-rpc.js";
 import { fixtureModels, fixtureTest } from "./fixtures.js";
@@ -146,6 +149,71 @@ const request = (phase: AgentRequest["phase"] = "review"): AgentRequest => ({
   tool: vi.fn(async () => {}),
   approve: vi.fn(async () => false),
 });
+it.each(["allow", "deny", "changed", "duplicate"])(
+  "routes a scoped operation through request.approve: %s",
+  async (mode) => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-codex-approval-"));
+    try {
+      await writeFile(join(cwd, "add.mjs"), "synthetic");
+      const mock = fakeServer(),
+        original = mock.server.request;
+      let decision: unknown, duplicate: unknown;
+      const params = {
+        threadId: "thread-fixture",
+        turnId: "turn-fixture",
+        itemId: "read-fixture",
+        cwd,
+        command: "Get-Content add.mjs",
+      };
+      const r = {
+        ...request("implement"),
+        cwd,
+        requestId: "11111111-1111-4111-8111-111111111111",
+      };
+      r.approve = vi.fn(async () => {
+        if (mode === "changed") params.command = "Get-Content .env";
+        return mode !== "deny";
+      });
+      mock.server.request = async (method, raw, signal) => {
+        if (method !== "turn/start") return original(method, raw, signal);
+        queueMicrotask(() => {
+          void (async () => {
+            mock.emit("turn/started", {
+              threadId: params.threadId,
+              turn: { id: params.turnId },
+            });
+            decision = await mock.approval()(
+              "item/commandExecution/requestApproval",
+              params,
+            );
+            if (mode === "duplicate")
+              duplicate = await mock.approval()(
+                "item/commandExecution/requestApproval",
+                params,
+              );
+            mock.emit("turn/completed", {
+              threadId: params.threadId,
+              turn: { id: params.turnId, status: "completed" },
+            });
+          })();
+        });
+        return { turn: { id: params.turnId } };
+      };
+      await new CodexWorkflowAgent(() => mock.server).run(
+        r,
+        new AbortController().signal,
+      );
+      expect(r.approve).toHaveBeenCalledTimes(1);
+      expect(decision).toEqual({
+        decision: mode === "deny" || mode === "changed" ? "decline" : "accept",
+      });
+      if (mode === "duplicate")
+        expect(duplicate).toEqual({ decision: "decline" });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+);
 it("uses official account/model APIs and does not copy or retain auth/account/config values", async () => {
   const mock = fakeServer(),
     agent = new CodexWorkflowAgent(() => mock.server);

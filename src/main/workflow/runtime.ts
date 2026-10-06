@@ -10,6 +10,7 @@ import { type Tool, type ToolRegistry } from "../tools/registry.js";
 import { type ChildOptions, ChildRunner } from "../agents/runner.js";
 import { type AgentConfig } from "../agents/definitions.js";
 import { loadModelCatalog } from "../config/model-catalog.js";
+import { resolveRole } from "../config/catalog.js";
 import { resolveModel } from "../config/config.js";
 import { type ProviderId } from "../core/types.js";
 import { type PlanItem, validatePlan } from "./plan-validate.js";
@@ -704,12 +705,14 @@ export class WorkflowRuntime {
               if (signal.aborted) abortReview();
               const reviewedModels = new Set<string>();
               const jobs = providers.map(async (provider) => {
+                // Reviewers of each company's code come from roles.reviewer.
+                const ofCodex = resolveRole("reviewer", "ofCodex");
                 const definition =
                   provider === "codex"
                     ? {
                         ...this.options.config.agents.reviewer!,
-                        model: "claude:sonnet",
-                        effort: "high" as const,
+                        model: ofCodex.key,
+                        ...(ofCodex.effort ? { effort: ofCodex.effort } : {}),
                       }
                     : { ...this.options.config.agents.reviewer! };
                 if (
@@ -717,7 +720,7 @@ export class WorkflowRuntime {
                   resolveModel(definition.model, this.options.aliases)
                     ?.provider !== "codex"
                 )
-                  definition.model = "codex:sol";
+                  definition.model = resolveRole("reviewer", "ofClaude").key;
                 const sameModel = this.limitedProviders.has(provider)
                   ? [...this.implementationModels].find(
                       ([id]) => !this.limitedProviders.has(id),

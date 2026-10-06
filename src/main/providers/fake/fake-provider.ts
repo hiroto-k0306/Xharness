@@ -1,4 +1,5 @@
 import { traceStream } from "../../core/trace.js";
+import { loadCatalog } from "../../config/catalog.js";
 import { reserveLlmCall, flushLlmCalls } from "../../core/llm-budget.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -362,20 +363,13 @@ export class FakeProvider implements Provider {
     this.id = options.provider ?? "claude";
   }
   models(): ModelInfo[] {
+    // The enabled catalog models of this provider (plus "fake" for Claude).
+    const listed = loadCatalog()
+      .models.filter((m) => m.provider === this.id && m.enabled)
+      .map((m) => ({ id: m.id, contextTokens: m.contextTokens ?? 0 }));
     return this.id === "codex"
-      ? ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"].map((id) => ({
-          id,
-          contextTokens: 272000,
-        }))
-      : [
-          "fake",
-          "claude-haiku-4-5-20251001",
-          "claude-opus-5-5",
-          "claude-sonnet-5-5",
-        ].map((id) => ({
-          id,
-          contextTokens: id.includes("haiku") ? 200000 : 1000000,
-        }));
+      ? listed
+      : [{ id: "fake", contextTokens: 1000000 }, ...listed];
   }
   private async load(name: string): Promise<FixtureFile> {
     if (!/^[\w.-]+$/.test(name)) throw new Error("Invalid fixture name");

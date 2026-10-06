@@ -98,8 +98,14 @@ export function parseCatalog(text: string): Catalog {
 }
 
 let shipped: Catalog | undefined;
+let override: Catalog | undefined;
+/** Tests only: replace the catalog every resolver sees; undefined restores the shipped one. */
+export function overrideCatalogForTest(catalog: Catalog | undefined) {
+  override = catalog;
+}
 /** Source / packaged main both resolve the repository-shipped catalog, never cwd. */
 export function loadCatalog(): Catalog {
+  if (override) return override;
   if (shipped) return shipped;
   // Keep Node filesystem URLs out of Vite's renderer asset URL rewriting.
   const FileURL = URL;

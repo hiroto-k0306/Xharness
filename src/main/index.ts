@@ -8,6 +8,7 @@ import { loadMainConfig } from "./config/config.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStartupArgs, resolveStartup } from "./config/config.js";
+import { resolveRole } from "./config/catalog.js";
 import { readLocalSecrets } from "./auth/local-secrets.js";
 import { Authentication } from "./auth/authentication.js";
 import { AutoRefresh } from "./auth/auto-refresh.js";
@@ -151,7 +152,11 @@ async function start() {
       home,
       cliModel:
         startup.model ??
-        (connectionTest ? "claude:haiku" : fake ? "fake" : undefined),
+        (connectionTest
+          ? resolveRole("connectionTest").key
+          : fake
+            ? "fake"
+            : undefined),
       cliEffort: startup.effort ?? (connectionTest ? "low" : undefined),
       supported: ["claude", "codex"],
       ...(fake ? { read: async () => "" } : {}),
@@ -251,7 +256,9 @@ async function start() {
       ? { connectionTest: true, createTools: connectionTestTools }
       : {}),
     phase4: true,
-    cliModel: startup.model ?? (connectionTest ? "claude:haiku" : undefined),
+    cliModel:
+      startup.model ??
+      (connectionTest ? resolveRole("connectionTest").key : undefined),
     cliEffort: (startup.effort ?? (connectionTest ? "low" : undefined)) as
       "low" | "medium" | "high" | "xhigh" | "max" | undefined,
     provider: officialOnly

@@ -1,5 +1,6 @@
 import { type ContentBlock } from "../../core/types.js";
 import { type ProviderRequest } from "../provider.js";
+import { catalogModel, sendsEffort } from "../../config/catalog.js";
 import { createHash } from "node:crypto";
 
 export const claudeIdentity =
@@ -90,14 +91,17 @@ export function toClaudeRequest(request: ProviderRequest) {
     !request.messages.length
   )
     throw new Error("Invalid Claude request");
-  const supportsEffort = /^claude-(opus|sonnet)-5-5(?:-|$)/.test(request.model);
+  // Capabilities come from the catalog: models listing efforts receive one;
+  // enabled catalog models without efforts accept and drop it (e.g. Haiku).
+  const catalogEntry = catalogModel(request.model);
+  const supportsEffort = !!catalogEntry && sendsEffort(catalogEntry);
   const effort = request.reasoning?.effort ?? "high";
   if (!["low", "medium", "high", "xhigh", "max"].includes(effort))
     throw new Error("Invalid effort");
   if (
     request.reasoning &&
     !supportsEffort &&
-    !/^claude-haiku-4-5(?:-|$)/.test(request.model)
+    !(catalogEntry?.enabled && catalogEntry.provider === "claude")
   )
     throw new Error("Unsupported model effort");
   const system: NativeBlock[] = [

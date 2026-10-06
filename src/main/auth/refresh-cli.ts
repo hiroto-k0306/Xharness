@@ -6,15 +6,17 @@ import { type ProviderName } from "../../shared/ipc.js";
 import { resolveCli } from "../tools/environment.js";
 import { powershellArguments } from "../tools/powershell-command.js";
 import { type RefreshResult } from "./auto-refresh.js";
+import { resolveRole } from "../config/catalog.js";
 
 export function refreshArguments(provider: ProviderName, cwd: string) {
   const prompt = "Reply only pong. Do not use tools.";
+  const probe = resolveRole("authRefresh", provider);
   return provider === "claude"
     ? [
         "-p",
         prompt,
         "--model",
-        "claude-haiku-4-5-20251001",
+        probe.id,
         "--safe-mode",
         "--no-session-persistence",
         "--tools",
@@ -27,9 +29,10 @@ export function refreshArguments(provider: ProviderName, cwd: string) {
         "--color",
         "never",
         "-m",
-        "gpt-6-luna",
-        "-c",
-        'model_reasoning_effort="low"',
+        probe.id,
+        ...(probe.effort
+          ? ["-c", `model_reasoning_effort="${probe.effort}"`]
+          : []),
         "-c",
         'web_search="disabled"',
         "-c",

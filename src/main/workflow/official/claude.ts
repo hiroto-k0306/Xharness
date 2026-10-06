@@ -10,6 +10,7 @@ import { resolve } from "node:path";
 import { approvePersonalQuery } from "../../connections/personal-sdk.js";
 import { tokenMeasurement } from "../../providers/token-usage.js";
 import { abortable } from "../../connections/siwc-http-utils.js";
+import { catalogModel } from "../../config/catalog.js";
 import { scopedPath, runtimeEnvironment } from "./workspace.js";
 import { spawnOwnedProcess } from "./owned-process.js";
 import { sdkExecutable } from "./sdk-executable.js";
@@ -45,11 +46,9 @@ function quotaSnapshot(
     "five_hour",
     "seven_day",
     "seven_day_oauth_apps",
-    ...(model.includes("opus")
-      ? ["seven_day_opus"]
-      : model.includes("sonnet")
-        ? ["seven_day_sonnet"]
-        : []),
+    ...(catalogModel(model)?.capabilities?.quotaWindow
+      ? [catalogModel(model)!.capabilities!.quotaWindow!]
+      : []),
   ];
   const windows = names.map((kind) => {
     const value = object(object(usage.rate_limits)[kind]);

@@ -7,6 +7,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { isEffort } from "../config/config.js";
+import { resolveRole } from "../config/catalog.js";
 import { type ReasoningEffort } from "../providers/provider.js";
 import { HISTORY_TOOLS } from "../tools/project-history.js";
 import { MEMORY_READ_TOOLS } from "../tools/project-memory.js";
@@ -46,12 +47,14 @@ export async function loadAgentConfig(
     waveChecks: [],
     agents: {
       explorer: {
-        model: "claude:sonnet",
+        model: resolveRole("explorer").key,
         tools: ["Read", "Grep", "Glob", "WebFetch"],
       },
       reviewer: {
-        model: "codex:sol",
-        effort: "high",
+        model: resolveRole("reviewer", "ofClaude").key,
+        ...(resolveRole("reviewer", "ofClaude").effort
+          ? { effort: resolveRole("reviewer", "ofClaude").effort }
+          : {}),
         tools: ["Read", "Grep", "Glob", "Bash"],
       },
     },

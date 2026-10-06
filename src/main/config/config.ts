@@ -5,16 +5,16 @@ import { DEFAULT_IMAGES } from "../../shared/images.js";
 import { type AuthSettings } from "../auth/auto-refresh.js";
 import { type ProviderId } from "../core/types.js";
 import { type ReasoningEffort } from "../providers/provider.js";
+import {
+  catalogAliases,
+  catalogModel,
+  loadCatalog,
+  resolveRole,
+  roleEffort,
+} from "./catalog.js";
 
-/** DESIGN.md §12 の aliases の既定値。設定ファイルの aliases で上書きできる。 */
-export const DEFAULT_ALIASES: Record<string, string> = {
-  opus: "claude-opus-5-5",
-  sonnet: "claude-sonnet-5-5",
-  haiku: "claude-haiku-4-5-20251001",
-  astra: "gpt-6-astra",
-  sol: "gpt-6.1-sol",
-  luna: "gpt-6-luna",
-};
+/** aliases の既定値はモデルカタログの alias から作る。設定ファイルの aliases で上書きできる。 */
+export const DEFAULT_ALIASES: Record<string, string> = catalogAliases();
 export const EFFORTS: readonly ReasoningEffort[] = [
   "low",
   "medium",
@@ -22,7 +22,13 @@ export const EFFORTS: readonly ReasoningEffort[] = [
   "xhigh",
   "max",
 ];
-export const DEFAULT_MAIN = { model: "claude:opus", effort: "high" } as const;
+/** 既定のメインモデルはカタログの roles.main(effort はそのモデルの defaultEffort)。 */
+export const DEFAULT_MAIN = (() => {
+  const main = resolveRole("main");
+  const effort = roleEffort(main);
+  if (!effort) throw new Error("roles.main のモデルに既定effortがありません");
+  return { model: main.key, effort } as const;
+})();
 
 export interface ModelChoice {
   provider: ProviderId;
@@ -31,7 +37,11 @@ export interface ModelChoice {
 }
 
 export function providerOfModel(model: string): ProviderId {
-  return /^(gpt|o\d|codex)/i.test(model) ? "codex" : "claude";
+  // カタログにあるモデルはカタログの provider。無い ID(利用者の別名など)だけ従来の推定。
+  return (
+    catalogModel(model)?.provider ??
+    (/^(gpt|o\d|codex)/i.test(model) ? "codex" : "claude")
+  );
 }
 
 /**
@@ -244,19 +254,18 @@ export async function loadMainConfig(
     if (r) resolved = r;
     else
       warnings.push(
-        "config.yaml の main.model を解決できないため claude:opus を使います",
+        `config.yaml の main.model を解決できないため ${DEFAULT_MAIN.model} を使います`,
       );
   }
   let effort: ReasoningEffort = DEFAULT_MAIN.effort;
   if (main.effort !== undefined) {
     if (isEffort(main.effort)) effort = main.effort;
     else
-      warnings.push("config.yaml の main.effort が不正なため high を使います");
+      warnings.push(
+        `config.yaml の main.effort が不正なため ${DEFAULT_MAIN.effort} を使います`,
+      );
   }
-  const fallback: Partial<Record<ProviderId, string>> = {
-    claude: "codex:sol",
-    codex: "claude:sonnet",
-  };
+  const fallback: Partial<Record<ProviderId, string>> = defaultFallback();
   if (root.fallback && typeof root.fallback === "object") {
     for (const provider of ["claude", "codex"] as const) {
       const spec = (root.fallback as Record<string, unknown>)[provider];
@@ -314,7 +323,7 @@ export async function resolveStartup(opts: {
   let choice = cfg.choice;
   if (!opts.supported.includes(choice.provider)) {
     warnings.push(
-      `${choice.provider} はまだ使えないため claude:opus を使います`,
+      `${choice.provider} はまだ使えないため ${DEFAULT_MAIN.model} を使います`,
     );
     choice = { ...choice, ...resolveModel(DEFAULT_MAIN.model)! };
   }
@@ -367,4 +376,19 @@ export function parseStartupArgs(argv: readonly string[]): {
     effort: value("--effort"),
     resume: value("--resume"),
   };
+}
+
+/** 枠切れ時の切り替え先の既定(カタログの roles.fallback)。 */
+export function defaultFallback(
+  catalog = loadCatalog(),
+): Partial<Record<ProviderId, string>> {
+  const result: Partial<Record<ProviderId, string>> = {};
+  for (const provider of ["claude", "codex"] as const)
+    if (
+      catalog.roles.fallback &&
+      typeof catalog.roles.fallback === "object" &&
+      provider in catalog.roles.fallback
+    )
+      result[provider] = resolveRole("fallback", provider, catalog).key;
+  return result;
 }

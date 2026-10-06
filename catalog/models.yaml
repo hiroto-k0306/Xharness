@@ -15,7 +15,16 @@
 #   quotaWeight   枠の消費の重さの目安 (1 = 軽い, 5 = 重い)。実績で補正する
 #   contextTokens コンテキスト長 (要確認のものは null)
 #   retiresAt     提供終了日。過ぎたら自動で無効化する
+#   capabilities  モデル名の文字列ではなく、ここで能力を定義する
+#                   serverCompaction  Claude のサーバー圧縮 (compact-2026-09-04) に対応
+#                   quotaWindow       公式SDKの使用量で見るモデル別の枠 (例 seven_day_opus)
+#                 effort を送るかどうかは efforts の有無で決める (無いモデルには送らない)
+#   acceptedIds   同じモデルとして受け付ける別表記の ID (送信には id を使う)
 #   stats         実績 (ハーネスがレシートから自動で書き込む。手で編集しない)
+#
+# roles にモデルの役割を集約する。値は provider:alias かモデル ID、または
+# { model, effort }。effort を書かない役割はモデルの defaultEffort (無ければ送らない) を使う。
+# 役割のモデルが無効・廃止なら、その役割は理由を示して停止し、別モデルへ置き換えない。
 
 version: 1
 updatedAt: 2026-10-01
@@ -41,6 +50,7 @@ models:
     defaultEffort: high
     quotaWeight: 5
     contextTokens: 1000000  # Phase 4: ユーザー確認と公式モデル一覧。上限入力の通信試験は未実施
+    capabilities: { serverCompaction: true, quotaWindow: seven_day_opus }
 
   - provider: claude
     id: claude-sonnet-5-5
@@ -59,6 +69,7 @@ models:
     defaultEffort: high
     quotaWeight: 3
     contextTokens: 1000000  # Phase 4: ユーザー確認と公式モデル一覧。上限入力の通信試験は未実施
+    capabilities: { serverCompaction: true, quotaWindow: seven_day_sonnet }
 
   - provider: claude
     id: claude-haiku-4-5-20251001
@@ -75,6 +86,7 @@ models:
       - 複数ファイルの整合性が必要な変更
     quotaWeight: 1
     contextTokens: 200000   # Phase 4: 公式モデル一覧の Haiku 4.5
+    acceptedIds: [claude-haiku-4-5]
 
   - provider: claude
     id: claude-fable-5-1
@@ -208,14 +220,31 @@ models:
     contextTokens: 272000
     efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
 
-# 役割ごとの既定 (設定ファイルの agents / main から参照する)
-defaults:
-  main:      claude:opus      # effort high
-  explorer:  claude:sonnet
+# 役割ごとの割り当て (コードはここだけを参照する。設定ファイルの指定があればそちらを優先)
+roles:
+  main: claude:opus                      # 既定のメインモデル (effort は defaultEffort)
+  fallback:                              # 枠切れ時の切り替え先 (設定の fallback で上書き可)
+    claude: codex:sol
+    codex: claude:sonnet
+  explorer: claude:sonnet                # 調査用の子エージェント
   reviewer:
-    ofClaudeCode: codex:sol   # Claude が書いた部分のレビュー
-    ofCodexCode:  claude:sonnet
-  utility:   claude:haiku     # タイトル生成など
+    ofClaude: { model: codex:sol, effort: high }       # Claude が書いた部分のレビュー
+    ofCodex: { model: claude:sonnet, effort: high }    # Codex が書いた部分のレビュー
+  utility:                               # Web の要約・検索などの補助処理
+    claude: claude:haiku
+    codex: { model: codex:luna, effort: low }
+  question:                              # 公式workflowの「質問だけ送信」
+    claude: claude:haiku
+    codex: codex:luna
+  compaction:                            # Codex 会話の要約による圧縮 (Claude は会話モデル自身のサーバー圧縮)
+    codex: { model: codex:luna, effort: low }
+  authRefresh:                           # 公式CLIによる認証更新の確認呼び出し
+    claude: claude:haiku
+    codex: { model: codex:luna, effort: low }
+  connectionTest: claude:haiku           # 接続テスト起動時のメインモデル
+  officialLegacyReviewer:                # 公式workflowの旧記録 (計画にレビュー担当がない) の互換
+    claude: { model: claude:opus, effort: high }
+    codex: { model: codex:luna, effort: low }
 
 # 以前は提供されていたが、今は Codex で選べないモデル (計画で指定されたら差し戻す)
 retired:

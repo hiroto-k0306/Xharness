@@ -1,39 +1,12 @@
-import { readFileSync } from "node:fs";
-import { URL } from "node:url";
-import { parse } from "yaml";
 import { isEffort } from "./config.js";
-import { type ProviderId } from "../core/types.js";
+import { loadCatalog, type CatalogModel } from "./catalog.js";
 import { type ReasoningEffort } from "../providers/provider.js";
 
-export interface CatalogModel {
-  imageInput?: boolean;
-  provider: ProviderId;
-  id: string;
-  enabled: boolean;
-  contextTokens: number | null;
-  efforts?: Partial<Record<ReasoningEffort, string>>;
-  defaultEffort?: ReasoningEffort;
-}
+export type { CatalogModel } from "./catalog.js";
 
-/** Source / packaged main both resolve the repository-shipped catalog, never cwd. */
+/** Models from the shipped catalog (see catalog.ts for roles and capabilities). */
 export function loadModelCatalog(): CatalogModel[] {
-  // Keep Node filesystem URLs out of Vite's renderer asset URL rewriting.
-  const FileURL = URL;
-  for (const path of [
-    new FileURL("../../../catalog/models.yaml", import.meta.url),
-    new FileURL("../../catalog/models.yaml", import.meta.url),
-  ]) {
-    try {
-      const doc = parse(readFileSync(path, "utf8")) as {
-        models: CatalogModel[];
-      };
-      if (!Array.isArray(doc.models)) throw new Error();
-      return doc.models;
-    } catch {
-      /* Try the bundled layout next. */
-    }
-  }
-  throw new Error("Model catalog unavailable");
+  return loadCatalog().models;
 }
 
 export function catalogEffort(model: CatalogModel, effort?: ReasoningEffort) {

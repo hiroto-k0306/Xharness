@@ -30,7 +30,7 @@ Windows環境。指定の`scripts/pnpm.ps1`を使用し、その子Nodeは22.23.
 - 初回全体整形: SPEC.mdだけ不一致。対象ファイルにPrettierを適用。
 - ローカルコミット初回: `git commit -m 'workflow: 登録テストIDの計画契約と有限停止を検証'`が`Author identity unknown` / `fatal: unable to auto-detect email address`で停止。作者情報をユーザーに確認中。OS権限拒否ではなく、権限・グローバルGit設定は変更していない。
 
-コミット・配布物・ハッシュは作者情報の確認後に追記する。過去の実通信・旧配布物の成功を今回の成功には数えない。
+以下のコミット前結果と、末尾のコミット後・配布版結果を区別する。過去の実通信・旧配布物の成功を今回の成功には数えない。
 
 ### コミット待ちの最終ソースで実行した検証
 
@@ -46,4 +46,45 @@ Windows環境。指定の`scripts/pnpm.ps1`を使用し、その子Nodeは22.23.
 
 検証はローカルpnpm配下Node22.23.3、Store版pwsh7.6.6（解決入口は`C:/Users/ahwri/AppData/Local/Microsoft/WindowsApps/pwsh.exe`）。GUIの`NO_COLOR`/`FORCE_COLOR`競合警告あり。型・lint・整形とビルドのログは`.out/offline-review-*.log`、GUI証拠は`.out/offline-review-gui/`。
 
-未コミット最終追跡差分`.out/offline-review-final-source.patch`のSHA256は`9a3b6aa10a330234263ecc43278e38d30fc93e74327d09e528cd777909e1ebdf`。新規会話回帰テストは`0ebca67e91df89bb9dbd7fe61bb484ba2733000eb303b40191aff5f1d8699f6f`。fixtureは開始時と同一。`.out/offline-review-source-hashes.json`に対応を保存した。コミット後の検証と偽って記録せず、現時点ではHEAD＋この差分に対する結果とする。
+未コミット最終追跡差分`.out/offline-review-final-source.patch`のSHA256は`9a3b6aa10a330234263ecc43278e38d30fc93e74327d09e528cd777909e1ebdf`。新規会話回帰テストは`0ebca67e91df89bb9dbd7fe61bb484ba2733000eb303b40191aff5f1d8699f6f`。fixtureは開始時と同一。`.out/offline-review-source-hashes.json`に対応を保存した。コミット後の検証と偽って記録せず、コミット前時点ではHEAD＋この差分に対する結果として記録した。
+
+## 作者情報の指定後：コミット・最終検証・配布物
+
+ユーザーが`Codex <codex@local>`を今回のコミット限定で指定したため、各`git commit`に`-c user.name=Codex -c user.email=codex@local`を付けた。永続Git設定は変更していない。再開時にもHEAD・差分・対象プロセスを確認し、他セッションの変更なし。
+
+| コミット  | 内容                                                                           |
+| --------- | ------------------------------------------------------------------------------ |
+| `1426a52` | 登録テストIDの計画契約、停止理由保持、不正計画・変更なし実装の回帰             |
+| `2a05bfc` | Codex部分通知の再取得、通常枠と課金経路の分離、返却直前の再確認、SPEC・fixture |
+| `7c38826` | Codex再確認・遅延通知・保存中の競合の回帰                                      |
+| `085d84c` | 通常質問・説明・実装レビュー後の雑談の有限終了                                 |
+| `72dca7e` | 過去の実通信記録と今回のコミット前レビュー記録                                 |
+
+**ビルド・最終検証対象は`72dca7ede6dee342fc2aa3a68582d7c74fde5171`のクリーンな作業ツリー。** この後のコミットは本報告書の検証結果追記のみで、配布物のソースSHAと区別する。
+
+| 最終検証                                          | 結果                                                                                                                                 |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `scripts/pnpm.ps1 test`                           | 203ファイル・1,838件成功、520.43秒。失敗・スキップなし。関連回帰も含む                                                               |
+| typecheck / lint / format:check                   | すべて成功                                                                                                                           |
+| build / build:headless / icon                     | すべて成功                                                                                                                           |
+| `electron-builder --win portable --publish never` | 成功。新規portableとwin-unpackedを生成。過去のesbuildアクセス拒否は再発なし                                                          |
+| portable.spec.ts                                  | 成功、23.3秒。独立fake home、二重起動、片方終了後の継続、展開app.asarとwin-unpackedのハッシュ一致                                    |
+| release-recovery.spec.ts                          | 成功、3.3秒。隔離した配布版の再起動・異常終了・履歴保全・未確定処理の再送拒否                                                        |
+| 配布exe指定のGUI全体                              | 25成功・1失敗、2.6分。下記の開発専用テストを誤って含めた。自前起動するSIWC等のケースは開発版であり、25件すべてを配布版成功と扱わない |
+| 開発版のGUI全体                                   | 24成功・2スキップ、1.6分。connections.spec.tsも成功。配布専用2件は別途上記で成功                                                     |
+
+配布exe指定の失敗は`test/gui/connections.spec.ts:7`の「接続方式」クリック待ち30秒timeout。SPEC §8「開発版UIの明示接続選択」と`src/main/index.ts`の`!app.isPackaged`分岐により、この欄は配布版に存在しない。製品の設定を緩めたり表示仕様を変更したりせず、開発版で検証する。失敗ログとスクリーンショットは保持し、成功へ書き換えない。全GUIを配布exeへ一括適用する手順には、この開発専用テストの対象分離が今後必要。
+
+全ログは`.out/final-72dca7e-*.log`、画面証拠は`.out/final-72dca7e-{packaged,dev}-gui/`。今回のモデル送信・認証操作は0回。SIWC/SDK/App Serverはfake/mockのみ。mock DAGの既存回帰は実行したがnative DAGは実行していない。旧インストール版の終了・更新、push、merge、リリース公開なし。
+
+### 配布物とソースの対応
+
+旧distは`.out/pre-72dca7e-dist/`へ保全し、新規生成した。SPEC §13に沿い、検証用配布物はリポジトリ外の`C:/Users/ahwri/Documents/Codex/2026-10-05/task/XHarness-release/XHarness-72dca7e-offline-validation/`へコピーした。上書きなし。86ファイルすべてでコピー元とのSHA256一致を確認。`README.md`には隔離fake homeでの起動例、`source-72dca7e.json`にはソースSHA・環境・全ファイルのサイズとhash、`SHA256SUMS.txt`には全86ファイルのhashを記録。
+
+| ファイル                          | SHA256                                                             |
+| --------------------------------- | ------------------------------------------------------------------ |
+| `XHarness-0.0.0-portable.exe`     | `184960268c112603eb8917fb0b3d1f11e0c29d20fba801a2fcfdd967a3cc4727` |
+| `win-unpacked/XHarness.exe`       | `294bf4b4656babe9586b636cf1b6d6bc76010a241a1f45bc4b7284972a737f7e` |
+| `win-unpacked/resources/app.asar` | `c026e14ef97ff9585d598a62dbdbf1072d3a82d622fd488c6e7442c09af552b7` |
+
+Windows x64 / Electron44.5.1、pnpm配下Node22.23.3 / Store版pwsh7.6.6。システムNode24で全検証した結果とは扱わない。builderにはpackage author未指定、重複依存参照、他OS/arm64用optional dependency非同梱の通知、GUIには色環境変数警告あり。配布物の実SDK/App Server通信、認証更新、インストーラー適用、他OS/arm64は未検証であり今回の対象外。

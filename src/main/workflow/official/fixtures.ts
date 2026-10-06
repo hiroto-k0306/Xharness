@@ -60,6 +60,20 @@ export const fixturePlan = (
         reason:
           "Small bounded implementation; cross-provider review is independent.",
       },
+      reviewer:
+        p === "claude"
+          ? {
+              provider: "codex",
+              model: "fixture-codex",
+              effort: "low",
+              reason: "Different company from the implementation.",
+            }
+          : {
+              provider: "claude",
+              model: "fixture-opus",
+              effort: "high",
+              reason: "Different company from the implementation.",
+            },
     },
   ],
 });

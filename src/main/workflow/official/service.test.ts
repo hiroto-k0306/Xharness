@@ -456,3 +456,29 @@ it("stops with the reason instead of falling back when the location becomes unus
   expect(after.connection?.workspaceRoot).toBe(root);
   expect(after.error).toMatch(/^合成課題workspaceの保存先が存在しません/);
 });
+it("refuses a product task without a main-model selection before creating anything", async () => {
+  const path = await home();
+  const instance = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    codexPath: "C:/never/codex.exe",
+  });
+  services.push(instance);
+  const view = await instance.command({ action: "create", provider: "codex" });
+  expect(view.error).toMatch(/^計画モデルが選択されていません/);
+  expect(view.records).toHaveLength(0);
+});
+it("passes the selection fixed at task start to the planner resolution", async () => {
+  const path = await home();
+  const received: unknown[] = [];
+  const instance = service(path, async (_cwd, _provider, planner) => {
+    received.push(structuredClone(planner));
+    throw new Error("stop before any model call");
+  });
+  await instance.command({
+    action: "create",
+    provider: "claude",
+    planner: { model: "codex:sol", effort: "high" },
+  });
+  expect(received).toEqual([{ model: "codex:sol", effort: "high" }]);
+});

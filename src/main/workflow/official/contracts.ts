@@ -42,6 +42,9 @@ export const planContract = z
             dependsOn: z.array(z.string()).max(16),
             acceptance: z.array(z.string()).min(1).max(20),
             assignee: assignment,
+            // Required for new plans (planOutputSchema); absent only in records
+            // created before planner-chosen reviewers.
+            reviewer: assignment.optional(),
           })
           .strict(),
       )
@@ -113,6 +116,9 @@ export function planOutputSchema(tests: TestSpec[]) {
       tasks: z
         .array(
           planContract.shape.tasks.element.extend({
+            reviewer: assignment.describe(
+              "Reviewer model from availableModels whose provider differs from the assignee's provider",
+            ),
             acceptance: z
               .array(z.enum(tests.map((test) => test.id)))
               .min(1)
@@ -210,6 +216,7 @@ export function validateOfficialPlan(
   files: string[],
   tests: TestSpec[],
   serializeConflicts = false,
+  requireReviewer = false,
 ) {
   const plan = planContract.parse(value);
   const ids = new Set(plan.tasks.map((t) => t.id));
@@ -236,6 +243,25 @@ export function validateOfficialPlan(
       )
     )
       throw new WorkflowFailure("unavailable-model");
+    if (!task.reviewer) {
+      if (requireReviewer) throw new WorkflowFailure("reviewer-missing");
+    } else {
+      // Review always comes from a different company than the implementation.
+      if (task.reviewer.provider === task.assignee.provider)
+        throw new WorkflowFailure("reviewer-same-provider");
+      const reviewer = task.reviewer;
+      if (
+        !models.some(
+          (m) =>
+            m.provider === reviewer.provider &&
+            m.model === reviewer.model &&
+            m.available &&
+            m.quotaAllowed === true &&
+            m.efforts.includes(reviewer.effort),
+        )
+      )
+        throw new WorkflowFailure("unavailable-model");
+    }
     if (task.dependsOn.some((id) => !ids.has(id)))
       throw new WorkflowFailure("unknown-dependency");
   }

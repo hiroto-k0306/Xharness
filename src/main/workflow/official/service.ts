@@ -22,9 +22,11 @@ import {
 import {
   runOfficialSingleTask,
   resumeBlockReason,
+  type PlannerChoice,
   type WorkflowOptions,
   type WorkflowRecord,
 } from "./runtime.js";
+import { resolveModel } from "../../config/config.js";
 import { officialWorkflowReport } from "./report.js";
 import { gitWorkspace } from "./workspace.js";
 import { ClaudeWorkflowAgent } from "./claude.js";
@@ -36,6 +38,7 @@ import {
   schemas,
   implementationContract,
   type ModelCandidate,
+  type AgentRequest,
 } from "./contracts.js";
 import { createDagWorkspace, dagWorkflowOptions } from "./dag-fixtures.js";
 import { runOfficialDag, type DagOptions } from "./dag.js";
@@ -75,6 +78,7 @@ export class OfficialWorkflowService {
       options?: (
         cwd: string,
         provider: "claude" | "codex",
+        planner?: PlannerSelection | PlannerChoice,
       ) => Promise<WorkflowOptions>;
     },
   ) {
@@ -357,6 +361,8 @@ export class OfficialWorkflowService {
     provider: "claude" | "codex",
     signal: AbortSignal,
     mode: "single" | "dag" = "single",
+    /** New tasks pass the main-model selection; resumes pass the recorded planner. */
+    planner?: PlannerSelection | PlannerChoice,
   ) {
     if (mode === "dag") {
       if (!this.settings.fake)
@@ -365,7 +371,8 @@ export class OfficialWorkflowService {
         );
       return dagWorkflowOptions(cwd, resolve(cwd, ".."));
     }
-    if (this.settings.options) return this.settings.options(cwd, provider);
+    if (this.settings.options)
+      return this.settings.options(cwd, provider, planner);
     const options = fixtureWorkflowOptions(cwd, {
       agents: fixtureAgents(provider).agents,
       workspace: gitWorkspace(cwd, redact),
@@ -403,6 +410,47 @@ export class OfficialWorkflowService {
         m.model === "gpt-6-luna" &&
         m.quotaAllowed === true,
     );
+    if (planner) {
+      // Product path: the planner comes from the user's main model, and the plan
+      // may choose any usable official model for implementation and review.
+      const usable = models.filter(
+        (m) => m.available && m.quotaAllowed === true,
+      );
+      const chosen = resolvePlannerChoice(planner, usable);
+      return {
+        ...options,
+        simulated: false,
+        diagnosticText: true, // This service creates only fixed synthetic workspaces.
+        timeoutMs: 120000,
+        agents: { claude, codex },
+        models: usable,
+        planner: chosen,
+        // Used only by records whose plans predate planner-chosen reviewers.
+        reviewers: {
+          ...(opus
+            ? {
+                claude: {
+                  model: opus.model,
+                  effort: opus.efforts.includes("high")
+                    ? ("high" as const)
+                    : null,
+                },
+              }
+            : {}),
+          ...(review
+            ? {
+                codex: {
+                  model: review.model,
+                  effort: review.efforts.includes("low")
+                    ? ("low" as const)
+                    : null,
+                },
+              }
+            : {}),
+        },
+        goal: `Correct addition without modifying the test. Assign the one implementation task to ${provider}.`,
+      } satisfies WorkflowOptions;
+    }
     if (!opus || !review || (provider === "claude" && !haiku))
       throw new Error("必要な公式modelとincluded usageを確認できません");
     return {
@@ -631,6 +679,16 @@ export class OfficialWorkflowService {
       }
       if (!this.settings.fake && !this.settings.codexPath)
         throw new Error("公式Codexの実行パスを設定してください");
+      if (
+        !this.settings.fake &&
+        command.action === "create" &&
+        command.mode !== "dag" &&
+        !command.planner
+      )
+        // No implicit default planner for new product tasks.
+        throw new Error(
+          "計画モデルが選択されていません。メインモデルを選択してから開始してください。",
+        );
       if (command.action === "create" || command.action === "chat") {
         const mode = command.action === "create" ? command.mode : "single";
         if (mode === "dag" && !this.settings.fake)
@@ -698,6 +756,7 @@ export class OfficialWorkflowService {
           command.provider,
           this.preparing.controller.signal,
           mode,
+          command.action === "create" ? command.planner : undefined,
         );
         options.startedAt = prepared.startedAt;
         this.preparing.controller.signal.throwIfAborted();
@@ -718,6 +777,7 @@ export class OfficialWorkflowService {
           record.plan!.tasks[0]!.assignee.provider,
           this.preparing.controller.signal,
           record.dag ? "dag" : "single",
+          record.planner, // never the current selection
         );
         this.preparing.controller.signal.throwIfAborted();
         options.goal = record.goal;
@@ -726,7 +786,7 @@ export class OfficialWorkflowService {
     } catch (error) {
       this.error =
         error instanceof Error &&
-        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題)/.test(
+        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル)/.test(
           error.message,
         )
           ? error.message
@@ -755,6 +815,49 @@ export class OfficialWorkflowService {
     this.active?.controller.abort();
     await this.active?.done;
   }
+}
+/** The user's main-model selection as sent when a task is created. */
+export interface PlannerSelection {
+  model: string;
+  effort?: AgentRequest["effort"];
+}
+/**
+ * Resolves the planner against the usable official models. Never substitutes
+ * another model: an unknown, unavailable or unsupported choice throws a reason.
+ */
+export function resolvePlannerChoice(
+  choice: PlannerSelection | PlannerChoice,
+  models: ModelCandidate[],
+): PlannerChoice {
+  const target =
+    "provider" in choice
+      ? { provider: choice.provider, model: choice.model }
+      : resolveModel(choice.model);
+  if (!target)
+    throw new Error(
+      `計画モデル「${choice.model}」を公式接続のモデルに対応付けできません。別のモデルへは切り替えていません。`,
+    );
+  const candidate = models.find(
+    (m) => m.provider === target.provider && m.model === target.model,
+  );
+  const connection =
+    target.provider === "claude" ? "Claude SDK" : "Codex App Server";
+  if (!candidate || !candidate.available || candidate.quotaAllowed !== true)
+    throw new Error(
+      `計画モデル「${target.model}」は公式${connection}で利用できないか、通常枠を確認できません。別のモデルへは切り替えていません。`,
+    );
+  const effort = choice.effort ?? null;
+  if (!candidate.efforts.includes(effort))
+    throw new Error(
+      `計画モデル「${target.model}」は推論レベル「${effort ?? "既定"}」に対応していません。別のモデルへは切り替えていません。`,
+    );
+  return {
+    provider: target.provider,
+    model: candidate.model,
+    effort,
+    selectedAs:
+      "provider" in choice ? (choice.selectedAs ?? choice.model) : choice.model,
+  };
 }
 /**
  * Live Claude calls use the full model ID that the official SDK resolved,

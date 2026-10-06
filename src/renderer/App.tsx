@@ -633,7 +633,7 @@ export function App() {
               onOpenChange={setImprovementsOpen}
             />
           )}
-          <OfficialWorkflowPanel />
+          <OfficialWorkflowPanel mainModel={model} mainEffort={effort} />
           <PromptLine
             onDraftChange={setSkillDraft}
             maxImages={app.images?.maxPerMessage}

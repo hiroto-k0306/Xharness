@@ -5,7 +5,14 @@ import type {
 } from "../../shared/official-workflow.js";
 import styles from "./OfficialWorkflowPanel.module.css";
 import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
-export function OfficialWorkflowPanel() {
+export function OfficialWorkflowPanel({
+  mainModel,
+  mainEffort,
+}: {
+  /** The main model selected now; sent once and fixed for the new task. */
+  mainModel?: string;
+  mainEffort?: "low" | "medium" | "high" | "xhigh" | "max";
+} = {}) {
   const [open, setOpen] = useState(false),
     [view, setView] = useState<OfficialWorkflowView>(),
     [error, setError] = useState(""),
@@ -93,6 +100,11 @@ export function OfficialWorkflowPanel() {
             公式接続設定を保存
           </button>
           <p role="status">{view?.connection?.message}</p>
+          <p aria-label="計画モデル">
+            計画モデル：{mainModel ?? "未選択"}
+            {mainEffort ? `（${mainEffort}）` : ""}
+            。作成時に確定し、実行中に選択を変えても次のタスクから反映します。利用できない場合は理由を表示し、別のモデルへ切り替えません。
+          </p>
           <label>
             合成課題workspaceの保存先
             <input
@@ -200,8 +212,21 @@ export function OfficialWorkflowPanel() {
             </select>
           </label>
           <button
-            disabled={!view?.available || !!view.activeId || pending}
-            onClick={() => void send({ action: "create", provider, mode })}
+            disabled={
+              !view?.available || !!view.activeId || pending || !mainModel
+            }
+            onClick={() =>
+              void send({
+                action: "create",
+                provider,
+                mode,
+                ...(mainModel
+                  ? {
+                      planner: { model: mainModel, effort: mainEffort ?? null },
+                    }
+                  : {}),
+              })
+            }
           >
             合成課題の計画を作成
           </button>

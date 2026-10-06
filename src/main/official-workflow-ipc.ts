@@ -29,6 +29,16 @@ const command = z.discriminatedUnion("action", [
       action: z.literal("create"),
       provider: z.enum(["claude", "codex"]),
       mode: z.enum(["single", "dag"]).optional(),
+      planner: z
+        .object({
+          model: z.string().min(1).max(200),
+          effort: z
+            .enum(["low", "medium", "high", "xhigh", "max"])
+            .nullable()
+            .optional(),
+        })
+        .strict()
+        .optional(),
     })
     .strict(),
   z

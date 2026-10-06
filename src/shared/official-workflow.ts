@@ -6,7 +6,16 @@ export type OfficialWorkflowCommand =
   | { action: "configure"; codexPath: string }
   | { action: "workspace_root"; path: string }
   | { action: "chat"; provider: "claude" | "codex"; text: string }
-  | { action: "create"; provider: "claude" | "codex"; mode?: "single" | "dag" }
+  | {
+      action: "create";
+      provider: "claude" | "codex";
+      mode?: "single" | "dag";
+      /** The main model selected when the task is started; fixed for this task. */
+      planner?: {
+        model: string;
+        effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
+      };
+    }
   | { action: "approve"; id: string; digest: string }
   | {
       action: "tool_decision";

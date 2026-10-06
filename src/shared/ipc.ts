@@ -1,5 +1,10 @@
 // main / preload / renderer が共有する契約。electron を import しない。
 import { parseRewindChoice } from "./rewind.js";
+import {
+  isConnectionChoice,
+  type ConnectionChoice,
+  type ConnectionView,
+} from "./connections.js";
 import { parseMemoryAction } from "./project-memory.js";
 import { parseSkillUiRequest } from "./project-skills.js";
 import { parseImprovementAction } from "./improvements.js";
@@ -73,6 +78,7 @@ export const EFFORT_VALUES: readonly Effort[] = [
 export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
+  connection?: ConnectionChoice;
   quotaPause?: import("./quota-resume.js").QuotaPauseView;
   llmCalls?: import("./llm-calls.js").LlmCalls;
   imageBytes?: number;
@@ -104,6 +110,7 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  connections?: ConnectionView[];
   images?: typeof import("./images.js").DEFAULT_IMAGES;
   commands?: import("./commands.js").CommandSuggestion[];
   authentication?: AuthenticationView[];
@@ -396,6 +403,8 @@ export type HarnessCommand =
       decision: PermissionDecision;
     }
   | { type: "set_model"; sessionId: string; model: string; effort?: Effort }
+  | { type: "set_connection"; sessionId: string; connection: ConnectionChoice }
+  | { type: "check_connection"; sessionId: string; cancel?: boolean }
   | { type: "set_default_model"; model: string; effort?: Effort }
   | { type: "close_session"; sessionId: string }
   | {
@@ -470,6 +479,23 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "set_connection":
+      return str(c.sessionId) && isConnectionChoice(c.connection)
+        ? {
+            type: "set_connection",
+            sessionId: c.sessionId,
+            connection: c.connection,
+          }
+        : undefined;
+    case "check_connection":
+      return str(c.sessionId) &&
+        (c.cancel === undefined || typeof c.cancel === "boolean")
+        ? {
+            type: "check_connection",
+            sessionId: c.sessionId,
+            cancel: c.cancel === true,
+          }
+        : undefined;
     case "local_browser": {
       const request = parseLocalBrowserAction(c.request);
       return str(c.sessionId) &&

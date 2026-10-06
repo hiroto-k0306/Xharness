@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { isConnectionChoice } from "../../shared/connections.js";
+import { unavailableConnections } from "../connections/ui-registry.js";
 import { resolvePermissionMode } from "../../shared/permission-modes.js";
 import { SessionSchedules } from "./schedules.js";
 import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
@@ -91,6 +93,7 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private connectionCheck?: { sessionId: string; abort: AbortController };
   private readonly localBrowser: LocalBrowserSessions;
   private readonly browserJobs = new Map<string, AbortController>();
   private readonly handoffs: Handoffs;
@@ -297,6 +300,9 @@ export class SessionController {
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
       commands: this.commands,
+      ...(this.options.connections
+        ? { connections: this.options.connections.views() }
+        : {}),
       images: this.imageSettings,
       authentication: this.options.fake
         ? undefined
@@ -1165,6 +1171,92 @@ export class SessionController {
           await this.workspaces.forget(command.workspaceId);
           await this.emitState();
           return { ok: true };
+        case "check_connection": {
+          if (command.cancel) {
+            if (
+              this.connectionCheck &&
+              this.connectionCheck.sessionId !== command.sessionId
+            )
+              return { ok: false, error: "別のセッションの接続確認です。" };
+            this.connectionCheck?.abort.abort();
+            return { ok: true };
+          }
+          if (!this.options.connections)
+            return { ok: false, error: "開発版でのみ接続確認できます。" };
+          if (
+            this.connectionCheck ||
+            this.sessions
+              .list()
+              .some(
+                (s) =>
+                  this.ctx.sessionBusy.has(s.id) ||
+                  this.runtime(s.id).status !== "idle",
+              )
+          )
+            return {
+              ok: false,
+              error: "実行・接続確認の完了後に確認してください。",
+            };
+          if (!this.sessions.get(command.sessionId))
+            return { ok: false, error: "Unknown session" };
+          const check = {
+            sessionId: command.sessionId,
+            abort: new AbortController(),
+          };
+          this.connectionCheck = check;
+          try {
+            await this.options.connections.check(check.abort.signal);
+            return {
+              ok: !check.abort.signal.aborted,
+              ...(check.abort.signal.aborted
+                ? { error: "接続確認をキャンセルしました。" }
+                : {}),
+            } as CommandResult;
+          } finally {
+            if (this.connectionCheck === check)
+              this.connectionCheck = undefined;
+            await this.emitState();
+          }
+        }
+        case "set_connection": {
+          const session = this.sessions.get(command.sessionId);
+          if (
+            !this.options.connections ||
+            !session ||
+            !isConnectionChoice(command.connection)
+          )
+            return { ok: false, error: "開発版の接続選択を確認してください。" };
+          if (
+            this.ctx.sessionBusy.has(session.id) ||
+            this.runtime(session.id).status !== "idle" ||
+            this.connectionCheck
+          )
+            return {
+              ok: false,
+              error: "実行・接続確認の完了後に選択してください。",
+            };
+          this.ctx.sessionBusy.add(session.id);
+          try {
+            const rt = await this.load(session.id);
+            if (
+              (session.connection ?? "legacy") !== command.connection &&
+              rt.messages.length
+            )
+              return {
+                ok: false,
+                error:
+                  "接続方式は空の新規セッションで選択してください。既存履歴を異なる認証経路へ転送しません。",
+              };
+            await this.sessions.save({
+              ...(this.sessions.get(session.id) ?? session),
+              connection: command.connection,
+            });
+            await this.emitState();
+            return { ok: true };
+          } finally {
+            this.ctx.sessionBusy.delete(session.id);
+          }
+        }
         case "set_model":
           if (this.improvementReads.has(command.sessionId))
             return {
@@ -1177,6 +1269,8 @@ export class SessionController {
             command.effort,
           );
         case "close_session":
+          if (this.connectionCheck?.sessionId === command.sessionId)
+            this.connectionCheck.abort.abort();
           this.browserJobs.get(command.sessionId)?.abort();
           await this.localBrowser.stop(command.sessionId);
           return await this.closeSession(command.sessionId);
@@ -1211,6 +1305,8 @@ export class SessionController {
         case "send":
           return this.send(command.sessionId, command.text, command.images);
         case "abort": {
+          if (this.connectionCheck?.sessionId === command.sessionId)
+            this.connectionCheck.abort.abort();
           this.browserJobs.get(command.sessionId)?.abort();
           await this.localBrowser.stop(command.sessionId);
           this.preparations.get(command.sessionId)?.abort.abort();
@@ -1436,6 +1532,41 @@ export class SessionController {
     scheduled: AbortSignal | undefined,
     abort: AbortController,
   ): Promise<CommandResult> {
+    if (this.connectionCheck)
+      return { ok: false, error: "接続確認の完了後に送信してください。" };
+    const selected = this.sessions.get(sessionId)?.connection ?? "legacy";
+    if (selected !== "legacy") {
+      const view = (
+        this.options.connections?.views() ?? unavailableConnections()
+      ).find((v) => v.mode === selected);
+      if (
+        !isConnectionChoice(selected) ||
+        view?.status !== "available" ||
+        !this.options.connections?.selection(
+          selected,
+          this.sessions.get(sessionId)!.cwd,
+        )
+      )
+        return { ok: false, error: view?.reason ?? "接続設定が不正です。" };
+      if (images?.length || text.trim().startsWith("/"))
+        return {
+          ok: false,
+          error:
+            "新接続では通常のテキスト入力のみ対応しています。画像・段階指示・圧縮コマンドは未対応です。",
+        };
+      const route = resolveModel(
+        this.sessions.get(sessionId)!.model,
+        this.options.aliases,
+      );
+      if (
+        !this.options.fake &&
+        route?.provider !== (selected === "openai-siwc" ? "codex" : "claude")
+      )
+        return {
+          ok: false,
+          error: "接続方式に対応するモデルを明示選択してください。",
+        };
+    }
     const imageSettings = (await loadMainConfig(this.options.home)).images;
     abort.signal.throwIfAborted();
     this.imageSettings = imageSettings;
@@ -1870,6 +2001,7 @@ export class SessionController {
   }
 
   private authenticationRequired(session: StoredSession) {
+    if (session.connection && session.connection !== "legacy") return false;
     if (this.options.fake || !this.options.authentication) return false;
     const provider = resolveModel(
       session.model,
@@ -2013,6 +2145,7 @@ export class SessionController {
   async shutdown(timeoutMs = 3000): Promise<void> {
     // Fence new commands and automatic work before the first asynchronous close.
     this.stopped = true;
+    this.connectionCheck?.abort.abort();
     for (const abort of this.browserJobs.values()) abort.abort();
     this.handoffs.clear();
     this.candidatePreviews.clear();

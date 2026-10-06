@@ -124,8 +124,10 @@ async function start() {
   try {
     main = await resolveStartup({
       home,
-      cliModel: startup.model ?? (fake ? "fake" : undefined),
-      cliEffort: startup.effort,
+      cliModel:
+        startup.model ??
+        (connectionTest ? "claude:haiku" : fake ? "fake" : undefined),
+      cliEffort: startup.effort ?? (connectionTest ? "low" : undefined),
       supported: ["claude", "codex"],
       ...(fake ? { read: async () => "" } : {}),
     });
@@ -201,8 +203,8 @@ async function start() {
       ? { connectionTest: true, createTools: connectionTestTools }
       : {}),
     phase4: true,
-    cliModel: startup.model,
-    cliEffort: startup.effort as
+    cliModel: startup.model ?? (connectionTest ? "claude:haiku" : undefined),
+    cliEffort: (startup.effort ?? (connectionTest ? "low" : undefined)) as
       "low" | "medium" | "high" | "xhigh" | "max" | undefined,
     provider: providers.find((p) => p.id === main.choice.provider)!,
     providers,

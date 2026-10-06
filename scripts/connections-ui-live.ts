@@ -1,6 +1,6 @@
 /** Manual, explicitly authorized only. Never part of test/build/package scripts. */
 import { _electron as electron, expect } from "@playwright/test";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { SessionStore } from "../src/main/session/store.js";
@@ -25,6 +25,15 @@ if (
   throw new Error("Non-default SDK route present; stop for review");
 const home = await mkdtemp(join(tmpdir(), "xh-connection-live-"));
 const root = resolve(".");
+const output =
+  process.argv.find((arg) => arg.startsWith("--output="))?.slice(9) ??
+  `.out/connections-ui-live-${Date.now()}.json`;
+const exists = await access(output).then(
+  () => true,
+  () => false,
+);
+if (exists)
+  throw new Error("Live evidence output already exists; use a fresh path");
 const env = Object.fromEntries(
   Object.entries(process.env).filter(
     ([k, v]) =>
@@ -40,11 +49,8 @@ const application = await electron.launch({
   cwd: root,
   args: [
     root,
+    ...(process.argv.includes("--offline") ? ["--fake"] : []),
     "--connection-test",
-    "--model",
-    "claude:haiku",
-    "--effort",
-    "low",
   ],
   env: { ...env, XHARNESS_HOME: home },
   timeout: 15000,
@@ -63,7 +69,9 @@ try {
     packaged: false,
   });
   const page = await application.firstWindow();
-  for (const mode of ["claude-mcp", "claude-proposals"] as const) {
+  for (const mode of process.argv.includes("--launch-only")
+    ? []
+    : (["claude-mcp", "claude-proposals"] as const)) {
     let id: string | undefined;
     let approved = false;
     let success = false;
@@ -104,8 +112,6 @@ try {
     const trace = id ? await readTraceReplay(home, id, (x) => x) : undefined;
     const history = id ? await new SessionStore(home).messages(id) : [];
     const task = evaluateTrace(trace)[0];
-    const executed = task?.evidence; // Tool execution is checked against trace AND saved history below.
-    void executed;
     const toolSpans =
       trace?.records.filter(
         (r) => r.kind === "tool" && r.label === "EvalEcho" && r.phase === "end",
@@ -131,6 +137,11 @@ try {
       savedResult,
       savedAnswer,
       task,
+      requestedModels: [
+        ...new Set(
+          history.flatMap((m) => (m.meta?.model ? [m.meta.model] : [])),
+        ),
+      ],
       queryHttpCount: "SDK internal HTTP count unknown",
     });
     if (!success) break;
@@ -139,14 +150,15 @@ try {
   await application.close();
   await mkdir(".out", { recursive: true });
   await writeFile(
-    ".out/connections-ui-live.json",
+    output,
     JSON.stringify({ home, at: new Date().toISOString(), results }, null, 2),
+    { flag: "wx" },
   );
 }
 console.log(
   JSON.stringify({
     tasks: results.length,
     passed: results.filter((r) => (r as { success: boolean }).success).length,
-    evidence: ".out/connections-ui-live.json",
+    evidence: output,
   }),
 );

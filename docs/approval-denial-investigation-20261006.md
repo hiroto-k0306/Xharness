@@ -234,3 +234,57 @@ workspaceは削除し、証跡はworkspaceの外に残した。
 
 - 確認できたこと：ユーザープロファイル外（D:）のworkspaceなら、公式App Server経由で、利用者が個別承認したGet-Contentが成功する。
 - 未確認：製品UIでの確認、実装・独立テスト・レビュー、配布版での動作、Temp以外のプロファイル配下（既定の `~\.xharness` など）での挙動。製品のworkspaceの場所は変更していない。
+
+## 合成課題workspaceの保存先設定とtrusted登録の整理（2026-10-07）
+
+ユーザー承認の範囲で実施した。追加の実通信はしていない。
+
+### trusted登録3件の削除
+
+`~/.codex/config.toml` から次の3項目（見出しと `trust_level` の行）だけを削除した。
+
+- `xh-appserver-probe-b10913\workspace`
+- `xh-appserver-probe-522737\workspace`
+- `xh-appserver-probe-c5a858\workspace`
+
+- 事前にバックアップをセッションのscratchpadに保存した。
+- 差分は該当9行だけ（`[projects.*]` は18件→15件）。他の設定は変更していない。
+- 以前の試行によるTemp配下の9件（前節で10件としたのは数え誤りで、`d:\aiwork\xharness` を含めていた）は保持した。
+
+### 保存先の設定
+
+公式workflowパネルに「合成課題workspaceの保存先」を追加した。
+
+- 指定できるのは既存フォルダの絶対パスで、リンク・junctionを含まないこと。書き込めるかは、一時フォルダを作って消すことで確認する。この確認は保存時と作成時の両方で行う。
+- 使えない場合は `合成課題workspaceの保存先…` で始まる理由を表示して停止し、Tempや既定の場所へ戻さない。保存済みの値は、使えなくても保持し、再起動後も理由を表示する。
+- 空で保存すると既定（workflow保存領域内）に戻る。
+- 新しいworkspaceは `<保存先>\<ID>\workspace-*` に作り、記録フォルダの `workspace.json` に親を残す。読み込み時は `workspace.json` があればその親（ID名の絶対パスに限る）を、なければ従来どおり記録フォルダを基準に、cwdを検証する。
+- 既存の記録・workspaceは移動・書き換えしない。DAG（模擬のみ）は従来の場所のまま。
+- Codex実行パスの保存は、保存先の値を消さない（`connection.json` を両方まとめて書く）。
+
+このPCでは保存先に `D:\AIwork` 配下を指定する想定。コードは特定のドライブを固定しない。
+
+### テスト（変更箇所のみ）
+
+| 対象                                                                                                | 件数                     |
+| --------------------------------------------------------------------------------------------------- | ------------------------ |
+| `service.test.ts`（Codex実行パスとの同時保持・再起動後の保持・空での解除）                          | 7件追加、計17件          |
+| 無効な保存先（相対パス・存在しない・ファイル・junction）の拒否                                      | `service.test.ts` に含む |
+| 新規workspaceの配置と `workspace.json`、既存（既定位置）の記録が再起動後もそのまま読めること        | `service.test.ts` に含む |
+| 作成時に保存先が消えていた場合に、記録・workspaceを作らず理由を表示し、再起動後も同じ理由を出すこと | `service.test.ts` に含む |
+| `official-workflow-ipc.test.ts`（不正な引数・長すぎるパスの拒否）                                   | 合格                     |
+| `OfficialWorkflowPanel.test.tsx`                                                                    | 合格                     |
+
+型チェック・ESLint・Prettier・通常ビルドも成功した。全回帰・GUI・実通信は実施していない。
+
+### 製品UIでの実通信検証（未実施・別途確認）
+
+製品の計画は必ずClaudeで作るため、次の通信が要る。
+
+- 最小構成：Claude計画1回＋Codex実装1回で、読み取りまで。
+- 完了まで：さらに独立テスト（通信なし）とClaudeレビュー1回、修正がある場合はCodexが最大2回追加。
+
+権限・設定への影響は次のとおり。
+
+- Codexのsandbox setupが、保存先配下の各workspaceに、`CodexSandboxUsers` とcapability SIDの変更権限、`.git` のdenyを付与する。
+- `~/.codex/config.toml` に、workspaceごとのtrusted登録が1件追加される。

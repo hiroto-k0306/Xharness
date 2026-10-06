@@ -56,3 +56,23 @@ node node_modules/@playwright/test/cli.js test test/gui/siwc.spec.ts
 ```
 
 新workflowは今回未実装。次は単一課題の計画→実装→異なるproviderのreadonly review→修正→再reviewを先に作り、その後DAG/worktreeへ拡張する。最新会話では計画もClaude Agent SDKを候補とし、CLIへ固定しない。Opus・読み取り中心・構造化出力の計画契約とし、実装権限は渡さない。SDK採用だけを品質向上の根拠にせず、実装側の公式agent loop・テスト・自己修正能力を保持する。Xは権限・取消・再開・履歴・評価・memory・idempotenceを管理する。初期は隠れたSDK内の多段delegationなし。Codex公式ローカルChatGPT認証はSIWCから独立させ、SIWC未登録を全体の開始条件にしない。
+
+## SDKの観測情報と現在の保存範囲
+
+導入済みClaude Agent SDK `0.3.290` の `sdk.d.ts`、接続adapter、取得済み匿名化traceを確認した。この照合のための追加実通信は0回。streamの秘密やthinking本文は参照しない。
+
+| 項目                        | SDKの公開event / hook / 管理API                                      | 現在のadapterとX側の責務                                                                                         |
+| --------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| 構造化計画・DAG・担当モデル | `outputFormat` / `structured_output`                                 | 現在はanswer/actions。計画schema・DAG・モデル・権限検証はXで追加する                                             |
+| ID                          | `session_id`、message `uuid`、`tool_use_id`、任意の送信UUID          | SDK sessionはquery内の一致確認だけ。Xのtask/session/request/action IDを保存し、再開対応表は未実装                |
+| 要求・結果・承認            | tool-use/result event、Pre/PostToolUse、`canUseTool`、permission情報 | X MCP経由の承認・実行・receiptは保存。全SDKツールの監査は未対応                                                  |
+| In/Out/cache                | result `usage`、モデル別`modelUsage`、assistant/stream usage         | 最終modelUsageを優先、途中main-loopは加算しない。失敗でresultが無い場合のassistant出力は不明                     |
+| モデル別・実モデル          | assistant model、modelUsageのキー・内訳、任意thinkingTokens          | 合計usageとモデル名一覧だけ保存。モデル別内訳・thinking量の保存は未対応                                          |
+| 終了・失敗・取消            | result subtype/is_error/stop/terminal reason、abort/interrupt        | X状態へ変換。success subtypeでもis_errorなら失敗。native error本文は保存しない                                   |
+| quota/reset                 | rate-limit event、任意utilization/resetsAt、実験的Usage API          | サブスク・Extra Usage確認と制限時停止。常時表示は未実装、利用率/reset取得は保証されない                          |
+| 再開                        | resume、session管理API、再初期化API                                  | 現在persistSession=falseで未使用。累計差分、ID対応、再実行防止はXで実装する                                      |
+| diff/commit/test/review     | tool resultやhookで実行結果を受け取れる                              | 対象base/head、diff、commit、test退出値、review根拠をXが検証・保存する。モデル自己申告だけでは品質証拠にならない |
+
+[公式cost-tracking](https://code.claude.com/docs/en/agent-sdk/cost-tracking) と導入済み型は、result.usageがmain loopだけ、modelUsageが子・sidechain・圧縮を含むquery pipeline累計、helperの一部は対象外、再開時には以前の累計を含むという点で一致する。現adapterは独立した単一prompt queryのみで、resumeや複数user turnを使わない。モデル別値を一度だけ集計する既存test、未知componentをゼロにしないtestがある。新たに同一assistant IDの重複除外・子イベント除外・placeholder出力の不明化、およびAPIエラーのsuccess subtype判定を確認した。失敗時の途中usageが全query treeをカバーすると説明しない。
+
+assistantのoutput_tokensは公式説明でplaceholderとされる。確定resultがない間は取得済みinput/cacheだけを残し、outputを不明とする保守的な修正を行った。SDKの公開型だけではplaceholderの確定時点は表現されないため、値が数値であることを確定の根拠にしない。既存A実測の最終modelUsage値と合否は変更していない。stream message_deltaを使った途中出力の確定、モデル別内訳、resume累計差分は次の観測拡張に残す。API換算costUSDは概算で、実請求やサブスク枠消費と同一視しない。

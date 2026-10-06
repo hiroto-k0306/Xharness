@@ -65,6 +65,14 @@ it("retains observed partial usage on failure without counting SDK replay twice"
       expect(settings.effort).toBe("low");
       yield partial;
       yield partial;
+      yield {
+        ...partial,
+        parent_tool_use_id: "child-tool",
+        message: {
+          id: "child-response",
+          usage: { ...usage, input_tokens: 999 },
+        },
+      };
       yield { type: "result", subtype: "error_during_execution" };
     },
   };
@@ -93,7 +101,7 @@ it("retains observed partial usage on failure without counting SDK replay twice"
   };
   expect(normalizeTokens(data.tokenMeasurement)).toMatchObject({
     input: 2,
-    output: 1,
+    output: null,
   });
   expect(result.stopCause).toBe("protocol");
 });

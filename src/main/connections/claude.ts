@@ -181,9 +181,14 @@ async function sdkRun(
         if (
           typeof message?.id === "string" &&
           message.usage &&
-          typeof message.usage === "object"
+          typeof message.usage === "object" &&
+          event.parent_tool_use_id == null
         ) {
-          partialUsage.set(message.id, message.usage);
+          // SDK assistant output_tokens is a placeholder; only result totals are final.
+          partialUsage.set(message.id, {
+            ...message.usage,
+            output_tokens: undefined,
+          });
           captureTraceUsage(
             tokenMeasurement("claude", {
               iterations: [...partialUsage.values()],
@@ -242,7 +247,7 @@ async function sdkRun(
             error: toolFailure,
             measurement: measureSdkResult(event),
           };
-        if (event.subtype !== "success")
+        if (event.subtype !== "success" || event.is_error === true)
           return {
             status: "failed" as const,
             error: "transport" as const,

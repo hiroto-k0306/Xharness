@@ -42,7 +42,7 @@ export function measureSdkResult(event: Record<string, unknown>) {
   }
   const usage = event.usage as Record<string, unknown> | undefined;
   if (
-    event.subtype !== "success" &&
+    (event.subtype !== "success" || event.is_error === true) &&
     usage?.input_tokens === 0 &&
     usage?.output_tokens === 0
   )

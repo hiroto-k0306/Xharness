@@ -230,3 +230,51 @@ it("stops on SDK quota/overage rather than continuing to an extra-charge path", 
   });
   expect(close).toHaveBeenCalled();
 });
+
+it.each(["A", "B"])(
+  "rejects %s success-subtype API errors while retaining observed usage",
+  async (variant) => {
+    const binding = officialSdkBinding(
+      { cwd: ".", subscriptionOnlyConfirmed: true, env: {} },
+      () => ({
+        close: vi.fn(),
+        async *[Symbol.asyncIterator]() {
+          yield {
+            ...events[0],
+            is_error: true,
+            usage: {
+              input_tokens: 2,
+              output_tokens: 1,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+            },
+          } as SDKMessage;
+        },
+      }),
+    );
+    const gateway = new ToolGateway(
+      {
+        taskId: input.taskId,
+        sessionId: input.sessionId,
+        requestId: input.requestId,
+      },
+      {},
+      new MemoryIntentLedger(),
+      async () => false,
+    );
+    const result =
+      variant === "A"
+        ? await new ClaudeProposals(binding).infer(input, signal())
+        : await new ClaudeMcpDelegation(binding, gateway).delegate(
+            input,
+            signal(),
+            () => {},
+          );
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "transport",
+      measurement: { input: 2, output: 1, scope: "main-loop" },
+    });
+    expect(result.proposal).toBeUndefined();
+  },
+);

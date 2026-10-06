@@ -8,3 +8,4 @@ spike/.out/
 auth.json
 .tools/
 coverage/
+.cache/

@@ -354,3 +354,24 @@ it("prefers whole query model totals once and keeps unknown thinking/cache compo
     }),
   ).toBeNull();
 });
+it("conversation provides no tools and denies a forged write hook", async () => {
+  const root = await cwd(),
+    mock = mockStart(async (options) => {
+      expect(options.tools).toEqual([]);
+      expect(options.permissionMode).toBe("plan");
+      const response = await pre(
+        options,
+        "Write",
+        { file_path: join(root, "add.mjs"), content: "changed" },
+        "forged",
+      );
+      expect(response).toMatchObject({
+        hookSpecificOutput: { permissionDecision: "deny" },
+      });
+    });
+  const result = await new ClaudeWorkflowAgent(mock.start).run(
+    request(root, "conversation"),
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
+});

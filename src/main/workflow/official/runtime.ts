@@ -34,6 +34,7 @@ export interface WorkflowRecord {
   simulated: boolean;
   id: string;
   goal: string;
+  answer?: string;
   cwd: string;
   startedAt: string;
   finishedAt?: string;

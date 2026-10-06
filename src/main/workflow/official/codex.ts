@@ -174,7 +174,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
     if (signal.aborted) cancel();
     const timer = setTimeout(cancel, request.timeoutMs),
       server = this.start(request.cwd),
-      readonly = ["plan", "review"].includes(request.phase);
+      readonly = ["plan", "review", "conversation"].includes(request.phase);
     let dispatched = false,
       nativeSessionId: string | undefined,
       nativeTurnId: string | undefined,

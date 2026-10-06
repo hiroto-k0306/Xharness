@@ -145,7 +145,7 @@ export interface RuntimeUsage {
 export interface AgentRequest {
   requestId: string;
   taskId: string;
-  phase: "plan" | "implement" | "fix" | "review";
+  phase: "plan" | "implement" | "fix" | "review" | "conversation";
   cwd: string;
   model: ModelCandidate;
   prompt: string;

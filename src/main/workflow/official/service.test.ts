@@ -211,3 +211,30 @@ it("configures and restores a production executable without executing it, and re
     (await restarted.command({ action: "list" })).connection?.codexPath,
   ).toBe(executable);
 });
+it("ends consecutive questions and post-work chat after one bounded call and preserves answers", async () => {
+  const path = await home(),
+    first = service(path);
+  for (const text of [
+    "こんにちは",
+    "先ほどの質問を説明して",
+    "コードを説明するだけ",
+    "作業ありがとう",
+  ]) {
+    await first.command({ action: "chat", provider: "claude", text });
+    await wait(first, (v) => !v.activeId);
+  }
+  const records = first.view().records.map((r) => r.record);
+  expect(records).toHaveLength(4);
+  for (const record of records) {
+    expect(record.status).toBe("completed");
+    expect(record.calls.map((c) => c.phase)).toEqual(["conversation"]);
+    expect(record.plan).toBeUndefined();
+    expect(record.checks).toEqual([]);
+    expect(record.answer).toContain("模擬回答");
+  }
+  const restored = await service(path).command({ action: "list" });
+  expect(restored.records.map((r) => r.record.answer)).toEqual(
+    records.map((r) => r.answer),
+  );
+  expect(restored.activeId).toBeUndefined();
+});

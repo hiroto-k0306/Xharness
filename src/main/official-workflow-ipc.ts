@@ -7,6 +7,13 @@ const command = z.discriminatedUnion("action", [
   z.object({ action: z.literal("list") }).strict(),
   z
     .object({
+      action: z.literal("chat"),
+      provider: z.enum(["claude", "codex"]),
+      text: z.string().trim().min(1).max(4000),
+    })
+    .strict(),
+  z
+    .object({
       action: z.literal("configure"),
       codexPath: z.string().min(1).max(1000),
     })

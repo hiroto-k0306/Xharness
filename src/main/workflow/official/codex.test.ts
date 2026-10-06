@@ -158,7 +158,7 @@ it("uses official account/model APIs and does not copy or retain auth/account/co
   expect(JSON.stringify(models)).not.toMatch(/never-persist/);
   expect(mock.close).toHaveBeenCalled();
 });
-it.each(["review", "implement"] as const)(
+it.each(["review", "implement", "conversation"] as const)(
   "runs %s with a fresh native thread, structured output and cumulative usage once",
   async (phase) => {
     const mock = fakeServer(),
@@ -184,7 +184,7 @@ it.each(["review", "implement"] as const)(
       allowProviderModelFallback: false,
       serviceTier: "default",
       environments: [],
-      sandbox: phase === "review" ? "read-only" : "workspace-write",
+      sandbox: phase !== "implement" ? "read-only" : "workspace-write",
     });
     expect(started.config).toMatchObject({
       "features.multi_agent": false,
@@ -199,7 +199,7 @@ it.each(["review", "implement"] as const)(
     expect(turn.summary).toBe("none");
     expect(turn.serviceTierForTurn).toBe("default");
     expect(turn.sandboxPolicy).toEqual(
-      phase === "review"
+      phase !== "implement"
         ? { type: "readOnly", networkAccess: false }
         : {
             type: "workspaceWrite",

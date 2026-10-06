@@ -3,6 +3,7 @@ export const OFFICIAL_WORKFLOW_CHANNEL = "xharness:official-workflow";
 export type OfficialWorkflowCommand =
   | { action: "list" }
   | { action: "configure"; codexPath: string }
+  | { action: "chat"; provider: "claude" | "codex"; text: string }
   | { action: "create"; provider: "claude" | "codex"; mode?: "single" | "dag" }
   | { action: "approve"; id: string; digest: string }
   | { action: "cancel" | "resume"; id: string };

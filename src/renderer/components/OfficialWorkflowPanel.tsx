@@ -12,6 +12,7 @@ export function OfficialWorkflowPanel() {
     [mode, setMode] = useState<"single" | "dag">("single"),
     [pending, setPending] = useState(false);
   const [codexPath, setCodexPath] = useState("");
+  const [question, setQuestion] = useState("");
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -128,6 +129,28 @@ export function OfficialWorkflowPanel() {
           >
             合成課題の計画を作成
           </button>
+          <label>
+            質問・追加質問（計画を作らない）
+            <textarea
+              aria-label="公式接続への質問"
+              value={question}
+              maxLength={4000}
+              onChange={(e) => setQuestion(e.target.value)}
+            />
+          </label>
+          <button
+            disabled={
+              !view?.available || !!view.activeId || pending || !question.trim()
+            }
+            onClick={() =>
+              void send({ action: "chat", provider, text: question.trim() })
+            }
+          >
+            質問だけ送信
+          </button>
+          <p>
+            選択したproviderに1回・60秒まで。直近5件を文脈に含めます。計画・実装は起動しません。
+          </p>
           {!view?.available && (
             <p>
               公式workflowは未設定です。上の公式Codex実行パスを設定してください。未設定では送信しません。
@@ -142,6 +165,7 @@ export function OfficialWorkflowPanel() {
               <a href={reportHref}>HTMLレポートを開く</a>
               <p>保全した作業領域：{r.cwd}</p>
               <p>{r.goal}</p>
+              {r.answer && <p aria-label="公式回答">{r.answer}</p>}
               {r.dag && (
                 <div>
                   <h4>DAG / 最大2並列 / native会話resume未対応</h4>

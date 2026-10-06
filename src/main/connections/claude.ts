@@ -11,6 +11,8 @@ import {
 } from "./contracts.js";
 import { RunBoundary, type ToolGateway } from "./boundary.js";
 import { measureSdkResult } from "./measurement.js";
+import { captureTraceResponse, captureTraceUsage } from "../core/trace.js";
+import { tokenMeasurement } from "../providers/token-usage.js";
 
 /** Narrow SDK port: concrete query/tool/createSdkMcpServer binding is not installed by this prototype. */
 export interface SdkOptions {
@@ -72,6 +74,7 @@ async function sdkRun(
     : [];
   const handlers: Record<string, (action: Action) => Promise<unknown>> = {};
   let toolFailure: FailureCode | undefined;
+  const partialUsage = new Map<string, unknown>();
   for (const tool of gateway ? input.tools : []) {
     if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(tool))
       throw new BoundaryError("unsupported");
@@ -161,6 +164,30 @@ async function sdkRun(
       if (signal.aborted) throw new BoundaryError("cancelled");
       if (!raw || typeof raw !== "object") throw new BoundaryError("malformed");
       const event = raw as Record<string, unknown>;
+      if (event.session_id !== undefined) {
+        if (
+          typeof event.session_id !== "string" ||
+          (sdkSession !== undefined && sdkSession !== event.session_id)
+        )
+          throw new BoundaryError("session-mismatch");
+        sdkSession = event.session_id;
+      }
+      if (event.type === "assistant") {
+        const message = event.message as Record<string, unknown> | undefined;
+        if (
+          typeof message?.id === "string" &&
+          message.usage &&
+          typeof message.usage === "object"
+        ) {
+          partialUsage.set(message.id, message.usage);
+          captureTraceUsage(
+            tokenMeasurement("claude", {
+              iterations: [...partialUsage.values()],
+            }),
+          );
+          captureTraceResponse({ usageScope: "partial-main-loop" });
+        }
+      }
       if (event.type === "rate_limit_event") {
         const info = event.rate_limit_info as
           Record<string, unknown> | undefined;
@@ -192,14 +219,6 @@ async function sdkRun(
               },
             },
           };
-      }
-      if (event.session_id !== undefined) {
-        if (
-          typeof event.session_id !== "string" ||
-          (sdkSession !== undefined && sdkSession !== event.session_id)
-        )
-          throw new BoundaryError("session-mismatch");
-        sdkSession = event.session_id;
       }
       // Never resume provider session IDs; only verify SDK consistency within this one query.
       if (event.type === "result") {

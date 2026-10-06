@@ -7,6 +7,8 @@ import { runConnectedTurn } from "./integration.js";
 import { runDevelopmentConnection } from "./development.js";
 import { acquireHomeWriter } from "../home-writer.js";
 import { SessionStore } from "../session/store.js";
+import { readTraceReplay } from "../session/report-trace.js";
+import { normalizeTokens } from "../providers/token-usage.js";
 import type { SdkBinding } from "./claude.js";
 import type { LoopOptions } from "../core/loop.js";
 
@@ -52,6 +54,39 @@ const options = (
   ]),
   permission: async () => true,
   maxRounds: 3,
+});
+it("retains observed partial usage on failure without counting SDK replay twice", async () => {
+  const dir = await home();
+  const partial = { type: "assistant", message: { id: "response-one", usage } };
+  const sdk: SdkBinding = {
+    subscriptionUseConfirmed: true,
+    createXServer: (h) => h,
+    async *query() {
+      yield partial;
+      yield partial;
+      yield { type: "result", subtype: "error_during_execution" };
+    },
+  };
+  const result = await runDevelopmentConnection(
+    dir,
+    process.cwd(),
+    "Fixture",
+    { mode: "claude-proposals", sdk, simulated: true },
+    options(),
+    new AbortController(),
+  );
+  const replay = await readTraceReplay(dir, result.sessionId, (text) => text);
+  const end = replay?.records.find(
+    (r) => r.kind === "llm" && r.phase === "end",
+  );
+  const data = end?.output as {
+    tokenMeasurement: Parameters<typeof normalizeTokens>[0];
+  };
+  expect(normalizeTokens(data.tokenMeasurement)).toMatchObject({
+    input: 2,
+    output: 1,
+  });
+  expect(result.stopCause).toBe("protocol");
 });
 it("persists pending before a simulated crash and blocks all new execution after restart", async () => {
   const dir = await home();

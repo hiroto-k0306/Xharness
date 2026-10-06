@@ -24,6 +24,7 @@ export interface Input extends Scope {
   timeoutMs: number;
 }
 export interface Measurement {
+  scope?: "responses-request" | "main-loop" | "query-pipeline";
   source: "responses" | "sdk-result";
   observedAt: string;
   /** Provider-native numbers only. null means absent, not zero. */

@@ -20,7 +20,7 @@ SDK設定は **settingSources**（初段階のsettingsSourcesを訂正）、tool
 
 Bの操作もXのtrace、tool receipt、tool_use/tool_result履歴へ残す。Xツールの失敗・拒否・重複を、SDKの最終自己申告で成功へ上書きしない。Aは既存ループの停止・承認・出力処理を使用する。開発ランナーは新規sessionのみを作り、評価状態を保存前にunsettledにし、receipt・履歴を保存後にsettledへ確定する。途中クラッシュの旧sessionを自動再開しない。
 
-SDK結果のmodelUsageを優先し、query pipeline内の主ループ・内部補助・圧縮等を一度だけ集計する。camelCaseの数値を既存tokenMeasurementのcanonicalフィールドとiterationsへ対応させる。結果のusageは主ループだけのfallbackでありmodelUsageへ加算しない。cacheは別入力、thinkingはoutputの部分集合。クラッシュresultのゼロusageは不明扱い。SDK内部HTTP回数やpipeline外の補助呼出は取得不能で、通信予算はSDK query開始単位である。測定カバー率はHTTP個別試行のカバー率ではない。旧Usage scalarは取得済み値だけの互換合計、欠測の意味はmeasurementが保持し、評価画面は不明を表示する。
+SDK結果のmodelUsageを優先し、query pipeline内の主ループ・内部補助・圧縮等を一度だけ集計する。camelCaseの数値を既存tokenMeasurementのcanonicalフィールドとiterationsへ対応させる。結果のusageは主ループだけのfallbackでありmodelUsageへ加算しない。途中失敗でもassistantから取得済みのusageをtraceへ残し、同一message IDの再配信を二重計上しない。cacheは別入力、thinkingはoutputの部分集合。クラッシュresultのゼロusageは不明扱い。SDK内部HTTP回数やpipeline外の補助呼出は取得不能で、通信予算はSDK query開始単位である。測定カバー率はHTTP個別試行のカバー率ではない。旧Usage scalarは取得済み値だけの互換合計、欠測の意味はmeasurementが保持し、評価画面は不明を表示する。
 
 公式SDKのrate_limit_eventでは出所・取得時刻・native utilization/resetsAtを記録する。native単位を推測して％や時刻へ変換せず不明のままにする。拒否やextra usage観測時に停止し、追加課金へ進む復旧処理は設けない。開発ランナーは新規sessionのみで、quota後の自動再開はない。
 
@@ -39,7 +39,7 @@ SDK結果のmodelUsageを優先し、query pipeline内の主ループ・内部�
 
 ## 検証
 
-Windows / Node 24.16.0 / PowerShell 7.6.5 / pnpm 10.34.6。focused対象は `src/main/connections` の4ファイル46件と既存 `src/main/core/loop.test.ts` の11件、合計 **57件**。公式SDK実Optionsを使うA/B、公式SDKが生成したMCPサーバーと実MCP Clientのメモリ内handshake/callTool、引数拒否、query close、quota、modelUsage、永続台帳・重複・破損・クラッシュ・writer排他・履歴保存を確認した。query transportだけを模擬し、実SDKモデル通信は起動しない。
+Windows / Node 24.16.0 / PowerShell 7.6.5 / pnpm 10.34.6。focused対象は `src/main/connections` の4ファイル47件と既存 `src/main/core/loop.test.ts` の11件、合計 **58件**。公式SDK実Optionsを使うA/B、公式SDKが生成したMCPサーバーと実MCP Clientのメモリ内handshake/callTool、引数拒否、query close、quota、modelUsage、永続台帳・重複・破損・クラッシュ・writer排他・履歴保存を確認した。query transportだけを模擬し、実SDKモデル通信は起動しない。
 
 3方式の開発CLI fake、typecheck、lint、build:headless、electron-vite buildも確認。全回帰は最後の変更をコミットした後に全対象（node/renderer/spike/scripts）を実行し、結果を `.out/connections-final-full.json`、当該HEADと対象差を `.out/connections-final-validation.json` に記録する。前段階1648件の成功を最終HEADの成功として流用しない。最終結果は作業完了報告を参照する。
 

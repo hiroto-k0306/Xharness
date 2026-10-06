@@ -32,6 +32,8 @@ export class ToolGateway {
     action: Action,
     signal: AbortSignal,
   ): Promise<string> {
+    scope = structuredClone(scope);
+    action = structuredClone(action);
     const previous = this.tail;
     let release!: () => void;
     this.tail = new Promise<void>((r) => {
@@ -65,7 +67,9 @@ export class ToolGateway {
     const frozen = structuredClone(action);
     if (!(await tool.validate(frozen.input)))
       throw new BoundaryError("malformed");
-    if (!(await this.authorize(scope, structuredClone(frozen))))
+    if (
+      !(await this.authorize(structuredClone(scope), structuredClone(frozen)))
+    )
       throw new BoundaryError("denied");
     if (signal.aborted) throw new BoundaryError("cancelled");
     if (!(await this.ledger.claim(scope, frozen)))

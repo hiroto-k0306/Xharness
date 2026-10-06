@@ -64,6 +64,9 @@ export async function runDevelopmentConnection(
               home,
               {
                 ...options,
+                permission: async (call, signal) =>
+                  options.tools.get(call.name)?.readOnly === true &&
+                  (await options.permission(call, signal)),
                 provider: {
                   id: "claude",
                   models: () => [],

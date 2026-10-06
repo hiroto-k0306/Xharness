@@ -13,6 +13,7 @@ export function measure(
   const totals = normalizeTokens(measurement);
   return {
     source,
+    scope: source === "responses" ? "responses-request" : "main-loop",
     observedAt: new Date().toISOString(),
     raw: measurement.raw,
     input: totals.input,
@@ -36,7 +37,8 @@ export function measureSdkResult(event: Record<string, unknown>) {
         cache_creation_input_tokens: m.cacheCreationInputTokens,
       };
     });
-    return measure("sdk-result", { iterations });
+    const result = measure("sdk-result", { iterations });
+    return result ? { ...result, scope: "query-pipeline" as const } : null;
   }
   const usage = event.usage as Record<string, unknown> | undefined;
   if (

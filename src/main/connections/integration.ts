@@ -213,16 +213,13 @@ export async function runConnectedTurnOwned(
       provider.id,
       outcome.measurement?.raw ?? {},
     );
-    captureTraceUsage(measurement);
+    if (outcome.measurement) captureTraceUsage(measurement);
     const totals = normalizeTokens(measurement);
     captureTraceResponse({
       connectionMode: selection.mode,
       outcome: outcome.status,
       quota: outcome.quota,
-      usageScope:
-        selection.mode === "openai-siwc"
-          ? "responses-request"
-          : "sdk-query-pipeline",
+      usageScope: outcome.measurement?.scope ?? "partial-or-unavailable",
     });
     const usage: Usage = {
       // Compatibility scalars sum measured values only. measurement carries missingness.

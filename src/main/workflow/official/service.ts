@@ -45,10 +45,16 @@ import {
 import { createDagWorkspace, dagWorkflowOptions } from "./dag-fixtures.js";
 import { runOfficialDag, type DagOptions } from "./dag.js";
 import {
-  QUESTION_MODELS,
   type OfficialWorkflowCommand,
   type OfficialWorkflowView,
+  type QuestionModel,
 } from "../../../shared/official-workflow.js";
+import {
+  catalogUnavailableReason,
+  catalogVersion,
+  resolveRole,
+  type ResolvedModel,
+} from "../../config/catalog.js";
 
 const uuid = (id: unknown): id is string =>
   typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id);
@@ -235,6 +241,10 @@ export class OfficialWorkflowService {
       available:
         this.storageReady && (this.settings.fake || !!this.settings.codexPath),
       storageReady: this.storageReady,
+      questionModels: {
+        claude: questionModel("claude"),
+        codex: questionModel("codex"),
+      },
       simulated: this.settings.fake,
       connection: {
         codexPath: this.settings.codexPath ?? "",
@@ -399,30 +409,36 @@ export class OfficialWorkflowService {
         }),
       ),
     ];
-    const opus = models.find(
+    // Usable = offered by the official connection AND enabled, current in the catalog.
+    const usable = models.filter(
       (m) =>
-        m.provider === "claude" &&
-        m.model.includes("opus") &&
-        m.quotaAllowed === true,
+        m.available &&
+        m.quotaAllowed === true &&
+        !catalogUnavailableReason(m.model),
     );
-    const haiku = models.find(
-      (m) =>
-        m.provider === "claude" &&
-        m.model.includes("haiku") &&
-        m.quotaAllowed === true,
+    // Records created before planner/reviewer selection keep their former roles,
+    // now named in the catalog instead of matched by model name.
+    const legacy = (role: ResolvedModel) => {
+      const listed = usable.find(
+        (m) => m.provider === role.provider && m.model === role.id,
+      );
+      return listed
+        ? {
+            model: listed.model,
+            effort: listed.efforts.includes(role.effort ?? null)
+              ? (role.effort ?? null)
+              : null,
+          }
+        : undefined;
+    };
+    const opus = legacy(resolveRole("officialLegacyPlanner"));
+    const opusReviewer = legacy(
+      resolveRole("officialLegacyReviewer", "claude"),
     );
-    const review = models.find(
-      (m) =>
-        m.provider === "codex" &&
-        m.model === "gpt-6-luna" &&
-        m.quotaAllowed === true,
-    );
+    const review = legacy(resolveRole("officialLegacyReviewer", "codex"));
     if (planner) {
       // Product path: the planner comes from the user's main model, and the plan
       // may choose any usable official model for implementation and review.
-      const usable = models.filter(
-        (m) => m.available && m.quotaAllowed === true,
-      );
       const chosen = resolvePlannerChoice(planner, usable);
       return {
         ...options,
@@ -434,31 +450,13 @@ export class OfficialWorkflowService {
         planner: chosen,
         // Used only by records whose plans predate planner-chosen reviewers.
         reviewers: {
-          ...(opus
-            ? {
-                claude: {
-                  model: opus.model,
-                  effort: opus.efforts.includes("high")
-                    ? ("high" as const)
-                    : null,
-                },
-              }
-            : {}),
-          ...(review
-            ? {
-                codex: {
-                  model: review.model,
-                  effort: review.efforts.includes("low")
-                    ? ("low" as const)
-                    : null,
-                },
-              }
-            : {}),
+          ...(opusReviewer ? { claude: opusReviewer } : {}),
+          ...(review ? { codex: review } : {}),
         },
         goal: `Correct addition without modifying the test. Assign the one implementation task to ${provider}.`,
       } satisfies WorkflowOptions;
     }
-    if (!opus || !review || (provider === "claude" && !haiku))
+    if (!opus || !opusReviewer || !review)
       throw new Error("必要な公式modelとincluded usageを確認できません");
     return {
       ...options,
@@ -466,21 +464,9 @@ export class OfficialWorkflowService {
       diagnosticText: true, // This service creates only fixed synthetic workspaces.
       timeoutMs: 120000,
       agents: { claude, codex },
-      models: models.filter((m) => m === opus || m === haiku || m === review),
-      planner: {
-        model: opus.model,
-        effort: opus.efforts.includes("high") ? ("high" as const) : null,
-      },
-      reviewers: {
-        claude: {
-          model: opus.model,
-          effort: opus.efforts.includes("high") ? ("high" as const) : null,
-        },
-        codex: {
-          model: review.model,
-          effort: review.efforts.includes("low") ? ("low" as const) : null,
-        },
-      },
+      models: usable,
+      planner: opus,
+      reviewers: { claude: opusReviewer, codex: review },
       goal: `Correct addition without modifying the test. Assign the one implementation task to ${provider}.`,
     } satisfies WorkflowOptions;
   }
@@ -574,7 +560,14 @@ export class OfficialWorkflowService {
         })();
     // Exactly the fixed question model, independent of list order. The
     // simulated mode keeps its fixture model for the provider.
-    const wanted = QUESTION_MODELS[provider];
+    let wanted: string;
+    try {
+      wanted = resolveRole("question", provider).id;
+    } catch (error) {
+      throw new Error(
+        `質問先のモデルを決められません：${error instanceof Error ? error.message : ""}`,
+      );
+    }
     const connection =
       provider === "claude" ? "Claude SDK" : "Codex App Server";
     const listed = candidates.find(
@@ -835,6 +828,22 @@ export class OfficialWorkflowService {
         const record = this.records.get(command.id);
         if (!record || resumeBlockReason(record))
           throw new Error("不確定な副作用または再開不能な段階です");
+        // Resume uses the recorded models; a model the catalog no longer
+        // offers stops here instead of being replaced.
+        if (!this.settings.fake)
+          for (const id of [
+            record.planner?.model,
+            ...(record.plan?.tasks ?? []).flatMap((t) => [
+              t.assignee.model,
+              t.reviewer?.model,
+            ]),
+          ]) {
+            const reason = id ? catalogUnavailableReason(id) : undefined;
+            if (reason)
+              throw new Error(
+                `再開できません：${reason}別のモデルへは切り替えていません。`,
+              );
+          }
         const workspace = gitWorkspace(record.cwd, redact),
           current = await workspace.inspect(new AbortController().signal);
         if (!current.clean || current.head !== record.head)
@@ -854,7 +863,7 @@ export class OfficialWorkflowService {
     } catch (error) {
       this.error =
         error instanceof Error &&
-        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先)/.test(
+        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先|再開できません)/.test(
           error.message,
         )
           ? error.message
@@ -884,6 +893,14 @@ export class OfficialWorkflowService {
     await this.active?.done;
   }
 }
+/** The catalog question model of a company, as shown and as used. */
+function questionModel(provider: "claude" | "codex"): QuestionModel {
+  try {
+    return { id: resolveRole("question", provider).id };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "unknown" };
+  }
+}
 /** The user's main-model selection as sent when a task is created. */
 export interface PlannerSelection {
   model: string;
@@ -905,6 +922,11 @@ export function resolvePlannerChoice(
     throw new Error(
       `計画モデル「${choice.model}」を公式接続のモデルに対応付けできません。別のモデルへは切り替えていません。`,
     );
+  const retired = catalogUnavailableReason(target.model);
+  if (retired)
+    throw new Error(
+      `計画モデル「${target.model}」を使えません：${retired}別のモデルへは切り替えていません。`,
+    );
   const candidate = models.find(
     (m) => m.provider === target.provider && m.model === target.model,
   );
@@ -925,6 +947,12 @@ export function resolvePlannerChoice(
     effort,
     selectedAs:
       "provider" in choice ? (choice.selectedAs ?? choice.model) : choice.model,
+    // A new selection records the catalog it was resolved with; a recorded one keeps its own.
+    ...("provider" in choice
+      ? choice.catalog
+        ? { catalog: choice.catalog }
+        : {}
+      : { catalog: catalogVersion() }),
   };
 }
 /**

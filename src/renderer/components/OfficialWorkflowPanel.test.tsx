@@ -1,11 +1,14 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OfficialWorkflowPanel } from "./OfficialWorkflowPanel.js";
-import {
-  QUESTION_MODELS,
-  type OfficialWorkflowCommand,
-  type OfficialWorkflowView,
+import type {
+  OfficialWorkflowCommand,
+  OfficialWorkflowView,
 } from "../../shared/official-workflow.js";
+const QUESTION_MODELS = {
+  claude: "claude-question-x",
+  codex: "codex-question-y",
+};
 afterEach(() => vi.unstubAllGlobals());
 it.each([true, false])(
   "shows concrete operation and sends one bound decision (%s)",
@@ -74,6 +77,10 @@ it.each(["claude", "codex"] as const)(
       available: true,
       storageReady: true,
       simulated: false,
+      questionModels: {
+        claude: { id: QUESTION_MODELS.claude },
+        codex: { id: QUESTION_MODELS.codex },
+      },
       connection: {
         codexPath: "C:/codex.exe",
         workspaceRoot: "",

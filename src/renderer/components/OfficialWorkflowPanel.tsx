@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  QUESTION_MODELS,
-  type OfficialWorkflowCommand,
-  type OfficialWorkflowView,
+import type {
+  OfficialWorkflowCommand,
+  OfficialWorkflowView,
 } from "../../shared/official-workflow.js";
 import styles from "./OfficialWorkflowPanel.module.css";
 import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
@@ -272,11 +271,10 @@ export function OfficialWorkflowPanel({
             質問先：
             {!questionProvider
               ? "未選択"
-              : `${questionProvider === "claude" ? "Claude" : "Codex"} ${
-                  view?.simulated
-                    ? "模擬モデル"
-                    : QUESTION_MODELS[questionProvider]
-                }`}
+              : `${questionProvider === "claude" ? "Claude" : "Codex"} ${questionModelLabel(
+                  view,
+                  questionProvider,
+                )}`}
             {mainProvider
               ? "（メインモデルの会社）"
               : "（模擬：実装候補の選択）"}
@@ -454,4 +452,14 @@ export function OfficialWorkflowPanel({
       )}
     </>
   );
+}
+/** Shows the service's catalog resolution, so the label is the model actually used. */
+function questionModelLabel(
+  view: OfficialWorkflowView | undefined,
+  provider: "claude" | "codex",
+) {
+  if (view?.simulated) return "模擬モデル";
+  const resolved = view?.questionModels?.[provider];
+  if (!resolved) return "未確認";
+  return "id" in resolved ? resolved.id : `利用不可（${resolved.error}）`;
 }

@@ -95,6 +95,7 @@ it("resolves the main model to its own official connection without substituting"
     model: "claude-sonnet-5-5",
     effort: "high",
     selectedAs: "claude:sonnet",
+    catalog: expect.objectContaining({ digest: expect.any(String) }),
   });
   expect(
     resolvePlannerChoice(

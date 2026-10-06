@@ -17,7 +17,12 @@ import {
   type OfficialAgent,
 } from "./contracts.js";
 import { fixtureWorkflowOptions, fixtureAgents } from "./fixtures.js";
-import { QUESTION_MODELS } from "../../../shared/official-workflow.js";
+import { resolveRole } from "../../config/catalog.js";
+/** The catalog question models (roles.question), as the service resolves them. */
+const QUESTION_MODELS = {
+  claude: resolveRole("question", "claude").id,
+  codex: resolveRole("question", "codex").id,
+};
 import { loadModelCatalog } from "../../config/model-catalog.js";
 const homes: string[] = [];
 const services: OfficialWorkflowService[] = [];

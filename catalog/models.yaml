@@ -242,6 +242,7 @@ roles:
     claude: claude:haiku
     codex: { model: codex:luna, effort: low }
   connectionTest: claude:haiku           # 接続テスト起動時のメインモデル
+  officialLegacyPlanner: { model: claude:opus, effort: high }  # 公式workflowの旧記録 (計画モデルの記録がない) の互換
   officialLegacyReviewer:                # 公式workflowの旧記録 (計画にレビュー担当がない) の互換
     claude: { model: claude:opus, effort: high }
     codex: { model: codex:luna, effort: low }

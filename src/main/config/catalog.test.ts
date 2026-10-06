@@ -64,6 +64,7 @@ it("resolves every shipped role to an enabled, current catalog model", () => {
     ["compaction", "codex"],
     ["authRefresh", "claude"],
     ["authRefresh", "codex"],
+    ["officialLegacyPlanner"],
     ["officialLegacyReviewer", "claude"],
     ["officialLegacyReviewer", "codex"],
   ];

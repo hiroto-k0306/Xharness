@@ -139,6 +139,8 @@ export interface PlannerChoice {
   effort: AgentRequest["effort"];
   /** The user's main model selection the planner was resolved from. */
   selectedAs?: string;
+  /** Catalog the selection was resolved with, fixed at task start. */
+  catalog?: { version: number; updatedAt: string; digest: string };
 }
 /** One X-owned task. Native runtimes keep their internal loop; no model can change this state machine. */
 export async function runOfficialSingleTask(
@@ -193,6 +195,9 @@ export async function runOfficialSingleTask(
       effort: options.planner.effort,
       ...("selectedAs" in options.planner && options.planner.selectedAs
         ? { selectedAs: options.planner.selectedAs }
+        : {}),
+      ...("catalog" in options.planner && options.planner.catalog
+        ? { catalog: options.planner.catalog }
         : {}),
     };
   if (options.resume) {

@@ -1,14 +1,8 @@
 import type { WorkflowRecord } from "../main/workflow/official/runtime.js";
 import type { PendingOperation } from "../main/workflow/official/operation-approval.js";
 export const OFFICIAL_WORKFLOW_CHANNEL = "xharness:official-workflow";
-/**
- * The one model per company used for questions (full IDs from catalog/models.yaml).
- * The service selects exactly this ID and the panel displays the same value.
- */
-export const QUESTION_MODELS = {
-  claude: "claude-haiku-4-5-20251001",
-  codex: "gpt-6-luna",
-} as const;
+/** A question model resolved from the catalog role, or why it cannot be used. */
+export type QuestionModel = { id: string } | { error: string };
 export type OfficialWorkflowCommand =
   | { action: "list" }
   | { action: "configure"; codexPath: string }
@@ -38,6 +32,8 @@ export interface OfficialWorkflowView {
   available: boolean;
   /** Storage is usable; a question to Claude needs nothing else configured. */
   storageReady?: boolean;
+  /** The same catalog resolution the service uses when sending a question. */
+  questionModels?: Record<"claude" | "codex", QuestionModel>;
   simulated: boolean;
   connection?: {
     codexPath: string;

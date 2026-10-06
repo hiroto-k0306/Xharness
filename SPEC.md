@@ -258,7 +258,7 @@ Codexの画像入りツール結果は、既定ではfunction_call_outputのinpu
 
 ユーザー承認済みの次段階として、src/main/connections/ にモデル推論と公式エージェント委任を分離した契約を追加した。OpenAI SIWC / Responses と Claude Agent SDK の提案方式・XツールMCP方式を、注入した認証・通信・SDKポートで比較する。計画・承認・ツール実行・履歴・評価はX側に保持する。モデル通信にSDKを使わない既存経路の規則に対する例外は、この未接続の実験に限定する。
 
-正式なクライアント登録・独立した認可・SDK結合・サブスク利用条件が未設定なら新方式は利用不可。CLI資格情報の転用、API課金への自動切替、既存設定の変更はしない。現在は模擬ポートとメモリ上のintent台帳のみで、永続台帳・公式SDKの実結合・UIの方式選択は未実装。詳細・再実行: [正式接続境界](docs/official-connections.md)。
+正式なクライアント登録・独立した認可・サブスク利用条件が未設定なら新方式は利用不可。CLI資格情報の転用、API課金への自動切替、既存設定の変更はしない。公式Claude SDK 0.3.290のAPI型・query・tool・MCPサーバーを結合し、単一writer下の永続intent台帳と既存Agent Loopの承認・使用量・trace・履歴保存に接続した。開発側の `connections:dev --connection` で明示選択する。通常アプリのUI・認証・ルーティングは変更せず、実通信も未確認。詳細・再実行・不足条件: [接続統合](docs/official-connections-integration.md)。
 
 ## 9. Web・MCP・フック・拡張
 

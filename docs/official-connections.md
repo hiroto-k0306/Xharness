@@ -1,5 +1,7 @@
 # 正式接続境界の最初の実験
 
+この文書は `41042c6` 時点の初段階の履歴。現行のSDK結合・永続台帳・開発側選択は [接続統合](official-connections-integration.md) を参照する。
+
 基準: 2026-10-06、main `ce01ed4`。専用worktree / `feature/official-connection-boundaries`。既存アプリの認証・ルーティング・設定は変更しない。
 
 ## 所有者と接続契約

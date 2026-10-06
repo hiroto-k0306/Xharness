@@ -1,4 +1,25 @@
 import { test, expect } from "./electron.fixture.js";
+
+test("official questions end once without entering a planning loop and survive reload", async ({
+  gui,
+}) => {
+  await gui.getByRole("button", { name: "公式workflow", exact: true }).click();
+  for (const [i, question] of [
+    "こんにちは",
+    "もう少し説明して",
+    "作業ありがとう",
+  ].entries()) {
+    await gui.getByRole("textbox", { name: "公式接続への質問" }).fill(question);
+    await gui.getByRole("button", { name: "質問だけ送信" }).click();
+    await expect(gui.getByLabel("公式回答")).toHaveCount(i + 1);
+  }
+  await expect(gui.getByRole("button", { name: "この計画を承認" })).toHaveCount(
+    0,
+  );
+  await gui.reload();
+  await gui.getByRole("button", { name: "公式workflow", exact: true }).click();
+  await expect(gui.getByLabel("公式回答")).toHaveCount(3);
+});
 test("official single-task UI approves, cancels, restores checkpoints and cross-reviews both providers", async ({
   gui,
 }) => {

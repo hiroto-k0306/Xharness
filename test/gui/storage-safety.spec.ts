@@ -51,7 +51,12 @@ test("desktop fences same-home headless while another fake home can start", asyn
   try {
     second = await electron.launch({
       cwd: process.cwd(),
-      args: [resolve("."), "--fake"],
+      ...(process.env.XHARNESS_TEST_EXECUTABLE
+        ? { executablePath: process.env.XHARNESS_TEST_EXECUTABLE }
+        : {}),
+      args: process.env.XHARNESS_TEST_EXECUTABLE
+        ? ["--fake"]
+        : [resolve("."), "--fake"],
       env: { ...env, XHARNESS_HOME: secondHome },
     });
     const page = await second.firstWindow();

@@ -1,6 +1,18 @@
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
+  projects: [
+    {
+      name: process.env.XHARNESS_TEST_EXECUTABLE ? "packaged" : "development",
+      testIgnore: process.env.XHARNESS_TEST_EXECUTABLE
+        ? [
+            "**/connections.spec.ts",
+            "**/connection-profile.spec.ts",
+            "**/siwc.spec.ts",
+          ]
+        : ["**/packaged-entry.spec.ts"],
+    },
+  ],
   testDir: "./test/gui",
   testMatch: "**/*.spec.ts",
   outputDir: ".out/gui",

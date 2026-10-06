@@ -462,6 +462,12 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 ## 15. 公式エージェント単一タスク実験
 
+Codexのcommand承認は登録済みテストの単一コマンド照合を維持し、それ以外の安全に解釈できる操作を「今回の操作だけ許可／拒否」の画面へ渡す。現在の追加対象は、計画で承認した通常ファイル1件へのGet-Content（Path/LiteralPath、Rawのみ）。作業場所、対象、要求理由、native session/turn、request IDを表示する。複合式・不明な構文・リンク・範囲外・秘密のパス・network/追加permission/永続policy変更は確認前に拒否する。任意shellやshell wrapperの一括承認は未対応。ファイル変更には従来の計画scope検証を適用する。
+
+操作承認はworkflow/request/session/turn/item/内容digestと固有nonceに結び付ける。60秒の期限、取消、再起動、二重クリック、重複native要求、内容変更で再利用しない。許可後にもscope・内容・枠を照合し、拒否・期限切れ・禁止操作はphaseを停止する。pending許可は保存・復元しない。画面からの応答は厳格なIPC schemaと送信元検証を通す。
+
+Claudeのモデル証跡は指定alias/解決済みID、SDK初期化、parent=nullの主系列assistant、parentありの補助系列、parent欠測、resultモデル別使用量を分けて表示する。不一致を警告し、モデル名を読み替えない。同梱CLIの初期化時バージョン、PostModelSwitchおよびmodel_refusal_fallbackの変更元/変更先/種別を許可リストで保存する（通知本文や思考は保存しない）。通知欠測から変更なしと推定しない。
+
 公式phaseの診断はrequest IDに結び付け、送信モデル・phase・cwd・sandbox・承認設定・ツール名と状態・終了理由を保存する。ClaudeはSDK初期モデル、assistantモデルとparent_tool_use_id（欠測はunknown）、resultのモデル別トークン値を別々に保持する。モデル名の集合から主応答や補助処理の役割を推測しない。通常の最終返答は明示的な合成課題診断だけで最大8000文字を保存し、認証情報をマスクする。思考ブロック・rawイベント・ツール本文・認証応答は保存しない。一般のAgentRequestは本文保存を既定で無効にする。
 
 Codex実装/fixのnative exec用に公式code-mode hostを使用する。起動時の一律無効化を行わず、phase設定で実装/fixだけcode_mode/hostを有効にする。code_mode_onlyは無効にし、読み取りphaseには既存のツール無効設定を適用する。workspace-write、networkAccess:false、untrusted承認、既存のscope・テストコマンド照合は維持する。hostの起動失敗や権限拒否は停止対象で、sandboxを緩めない。

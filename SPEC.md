@@ -471,3 +471,5 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 固定合成repositoryの模擬DAGを追加する。依存先・循環・scope・候補model/effortを検証し、同じfileを触る独立項目には計画承認前に直列依存を加える。最大並列数は2。子は管理領域内のdetached worktreeだけを使い、依存成果を取込済みの確定HEADから開始する。成果取込は管理checkoutへ直列cherry-pickし、intent・結果・取込HEADを保存して二重取込を防ぐ。統合後は全体テストと固定base/headの全差分レビューを行い、混在providerなら両者が横断レビューする。子ごと/全体それぞれ最大2修正。不明/不足quota・失敗・中断で新規起動を止め、保存済み安全境界だけ再開する。取消後もworktreeと証拠を残す。
 
 DAGのUI・runtime公開入口はfixture/modelの模擬実行に限定する。元checkoutや未コミット変更は対象にしない。一般プロジェクトの任意コード実行、実SDK/App Serverの複数worktree強制書込み隔離、native会話resumeは未対応で、模擬成功を実provider成功と呼ばない。詳細は[Jobと合成DAG](docs/official-workflow-dag.md)。
+
+一般projectにはproviderを起動しない非破壊preflight CLIを提供する。Git root/HEAD/dirty状態と計画scopeの実体・link・traversal・設定を検査し、未コミット変更や設定を修正しない。Git include/filterがある場合は追加Git検査を止め、HEAD/cleanを未知として報告する。inspectionPassedはnative実行許可やOS隔離の証明ではない。公式runtimeの権限ゲートとWindows shell/test隔離の限界、拒否テスト、再実行方法は[preflightと隔離境界](docs/official-workflow-preflight.md)を参照。

@@ -6,7 +6,7 @@
 .\scripts\pnpm.ps1 exec tsx scripts/official-preflight.ts --project 'C:\path\project' --file src/example.ts
 ```
 
-root実体/Git root/HEAD、dirty状態、計画pathの絶対path・traversal・junction・hardlink・重複、tracked symlink/submodule、project設定の存在を検査する。settingsやcredential内容は読まず、Git設定は関連するキー名だけ検査する。global/system Git設定とhook/fsmonitorを無効化し、optional locksを無効化する。clean filter/include設定やgitattributesがある場合はstatusを実行せず、cleanはnullとする。未知をcleanとみなさない。保守的なblockerは利用者によるレビューのための根拠であり、自動的に設定を削除・変更しない。
+root実体/Git root/HEAD、dirty状態、計画pathの絶対path・traversal・junction・hardlink・重複、tracked symlink/submodule、project設定の存在を検査する。settingsやcredential内容は読まず、Git設定は関連するキー名だけを`--no-includes`で検査する。global/system Git設定とhook/fsmonitorを無効化し、optional locksを無効化する。clean filter/include設定がある場合は追加Gitコマンドを実行せず、HEAD/cleanはnullとする。gitattributesがある場合はstatusを実行せずcleanはnullとする。未知をcleanとみなさない。保守的なblockerは利用者によるレビューのための根拠であり、自動的に設定を削除・変更しない。既存`validatePlan`が依存・循環・scope・test ID・model/effort/quotaを検証し、preflightがその対象fileのfilesystem実体を検査する。一般projectへの計画生成やnative実行は公開しない。
 
 | 経路             | 強制する境界                                                                                                                                                | 残る制約                                                                                                                   |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |

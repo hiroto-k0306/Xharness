@@ -260,6 +260,10 @@ Codexの画像入りツール結果は、既定ではfunction_call_outputのinpu
 
 正式なクライアント登録・独立した認可・サブスク利用条件が未設定なら新方式は利用不可。CLI資格情報の転用、API課金への自動切替、既存設定の変更はしない。公式Claude SDK 0.3.290のAPI型・query・tool・MCPサーバーを結合し、単一writer下の永続intent台帳と既存Agent Loopの承認・使用量・trace・履歴保存に接続した。開発側の `connections:dev --connection` で明示選択する。通常アプリのUI・認証・ルーティングは変更せず、実通信も未確認。詳細・再実行・不足条件: [接続統合](docs/official-connections-integration.md)。
 
+### 開発版UIの明示接続選択（2026-10-06追記）
+
+非packaged版の通常UIでセッション単位の既存方式・SIWC・Claude Agent SDK A/Bを選択し、未設定／利用可能／認可必要と理由を表示する。旧recordは既存方式。空の新規セッションでのみ方式を変更でき、モデル・effort・既存設定は変更しない。未設定は送信前に拒否し、既存方式へ自動fallbackしない。本人のClaudeローカル開発では公式SDK自身のaccountInfoとUsage確認でfirst-partyサブスク・APIキー経路なし・Extra Usage無効を確認し、各送信でも入力を保留して再確認する。Xは資格情報の独自読出しや新規ログインをしない。利用可能状態は再起動で再確認する。SDK利用の別クレジット移行停止と第三者向け配布条件は分けて扱う。今回はHaikuの短文queryを1回だけ確認した。既存インストール・packaged版は更新しない。新接続の通常テキストAgent Loop以外（画像・workflow・補助モデル通信・slash command・Xフック）は未対応。設定済みXフックがあれば保護を無視せず通信前に停止する。最新の手順・制約・ライブ結果は [開発版接続UI](docs/official-connections-ui.md) を参照。
+
 ## 9. Web・MCP・フック・拡張
 
 WebSearch / WebFetchを提供し、検索プロバイダ、検索回数、取得文字数、キャッシュを設定する。URLや接続先の検証を行い、取得内容は外部データとして扱う。検索には補助モデル通信が発生する経路がある。

@@ -210,6 +210,7 @@ export class ClaudeProposals implements ModelInference {
   readonly boundary = new RunBoundary();
   constructor(private binding?: SdkBinding) {}
   infer(input: Input, signal: AbortSignal): Promise<Outcome> {
+    input = structuredClone(input);
     return this.boundary.run("claude-proposals", input, signal, (inner) =>
       sdkRun(this.binding, input, inner),
     );
@@ -227,6 +228,7 @@ export class ClaudeMcpDelegation implements AgentDelegation {
     signal: AbortSignal,
     progress: (phase: "started" | "tool" | "finished") => void,
   ): Promise<Outcome> {
+    input = structuredClone(input);
     return this.boundary.run("claude-mcp", input, signal, (inner) =>
       sdkRun(this.binding, input, inner, this.gateway, progress),
     );

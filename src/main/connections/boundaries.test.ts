@@ -79,6 +79,53 @@ function gateway(
   };
 }
 describe("X-owned connection boundaries", () => {
+  it("snapshots X identity before awaiting transport", async () => {
+    const mutable = structuredClone(input);
+    let release: () => void = () => {};
+    const binding = siwc([]);
+    binding.send = async function* () {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      yield { type: "response.completed", response: { status: "completed" } };
+    };
+    const pending = new SiwcInference(binding).infer(mutable, signal());
+    mutable.taskId = "other";
+    mutable.sessionId = "other";
+    release();
+    expect(await pending).toMatchObject({
+      taskId: "task",
+      sessionId: "session",
+      status: "completed",
+    });
+  });
+  it("keeps observed usage when structured quality validation fails", async () => {
+    const result = await new ClaudeProposals(
+      sdk([
+        { type: "result", subtype: "success", structured_output: {}, usage },
+      ]),
+    ).infer(input, signal());
+    expect(result).toMatchObject({
+      status: "failed",
+      error: "malformed",
+      measurement: { input: 17, output: 4 },
+    });
+  });
+  it("preserves SDK failed-attempt usage and provider-native subset structure", async () => {
+    const result = await new ClaudeProposals(
+      sdk([{ type: "result", subtype: "error_max_turns", usage }]),
+    ).infer(input, signal());
+    expect(result).toMatchObject({
+      status: "failed",
+      measurement: { input: 17, output: 4 },
+    });
+    expect(
+      measure("responses", {
+        input_tokens: 20,
+        input_tokens_details: { cached_tokens: 5 },
+      })?.raw,
+    ).toEqual({ input_tokens: 20, input_tokens_details: { cached_tokens: 5 } });
+  });
   it("keeps all new modes unavailable without bindings", async () => {
     expect(siwcReadiness().available).toBe(false);
     expect(sdkReadiness().available).toBe(false);

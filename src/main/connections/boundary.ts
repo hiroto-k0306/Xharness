@@ -22,7 +22,9 @@ export class ToolGateway {
     private tools: Record<string, XTool>,
     private ledger: IntentLedger,
     private authorize: (scope: Scope, action: Action) => Promise<boolean>,
-  ) {}
+  ) {
+    this.scope = structuredClone(scope);
+  }
   async execute(
     scope: Scope,
     action: Action,

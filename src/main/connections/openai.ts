@@ -36,6 +36,7 @@ export class SiwcInference implements ModelInference {
   readonly boundary = new RunBoundary();
   constructor(private binding?: SiwcBinding) {}
   infer(input: Input, signal: AbortSignal): Promise<Outcome> {
+    input = structuredClone(input);
     return this.boundary.run("openai-siwc", input, signal, async (inner) => {
       if (!siwcReadiness(this.binding).available || !this.binding)
         throw new BoundaryError("unconfigured");

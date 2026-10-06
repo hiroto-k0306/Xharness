@@ -13,19 +13,38 @@ export interface IntentLedger {
   complete(scope: Scope, action: Action): Promise<void>;
 }
 export interface XTool {
-  validate(input: unknown): boolean;
+  validate(input: unknown): boolean | Promise<boolean>;
   execute(input: unknown, signal: AbortSignal): Promise<string>;
 }
 export class ToolGateway {
+  private tail: Promise<void> = Promise.resolve();
   constructor(
     private scope: Scope,
     private tools: Record<string, XTool>,
     private ledger: IntentLedger,
     private authorize: (scope: Scope, action: Action) => Promise<boolean>,
+    private observed: (action: Action, result: string) => void = () => {},
   ) {
     this.scope = structuredClone(scope);
   }
   async execute(
+    scope: Scope,
+    action: Action,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const previous = this.tail;
+    let release!: () => void;
+    this.tail = new Promise<void>((r) => {
+      release = r;
+    });
+    await previous;
+    try {
+      return await this.executeNow(scope, action, signal);
+    } finally {
+      release();
+    }
+  }
+  private async executeNow(
     scope: Scope,
     action: Action,
     signal: AbortSignal,
@@ -44,7 +63,8 @@ export class ToolGateway {
       throw new BoundaryError("unsupported");
     // Snapshot before awaits: authorization and execution must see identical arguments.
     const frozen = structuredClone(action);
-    if (!tool.validate(frozen.input)) throw new BoundaryError("malformed");
+    if (!(await tool.validate(frozen.input)))
+      throw new BoundaryError("malformed");
     if (!(await this.authorize(scope, structuredClone(frozen))))
       throw new BoundaryError("denied");
     if (signal.aborted) throw new BoundaryError("cancelled");
@@ -55,6 +75,7 @@ export class ToolGateway {
     const result = await tool.execute(frozen.input, signal);
     if (signal.aborted) throw new BoundaryError("cancelled");
     await this.ledger.complete(scope, frozen);
+    this.observed(frozen, result);
     return result;
   }
 }

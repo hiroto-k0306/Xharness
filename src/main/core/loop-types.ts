@@ -93,6 +93,12 @@ export type StepHook = (
   signal: AbortSignal,
 ) => Promise<HookResult>;
 export interface LoopOptions {
+  /** Optional execution boundary; normal gate/validation/trace remain in the X loop. */
+  executeTool?(
+    call: ToolCall,
+    tool: Tool,
+    signal: AbortSignal,
+  ): Promise<ToolOutput>;
   checkpoint?: import("../tools/registry.js").WriteCheckpoint;
   prepareContext?(
     messages: Message[],

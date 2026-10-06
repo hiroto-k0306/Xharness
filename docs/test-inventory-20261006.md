@@ -56,3 +56,9 @@ Vitestのnode projectは`src/**/*.test.ts`、renderer projectもrenderer内の`.
 承認・認証、保存/復元、二重実行、usage、不明カバー率、新旧adapter契約は削減対象ではなく、担当tierと一つの代表故障に対応付ける。全回帰はtier切替を確認する初回と最終/リリース前に行い、文書だけの変更や棚卸しで繰り返さない。
 
 証拠: `.out/official-workflow-ui-final-vitest.json`、`.out/official-workflow-ui-final-gui.log`、`.out/official-workflow-ui-final-gui-rerun.log`、`vitest.config.ts`、`playwright.config.ts`。この棚卸し後の新DAG/Jobテストは別の検証記録に記載する。
+
+## 後続検証で追加された待機問題
+
+Job/DAGの実装節目に必要な最終回帰（`5d9d0ad`）で、既存 `improvement-boundaries.test.ts` のprovenanceケースがidle待機5秒でtimeoutした。全体は201ファイル・1802合格/1失敗。分離した既存ファイルは5件合格（2.50秒）。全fake GUIでは既存model-candidatesがprompt有効化待機10秒でtimeoutし、23合格/1失敗/2skip。分離すると1件合格（1.7秒）。新workflow関連57ケース・新UI2ケースは全体実行で合格した。
+
+この二件もtiming問題の調査候補に追加する。既存コードを変更していない事実と分離再実行合格から、新workflowの故障と断定する根拠はないが、原因を解決したとも言わない。terminal state・保存済みtask・権限待ち・turn errorを区別するfixture診断と、実行時間の確認を推奨する。固定timeoutを延ばすだけの修正や自動retryはしない。初回の失敗と再実行結果を別に残し、棚卸し目的の全回帰を追加反復していない。

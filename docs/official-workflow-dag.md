@@ -46,3 +46,15 @@ SDK/native会話のresumeは実装していない。保存した安全なphase�
 途中の関連検証: 合成DAG10ケース合格（71.29秒）、trace集計を加えた独立/依存E2E1ケース合格（13.95秒）、通常UI single/DAG 2ケース合格（38.8秒）。Jobの3ケースは実Nodeで合格（7.97秒）。後から追加した双方向stdioは最終検証で確認する。これは実provider通信ではない。
 
 既存テストの整理候補・時間・tierは[棚卸し](test-inventory-20261006.md)に分離した。テスト削除やproject設定変更は行っていない。最終コードの検証結果は後段へ追記する。
+
+## 最終コードの検証（2026-10-06）
+
+対象コードは `5d9d0ad6157416474b89016a08a90831b9f81653`。Windows、Node 24.16.0、Codex同梱PowerShell 7.6.5、repository-local pnpm。typecheck/lint/format、Electron/headless buildは合格。アプリ内実provider queryは0で、拒否済み実通信の再試行もない。
+
+全回帰は201ファイル・1803ケースを一度実行し、1802合格・既存1件失敗（約394.2秒）。既存 `improvement-boundaries.test.ts` のsource provenance検証が、fixtureのidle待機5秒でtimeoutした。該当ファイルを分離再実行すると5件すべて合格（2.50秒）。公式workflow関連8ファイル・57ケースは全回帰内ですべて合格し、Jobの双方向stdioを含む4ケース、DAGの11ケースを確認した。
+
+全fake GUIは23合格・既存1件timeout・2skip（約99.7秒）。既存model-candidatesがprompt有効化の10秒待機で止まり、分離再実行は1件合格（1.7秒）。新single/DAG UIは全体実行内でもそれぞれ合格（17.2/22.7秒）。2skipはportable exeとpackaged restartで、配布exeを作成・更新していないため未実行。単体/GUIとも初回失敗を取り消さず、連続全体合格とは扱わない。原因未確定の待機問題をtimeout延長や全回帰反復で隠していない。
+
+CLIの固定mock E2Eはcompleted、3node統合、修正1回、11call。`.out/official-workflow-dag-evidence.{html,json}`へ保存済みrecordから最終reportを生成した。通常UIは `.out/official-workflow-dag-ui.png`。JSON/HTML、trace、worktreeの原本は `C:\Users\ahwri\AppData\Local\Temp\dag-RoTrvO` に保持する。全体検証ログは `.out/official-workflow-dag-final-validation.json`、`official-workflow-dag-final-vitest.json`、`official-workflow-dag-final-gui.log`。分離結果は `official-workflow-dag-improvement-rerun.log` と `official-workflow-dag-model-candidates-rerun.log`。
+
+元の `D:\AIwork\Xharness` はHEAD `50e7707c0704e1d5aea5818cdea4bae8a2ef7599`・cleanのまま。push/merge、既存インストール更新、認証変更なし。最終検証後は文書・証拠記録のみを変更する。native DAGは未検証というだけでなく、一般的な強制書込み隔離が未整備のため入口で無効化している。Jobは実Nodeで検証、実SDK/App Serverのプロセス起動は未検証。この段階の完了は固定fixtureの模擬DAGである。

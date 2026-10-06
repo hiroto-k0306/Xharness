@@ -61,7 +61,8 @@ it("retains observed partial usage on failure without counting SDK replay twice"
   const sdk: SdkBinding = {
     subscriptionUseConfirmed: true,
     createXServer: (h) => h,
-    async *query() {
+    async *query({ options: settings }) {
+      expect(settings.effort).toBe("low");
       yield partial;
       yield partial;
       yield { type: "result", subtype: "error_during_execution" };

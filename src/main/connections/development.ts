@@ -59,11 +59,12 @@ export async function runDevelopmentConnection(
       },
       () =>
         withSessionTrace(home, id, clean, () =>
-          withTaskTrace({ model: options.model, taskId }, () =>
+          withTaskTrace({ model: options.model, effort: "low", taskId }, () =>
             runConnectedTurnOwned(
               home,
               {
                 ...options,
+                reasoning: { effort: "low" },
                 permission: async (call, signal) =>
                   options.tools.get(call.name)?.readOnly === true &&
                   (await options.permission(call, signal)),

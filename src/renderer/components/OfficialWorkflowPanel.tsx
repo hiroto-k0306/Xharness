@@ -9,6 +9,7 @@ export function OfficialWorkflowPanel() {
     [view, setView] = useState<OfficialWorkflowView>(),
     [error, setError] = useState(""),
     [provider, setProvider] = useState<"claude" | "codex">("claude"),
+    [mode, setMode] = useState<"single" | "dag">("single"),
     [pending, setPending] = useState(false);
   useEffect(() => {
     if (!open) return;
@@ -67,10 +68,29 @@ export function OfficialWorkflowPanel() {
               : "公式SDK / App Serverの既存サブスクを使用します。計画生成も枠を使用します。追加課金へ切り替えません。"}
           </p>
           <label>
+            実行方式{" "}
+            <select
+              aria-label="workflow実行方式"
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "single" | "dag")}
+            >
+              <option value="single">単一タスク</option>
+              <option value="dag" disabled={!view?.simulated}>
+                合成DAG（模擬・最大2並列）
+              </option>
+            </select>
+          </label>
+          {mode === "dag" && (
+            <p>
+              DAGは固定合成課題の模擬実行です。実provider並行実行は未検証。native会話のresumeは行わず、安全な保存段階から新しいphaseを開始します。
+            </p>
+          )}
+          <label>
             実装候補{" "}
             <select
               aria-label="公式workflow実装候補"
               value={provider}
+              disabled={mode === "dag"}
               onChange={(e) =>
                 setProvider(e.target.value as "claude" | "codex")
               }
@@ -81,7 +101,7 @@ export function OfficialWorkflowPanel() {
           </label>
           <button
             disabled={!view?.available || !!view.activeId || pending}
-            onClick={() => void send({ action: "create", provider })}
+            onClick={() => void send({ action: "create", provider, mode })}
           >
             合成課題の計画を作成
           </button>
@@ -99,6 +119,22 @@ export function OfficialWorkflowPanel() {
               <a href={reportHref}>HTMLレポートを開く</a>
               <p>保全した作業領域：{r.cwd}</p>
               <p>{r.goal}</p>
+              {r.dag && (
+                <div>
+                  <h4>DAG / 最大2並列 / native会話resume未対応</h4>
+                  <p>
+                    {r.dag.phase} /{" "}
+                    {r.simulated ? "模擬実行" : "実provider並行実行は未検証"}
+                  </p>
+                  {r.dag.nodes.map((n) => (
+                    <p key={n.id}>
+                      {n.id}: {n.state} / base{" "}
+                      {n.base?.slice(0, 12) ?? "未確定"} / 取込{" "}
+                      {n.integratedHead?.slice(0, 12) ?? "未取込"}
+                    </p>
+                  ))}
+                </div>
+              )}
               <small>
                 task {r.id} / 次の段階 {r.next} / 再開 {r.resumed ?? 0}回
               </small>

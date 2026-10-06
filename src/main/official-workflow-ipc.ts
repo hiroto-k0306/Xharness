@@ -9,6 +9,7 @@ const command = z.discriminatedUnion("action", [
     .object({
       action: z.literal("create"),
       provider: z.enum(["claude", "codex"]),
+      mode: z.enum(["single", "dag"]).optional(),
     })
     .strict(),
   z

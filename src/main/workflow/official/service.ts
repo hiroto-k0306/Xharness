@@ -28,6 +28,8 @@ import { gitWorkspace } from "./workspace.js";
 import { ClaudeWorkflowAgent } from "./claude.js";
 import { CodexWorkflowAgent } from "./codex.js";
 import { planContract } from "./contracts.js";
+import { createDagWorkspace, dagWorkflowOptions } from "./dag-fixtures.js";
+import { runOfficialDag, type DagOptions } from "./dag.js";
 import type {
   OfficialWorkflowCommand,
   OfficialWorkflowView,
@@ -121,7 +123,7 @@ export class OfficialWorkflowService {
           !Number.isFinite(Date.parse(record.startedAt)) ||
           !Number.isInteger(record.correctionRounds) ||
           record.correctionRounds < 0 ||
-          record.correctionRounds > 2 ||
+          record.correctionRounds > (record.dag ? 34 : 2) ||
           !Array.isArray(record.calls) ||
           !Array.isArray(record.tools) ||
           !Array.isArray(record.checks) ||
@@ -208,7 +210,15 @@ export class OfficialWorkflowService {
     cwd: string,
     provider: "claude" | "codex",
     signal: AbortSignal,
+    mode: "single" | "dag" = "single",
   ) {
+    if (mode === "dag") {
+      if (!this.settings.fake)
+        throw new Error(
+          "DAGは固定合成課題の模擬実行のみ対応しています。実provider並行実行は未検証です。",
+        );
+      return dagWorkflowOptions(cwd, resolve(cwd, ".."));
+    }
     if (this.settings.options) return this.settings.options(cwd, provider);
     const options = fixtureWorkflowOptions(cwd, {
       agents: fixtureAgents(provider).agents,
@@ -294,10 +304,9 @@ export class OfficialWorkflowService {
           taskId: id,
         },
         async () => {
-          const record = await runOfficialSingleTask(
-            options,
-            controller.signal,
-          );
+          const record = await (
+            "worktrees" in options ? runOfficialDag : runOfficialSingleTask
+          )(options as DagOptions, controller.signal);
           return {
             ...record,
             stopCause:
@@ -349,10 +358,15 @@ export class OfficialWorkflowService {
     try {
       if (!this.storageReady) throw new Error("Unsafe workflow storage");
       if (command.action === "create") {
+        if (command.mode === "dag" && !this.settings.fake)
+          throw new Error("Native DAG is not enabled");
         const id = randomUUID(),
           directory = join(this.root, id);
         await mkdir(directory);
-        const cwd = await createSyntheticWorkspace("workspace-", directory);
+        const cwd =
+          command.mode === "dag"
+            ? (await createDagWorkspace(directory, directory)).cwd
+            : await createSyntheticWorkspace("workspace-", directory);
         this.preparing = { id, controller: new AbortController() };
         const state = await gitWorkspace(cwd, redact).inspect(
           this.preparing.controller.signal,
@@ -374,12 +388,23 @@ export class OfficialWorkflowService {
           checks: [],
           reviews: [],
           commits: [],
+          ...(command.mode === "dag"
+            ? {
+                dag: {
+                  maxParallel: 2 as const,
+                  phase: "nodes" as const,
+                  nodes: [],
+                  nativeConversationResume: false as const,
+                },
+              }
+            : {}),
         };
         await this.save(prepared);
         const options = await this.options(
           cwd,
           command.provider,
           this.preparing.controller.signal,
+          command.mode,
         );
         options.startedAt = prepared.startedAt;
         this.preparing.controller.signal.throwIfAborted();
@@ -397,6 +422,7 @@ export class OfficialWorkflowService {
           record.cwd,
           record.plan!.tasks[0]!.assignee.provider,
           this.preparing.controller.signal,
+          record.dag ? "dag" : "single",
         );
         this.preparing.controller.signal.throwIfAborted();
         options.goal = record.goal;

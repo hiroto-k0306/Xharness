@@ -123,8 +123,15 @@ export class SiwcInference implements ModelInference {
             error: "transport",
             measurement: measure("responses", response?.usage),
           };
-        } else if (event.type === "response.incomplete")
-          throw new BoundaryError("malformed");
+        } else if (event.type === "response.incomplete") {
+          const response = event.response as
+            Record<string, unknown> | undefined;
+          return {
+            status: "failed",
+            error: "malformed",
+            measurement: measure("responses", response?.usage),
+          };
+        }
       }
       throw new BoundaryError("transport"); // EOF or partial text is not completion.
     });

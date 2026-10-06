@@ -8,7 +8,8 @@ import { BoundaryError } from "./contracts.js";
 export async function listenSiwcCallback(
   options: {
     hostId: string;
-    selected?: { clientId: string; subject: string };
+    selected?: { clientId: string; subject: string; idToken?: string };
+    requestPlanConsent?: boolean;
     pendingClientId?: string;
     timeoutMs?: number;
     verifier?: IdVerifier;
@@ -22,6 +23,7 @@ export async function listenSiwcCallback(
   signal.throwIfAborted();
   let attempt: SiwcAttempt | undefined;
   let settled = false;
+  let accepted = false;
   let resolve!: (grant: SiwcGrant) => void;
   let reject!: (error: BoundaryError) => void;
   const result = new Promise<SiwcGrant>((yes, no) => {
@@ -71,6 +73,11 @@ export async function listenSiwcCallback(
       return;
     }
     // Stop duplicate callbacks immediately; retain only this in-memory exchange.
+    if (accepted) {
+      response.writeHead(409).end("Sign-in already received");
+      return;
+    }
+    accepted = true;
     server.close();
     response.writeHead(200).end("Return to XHarness to check sign-in status.");
     void attempt
@@ -101,6 +108,7 @@ export async function listenSiwcCallback(
       {
         hostId: options.hostId,
         selected: options.selected,
+        requestPlanConsent: options.requestPlanConsent,
         pendingClientId: options.pendingClientId,
         timeoutMs,
         redirectUri: `http://127.0.0.1:${port}/auth/callback`,

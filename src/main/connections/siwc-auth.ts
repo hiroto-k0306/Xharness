@@ -33,7 +33,7 @@ export interface VerifiedIdentity {
 }
 export type IdVerifier = (
   token: string,
-  expected: { clientId: string; nonce: string },
+  expected: { clientId: string; nonce?: string },
   signal: AbortSignal,
 ) => Promise<VerifiedIdentity>;
 const object = (v: unknown): Record<string, unknown> =>
@@ -69,7 +69,8 @@ export class SiwcAttempt {
   #options: {
     hostId: string;
     redirectUri: string;
-    selected?: { clientId: string; subject: string };
+    selected?: { clientId: string; subject: string; idToken?: string };
+    requestPlanConsent?: boolean;
     pendingClientId?: string;
     timeoutMs?: number;
   };
@@ -85,7 +86,8 @@ export class SiwcAttempt {
     options: {
       hostId: string;
       redirectUri: string;
-      selected?: { clientId: string; subject: string };
+      selected?: { clientId: string; subject: string; idToken?: string };
+      requestPlanConsent?: boolean;
       pendingClientId?: string;
       timeoutMs?: number;
     },
@@ -122,6 +124,10 @@ export class SiwcAttempt {
       scope:
         "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct",
       resource: SIWC_RESOURCE,
+      ...(options.selected?.idToken
+        ? { id_token_hint: options.selected.idToken }
+        : {}),
+      ...(options.requestPlanConsent ? { prompt: "consent" } : {}),
       state: this.#state,
       nonce: this.#nonce,
       code_challenge_method: "S256",
@@ -223,12 +229,7 @@ export class SiwcAttempt {
       )
         throw new BoundaryError("session-mismatch");
       const scopes = [...new Set(t.scope.split(/\s+/).filter(Boolean))];
-      if (
-        !["resource.invoke", "chatgpt.tokens.use.direct"].every((s) =>
-          scopes.includes(s),
-        )
-      )
-        throw new BoundaryError("denied");
+      // Retain verified identity even if plan use was declined; inference still gates scopes.
       if (scopes.includes("offline_access") && !text(t.refresh_token))
         throw new BoundaryError("malformed");
       const now = Date.now();
@@ -340,7 +341,7 @@ export function openaiIdVerifier(http: Http = fetch): IdVerifier {
         (claims.nbf !== undefined &&
           (!Number.isSafeInteger(claims.nbf) ||
             (claims.nbf as number) > now)) ||
-        claims.nonce !== expected.nonce ||
+        (expected.nonce !== undefined && claims.nonce !== expected.nonce) ||
         !text(claims.sub)
       )
         throw new BoundaryError("malformed");

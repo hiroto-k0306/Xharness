@@ -19,6 +19,69 @@ const tokens = {
   scope: "openid offline_access resource.invoke chatgpt.tokens.use.direct",
 };
 const verifier: IdVerifier = async () => ({ subject: "dummy-subject" });
+it("retains verified identity without plan permission and requests extra consent only explicitly", async () => {
+  const f = fixture();
+  f.http.mockResolvedValueOnce(json({ ...tokens, scope: "openid" }));
+  const g = await f.attempt.finish(f.callback, new AbortController().signal);
+  expect(g.scopes).toEqual(["openid"]);
+  const ordinary = new SiwcAttempt(
+    {
+      hostId: "dummy-host",
+      redirectUri: "http://127.0.0.1:1455/auth/callback",
+      selected: {
+        clientId: "oaiapp_dummy",
+        subject: "dummy-subject",
+        idToken: "dummy-retained-id",
+      },
+    },
+    verifier,
+    f.http,
+  );
+  const u = new URL(ordinary.authorizationUrl);
+  expect(u.searchParams.get("id_token_hint")).toBe("dummy-retained-id");
+  expect(u.searchParams.has("prompt")).toBe(false);
+  ordinary.discard();
+  const consent = new SiwcAttempt(
+    {
+      hostId: "dummy-host",
+      redirectUri: "http://127.0.0.1:1455/auth/callback",
+      selected: { clientId: "oaiapp_dummy", subject: "dummy-subject" },
+      requestPlanConsent: true,
+    },
+    verifier,
+    f.http,
+  );
+  expect(new URL(consent.authorizationUrl).searchParams.get("prompt")).toBe(
+    "consent",
+  );
+  consent.discard();
+});
+it("discards expired state without code exchange", async () => {
+  const remote = vi.fn<typeof fetch>();
+  const a = new SiwcAttempt(
+    {
+      hostId: "dummy-host",
+      redirectUri: "http://127.0.0.1:1455/auth/callback",
+      timeoutMs: 1,
+    },
+    verifier,
+    remote,
+  );
+  await new Promise((r) => setTimeout(r, 5));
+  const u = new URL(a.redirectUri);
+  u.search = new URLSearchParams({
+    state: new URL(a.authorizationUrl).searchParams.get("state")!,
+    client_id: "oaiapp_dummy",
+    code: "dummy-code",
+  }).toString();
+  await expect(a.finish(u.href, new AbortController().signal)).rejects.toThrow(
+    "timeout",
+  );
+  await expect(a.finish(u.href, new AbortController().signal)).rejects.toThrow(
+    "duplicate",
+  );
+  expect(remote).not.toHaveBeenCalled();
+});
 function fixture(selected?: { clientId: string; subject: string }) {
   const http = vi.fn<typeof fetch>(async () => json(tokens));
   const attempt = new SiwcAttempt(
@@ -131,10 +194,9 @@ it("returning account retains issued ID; rejects changed registration/identity",
     mismatch.attempt.finish(mismatch.callback, new AbortController().signal),
   ).rejects.toThrow("session-mismatch");
 });
-it("rejects invalid_grant, missing grant scopes, expiry and secret native errors without retry", async () => {
+it("rejects invalid_grant, expiry and secret native errors without retry", async () => {
   for (const response of [
     json({ error: "invalid_grant", secret: "dummy-code" }, 400),
-    json({ ...tokens, scope: "openid" }),
     json({ ...tokens, expires_in: 0 }),
   ]) {
     const f = fixture();

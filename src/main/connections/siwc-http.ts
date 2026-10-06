@@ -5,6 +5,7 @@ import type { SiwcGrant } from "./siwc-auth.js";
 
 import {
   boundedJson,
+  abortable,
   SIWC_ISSUER,
   SIWC_RESOURCE,
   type Http,
@@ -48,6 +49,8 @@ function safeEvent(value: unknown, grant: SiwcGrant) {
       grant.refreshToken,
       grant.idToken,
       grant.subject,
+      grant.clientId,
+      grant.hostId,
     ])
       if (secret) delta = delta.split(secret).join("[redacted]");
     return { type: e.type, delta };
@@ -104,17 +107,20 @@ export function siwcHttpBinding(
       inner.addEventListener("abort", abort, { once: true });
       try {
         inner.throwIfAborted();
-        const response = await http(request.endpoint, {
-          method: "POST",
-          signal: inner,
-          redirect: "error",
-          headers: {
-            Authorization: `Bearer ${grant.accessToken}`,
-            "Content-Type": "application/json",
-            Accept: "text/event-stream",
-          },
-          body: JSON.stringify(request.body),
-        });
+        const response = await abortable(
+          http(request.endpoint, {
+            method: "POST",
+            signal: inner,
+            redirect: "error",
+            headers: {
+              Authorization: `Bearer ${grant.accessToken}`,
+              "Content-Type": "application/json",
+              Accept: "text/event-stream",
+            },
+            body: JSON.stringify(request.body),
+          }),
+          inner,
+        );
         if (!response.ok) {
           if ([401, 403, 429].includes(response.status)) {
             // Preserve only documented quota codes; discard all raw messages/headers.
@@ -139,8 +145,10 @@ export function siwcHttpBinding(
             .get("content-type")
             ?.toLowerCase()
             .startsWith("text/event-stream")
-        )
+        ) {
+          await response.body?.cancel().catch(() => {});
           throw new BoundaryError("malformed");
+        }
         reader = response.body?.getReader();
         if (!reader) throw new BoundaryError("transport");
         const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -149,6 +157,8 @@ export function siwcHttpBinding(
           grant.refreshToken,
           grant.idToken,
           grant.subject,
+          grant.clientId,
+          grant.hostId,
         ].filter((s): s is string => !!s);
         const withheld = Math.max(...secrets.map((s) => s.length), 1) - 1;
         let pending = "";
@@ -231,11 +241,14 @@ export async function listSiwcModels(
   if (!usableGrant(grant)) throw new BoundaryError("unconfigured");
   const inner = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
   try {
-    const response = await http(`${SIWC_RESOURCE}/models`, {
-      signal: inner,
-      redirect: "error",
-      headers: { Authorization: `Bearer ${grant.accessToken}` },
-    });
+    const response = await abortable(
+      http(`${SIWC_RESOURCE}/models`, {
+        signal: inner,
+        redirect: "error",
+        headers: { Authorization: `Bearer ${grant.accessToken}` },
+      }),
+      inner,
+    );
     const body = obj(await boundedJson(response, inner));
     if (!Array.isArray(body.models)) throw new BoundaryError("malformed");
     return body.models.slice(0, 1000).flatMap((v) => {

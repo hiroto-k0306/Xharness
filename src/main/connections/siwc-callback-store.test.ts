@@ -30,6 +30,41 @@ const http = () =>
       scope: grant.scopes.join(" "),
     }),
   );
+it("a duplicate callback cannot cancel the accepted exchange or dispatch it twice", async () => {
+  let finish!: (r: Response) => void;
+  const remote = vi.fn<typeof fetch>(
+    () =>
+      new Promise((r) => {
+        finish = r;
+      }),
+  );
+  const l = await listenSiwcCallback(
+    { hostId: "dummy-host", verifier, http: remote },
+    new AbortController().signal,
+  );
+  const u = new URL(l.redirectUri);
+  u.search = new URLSearchParams({
+    state: new URL(l.authorizationUrl).searchParams.get("state")!,
+    code: "dummy-code",
+    client_id: "oaiapp_dummy",
+  }).toString();
+  const responses = await Promise.allSettled([fetch(u), fetch(u)]);
+  expect(
+    responses.some((r) => r.status === "fulfilled" && r.value.status === 200),
+  ).toBe(true);
+  await vi.waitFor(() => expect(remote).toHaveBeenCalledTimes(1));
+  finish(
+    Response.json({
+      access_token: grant.accessToken,
+      id_token: grant.idToken,
+      token_type: "Bearer",
+      expires_in: 3600,
+      scope: grant.scopes.join(" "),
+    }),
+  );
+  expect((await l.result).subject).toBe(grant.subject);
+  expect(remote).toHaveBeenCalledTimes(1);
+});
 it("binds loopback before URL generation and returns a verified grant without saving/activating", async () => {
   const remote = http(),
     abort = new AbortController();

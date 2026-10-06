@@ -20,6 +20,12 @@ const command = z.discriminatedUnion("action", [
     .strict(),
   z
     .object({
+      action: z.literal("workspace_root"),
+      path: z.string().max(1000),
+    })
+    .strict(),
+  z
+    .object({
       action: z.literal("create"),
       provider: z.enum(["claude", "codex"]),
       mode: z.enum(["single", "dag"]).optional(),

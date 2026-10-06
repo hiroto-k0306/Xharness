@@ -6,8 +6,10 @@ import {
   readdir,
   lstat,
   realpath,
+  mkdtemp,
+  rm,
 } from "node:fs/promises";
-import { join, resolve, relative, isAbsolute } from "node:path";
+import { join, resolve, relative, isAbsolute, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { withSessionTrace, withTaskTrace } from "../../core/trace.js";
@@ -68,6 +70,8 @@ export class OfficialWorkflowService {
       home: string;
       fake: boolean;
       codexPath?: string;
+      /** Parent folder for new synthetic workspaces; unset keeps the record folder. */
+      workspaceRoot?: string;
       options?: (
         cwd: string,
         provider: "claude" | "codex",
@@ -96,9 +100,27 @@ export class OfficialWorkflowService {
         throw new Error("Invalid connection file");
       const saved = JSON.parse(await readFile(file, "utf8")) as {
         codexPath?: unknown;
+        workspaceRoot?: unknown;
       };
-      await this.validateExecutable(saved.codexPath);
-      this.settings.codexPath = saved.codexPath as string;
+      if (saved.workspaceRoot !== undefined) {
+        // Kept as saved even when unusable; creation reports why instead of
+        // silently falling back to the default location.
+        if (
+          typeof saved.workspaceRoot !== "string" ||
+          saved.workspaceRoot.length > 1000
+        )
+          throw new Error("Invalid workspace root");
+        this.settings.workspaceRoot = saved.workspaceRoot;
+        await this.validateWorkspaceRoot(saved.workspaceRoot).catch(
+          (error: unknown) => {
+            this.error = error instanceof Error ? error.message : undefined;
+          },
+        );
+      }
+      if (saved.codexPath !== undefined) {
+        await this.validateExecutable(saved.codexPath);
+        this.settings.codexPath = saved.codexPath as string;
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         this.settings.codexPath = undefined;
@@ -165,7 +187,10 @@ export class OfficialWorkflowService {
           !/^[a-f0-9]{40,64}$/.test(record.base)
         )
           continue;
-        const rel = relative(directory, record.cwd);
+        const rel = relative(
+          await this.workspaceParent(directory, id),
+          record.cwd,
+        );
         if (
           !rel ||
           rel.startsWith("..") ||
@@ -203,6 +228,7 @@ export class OfficialWorkflowService {
       simulated: this.settings.fake,
       connection: {
         codexPath: this.settings.codexPath ?? "",
+        workspaceRoot: this.settings.workspaceRoot ?? "",
         status: this.settings.codexPath ? "configured" : "unconfigured",
         message: this.settings.fake
           ? "模擬通信のみ"
@@ -233,6 +259,79 @@ export class OfficialWorkflowService {
     const stat = await lstat(path);
     if (!stat.isFile() || stat.isSymbolicLink())
       throw new Error("公式Codexの実行パスは通常ファイルが必要です");
+  }
+  /**
+   * Must be an existing, writable, non-link absolute folder. Never created or
+   * replaced here, and never swapped for a temporary location.
+   */
+  private async validateWorkspaceRoot(path: unknown): Promise<string> {
+    if (typeof path !== "string" || !isAbsolute(path))
+      throw new Error(
+        "合成課題workspaceの保存先は絶対パスで指定してください。",
+      );
+    const target = resolve(path);
+    let stat;
+    try {
+      stat = await lstat(target);
+    } catch {
+      throw new Error(
+        "合成課題workspaceの保存先が存在しません。フォルダを作成してから指定してください。",
+      );
+    }
+    if (
+      !stat.isDirectory() ||
+      stat.isSymbolicLink() ||
+      (await realpath(target)).toLowerCase() !== target.toLowerCase()
+    )
+      throw new Error(
+        "合成課題workspaceの保存先には、リンクやjunctionを含まないフォルダを指定してください。",
+      );
+    let probe: string | undefined;
+    try {
+      probe = await mkdtemp(join(target, ".xharness-write-check-"));
+    } catch {
+      throw new Error(
+        "合成課題workspaceの保存先に書き込めません。権限を確認してください。",
+      );
+    } finally {
+      if (probe) await rm(probe, { recursive: true, force: true });
+    }
+    return target;
+  }
+  /** Where a record's workspace lives: the sidecar if present, else the legacy record folder. */
+  private async workspaceParent(directory: string, id: string) {
+    const file = join(directory, "workspace.json");
+    let stat;
+    try {
+      stat = await lstat(file);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return directory;
+      throw error;
+    }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4000)
+      throw new Error("Invalid workspace sidecar");
+    const parent = (
+      JSON.parse(await readFile(file, "utf8")) as { workspaceParent?: unknown }
+    ).workspaceParent;
+    if (
+      typeof parent !== "string" ||
+      !isAbsolute(parent) ||
+      basename(parent) !== id
+    )
+      throw new Error("Invalid workspace sidecar");
+    return parent;
+  }
+  private async writeConnection() {
+    const temporary = join(this.root, randomUUID() + ".tmp");
+    await writeFile(
+      temporary,
+      JSON.stringify({
+        codexPath: this.settings.codexPath,
+        workspaceRoot: this.settings.workspaceRoot,
+      }),
+      { mode: 0o600 },
+    );
+    await rename(temporary, join(this.root, "connection.json"));
   }
   private async save(record: WorkflowRecord) {
     const directory = join(this.root, record.id);
@@ -518,14 +617,16 @@ export class OfficialWorkflowService {
       if (!this.storageReady) throw new Error("Unsafe workflow storage");
       if (command.action === "configure") {
         await this.validateExecutable(command.codexPath);
-        const temporary = join(this.root, `${randomUUID()}.tmp`);
-        await writeFile(
-          temporary,
-          JSON.stringify({ codexPath: command.codexPath }),
-          { mode: 0o600 },
-        );
-        await rename(temporary, join(this.root, "connection.json"));
         this.settings.codexPath = command.codexPath;
+        await this.writeConnection();
+        return this.view();
+      }
+      if (command.action === "workspace_root") {
+        // Empty clears the setting and returns to the default location.
+        this.settings.workspaceRoot = command.path.trim()
+          ? await this.validateWorkspaceRoot(command.path.trim())
+          : undefined;
+        await this.writeConnection();
         return this.view();
       }
       if (!this.settings.fake && !this.settings.codexPath)
@@ -534,13 +635,28 @@ export class OfficialWorkflowService {
         const mode = command.action === "create" ? command.mode : "single";
         if (mode === "dag" && !this.settings.fake)
           throw new Error("Native DAG is not enabled");
+        // Checked again at use time; an unusable folder stops with its reason.
+        const workspaceRoot =
+          mode !== "dag" && this.settings.workspaceRoot !== undefined
+            ? await this.validateWorkspaceRoot(this.settings.workspaceRoot)
+            : undefined;
         const id = randomUUID(),
           directory = join(this.root, id);
         await mkdir(directory);
+        let parent = directory;
+        if (workspaceRoot) {
+          parent = join(workspaceRoot, id);
+          await mkdir(parent);
+          await writeFile(
+            join(directory, "workspace.json"),
+            JSON.stringify({ workspaceParent: parent }),
+            { mode: 0o600, flag: "wx" },
+          );
+        }
         const cwd =
           mode === "dag"
             ? (await createDagWorkspace(directory, directory)).cwd
-            : await createSyntheticWorkspace("workspace-", directory);
+            : await createSyntheticWorkspace("workspace-", parent);
         this.preparing = { id, controller: new AbortController() };
         const state = await gitWorkspace(cwd, redact).inspect(
           this.preparing.controller.signal,
@@ -610,7 +726,9 @@ export class OfficialWorkflowService {
     } catch (error) {
       this.error =
         error instanceof Error &&
-        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude)/.test(error.message)
+        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題)/.test(
+          error.message,
+        )
           ? error.message
           : "workflowを開始できませんでした。再送していません。";
       const prepared = this.preparing && this.records.get(this.preparing.id);

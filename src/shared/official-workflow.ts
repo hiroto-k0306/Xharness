@@ -4,6 +4,7 @@ export const OFFICIAL_WORKFLOW_CHANNEL = "xharness:official-workflow";
 export type OfficialWorkflowCommand =
   | { action: "list" }
   | { action: "configure"; codexPath: string }
+  | { action: "workspace_root"; path: string }
   | { action: "chat"; provider: "claude" | "codex"; text: string }
   | { action: "create"; provider: "claude" | "codex"; mode?: "single" | "dag" }
   | { action: "approve"; id: string; digest: string }
@@ -20,6 +21,8 @@ export interface OfficialWorkflowView {
   simulated: boolean;
   connection?: {
     codexPath: string;
+    /** Empty means the default location under the workflow storage. */
+    workspaceRoot: string;
     status: "unconfigured" | "configured";
     message: string;
   };

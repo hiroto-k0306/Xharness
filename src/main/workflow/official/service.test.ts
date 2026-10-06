@@ -1,7 +1,15 @@
 import { afterEach, it, expect } from "vitest";
-import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  rm,
+  writeFile,
+  readFile,
+  mkdir,
+  symlink,
+  readdir,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { OfficialWorkflowService, pinClaudeModels } from "./service.js";
 import type { ModelCandidate } from "./contracts.js";
 import { fixtureWorkflowOptions, fixtureAgents } from "./fixtures.js";
@@ -330,4 +338,121 @@ it("pins live Claude candidates to confirmed full model IDs and drops unconfirme
     ["claude-opus-5-5", "claude-opus-5-5"],
     ["claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001"],
   ]);
+});
+const stopBeforeModels = async (): Promise<never> => {
+  throw new Error("stop before any model call");
+};
+it("keeps the workspace location and Codex path across restarts", async () => {
+  const path = await home(),
+    root = await home();
+  const exe = join(path, "codex.exe");
+  await writeFile(exe, "");
+  const first = new OfficialWorkflowService({ home: path, fake: false });
+  services.push(first);
+  await first.command({ action: "configure", codexPath: exe });
+  const saved = await first.command({ action: "workspace_root", path: root });
+  expect(saved.error).toBeUndefined();
+  expect(saved.connection).toMatchObject({
+    codexPath: exe,
+    workspaceRoot: root,
+  });
+  const second = new OfficialWorkflowService({ home: path, fake: false });
+  services.push(second);
+  expect((await second.command({ action: "list" })).connection).toMatchObject({
+    codexPath: exe,
+    workspaceRoot: root,
+  });
+  const cleared = await second.command({ action: "workspace_root", path: "" });
+  expect(cleared.connection).toMatchObject({
+    codexPath: exe,
+    workspaceRoot: "",
+  });
+});
+it.each(["relative", "missing", "file", "junction"] as const)(
+  "rejects an unusable workspace location (%s) with its reason",
+  async (kind) => {
+    const path = await home(),
+      parent = await home();
+    const target =
+      kind === "relative"
+        ? "relative-folder"
+        : kind === "missing"
+          ? join(parent, "missing")
+          : kind === "file"
+            ? join(parent, "file.txt")
+            : join(parent, "link");
+    if (kind === "file") await writeFile(target, "");
+    if (kind === "junction") {
+      await mkdir(join(parent, "real"));
+      await symlink(join(parent, "real"), target, "junction");
+    }
+    const instance = service(path);
+    const view = await instance.command({
+      action: "workspace_root",
+      path: target,
+    });
+    expect(view.error).toMatch(/^合成課題workspaceの保存先/);
+    expect(view.connection?.workspaceRoot).toBe("");
+  },
+);
+it("creates new workspaces under the configured location and leaves existing records in place", async () => {
+  const path = await home(),
+    root = await home();
+  const instance = service(path, stopBeforeModels);
+  const legacy = await instance.command({
+    action: "create",
+    provider: "claude",
+  });
+  const legacyRecord = legacy.records[0]!.record;
+  expect(
+    relative(
+      join(path, "official-workflows", legacyRecord.id),
+      legacyRecord.cwd,
+    ),
+  ).toMatch(/^workspace-/);
+  await instance.command({ action: "workspace_root", path: root });
+  const created = await instance.command({
+    action: "create",
+    provider: "claude",
+  });
+  const record = created.records.find(
+    (r) => r.record.id !== legacyRecord.id,
+  )!.record;
+  expect(relative(join(root, record.id), record.cwd)).toMatch(
+    /^workspace-[^\/]+$/,
+  );
+  expect(
+    JSON.parse(
+      await readFile(
+        join(path, "official-workflows", record.id, "workspace.json"),
+        "utf8",
+      ),
+    ),
+  ).toEqual({ workspaceParent: join(root, record.id) });
+  // Restart: both records load; the legacy one keeps its original folder.
+  const restarted = service(path);
+  const view = await restarted.command({ action: "list" });
+  const byId = new Map(view.records.map((r) => [r.record.id, r.record]));
+  expect(byId.get(legacyRecord.id)?.cwd).toBe(legacyRecord.cwd);
+  expect(byId.get(record.id)?.cwd).toBe(record.cwd);
+});
+it("stops with the reason instead of falling back when the location becomes unusable", async () => {
+  const path = await home(),
+    root = await home();
+  const instance = service(path, stopBeforeModels);
+  await instance.command({ action: "workspace_root", path: root });
+  await rm(root, { recursive: true, force: true });
+  const view = await instance.command({ action: "create", provider: "claude" });
+  expect(view.error).toMatch(/^合成課題workspaceの保存先が存在しません/);
+  expect(view.records).toHaveLength(0);
+  expect(
+    (await readdir(join(path, "official-workflows"))).filter((n) =>
+      /^[a-f0-9-]{36}$/.test(n),
+    ),
+  ).toEqual([]);
+  // The saved choice is kept and reported again after a restart.
+  const restarted = service(path);
+  const after = await restarted.command({ action: "list" });
+  expect(after.connection?.workspaceRoot).toBe(root);
+  expect(after.error).toMatch(/^合成課題workspaceの保存先が存在しません/);
 });

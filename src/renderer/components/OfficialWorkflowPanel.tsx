@@ -13,6 +13,7 @@ export function OfficialWorkflowPanel() {
     [mode, setMode] = useState<"single" | "dag">("single"),
     [pending, setPending] = useState(false);
   const [codexPath, setCodexPath] = useState("");
+  const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [question, setQuestion] = useState("");
   const sending = useRef(false);
   useEffect(() => {
@@ -92,6 +93,32 @@ export function OfficialWorkflowPanel() {
             公式接続設定を保存
           </button>
           <p role="status">{view?.connection?.message}</p>
+          <label>
+            合成課題workspaceの保存先
+            <input
+              aria-label="合成課題workspaceの保存先"
+              value={workspaceRoot}
+              placeholder={
+                view?.connection?.workspaceRoot ||
+                "未設定（workflow保存領域の中）"
+              }
+              onChange={(e) => setWorkspaceRoot(e.target.value)}
+            />
+          </label>
+          <button
+            disabled={pending || !!view?.activeId}
+            onClick={() =>
+              void send({
+                action: "workspace_root",
+                path: workspaceRoot.trim(),
+              })
+            }
+          >
+            workspace保存先を保存
+          </button>
+          <p>
+            既存のフォルダの絶対パスを指定します。存在・書き込み可否を確認し、使えない場合は理由を表示して停止します（別の場所へ自動で切り替えません）。空で保存すると既定に戻ります。既存の記録は移動しません。
+          </p>
           {view?.operationApproval && (
             <section
               className={styles.operationApproval}

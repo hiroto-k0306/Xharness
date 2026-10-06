@@ -44,6 +44,22 @@ it("rejects foreign frames and arbitrary workflow input before invoking the serv
     mock.handler!(event, { action: "approve", id: "not-id", digest: "fake" }),
   ).rejects.toThrow("Invalid workflow command");
   expect(command).not.toHaveBeenCalled();
+  await expect(
+    mock.handler!(event, {
+      action: "workspace_root",
+      path: "D:/x",
+      createIfMissing: true,
+    }),
+  ).rejects.toThrow("Invalid workflow command");
+  await expect(
+    mock.handler!(event, { action: "workspace_root", path: "x".repeat(1001) }),
+  ).rejects.toThrow("Invalid workflow command");
+  expect(command).not.toHaveBeenCalled();
   await mock.handler!(event, { action: "list" });
   expect(command).toHaveBeenCalledWith({ action: "list" });
+  await mock.handler!(event, { action: "workspace_root", path: "D:/AIwork" });
+  expect(command).toHaveBeenCalledWith({
+    action: "workspace_root",
+    path: "D:/AIwork",
+  });
 });

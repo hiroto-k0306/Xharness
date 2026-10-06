@@ -65,8 +65,9 @@ export const fixturePlan = (
 });
 export async function createSyntheticWorkspace(
   prefix = "xh-official-workflow-",
+  parent = tmpdir(),
 ) {
-  const cwd = await mkdtemp(join(tmpdir(), prefix));
+  const cwd = await mkdtemp(join(parent, prefix));
   await writeFile(
     join(cwd, "add.mjs"),
     "export const add = (a, b) => a - b;\n",
@@ -104,7 +105,7 @@ export async function createSyntheticWorkspace(
 }
 export const fixtureTest = (): TestSpec => ({
   id: "arithmetic",
-  program: process.execPath,
+  program: process.versions.electron ? "node" : process.execPath,
   args: ["--test", "acceptance.test.mjs"],
   command: "node --test acceptance.test.mjs",
   timeoutMs: 10000,
@@ -125,7 +126,7 @@ export function fixtureAgents(
       if (request.phase === "plan") output = fixturePlan(implementation);
       else if (request.phase === "implement" || request.phase === "fix") {
         const content =
-          implementations++ === 0 && failFirst
+          implementations++ === 0 && failFirst && request.phase !== "fix"
             ? "export const add = (a,b) => a-b; // intentionally incorrect first mock attempt\n"
             : "export const add = (a,b) => a+b;\n";
         const evidence = {

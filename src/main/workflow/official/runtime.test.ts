@@ -13,6 +13,7 @@ import {
 } from "./fixtures.js";
 import {
   runOfficialSingleTask,
+  resumeBlockReason,
   workflowUsage,
   type WorkflowRecord,
 } from "./runtime.js";
@@ -32,6 +33,53 @@ const workspace = async () => {
   return cwd;
 };
 const signal = () => new AbortController().signal;
+it.each(["verify", "review"] as const)(
+  "resumes %s checkpoint without replaying completed model work",
+  async (next) => {
+    const cwd = await workspace();
+    let checkpoint: WorkflowRecord | undefined;
+    await expect(
+      runOfficialSingleTask(
+        fixtureWorkflowOptions(cwd, {
+          save: async (record) => {
+            if (
+              record.next === next &&
+              !record.pendingEffect &&
+              record.calls.at(-1)?.phase !== "review"
+            ) {
+              checkpoint = structuredClone(record);
+              throw new Error("fixture process interruption");
+            }
+          },
+        }),
+        signal(),
+      ),
+    ).rejects.toThrow();
+    expect(checkpoint).toBeDefined();
+    expect(resumeBlockReason(checkpoint!)).toBeNull();
+    const fake = fixtureAgents();
+    const resumed = await runOfficialSingleTask(
+      fixtureWorkflowOptions(cwd, { resume: checkpoint, agents: fake.agents }),
+      signal(),
+    );
+    expect(resumed.status).toBe("completed");
+    expect(fake.requests.map((r) => r.phase)).toEqual([
+      "review",
+      "fix",
+      "review",
+    ]);
+    expect(resumed.calls.filter((c) => c.phase === "implement")).toHaveLength(
+      1,
+    );
+    const changed = fixtureWorkflowOptions(cwd, {
+      resume: { ...checkpoint!, head: resumed.head },
+      tests: [{ ...fixtureTest(), args: ["forged-command"] }],
+    });
+    await expect(runOfficialSingleTask(changed, signal())).rejects.toThrow(
+      "execution-scope-changed",
+    );
+  },
+);
 it.each(["claude", "codex"] as const)(
   "runs %s implementation, other-provider full review, correction and process evidence",
   async (implementation) => {

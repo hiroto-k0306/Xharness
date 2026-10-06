@@ -164,10 +164,17 @@ it.each(["review", "implement", "conversation"] as const)(
     const mock = fakeServer(),
       agent = new CodexWorkflowAgent(() => mock.server);
     const result = await agent.run(
-      request(phase),
+      { ...request(phase), diagnosticText: true },
       new AbortController().signal,
     );
     expect(result.status).toBe("completed");
+    expect(result.diagnostics).toMatchObject({
+      requestId: "request-fixture",
+      phase,
+      requestedModel: "fixture-codex",
+      finalAnswer: '{"summary":"OK"}',
+      termination: "completed",
+    });
     expect(result.nativeSessionId).toBe("thread-fixture");
     expect(result.nativeTurnId).toBe("turn-fixture");
     expect(normalizeTokens(result.usage!.measurement)).toMatchObject({

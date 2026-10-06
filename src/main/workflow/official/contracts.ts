@@ -143,6 +143,8 @@ export interface RuntimeUsage {
   complete: boolean;
 }
 export interface AgentRequest {
+  /** Only explicitly approved synthetic diagnostics may retain response text. */
+  diagnosticText?: boolean;
   requestId: string;
   taskId: string;
   phase: "plan" | "implement" | "fix" | "review" | "conversation";
@@ -158,6 +160,7 @@ export interface AgentRequest {
   approve(name: string, input: unknown, signal: AbortSignal): Promise<boolean>;
 }
 export interface AgentResult {
+  diagnostics?: import("./diagnostics.js").AgentDiagnostics;
   status: "completed" | "failed" | "cancelled" | "timeout" | "quota-paused";
   dispatched: boolean;
   output?: unknown;

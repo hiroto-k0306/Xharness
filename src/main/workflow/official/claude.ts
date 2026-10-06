@@ -14,6 +14,7 @@ import { scopedPath, runtimeEnvironment } from "./workspace.js";
 import { spawnOwnedProcess } from "./owned-process.js";
 import { sdkExecutable } from "./sdk-executable.js";
 import { digest } from "./runtime.js";
+import { diagnostics } from "./diagnostics.js";
 import { sdkUsage, object, modelName } from "./usage.js";
 import {
   normalizeFile,
@@ -183,6 +184,11 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
     if (signal.aborted) cancel();
     const timer = setTimeout(cancel, request.timeoutMs),
       readonly = ["plan", "review", "conversation"].includes(request.phase);
+    const diagnostic = diagnostics(
+      request,
+      readonly ? "read-only" : "scoped-write",
+      readonly ? "plan" : "default",
+    );
     let session: ReturnType<typeof held> | undefined,
       dispatched = false,
       usage: RuntimeUsage | null = null,
@@ -196,6 +202,7 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
       { inputDigest: string; allowed: boolean; completed: boolean }
     >();
     const emit: AgentRequest["tool"] = async (evidence) => {
+      diagnostic.tool(evidence);
       try {
         await request.tool(evidence);
       } catch {
@@ -289,6 +296,7 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
       usage,
       quota,
       elapsedMs: Date.now() - started,
+      diagnostics: diagnostic.finish(status),
     });
     try {
       const options: Options = {
@@ -403,6 +411,7 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
         const raw = next.value;
         controller.signal.throwIfAborted();
         const event = object(raw);
+        diagnostic.claude(event);
         if (
           typeof event.session_id === "string" &&
           /^[a-f0-9-]{36}$/i.test(event.session_id)

@@ -22,6 +22,7 @@ import { withSessionTrace, withTaskTrace } from "../../core/trace.js";
 import { readTraceReplay } from "../../session/report-trace.js";
 import { evaluateTrace } from "../../session/evaluation.js";
 import { officialWorkflowReport } from "./report.js";
+import { diagnostics } from "./diagnostics.js";
 const homes: string[] = [];
 afterEach(async () => {
   for (const home of homes.splice(0))
@@ -67,6 +68,15 @@ it("stops a no-change implementation without tests, review or replay", async () 
       status: "completed",
       dispatched: true,
       output: { summary: "No edits needed" },
+      diagnostics: (() => {
+        const d = diagnostics(
+          { ...request, diagnosticText: true },
+          "scoped-write",
+          "default",
+        );
+        d.answer("No edits needed");
+        return d.finish("completed");
+      })(),
       observedModels: [request.model.model],
       usage: null,
       elapsedMs: 1,
@@ -82,6 +92,9 @@ it("stops a no-change implementation without tests, review or replay", async () 
     checks: [],
     reviews: [],
     commits: [],
+  });
+  expect(result.calls.at(-1)).toMatchObject({
+    diagnostics: { finalAnswer: "No edits needed", termination: "completed" },
   });
   expect(implementations).toBe(1);
   expect(result.calls.map((c) => c.phase)).toEqual(["plan", "implement"]);

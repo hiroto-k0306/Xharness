@@ -96,6 +96,7 @@ export interface WorkflowRecord {
   error?: string;
 }
 export interface WorkflowOptions {
+  diagnosticText?: boolean;
   startedAt?: string;
   resume?: WorkflowRecord;
   simulated?: boolean;
@@ -245,6 +246,7 @@ export async function runOfficialSingleTask(
         options.agents[model.provider].run(
           {
             requestId,
+            diagnosticText: options.diagnosticText,
             taskId: record.id,
             phase,
             cwd: options.cwd,

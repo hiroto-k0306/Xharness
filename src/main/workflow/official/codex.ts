@@ -4,6 +4,7 @@ import { AppServerRpc, type AppServerPort } from "./app-server-rpc.js";
 import { codexUsage, object, modelName } from "./usage.js";
 import { scopedPath } from "./workspace.js";
 import { digest } from "./runtime.js";
+import { diagnostics } from "./diagnostics.js";
 import {
   normalizeFile,
   WorkflowFailure,
@@ -175,6 +176,11 @@ export class CodexWorkflowAgent implements OfficialAgent {
     const timer = setTimeout(cancel, request.timeoutMs),
       server = this.start(request.cwd),
       readonly = ["plan", "review", "conversation"].includes(request.phase);
+    const diagnostic = diagnostics(
+      request,
+      readonly ? "read-only" : "workspace-write",
+      readonly ? "never" : "untrusted",
+    );
     let dispatched = false,
       nativeSessionId: string | undefined,
       nativeTurnId: string | undefined,
@@ -235,6 +241,13 @@ export class CodexWorkflowAgent implements OfficialAgent {
         !["commandExecution", "fileChange"].includes(String(item.type))
       )
         return;
+      diagnostic.tool({
+        name: String(item.type),
+        status,
+        actionId: item.id,
+        inputDigest: "",
+        source: "native-sandbox",
+      });
       evidence.push(
         request
           .tool({
@@ -324,6 +337,14 @@ export class CodexWorkflowAgent implements OfficialAgent {
         const turn = object(params.turn);
         if (id(turn.id)) nativeTurnId = turn.id;
         if (method === "turn/completed") complete(turn);
+        if (method === "turn/completed" && typeof turn.status === "string")
+          diagnostic.data.termination = [
+            "completed",
+            "failed",
+            "interrupted",
+          ].includes(turn.status)
+            ? turn.status
+            : "unknown";
       }
     });
     server.approve(async (method, params) => {
@@ -368,6 +389,13 @@ export class CodexWorkflowAgent implements OfficialAgent {
         status: allowed ? "allowed" : "denied",
         source: "plan",
       });
+      diagnostic.tool({
+        name: method,
+        status: allowed ? "allowed" : "denied",
+        actionId: "approval",
+        inputDigest: "",
+        source: "plan",
+      });
       // Persistence/path checks above can yield while a new quota update arrives.
       await waitQuota();
       return { decision: allowed ? "accept" : "decline" };
@@ -386,6 +414,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
       quota: quota ? { ...quota, rechecks } : undefined,
       elapsedMs: Date.now() - started,
       error: stopReason,
+      diagnostics: diagnostic.finish(status),
     });
     const stop = () => {
       if (nativeSessionId && nativeTurnId)
@@ -511,6 +540,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
         ...(Array.isArray(final.items) ? final.items.map(object) : []),
       ].filter((i) => i.type === "agentMessage" && typeof i.text === "string");
       const answer = messages.at(-1)?.text;
+      diagnostic.answer(answer);
       return result(
         "completed",
         typeof answer === "string" ? JSON.parse(answer) : undefined,

@@ -299,6 +299,7 @@ export class OfficialWorkflowService {
     return {
       ...options,
       simulated: false,
+      diagnosticText: true, // This service creates only fixed synthetic workspaces.
       timeoutMs: 120000,
       agents: { claude, codex },
       models: models.filter((m) => m === opus || m === haiku || m === review),

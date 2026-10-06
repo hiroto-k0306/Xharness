@@ -77,6 +77,14 @@ it("retains observed partial usage on failure without counting SDK replay twice"
     new AbortController(),
   );
   const replay = await readTraceReplay(dir, result.sessionId, (text) => text);
+  const start = replay?.records.find(
+    (r) => r.kind === "llm" && r.phase === "start",
+  );
+  expect(start?.label).toBe("claude");
+  expect(start?.input).toMatchObject({
+    internal: { model: "fixture", reasoning: { effort: "low" } },
+    connectionMode: "claude-proposals",
+  });
   const end = replay?.records.find(
     (r) => r.kind === "llm" && r.phase === "end",
   );

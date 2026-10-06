@@ -113,7 +113,11 @@ async function sdkRun(
     const options: SdkOptions = {
       model: input.model,
       effort: input.effort,
-      systemPrompt: input.instructions,
+      systemPrompt:
+        input.instructions +
+        (!gateway
+          ? "\nYou are the decision provider for XHarness. The listed X tools are executed by XHarness after its approval, not by this SDK. Propose their execution in the structured output actions array ({id,tool,input}); SDK built-in tools are intentionally disabled. Do not claim a listed X tool is unavailable merely because it is not an SDK tool. When X has returned tool results in history, use those results and emit actions=[] if done."
+          : ""),
       tools: [],
       settingSources: [],
       strictMcpConfig: true,
@@ -222,6 +226,15 @@ async function sdkRun(
       }
       // Never resume provider session IDs; only verify SDK consistency within this one query.
       if (event.type === "result") {
+        const modelUsage =
+          event.modelUsage && typeof event.modelUsage === "object"
+            ? event.modelUsage
+            : {};
+        captureTraceResponse({
+          observedModels: Object.keys(modelUsage).filter((model) =>
+            /^[a-zA-Z0-9._:-]{1,200}$/.test(model),
+          ),
+        });
         progress("finished");
         if (gateway && toolFailure)
           return {

@@ -56,8 +56,8 @@ export async function runConnectedTurnOwned(
     models: () => [{ id: options.model, contextTokens: null }],
     stream(request, abort) {
       return traceStream(
-        `connection:${selection.mode}`,
-        request,
+        provider.id,
+        { internal: request, connectionMode: selection.mode },
         stream(request, abort),
         !!selection.simulated,
       );

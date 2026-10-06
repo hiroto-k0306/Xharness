@@ -268,7 +268,7 @@ Codexの画像入りツール結果は、既定ではfunction_call_outputのinpu
 
 非packagedの明示 `--connection-test` は絶対パスの空homeだけを使い、Electron profileを先に分離する。従来の認証reader/更新/ログインとlegacy送信を接続せず、無害な固定ツール1個に限定する。本人の公式SDK認証でA/Bを各1タスク実測し、BはX承認/実行/結果保存に合格、Aはactionを提案せず不合格だった。Aの役割指示とmodel/effortのtrace形式を修正したが、その後のA実通信は未検証。実通信の指定回数を越えて再送しない。
 
-SIWCはPKCE/state/nonce、固定loopback callback、発行IDでのexchange、ID token署名/identity/scope照合、公開Responsesのstream/cancel/error、models取得、保護保存インターフェースを実装しmockで検証した。通常UIでは未設定のままで、実登録/OAuth/実資格情報保存は行っていない。登録/account管理UI、stable host IDの保存接続、OS保護されたowner-only/atomicな永続backendのアプリ接続、refresh運用は残る。登録だけが不足とは扱わない。根拠・実測usage・制約: [接続stage4](docs/official-connections-stage4.md)。
+SIWCはPKCE/state/nonce、固定loopback callback、発行IDでのexchange、ID token署名/identity/scope照合、公開Responsesのstream/cancel/errorを実装しmockで検証した。[接続stage4](docs/official-connections-stage4.md) は当時の記録として保持する。ユーザー承認済みstage5では開発UIの登録/account選択・解除・welcome・catalog、stable host ID、Windows DPAPI/owner ACL/atomic保存とexclusive lease、refresh運用を接続した。回転前の停止意図と新tokenの保存を送信より先に行い、曖昧な失敗では旧refreshを自動再送せず再認可する。sessionのaccount参照はローカルUUID、SIWCモデルは公開catalog slugとserver-default reasoningを使い旧recordとの互換性を保つ。実登録/OAuth/provider通信/実token保存は0回。実アカウントのcatalog・推論・更新・解除とpreview/配布条件は未確認。Aの追加固定課題1タスクは合格、Bは前回成功を再利用。根拠・usage・検証範囲: [接続stage5](docs/official-connections-stage5.md)。
 
 ## 9. Web・MCP・フック・拡張
 

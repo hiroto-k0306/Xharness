@@ -69,9 +69,12 @@ try {
     packaged: false,
   });
   const page = await application.firstWindow();
+  let checked = false;
   for (const mode of process.argv.includes("--launch-only")
     ? []
-    : (["claude-mcp", "claude-proposals"] as const)) {
+    : process.argv.includes("--a-only")
+      ? (["claude-proposals"] as const)
+      : (["claude-mcp", "claude-proposals"] as const)) {
     let id: string | undefined;
     let approved = false;
     let success = false;
@@ -83,11 +86,12 @@ try {
       id = created.sessionId;
       await page.getByRole("button", { name: /^接続方式:/ }).click();
       await page.getByRole("combobox", { name: "接続方式" }).selectOption(mode);
-      if (mode === "claude-mcp") {
+      if (!checked) {
         await page.getByRole("button", { name: "公式SDK接続を確認" }).click();
         await expect(page.getByRole("status")).toContainText("利用可能", {
           timeout: 65000,
         });
+        checked = true;
       }
       await page.getByRole("button", { name: "接続を適用" }).click();
       const prompt = page.getByRole("textbox", { name: "prompt", exact: true });

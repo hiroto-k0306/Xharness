@@ -1,5 +1,7 @@
 # Claude A/Bの隔離UI検証とSIWCの認証前実装
 
+この文書はstage4時点の記録。Aの追加確認とSIWCライフサイクルの最新状況は [接続stage5](official-connections-stage5.md) を参照。
+
 対象: `feature/official-connection-boundaries`、開始 `7fc4d90d82f2878c7c64f1be707ab4cfe46fb2cd`。2026-10-06、既存worktree `Xharness-connections` を継続した。別成果 `78ce2bf` は別ブランチに保全し、この作業へ取り込んでいない。push・merge・インストール済みアプリ更新は行っていない。
 
 ## Claudeで実際に確認した範囲

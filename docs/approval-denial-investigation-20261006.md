@@ -78,3 +78,50 @@
 - 独立テスト→Claudeレビューの実通信は未実施。
 - 配布版（exe）での確認は未実施。今回の実通信は開発ビルドで、配布版とはElectron・同梱パスの条件が異なる。
 - 以前のHaikuがSonnetの主応答になった原因は未確定。今回は完全IDの指定で、Opusの4回とも一致した。
+
+## 追加調査：承認済みGet-Contentの実行失敗（試行5）
+
+許可対象は広げず、合成課題の実行itemごとに次を記録するようにした（`diagnostics.commandRuns`、HTMLレポートにも表示）。
+
+- itemId・状態・終了コード・所要時間・source・cwdの一致
+- 合成課題の診断時だけ、秘密値を伏せたコマンド文字列・cwd・出力末尾4000文字
+
+出力は、itemの `aggregatedOutput` がなければ、同じitemの `outputDelta` を使う。App Serverのitemに実行引数配列はないため、`argv: "not-provided"` と記録し、推測しない。Codexが報告しない値はnullのままにする。
+
+試行5（ソース `c97249d`＋この記録の未コミット変更、開発ビルド）。Claude計画1回（`claude-opus-5-5`で一致）とCodex実装1回で予算を使い切る。実装後は補助スクリプトが停止し、テスト・レビューには進まない設定にした。
+
+1. 利用者が計画を承認した。Codexが `"…powershell.exe" -Command 'Get-Content -Raw add.mjs'` を要求し、利用者が「今回の操作だけ許可」を押した（`allowed`/`explicit`、environment `local`、thread環境0件）。
+2. 実行結果は item `exec-d8e614fe-998a-48d6-b8e9-995c1e70c638`、`failed`、**終了コード1**、269ms、source `unifiedExecStartup`、itemのcwdはworkflowと一致（`…\xh-approval-trial-5-P04ac7\official-workflows\456a8581-…\workspace-6BlG6t`）。
+3. 出力（秘密値を伏せた記録、`aggregatedOutput`）のASCII部分は次のとおり。
+   ```
+   Get-Content : … 'C:\add.mjs' …
+   + CategoryInfo : ObjectNotFound: (C:\add.mjs:String) [Get-Content], ItemNotFoundException
+   + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+   ```
+   非ASCII部分は、Codexから届いた時点でU+FFFDに置換されており復元できない。バイト列はCP932の「パス」をUTF-8として解釈した形に一致するが、推測で復元していない。
+4. Codexが同じコマンドを新しいitem（`exec-099fd8f6…`）で再要求した。利用者の拒否（または期限切れ）でphaseを停止し、自動再試行はしていない。`add.mjs` は未変更、HEAD=base。
+
+### 判明したこと
+
+- 失敗の直接原因：**Windows PowerShellが相対パス `add.mjs` を `C:\` 基準で解決した**（`C:\add.mjs` が存在しない）。Codexが報告したitemのcwdはworkspaceと一致しているため、報告されたcwdと実プロセスの作業ディレクトリが一致していない。
+- XHarnessの承認判定・応答は意図どおり動いた。許可は今回の1件だけで、再要求には新たな確認が出た。
+
+### 未確認（推測しない）
+
+- 実プロセスの作業ディレクトリが `C:\` になった理由。Codexのsandbox実行（`unifiedExecStartup`）が、ユーザーTemp配下のworkspaceを作業ディレクトリにできなかった可能性はあるが、ACLや実行ユーザーの記録はなく、確認していない。
+- 実行引数配列（App Serverが提供しない）。
+
+### 通信の合計（試行1〜5）
+
+| 対象                              | 回数       | In                     | Out                 |
+| --------------------------------- | ---------- | ---------------------- | ------------------- |
+| Claude（計画、`claude-opus-5-5`） | 5（予算5） | 91,173                 | 4,738               |
+| Codex（実装、`gpt-6-luna`/low）   | 5（予算5） | 33,866（試行4・5のみ） | 222（試行4・5のみ） |
+
+- 試行5の内訳：Claude In18,253/Out996、Codex In11,754（cached 0）/Out69。
+- Codexの試行1〜3は `usage=null` で欠測（0ではない）。
+- 予算を使い切ったため、追加の実通信は行わない。
+
+### 次に必要な判断
+
+workspaceの場所（現在はXHARNESS_HOME配下）で、Codexのsandbox実行が作業ディレクトリを使えるかの確認が必要。許可対象・sandbox設定は変更していない。調査には、Codex側の実行条件の確認、または新たな通信予算の承認が必要。

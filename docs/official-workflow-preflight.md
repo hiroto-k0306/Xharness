@@ -23,3 +23,11 @@ Claude公式文書はnative Windowsのshellをunsandboxedと明記する。[Clau
 FakeProviderの`text.includes("429")`がランダムUUIDやSHA-256の一部を故障注入として扱い、3秒retryを繰り返す原因を固定入力で再現した。修正前はClaude/Codex両方の新規route regressionが失敗した。修正後は単独token `429`だけをcontrolにし、`trigger 429`を維持する。sessionとElectron candidate GUIには429を含む実際のversion hashを固定生成し、通常完了を検証する。timeout延長や固定sleepは追加しない。
 
 これで識別子依存のtimeout原因は修正できるが、過去に観測したGUI panel remount/detachmentの原因まで同一と断定しない。最終full suite結果は別途記録する。既存二環境の重複18 caseは[監査記録](test-inventory-20261006.md)の通り維持する。
+
+## 最終offline検証（2026-10-06追補）
+
+コードcommit `ac9cce1`。修正前は固定UUID/hashを入力するroute regressionがClaude/Codex両方で失敗し、修正後は関連fake/session/権限36 caseとpreflight4 caseが合格した。full unitは202 file / 1811 case全合格（420.07秒）。full runにも429入りhashのsession回帰と条件付きincludeを含むpreflight4 caseが含まれる。full Electron GUIは24 case合格、portableとpackaged restartの2 caseは配布済みbinaryを要するため未実行。既存improvements/model-candidatesと新しいofficial single/DAG画面も合格した。typecheck、lint、format、Electron build、headless buildはexit 0。full unitには二環境重複18 caseを含む。
+
+`.out/official-timeout-full-vitest.json`と`official-timeout-full-unit.log`、`official-timeout-full-gui.log`、`official-timeout-{typecheck,lint,format,build,headless}.log`に実行結果を保存。非破壊CLIの実演結果は`.out/official-preflight-demo.json`（自分の保存済みmock workspace、clean true、nativeDagEnabled false）。全体の根拠索引は`.out/official-timeout-validation.json`。
+
+この追補のprovider queryは0。過去のlive拒否を別経路・executorで再試行していない。実SDK/App Serverの強制隔離、native DAG、native conversation resume、配布済みapp更新・実運用確認は未実施。OS security設定、認証、元checkoutを変更せず、push/mergeもしていない。full成功はmock/offlineの結果であり実provider成功の証明ではない。

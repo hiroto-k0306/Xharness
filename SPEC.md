@@ -254,6 +254,12 @@ Codexの画像入りツール結果は、既定ではfunction_call_outputのinpu
 
 実装: [auto-refresh.ts](src/main/auth/auto-refresh.ts)、[プロバイダラッパー](src/main/providers/auth-refresh.ts)。詳細・試験結果: [auth-refresh-progress.md](docs/auth-refresh-progress.md)。
 
+### 正式接続境界の実験（通常経路には未接続）
+
+ユーザー承認済みの次段階として、src/main/connections/ にモデル推論と公式エージェント委任を分離した契約を追加した。OpenAI SIWC / Responses と Claude Agent SDK の提案方式・XツールMCP方式を、注入した認証・通信・SDKポートで比較する。計画・承認・ツール実行・履歴・評価はX側に保持する。モデル通信にSDKを使わない既存経路の規則に対する例外は、この未接続の実験に限定する。
+
+正式なクライアント登録・独立した認可・SDK結合・サブスク利用条件が未設定なら新方式は利用不可。CLI資格情報の転用、API課金への自動切替、既存設定の変更はしない。現在は模擬ポートとメモリ上のintent台帳のみで、永続台帳・公式SDKの実結合・UIの方式選択は未実装。詳細・再実行: [正式接続境界](docs/official-connections.md)。
+
 ## 9. Web・MCP・フック・拡張
 
 WebSearch / WebFetchを提供し、検索プロバイダ、検索回数、取得文字数、キャッシュを設定する。URLや接続先の検証を行い、取得内容は外部データとして扱う。検索には補助モデル通信が発生する経路がある。

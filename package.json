@@ -43,7 +43,8 @@
     "package": "pnpm icon && pnpm build && electron-builder --win",
     "package:dir": "pnpm icon && pnpm build && electron-builder --win --dir",
     "release:collect": "tsx scripts/collect-release.ts",
-    "release": "pnpm package && pnpm release:collect"
+    "release": "pnpm package && pnpm release:collect",
+    "connections:offline": "tsx scripts/connections-offline.ts"
   },
   "devDependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",

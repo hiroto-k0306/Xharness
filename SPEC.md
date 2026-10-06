@@ -464,4 +464,4 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 ユーザー承認済みの追加経路として、開発用の固定synthetic workflowを実装する。Claude SDKで読み取り専用のOpus計画、利用可能な公式model/effort/枠の検証、利用者の計画承認、SDKまたはCodex公式App Serverによるnative実装、実プロセスのテスト、実装と別providerによる固定base/head全diffレビュー、最大2修正を行う。Codexは公式App Server自身のChatGPT認証を使い、SIWC登録を条件にしない。Xが権限・取消・保存intent・commit・証跡・評価を管理する。既存routingやstage5の通常テキスト経路は変更しない。
 
-単一タスク・開発入口のみで、DAG並列実行、完全checkpoint再開、通常UI接続、一般プロジェクト適用は未実装。新しい実通信は都度明示許可が必要。既存§8の新接続workflow未対応という制約は通常アプリに引き続き適用し、この別入口だけを例外とする。SDK利用例外もこの経路に限定する。詳細と再実行・制約は[公式workflow単一タスク](docs/official-workflow-single-task.md)。
+固定合成課題の単一タスクを通常UIの「公式workflow」パネルと開発CLIで扱う。UIで計画確認/承認/中断と安全なcheckpoint再開を実装し、保存したHEADと実行条件digestを照合する。不確定なquery/commit/testは自動再送せず、プロセス中断状態を明示して作業を保全する。DAG並列実行、完全native会話resume、一般プロジェクト適用は未実装。新しい実通信は都度明示許可が必要。既存§8の通常テキスト接続のworkflow未対応はそのままとし、この独立パネル/CLIを例外とする。SDK利用例外もこの経路に限定する。詳細と再実行・制約は[公式workflow単一タスク](docs/official-workflow-single-task.md)。

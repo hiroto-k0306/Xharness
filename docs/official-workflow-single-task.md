@@ -1,10 +1,10 @@
 # 公式エージェント単一タスク workflow
 
-ユーザー承認済みの追加範囲。通常アプリの既存経路とstage5接続UIは維持し、開発用の単一タスク実行入口を追加する。入口の対象は一時Gitリポジトリの固定算術課題だけ。
+ユーザー承認済みの追加範囲。通常アプリの既存経路とstage5接続UIは維持し、通常画面の「公式workflow」パネルと開発CLIを追加する。対象は独立した管理用Gitリポジトリの固定算術課題だけ。元のユーザープロジェクトは変更しない。
 
 ## 実行と証跡
 
-Claude SDKの読み取り専用計画に、実SDK/App Serverのモデル一覧・effort・枠確認結果を渡す。Xがmodelの捏造、未知テスト、対象拡張、循環依存、依存のないファイル競合を拒否する。初期版は1タスクのみ実行。計画HTMLとdigestを確認し、実通信では利用者が承認する。mockだけは固定fixtureを承認する。
+Claude SDKの読み取り専用計画に、実SDK/App Serverのモデル一覧・effort・枠確認結果を渡す。Xがmodelの捏造、未知テスト、対象拡張、循環依存、依存のないファイル競合を拒否する。初期版は1タスクのみ実行。通常UIは模擬時も計画・対象・テスト・担当model/effort・理由・digestを確認して利用者が承認する。開発CLIのmockだけは固定fixtureを承認する。
 
 Claude実装はSDKのnative tools・テスト・自己修正ループ、Codex実装は公式App Serverのnative loop。隠れた子エージェント、MCP、ネットワーク、認証変更、package install、modelによるgit commitは許可しない。Xが対象を照合してローカルcommitし、独立プロセスで指定受入・全体テストを実行する。その後、実装と別providerが固定base/headの全diffをレビューする。
 
@@ -40,8 +40,9 @@ npx tsx scripts/official-workflow.ts --authorized-live --synthetic-only --codex 
 
 ## 残る境界
 
-- 単一タスク専用。DAG実行、独立worktree並列化、通常アプリworkflow UI、配布更新は未実装。
-- 永続stateは送信前intentを保存し、保存失敗で以後の実行を止める。再起動後の不確定callを自動再送しない。完全なcheckpoint復元/native resume/再開UIは未実装。SDK resumeは会話だけでGit/DAG/permissionsを復元しないため、各phaseは新規session/thread。
+- 単一タスク専用。DAG実行、独立worktree並列化、一般プロジェクト適用、配布更新は未実装。
+- 通常UIで中断と安全な段階からの再開を実装。home/official-workflows/<task ID>にstate・HTML・trace・独立Git作業を保持する。承認待ちの中断後は同じ計画で再承認し、完了済み計画queryを再送しない。固定HEADとgoal/files/test commandsのexecution digestを照合し、許可を拡張しない。
+- 永続stateはquery送信前、commit前、test前のintentを保存する。プロセス中断の状態をinterruptedとして復元し、running call/未確定commit・test/phase結果を保存し終えていない状態は再送・再開を拒否する。保存済みverify/review/fix境界だけを継続し、完了済み実装を再実行しない。旧stateのexecution digestが欠ける場合も自動移行・再開しない。完全なnative会話resumeは未実装。SDK resumeはGit/DAG/permissionsを復元しないため各phaseは新規session/thread。
 - ClaudeはPreToolUseでfile/commandを事前制限する。Codex 0.160.0に同等のfile別hookはなく、workspace sandbox/承認とXの事後照合で対象外変更のcommitを拒否・保全する。全書込の事前抑止と同一視しない。
 - App Server 0.160.0 readOnlyはread rootの限定を表現しない。レビューのshell/native実行を無効化し、提供した全diffを使うよう制限する。厳密な読み取り対象OS隔離は未実装。
 - 環境・diff/ファイルサイズ制限、credential path/リンク/秘密値検査はあるが秘密検出の完全性は保証しない。synthetic外への展開前に追加検証が必要。
@@ -63,3 +64,15 @@ npx tsx scripts/official-workflow.ts --authorized-live --synthetic-only --codex 
 検証JSONは`.out/official-workflow-final-validation.json`（全体）、`official-workflow-final-fixture-validation.json`（最終fixture）、`official-workflow-vitest.json`（全テスト）、`official-workflow-focused.json`（関連テスト）、`official-workflow-report-ui.json`（HTML表示）。元の`D:\AIwork\Xharness`はHEAD`50e7707c0704e1d5aea5818cdea4bae8a2ef7599`・cleanのまま。
 
 今回の新workflowの実通信は0件。最小synthetic live確認は自動承認審査が、委任元のfake/mock限定・サブスク使用禁止を理由に起動前に拒否した。回避・再試行せず、認証変更・新規登録・課金fallbackもしていない。実SDK/App Serverによる計画→実装→レビューの成功は未確認であり、別途明示許可を要する。
+
+## 通常UI統合と安全な再開
+
+通常画面の「公式workflow」を開き、実装候補を選び「合成課題の計画を作成」する。fakeではモデル通信なし、受入テストは本物のNodeプロセス。Electron自身をNodeとして再起動しないよう、Electron環境ではPATH上のNodeを使う。実経路は既存設定auth.codexCliPathを必要とし、計画開始前に枠消費を表示する。SDK/App Serverはユーザー操作後にだけ起動し、起動時に認証・モデル確認を自動実行しない。
+
+計画の承認・中断、保存状態の閲覧・再開、実テスト結果と全差分レビュー、native/usage記録、既存ローカルリンク確認を通したHTML表示を通常UIで扱う。IPCは所有window/main frameとstrict commandを検証し、rendererからcwd・shell command・権限変更を渡す入口は作らない。アプリ終了時は両engineを中断し、保存完了を待つ。
+
+接続事前確認中の失敗・中断も保存する。モデルcallがなければcallsは空でusageを捏造しない。再開時は実workspaceのclean/HEADと実行条件digestを確認し、人間の変更を取り消さない。scope・構成が変わる、結果が不明、未取得の枠は安全停止する。再起動後に以前のツール許可や会話resume権限を復活させない。
+
+単一タスクのUI E2Eでは中断→画面リロード→再承認→合格と両provider方向を確認。main serviceの新規instanceでは承認待ち復元、送信済み不確定callの拒否、変更workspaceの保全、事前確認失敗の記録を検証する。runtimeでverify/review checkpointから完了済みmodel作業を再送せず継続することと、test command変更時の拒否を確認する。
+
+親から後続ユーザー許可の引用と「同じコマンドを1回だけ再試行」の明示指示を受け、2026-10-06にその1回を再試行した。自動承認審査は引用を「untrusted assistant-provided evidence」と扱い、元のfake/mock限定を理由に再び起動前に拒否した。指示どおり停止し、経路変更や追加再試行はしていない。今回workflowの実プロバイダquery・サブスク使用は引き続き0。既存stage5の過去の実通信とは分ける。

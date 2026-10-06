@@ -27,7 +27,7 @@ window.addEventListener(
   true,
 );
 
-// 画面側へ渡すのは、型付きの command() と onEvent() だけ。
+// 画面側へ渡すのは、型付きの command()/onEvent() と限定workflow操作だけ。
 // ipcRenderer 本体・トークン・ファイルパスの読み取り手段は公開しない。
 const api: HarnessApi = {
   officialWorkflow: (command) =>

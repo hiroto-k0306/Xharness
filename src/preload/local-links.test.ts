@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
 import { LOCAL_LINK_CHANNEL } from "../shared/local-links.js";
+import { OFFICIAL_WORKFLOW_CHANNEL } from "../shared/official-workflow.js";
+import type { HarnessApi } from "../shared/ipc.js";
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(async () => false),
   expose: vi.fn(),
@@ -56,7 +58,13 @@ it("isolated preload only forwards trusted, activated file clicks; no public ope
   expect(click(true)).not.toHaveBeenCalled();
   expect(mocks.invoke).not.toHaveBeenCalled();
   expect(Object.keys(mocks.expose.mock.calls[0]![1])).toEqual([
+    "officialWorkflow",
     "command",
     "onEvent",
   ]);
+  const api = mocks.expose.mock.calls[0]![1] as HarnessApi;
+  await api.officialWorkflow!({ action: "list" });
+  expect(mocks.invoke).toHaveBeenCalledWith(OFFICIAL_WORKFLOW_CHANNEL, {
+    action: "list",
+  });
 });

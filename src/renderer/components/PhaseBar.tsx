@@ -1,5 +1,6 @@
 import { type SessionView } from "../state/store.js";
 import styles from "./Workflow.module.css";
+import { providerOf } from "../state/steps.js";
 export function PhaseBar({
   view,
   model = "main",
@@ -29,7 +30,7 @@ export function PhaseBar({
           }
           style={{
             ["--glow" as string]:
-              i === 2 && reviewer?.model.startsWith("gpt")
+              i === 2 && reviewer && providerOf(reviewer.model) === "codex"
                 ? "var(--codex)"
                 : "var(--claude)",
           }}

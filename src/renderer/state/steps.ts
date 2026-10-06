@@ -1,4 +1,5 @@
 import { type StepNode } from "../../shared/ipc.js";
+import { uiProviderOf } from "./model-catalog.js";
 
 /** §19.2 の STEP と役割色(§16.2) */
 export const STEPS: { node: StepNode; label: string }[] = [
@@ -11,7 +12,7 @@ export const STEPS: { node: StepNode; label: string }[] = [
 ];
 
 export function providerOf(model: string): "claude" | "codex" {
-  return /^(gpt|o\d|codex)/i.test(model) ? "codex" : "claude";
+  return uiProviderOf(model);
 }
 
 /** STEP の役割色(CSS 変数名)。model だけはモデルのプロバイダ色。 */

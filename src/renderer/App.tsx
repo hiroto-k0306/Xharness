@@ -10,6 +10,7 @@ import { ConnectionPicker } from "./components/ConnectionPicker.js";
 import { PlanApproval } from "./components/PlanApproval.js";
 import { RewindApproval } from "./components/RewindApproval.js";
 import { useEffect, useState } from "react";
+import { setUiModelCatalog, uiSendsEffort } from "./state/model-catalog.js";
 import {
   Hero,
   LoopFlow,
@@ -33,11 +34,9 @@ import { providerOf } from "./state/steps.js";
 import { useStore } from "./state/store.js";
 import styles from "./App.module.css";
 
-/** effort は Haiku には送らないので表示もしない(§7.1) */
+/** effort を送らないモデル(カタログに efforts が無い)は表示もしない(§7.1) */
 function modelLabel(model: string, effort: string): string {
-  return model === "fake" || /^claude-haiku/.test(model)
-    ? model
-    : `${model} · ${effort}`;
+  return uiSendsEffort(model) ? `${model} · ${effort}` : model;
 }
 
 export function App() {
@@ -56,6 +55,8 @@ export function App() {
   const s = useStore();
   const { app, views, prefs } = s;
   useEffect(() => s.start(), []);
+  // The UI follows the same catalog the main process resolved.
+  setUiModelCatalog(app?.models);
 
   const current = app?.currentSessionId ?? null;
   useEffect(() => setSkillsOpen(false), [current]);

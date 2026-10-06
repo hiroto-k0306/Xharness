@@ -11,6 +11,7 @@ export function OfficialWorkflowPanel() {
     [provider, setProvider] = useState<"claude" | "codex">("claude"),
     [mode, setMode] = useState<"single" | "dag">("single"),
     [pending, setPending] = useState(false);
+  const [codexPath, setCodexPath] = useState("");
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -68,6 +69,28 @@ export function OfficialWorkflowPanel() {
               : "公式SDK / App Serverの既存サブスクを使用します。計画生成も枠を使用します。追加課金へ切り替えません。"}
           </p>
           <label>
+            公式Codex実行パス
+            <input
+              aria-label="公式Codex実行パス"
+              value={codexPath}
+              placeholder={view?.connection?.codexPath || "C:\\...\\codex.exe"}
+              onChange={(e) => setCodexPath(e.target.value)}
+            />
+          </label>
+          <button
+            disabled={pending || !!view?.activeId || !codexPath.trim()}
+            onClick={() =>
+              void send({ action: "configure", codexPath: codexPath.trim() })
+            }
+          >
+            公式接続設定を保存
+          </button>
+          <p role="status">{view?.connection?.message}</p>
+          <p>
+            計画はOpus、実装候補はHaiku / Codex
+            Luna。最大7回のphase呼出・各120秒・修正2回で終了します。SDK内部のモデル往復数は別です。
+          </p>
+          <label>
             実行方式{" "}
             <select
               aria-label="workflow実行方式"
@@ -107,7 +130,7 @@ export function OfficialWorkflowPanel() {
           </button>
           {!view?.available && (
             <p>
-              公式workflowは未設定です。通常画面の設定で公式Codex実行パスを指定してください。
+              公式workflowは未設定です。上の公式Codex実行パスを設定してください。未設定では送信しません。
             </p>
           )}
           {(error || view?.error) && <p role="alert">{error || view?.error}</p>}

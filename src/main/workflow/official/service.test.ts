@@ -182,3 +182,32 @@ it("records a preflight failure without inventing usage or running a model", asy
     "execution-scope-not-checkpointed",
   );
 });
+it("configures and restores a production executable without executing it, and refuses missing settings", async () => {
+  const path = await home();
+  const unconfigured = new OfficialWorkflowService({ home: path, fake: false });
+  services.push(unconfigured);
+  const refused = await unconfigured.command({
+    action: "create",
+    provider: "claude",
+  });
+  expect(refused.available).toBe(false);
+  expect(refused.records).toHaveLength(0);
+  expect(refused.error).toContain("実行パス");
+  const invalid = await unconfigured.command({
+    action: "configure",
+    codexPath: "relative.exe",
+  });
+  expect(invalid.available).toBe(false);
+  const executable = join(path, "dummy-never-run.exe");
+  await writeFile(executable, "not executable");
+  const configured = await unconfigured.command({
+    action: "configure",
+    codexPath: executable,
+  });
+  expect(configured.connection?.status).toBe("configured");
+  const restarted = new OfficialWorkflowService({ home: path, fake: false });
+  services.push(restarted);
+  expect(
+    (await restarted.command({ action: "list" })).connection?.codexPath,
+  ).toBe(executable);
+});

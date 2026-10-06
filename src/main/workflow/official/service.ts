@@ -7,7 +7,7 @@ import {
   lstat,
   realpath,
 } from "node:fs/promises";
-import { join, resolve, relative } from "node:path";
+import { join, resolve, relative, isAbsolute } from "node:path";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { withSessionTrace, withTaskTrace } from "../../core/trace.js";
@@ -76,6 +76,28 @@ export class OfficialWorkflowService {
     if ((await realpath(this.root)).toLowerCase() !== this.root.toLowerCase())
       throw new Error("Linked workflow storage");
     this.storageReady = true;
+    try {
+      const file = join(this.root, "connection.json");
+      const stat = await lstat(file);
+      if (
+        !stat.isFile() ||
+        stat.isSymbolicLink() ||
+        stat.nlink !== 1 ||
+        stat.size > 4000
+      )
+        throw new Error("Invalid connection file");
+      const saved = JSON.parse(await readFile(file, "utf8")) as {
+        codexPath?: unknown;
+      };
+      await this.validateExecutable(saved.codexPath);
+      this.settings.codexPath = saved.codexPath as string;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        this.settings.codexPath = undefined;
+        this.error =
+          "公式接続設定を確認できません。実行パスを設定し直してください。";
+      }
+    }
     for (const id of (await readdir(this.root)).filter(uuid).slice(-50)) {
       try {
         const directory = join(this.root, id),
@@ -171,6 +193,15 @@ export class OfficialWorkflowService {
       available:
         this.storageReady && (this.settings.fake || !!this.settings.codexPath),
       simulated: this.settings.fake,
+      connection: {
+        codexPath: this.settings.codexPath ?? "",
+        status: this.settings.codexPath ? "configured" : "unconfigured",
+        message: this.settings.fake
+          ? "模擬通信のみ"
+          : this.settings.codexPath
+            ? "実行パス設定済み。認証・通常枠・モデルは送信前に公式SDK / App Serverで確認します。"
+            : "未設定：公式Codexのexeを指定してください。認証情報は入力しません。",
+      },
       activeId: this.active?.id ?? this.preparing?.id,
       approval: this.approval
         ? { id: this.approval.id, digest: this.approval.digest }
@@ -186,6 +217,13 @@ export class OfficialWorkflowService {
             .href,
         })),
     };
+  }
+  private async validateExecutable(path: unknown) {
+    if (typeof path !== "string" || !isAbsolute(path) || !/\.exe$/i.test(path))
+      throw new Error("公式Codexの実行パスはexeの絶対パスで指定してください");
+    const stat = await lstat(path);
+    if (!stat.isFile() || stat.isSymbolicLink())
+      throw new Error("公式Codexの実行パスは通常ファイルが必要です");
   }
   private async save(record: WorkflowRecord) {
     const directory = join(this.root, record.id);
@@ -248,7 +286,7 @@ export class OfficialWorkflowService {
     const review = models.find(
       (m) =>
         m.provider === "codex" &&
-        m.model === "gpt-6.1-sol" &&
+        m.model === "gpt-6-luna" &&
         m.quotaAllowed === true,
     );
     if (!opus || !review || (provider === "claude" && !haiku))
@@ -256,6 +294,7 @@ export class OfficialWorkflowService {
     return {
       ...options,
       simulated: false,
+      timeoutMs: 120000,
       agents: { claude, codex },
       models: models.filter((m) => m === opus || m === haiku || m === review),
       planner: {
@@ -357,6 +396,20 @@ export class OfficialWorkflowService {
     this.error = undefined;
     try {
       if (!this.storageReady) throw new Error("Unsafe workflow storage");
+      if (command.action === "configure") {
+        await this.validateExecutable(command.codexPath);
+        const temporary = join(this.root, `${randomUUID()}.tmp`);
+        await writeFile(
+          temporary,
+          JSON.stringify({ codexPath: command.codexPath }),
+          { mode: 0o600 },
+        );
+        await rename(temporary, join(this.root, "connection.json"));
+        this.settings.codexPath = command.codexPath;
+        return this.view();
+      }
+      if (!this.settings.fake && !this.settings.codexPath)
+        throw new Error("公式Codexの実行パスを設定してください");
       if (command.action === "create") {
         if (command.mode === "dag" && !this.settings.fake)
           throw new Error("Native DAG is not enabled");

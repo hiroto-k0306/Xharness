@@ -11,7 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { OfficialWorkflowService, pinClaudeModels } from "./service.js";
-import type { ModelCandidate } from "./contracts.js";
+import {
+  WorkflowFailure,
+  type ModelCandidate,
+  type OfficialAgent,
+} from "./contracts.js";
 import { fixtureWorkflowOptions, fixtureAgents } from "./fixtures.js";
 const homes: string[] = [];
 const services: OfficialWorkflowService[] = [];
@@ -482,3 +486,165 @@ it("passes the selection fixed at task start to the planner resolution", async (
   });
   expect(received).toEqual([{ model: "codex:sol", effort: "high" }]);
 });
+function officialAgent(
+  provider: "claude" | "codex",
+  state: "ok" | "unreachable" | "quota-unknown",
+) {
+  const calls = { discover: 0, run: 0 };
+  const agent: OfficialAgent = {
+    provider,
+    async discover() {
+      calls.discover++;
+      if (state === "unreachable")
+        throw new WorkflowFailure("app-server-closed");
+      const model =
+        provider === "claude" ? "claude-haiku-4-5-20251001" : "gpt-6-luna";
+      return [
+        {
+          provider,
+          model: provider === "claude" ? "haiku" : model,
+          resolvedModel: provider === "claude" ? model : undefined,
+          efforts: [null, "low"],
+          available: true,
+          quotaAllowed: state === "ok" ? true : null,
+          capabilitySource:
+            provider === "claude" ? "official-sdk" : "official-app-server",
+        },
+      ];
+    },
+    async run(request) {
+      calls.run++;
+      return {
+        status: "completed",
+        dispatched: true,
+        output: { summary: `answer from ${request.model.model}` },
+        observedModels: [request.model.model],
+        usage: null,
+        elapsedMs: 1,
+      };
+    },
+  };
+  return { agent, calls };
+}
+async function liveService(
+  claude: ReturnType<typeof officialAgent>,
+  codex: ReturnType<typeof officialAgent>,
+  codexPath?: string,
+) {
+  const path = await home();
+  const instance = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    codexPath,
+    agents: { claude: claude.agent, codex: codex.agent },
+  });
+  services.push(instance);
+  return instance;
+}
+it.each([
+  ["Codex path unset", undefined, "unreachable"],
+  ["Codex unreachable", "C:/configured/codex.exe", "unreachable"],
+  ["Codex usage unknown", "C:/configured/codex.exe", "quota-unknown"],
+] as const)(
+  "answers a Claude question with only Claude available (%s), never contacting Codex",
+  async (_label, codexPath, codexState) => {
+    const claude = officialAgent("claude", "ok"),
+      codex = officialAgent("codex", codexState);
+    const instance = await liveService(claude, codex, codexPath);
+    expect((await instance.command({ action: "list" })).storageReady).toBe(
+      true,
+    );
+    await instance.command({
+      action: "chat",
+      provider: "claude",
+      text: "質問",
+    });
+    const view = await wait(instance, (v) => !v.activeId);
+    expect(view.error).toBeUndefined();
+    const record = view.records[0]!.record;
+    expect(record.status).toBe("completed");
+    expect(record.answer).toBe("answer from claude-haiku-4-5-20251001");
+    expect(record.plan).toBeUndefined();
+    expect(codex.calls).toEqual({ discover: 0, run: 0 });
+  },
+);
+it.each([
+  [
+    "Codex path unset",
+    undefined,
+    "unreachable",
+    /^公式Codexの実行パスを設定してください/,
+    0,
+  ],
+  [
+    "Codex unreachable",
+    "C:/configured/codex.exe",
+    "unreachable",
+    /^公式Codex接続確認: app-server-closed/,
+    1,
+  ],
+  [
+    "Codex usage unknown",
+    "C:/configured/codex.exe",
+    "quota-unknown",
+    /^質問先のCodexを利用できないか/,
+    1,
+  ],
+] as const)(
+  "stops a Codex question with the reason when Codex is unusable (%s), without switching to Claude",
+  async (_label, codexPath, codexState, reason, discovered) => {
+    const claude = officialAgent("claude", "ok"),
+      codex = officialAgent("codex", codexState);
+    const instance = await liveService(claude, codex, codexPath);
+    const view = await instance.command({
+      action: "chat",
+      provider: "codex",
+      text: "質問",
+    });
+    expect(view.error).toMatch(reason);
+    expect(codex.calls).toEqual({ discover: discovered, run: 0 });
+    expect(claude.calls).toEqual({ discover: 0, run: 0 });
+    for (const { record } of view.records) {
+      expect(record.answer).toBeUndefined();
+      expect(record.calls).toEqual([]);
+    }
+  },
+);
+it("stops a Claude question when Claude is unusable even though Codex is available", async () => {
+  const claude = officialAgent("claude", "quota-unknown"),
+    codex = officialAgent("codex", "ok");
+  const instance = await liveService(claude, codex, "C:/configured/codex.exe");
+  const view = await instance.command({
+    action: "chat",
+    provider: "claude",
+    text: "質問",
+  });
+  expect(view.error).toMatch(/^質問先のClaude（Haiku）を利用できないか/);
+  expect(claude.calls).toEqual({ discover: 1, run: 0 });
+  expect(codex.calls).toEqual({ discover: 0, run: 0 });
+});
+it.each(["claude", "codex"] as const)(
+  "keeps requiring both companies for the plan/implement/review workflow (%s unavailable)",
+  async (down) => {
+    const claude = officialAgent(
+        "claude",
+        down === "claude" ? "unreachable" : "ok",
+      ),
+      codex = officialAgent("codex", down === "codex" ? "unreachable" : "ok");
+    const instance = await liveService(
+      claude,
+      codex,
+      "C:/configured/codex.exe",
+    );
+    const view = await instance.command({
+      action: "create",
+      provider: "codex",
+      planner: { model: "claude:haiku", effort: null },
+    });
+    expect(view.error).toMatch(
+      down === "claude" ? /^公式Claude接続確認/ : /^公式Codex接続確認/,
+    );
+    expect(claude.calls.run + codex.calls.run).toBe(0);
+    expect(view.activeId).toBeUndefined();
+  },
+);

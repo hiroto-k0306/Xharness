@@ -8,7 +8,10 @@ import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
 export function OfficialWorkflowPanel({
   mainModel,
   mainEffort,
+  mainProvider,
 }: {
+  /** Company of the main model; questions use only this connection. */
+  mainProvider?: "claude" | "codex";
   /** The main model selected now; sent once and fixed for the new task. */
   mainModel?: string;
   mainEffort?: "low" | "medium" | "high" | "xhigh" | "max";
@@ -23,6 +26,9 @@ export function OfficialWorkflowPanel({
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [question, setQuestion] = useState("");
   const sending = useRef(false);
+  // Simulated mode has no real company; keep its existing provider selection.
+  const questionProvider =
+    mainProvider ?? (view?.simulated ? provider : undefined);
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -241,16 +247,37 @@ export function OfficialWorkflowPanel({
           </label>
           <button
             disabled={
-              !view?.available || !!view.activeId || pending || !question.trim()
+              !questionProvider ||
+              !view?.storageReady ||
+              (questionProvider === "codex" &&
+                !view.simulated &&
+                view.connection?.status !== "configured") ||
+              !!view.activeId ||
+              pending ||
+              !question.trim()
             }
             onClick={() =>
-              void send({ action: "chat", provider, text: question.trim() })
+              questionProvider &&
+              void send({
+                action: "chat",
+                provider: questionProvider,
+                text: question.trim(),
+              })
             }
           >
             質問だけ送信
           </button>
           <p>
-            選択したproviderに1回・60秒まで。直近5件を文脈に含めます。計画・実装は起動しません。
+            質問先：
+            {questionProvider === "claude"
+              ? "Claude（Haiku）"
+              : questionProvider === "codex"
+                ? "Codex"
+                : "未選択"}
+            {mainProvider
+              ? "（メインモデルの会社）"
+              : "（模擬：実装候補の選択）"}
+            。この会社の接続だけを確認し、1回・60秒まで。直近5件を文脈に含めます。計画・実装は起動しません。
           </p>
           {!view?.available && (
             <p>

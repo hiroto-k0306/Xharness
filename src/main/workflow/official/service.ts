@@ -18,6 +18,7 @@ import {
   createSyntheticWorkspace,
   fixtureWorkflowOptions,
   fixtureAgents,
+  fixtureModels,
 } from "./fixtures.js";
 import {
   runOfficialSingleTask,
@@ -39,6 +40,7 @@ import {
   implementationContract,
   type ModelCandidate,
   type AgentRequest,
+  type OfficialAgent,
 } from "./contracts.js";
 import { createDagWorkspace, dagWorkflowOptions } from "./dag-fixtures.js";
 import { runOfficialDag, type DagOptions } from "./dag.js";
@@ -75,6 +77,8 @@ export class OfficialWorkflowService {
       codexPath?: string;
       /** Parent folder for new synthetic workspaces; unset keeps the record folder. */
       workspaceRoot?: string;
+      /** Test seam: official agents to use instead of the real SDK / App Server. */
+      agents?: Partial<Record<"claude" | "codex", OfficialAgent>>;
       options?: (
         cwd: string,
         provider: "claude" | "codex",
@@ -229,6 +233,7 @@ export class OfficialWorkflowService {
     return {
       available:
         this.storageReady && (this.settings.fake || !!this.settings.codexPath),
+      storageReady: this.storageReady,
       simulated: this.settings.fake,
       connection: {
         codexPath: this.settings.codexPath ?? "",
@@ -380,8 +385,9 @@ export class OfficialWorkflowService {
     if (this.settings.fake) return options;
     if (!this.settings.codexPath)
       throw new Error("公式Codexの実行パスを設定してください");
-    const claude = new ClaudeWorkflowAgent(),
-      codex = CodexWorkflowAgent.local(this.settings.codexPath);
+    // The workflow (plan, implementation, cross-company review) needs both.
+    const claude = this.agent("claude"),
+      codex = this.agent("codex");
     const models = [
       ...(await codex.discover(cwd, signal).catch((e: unknown) => {
         throw new Error(connectionFailure("codex", e));
@@ -537,21 +543,58 @@ export class OfficialWorkflowService {
       });
     this.active = { id, controller, done };
   }
+  private agent(provider: "claude" | "codex"): OfficialAgent {
+    const injected = this.settings.agents?.[provider];
+    if (injected) return injected;
+    return provider === "claude"
+      ? new ClaudeWorkflowAgent()
+      : CodexWorkflowAgent.local(this.settings.codexPath!);
+  }
+  /**
+   * A question needs only the selected company's connection. The other company
+   * is never contacted, and an unusable selection is never swapped for it.
+   */
+  private async conversationTarget(
+    cwd: string,
+    provider: "claude" | "codex",
+    signal: AbortSignal,
+  ): Promise<{ agent?: OfficialAgent; model: ModelCandidate }> {
+    const candidates = this.settings.fake
+      ? fixtureModels.filter((m) => m.provider === provider)
+      : await (async () => {
+          if (provider === "codex" && !this.settings.codexPath)
+            throw new Error("公式Codexの実行パスを設定してください");
+          const found = await this.agent(provider)
+            .discover(cwd, signal)
+            .catch((e: unknown) => {
+              throw new Error(connectionFailure(provider, e));
+            });
+          return provider === "claude" ? pinClaudeModels(found) : found;
+        })();
+    const model = candidates.find(
+      (m) =>
+        m.provider === provider &&
+        m.available &&
+        m.quotaAllowed === true &&
+        (provider === "codex" || /haiku/.test(m.model + m.resolvedModel)),
+    );
+    if (!model)
+      throw new Error(
+        `質問先の${provider === "claude" ? "Claude（Haiku）" : "Codex"}を利用できないか、通常枠を確認できません。別の会社のモデルへは切り替えていません。`,
+      );
+    return {
+      agent: this.settings.fake ? undefined : this.agent(provider),
+      model,
+    };
+  }
   private launchConversation(
     record: WorkflowRecord,
-    options: WorkflowOptions,
+    target: { agent?: OfficialAgent; model: ModelCandidate },
     provider: "claude" | "codex",
   ) {
     const controller = new AbortController();
     const done = (async () => {
-      const model = options.models.find(
-        (m) =>
-          m.provider === provider &&
-          m.available &&
-          m.quotaAllowed === true &&
-          (provider === "codex" || /haiku/.test(m.model + m.resolvedModel)),
-      );
-      if (!model) throw new Error("Conversation model unavailable");
+      const model = target.model;
       const entry = {
         requestId: randomUUID(),
         phase: "conversation" as const,
@@ -580,7 +623,7 @@ export class OfficialWorkflowService {
             usage: null,
             elapsedMs: 0,
           }
-        : await options.agents[provider].run(
+        : await target.agent!.run(
             {
               requestId: entry.requestId,
               taskId: record.id,
@@ -677,7 +720,12 @@ export class OfficialWorkflowService {
         await this.writeConnection();
         return this.view();
       }
-      if (!this.settings.fake && !this.settings.codexPath)
+      // Questions check only their own company's connection (below).
+      if (
+        !this.settings.fake &&
+        !this.settings.codexPath &&
+        command.action !== "chat"
+      )
         throw new Error("公式Codexの実行パスを設定してください");
       if (
         !this.settings.fake &&
@@ -751,18 +799,26 @@ export class OfficialWorkflowService {
             : {}),
         };
         await this.save(prepared);
-        const options = await this.options(
-          cwd,
-          command.provider,
-          this.preparing.controller.signal,
-          mode,
-          command.action === "create" ? command.planner : undefined,
-        );
-        options.startedAt = prepared.startedAt;
-        this.preparing.controller.signal.throwIfAborted();
-        if (command.action === "chat")
-          this.launchConversation(prepared, options, command.provider);
-        else this.launch(id, options);
+        if (command.action === "chat") {
+          const target = await this.conversationTarget(
+            cwd,
+            command.provider,
+            this.preparing.controller.signal,
+          );
+          this.preparing.controller.signal.throwIfAborted();
+          this.launchConversation(prepared, target, command.provider);
+        } else {
+          const options = await this.options(
+            cwd,
+            command.provider,
+            this.preparing.controller.signal,
+            mode,
+            command.planner,
+          );
+          options.startedAt = prepared.startedAt;
+          this.preparing.controller.signal.throwIfAborted();
+          this.launch(id, options);
+        }
       } else {
         const record = this.records.get(command.id);
         if (!record || resumeBlockReason(record))
@@ -786,7 +842,7 @@ export class OfficialWorkflowService {
     } catch (error) {
       this.error =
         error instanceof Error &&
-        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル)/.test(
+        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先)/.test(
           error.message,
         )
           ? error.message

@@ -26,7 +26,10 @@ export type OfficialWorkflowCommand =
     }
   | { action: "cancel" | "resume"; id: string };
 export interface OfficialWorkflowView {
+  /** Workflow (plan / implement / review) can start: storage and both connections configured. */
   available: boolean;
+  /** Storage is usable; a question to Claude needs nothing else configured. */
+  storageReady?: boolean;
   simulated: boolean;
   connection?: {
     codexPath: string;

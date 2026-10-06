@@ -633,7 +633,15 @@ export function App() {
               onOpenChange={setImprovementsOpen}
             />
           )}
-          <OfficialWorkflowPanel mainModel={model} mainEffort={effort} />
+          <OfficialWorkflowPanel
+            mainModel={model}
+            mainEffort={effort}
+            mainProvider={
+              (app.models ?? []).find((m) => m.id === model)?.provider ??
+              (/^(claude|codex):/.exec(model ?? "")?.[1] as
+                "claude" | "codex" | undefined)
+            }
+          />
           <PromptLine
             onDraftChange={setSkillDraft}
             maxImages={app.images?.maxPerMessage}

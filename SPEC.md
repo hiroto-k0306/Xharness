@@ -477,3 +477,7 @@ Codexの残量と認証・課金経路は別に検証する。公式App Server 0
 DAGのUI・runtime公開入口はfixture/modelの模擬実行に限定する。元checkoutや未コミット変更は対象にしない。一般プロジェクトの任意コード実行、実SDK/App Serverの複数worktree強制書込み隔離、native会話resumeは未対応で、模擬成功を実provider成功と呼ばない。詳細は[Jobと合成DAG](docs/official-workflow-dag.md)。
 
 一般projectにはproviderを起動しない非破壊preflight CLIを提供する。Git root/HEAD/dirty状態と計画scopeの実体・link・traversal・設定を検査し、未コミット変更や設定を修正しない。Git include/filterがある場合は追加Git検査を止め、HEAD/cleanを未知として報告する。inspectionPassedはnative実行許可やOS隔離の証明ではない。公式runtimeの権限ゲートとWindows shell/test隔離の限界、拒否テスト、再実行方法は[preflightと隔離境界](docs/official-workflow-preflight.md)を参照。
+
+### 配布版の公式専用プロファイル（2026-10-06）
+
+ユーザー承認済みの配布版検証・利用導線として、`--official-only` と絶対パスの `XHARNESS_HOME` を指定すると、単一起動ロック取得前にElectronのprofileをそのhomeへ分離する。公式SDK/App Server自身の正規認証を使用し、X側の旧資格情報reader・ログイン・自動更新・旧モデル送信を接続しない。既存homeを移行・コピーせず、通常の起動動作は変更しない。公式専用では「公式workflow」の操作を使用し、旧チャット欄への送信は明示拒否する。

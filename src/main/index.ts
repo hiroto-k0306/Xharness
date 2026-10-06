@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, safeStorage, shell } from "electron";
 import { homedir } from "node:os";
 import { mkdirSync } from "node:fs";
 import { fakeUserDataPath } from "./fake-profile.js";
+import { officialProfile, unavailableLegacy } from "./official-profile.js";
 import { acquireHomeWriter } from "./home-writer.js";
 import { loadMainConfig } from "./config/config.js";
 import { join } from "node:path";
@@ -51,6 +52,11 @@ import {
 const here = fileURLToPath(new URL(".", import.meta.url));
 const startup = parseStartupArgs(process.argv.slice(1));
 const fake = startup.fake;
+const officialUserData = officialProfile(
+  process.argv.slice(1),
+  process.env.XHARNESS_HOME,
+);
+const officialOnly = !!officialUserData;
 const testUserData = connectionTestProfile(
   process.argv.slice(1),
   app.isPackaged,
@@ -66,6 +72,7 @@ const siwcFixture = siwcFixtureProfile(
 );
 // 明示的なfakeのuserDataは単一起動ロックより前に分離する。実版は従来の保存先。
 const fakeUserData =
+  officialUserData ??
   testUserData ??
   fakeUserDataPath(fake, app.isPackaged, process.env.XHARNESS_HOME);
 if (fakeUserData) {
@@ -192,9 +199,10 @@ async function start() {
             autoRefresh,
           ),
         ];
-  const secrets = fake || connectionTest ? [] : await readLocalSecrets();
+  const secrets =
+    fake || connectionTest || officialOnly ? [] : await readLocalSecrets();
   const authentication =
-    fake || connectionTest
+    fake || connectionTest || officialOnly
       ? undefined
       : new Authentication({
           autoRefreshEnabled: () => autoRefreshEnabled,
@@ -217,7 +225,7 @@ async function start() {
     windowsSiwcProtector(safeStorage),
   );
   const siwc =
-    !app.isPackaged && (!fake || siwcFixture)
+    !officialOnly && !app.isPackaged && (!fake || siwcFixture)
       ? siwcFixture
         ? fixtureSiwcManager(vault)
         : new SiwcManager(vault, (url) => shell.openExternal(url), {
@@ -228,7 +236,7 @@ async function start() {
           })
       : undefined;
   controller = new SessionController({
-    ...(!app.isPackaged
+    ...(!officialOnly && !app.isPackaged
       ? {
           connections: developmentUiConnections(
             home,
@@ -246,9 +254,13 @@ async function start() {
     cliModel: startup.model ?? (connectionTest ? "claude:haiku" : undefined),
     cliEffort: (startup.effort ?? (connectionTest ? "low" : undefined)) as
       "low" | "medium" | "high" | "xhigh" | "max" | undefined,
-    provider: providers.find((p) => p.id === main.choice.provider)!,
-    providers,
-    fallback: main.fallback,
+    provider: officialOnly
+      ? unavailableLegacy(main.choice.provider)
+      : providers.find((p) => p.id === main.choice.provider)!,
+    providers: officialOnly
+      ? [unavailableLegacy("claude"), unavailableLegacy("codex")]
+      : providers,
+    fallback: officialOnly ? {} : main.fallback,
     web: main.web,
     model: main.choice.model,
     effort: main.choice.effort,
@@ -263,7 +275,10 @@ async function start() {
     localBrowserFactory: createLocalBrowser,
     emit: (event) => sendEvent(window, event),
     // MCP の OAuth トークンは OS の暗号化(Windows では DPAPI)で保存する。使えなければ OAuth を使わない
-    ...(!fake && !connectionTest && safeStorage.isEncryptionAvailable()
+    ...(!fake &&
+    !connectionTest &&
+    !officialOnly &&
+    safeStorage.isEncryptionAvailable()
       ? {
           mcpSecrets: fileSecretStore(join(home, "secrets"), {
             encrypt: (text) => safeStorage.encryptString(text),

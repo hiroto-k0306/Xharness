@@ -1,0 +1,7 @@
+# 配布版公式workflow検証（2026-10-06）
+
+対象: feature/official-workflow-single-task、開始HEAD cfabfcf34fda1dc859237e20cec6d7cb80fd4495。開始時はclean。Get-CimInstanceによるプロセス確認とCodexのチャット一覧に同checkoutを使用する実行中作業は見つからず、無関係なプロセスは終了していない。
+
+現状の問題: 配布版の公式workflowパネルは存在するが、未設定時に実在しない設定画面へ案内する。開発用接続選択のテストが配布版でも走る。通常会話の公式専用導線がない。一般projectのnative書き込み隔離は未完成で、今回も固定合成課題だけを対象とする。
+
+公式専用profileを追加。起動前にElectron保存先を分け、旧資格情報reader・認証更新・旧送信を接続しない。設定・認証ファイルの抽出やコピーは行わない。実通信・配布検証の結果は後続に追記する。

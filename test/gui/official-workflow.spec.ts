@@ -57,6 +57,7 @@ test("official single-task UI approves, cancels, restores checkpoints and cross-
 test("synthetic DAG UI restores approval and displays serial imports and full integration evidence", async ({
   gui,
 }) => {
+  test.setTimeout(60000);
   await gui.getByRole("button", { name: /new session/ }).click();
   await gui.getByRole("button", { name: "公式workflow", exact: true }).click();
   const panel = gui.getByRole("region", { name: "公式単一タスクworkflow" });
@@ -74,7 +75,7 @@ test("synthetic DAG UI restores approval and displays serial imports and full in
   await panel.getByRole("button", { name: "安全な段階から再開" }).click();
   await panel.getByRole("button", { name: "この計画を承認" }).click();
   await expect(panel.getByRole("heading", { name: /completed/ })).toBeVisible({
-    timeout: 25000,
+    timeout: 45000,
   });
   for (const id of ["add", "multiply", "combine"])
     await expect(

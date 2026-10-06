@@ -945,7 +945,82 @@ it.each([
     }
   },
 );
-it("records the exit code of a finished native command but never its output", async () => {
+it.each([
+  [false, "aggregated"],
+  [true, "aggregated"],
+  [true, "delta"],
+] as const)(
+  "records a finished command run bound to its item (synthetic text %s, output from %s)",
+  async (diagnosticText, outputSource) => {
+    const mock = fakeServer(),
+      original = mock.server.request;
+    const failure =
+      "Get-Content : Access denied Bearer never-persist-token\r\n";
+    mock.server.request = async (method, raw, signal) => {
+      if (method !== "turn/start") return original(method, raw, signal);
+      queueMicrotask(() => {
+        mock.emit("turn/started", {
+          threadId: "thread-fixture",
+          turn: { id: "turn-fixture" },
+        });
+        if (outputSource === "delta")
+          mock.emit("item/commandExecution/outputDelta", {
+            threadId: "thread-fixture",
+            turnId: "turn-fixture",
+            itemId: "exec-fixture",
+            delta: failure,
+          });
+        mock.emit("item/completed", {
+          threadId: "thread-fixture",
+          turnId: "turn-fixture",
+          item: {
+            id: "exec-fixture",
+            type: "commandExecution",
+            status: "failed",
+            command: "Get-Content add.mjs",
+            cwd: process.cwd(),
+            source: "agent",
+            exitCode: 1,
+            durationMs: 42,
+            aggregatedOutput: outputSource === "aggregated" ? failure : null,
+          },
+        });
+        mock.emit("turn/completed", {
+          threadId: "thread-fixture",
+          turn: { id: "turn-fixture", status: "completed" },
+        });
+      });
+      return { turn: { id: "turn-fixture" } };
+    };
+    const result = await new CodexWorkflowAgent(() => mock.server).run(
+      { ...request("implement"), diagnosticText },
+      new AbortController().signal,
+    );
+    const [run] = result.diagnostics!.commandRuns!;
+    expect(run).toMatchObject({
+      itemId: "exec-fixture",
+      status: "failed",
+      exitCode: 1,
+      durationMs: 42,
+      source: "agent",
+      cwd: "same",
+      argv: "not-provided",
+      outputSource: diagnosticText ? outputSource : "aggregated",
+      outputTruncated: false,
+    });
+    if (diagnosticText) {
+      expect(run!.command).toBe("Get-Content add.mjs");
+      expect(run!.cwdPath).toBe(process.cwd());
+      expect(run!.output).toContain("Access denied");
+      expect(run!.output).toContain("[redacted]");
+    } else {
+      expect(run!.command).toBeUndefined();
+      expect(run!.output).toBeUndefined();
+    }
+    expect(JSON.stringify(result)).not.toContain("never-persist-token");
+  },
+);
+it("keeps unreported command values null instead of inferring them", async () => {
   const mock = fakeServer(),
     original = mock.server.request;
   mock.server.request = async (method, raw, signal) => {
@@ -962,8 +1037,6 @@ it("records the exit code of a finished native command but never its output", as
           id: "exec-fixture",
           type: "commandExecution",
           status: "failed",
-          exitCode: 1,
-          aggregatedOutput: "never-persist-output",
         },
       });
       mock.emit("turn/completed", {
@@ -974,11 +1047,20 @@ it("records the exit code of a finished native command but never its output", as
     return { turn: { id: "turn-fixture" } };
   };
   const result = await new CodexWorkflowAgent(() => mock.server).run(
-    request("implement"),
+    { ...request("implement"), diagnosticText: true },
     new AbortController().signal,
   );
-  expect(result.diagnostics?.commandExits).toEqual([
-    { status: "failed", exitCode: 1 },
+  expect(result.diagnostics!.commandRuns).toEqual([
+    {
+      itemId: "exec-fixture",
+      status: "failed",
+      exitCode: null,
+      durationMs: null,
+      source: null,
+      cwd: "missing",
+      argv: "not-provided",
+      outputSource: "none",
+      outputTruncated: false,
+    },
   ]);
-  expect(JSON.stringify(result)).not.toContain("never-persist-output");
 });

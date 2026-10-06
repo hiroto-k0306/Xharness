@@ -1,4 +1,9 @@
-import type { AgentRequest, AgentResult, ToolEvidence } from "./contracts.js";
+import {
+  normalizeFile,
+  type AgentRequest,
+  type AgentResult,
+  type ToolEvidence,
+} from "./contracts.js";
 import { modelName, object } from "./usage.js";
 import { redact } from "../../core/redact.js";
 import type { CommandShape, RejectionStage } from "./command-approval.js";
@@ -12,6 +17,22 @@ export interface ApprovalDiagnostic {
   shape?: CommandShape;
   /** Present only for approved synthetic diagnostics, after secret redaction. */
   command?: string;
+}
+
+export interface CommandRunDiagnostic {
+  itemId: string;
+  status: "completed" | "failed";
+  exitCode: number | null;
+  durationMs: number | null;
+  source: string | null;
+  cwd: "same" | "different" | "missing";
+  argv: "not-provided";
+  /** Synthetic diagnostics only, secret-redacted. */
+  command?: string;
+  cwdPath?: string;
+  output?: string;
+  outputSource: "aggregated" | "delta" | "none";
+  outputTruncated: boolean;
 }
 
 export interface AgentDiagnostics {
@@ -30,8 +51,11 @@ export interface AgentDiagnostics {
   approvals?: ApprovalDiagnostic[];
   /** Number of environments in the thread/start response (null when absent). */
   threadEnvironments?: number | null;
-  /** Exit codes of finished native commands; output text is never stored. */
-  commandExits?: { status: "completed" | "failed"; exitCode: number | null }[];
+  /**
+   * One entry per finished native command item. Values Codex did not report
+   * stay null; argv is not part of the App Server item and is never inferred.
+   */
+  commandRuns?: CommandRunDiagnostic[];
   /** Fixed XHarness stop codes; never native text. */
   stops?: string[];
   /** Codex CodexErrorInfo variant names only; messages are never stored. */
@@ -84,16 +108,63 @@ export function diagnostics(
       if (data.tools.length < 100)
         data.tools.push({ name: e.name, status: e.status });
     },
-    commandExit(status: "completed" | "failed", exitCode: unknown) {
-      data.commandExits ??= [];
-      if (data.commandExits.length < 50)
-        data.commandExits.push({
-          status,
-          exitCode:
-            typeof exitCode === "number" && Number.isInteger(exitCode)
-              ? exitCode
-              : null,
-        });
+    commandRun(
+      itemId: string,
+      status: "completed" | "failed",
+      item: Record<string, unknown>,
+      delta?: string,
+    ) {
+      data.commandRuns ??= [];
+      if (data.commandRuns.length >= 50) return;
+      const text =
+        typeof item.aggregatedOutput === "string"
+          ? item.aggregatedOutput
+          : delta;
+      const clean = (v: string, max: number) =>
+        redact(safeDiagnosticText(v.slice(-max)));
+      data.commandRuns.push({
+        itemId,
+        status,
+        exitCode:
+          typeof item.exitCode === "number" && Number.isInteger(item.exitCode)
+            ? item.exitCode
+            : null,
+        durationMs:
+          typeof item.durationMs === "number" &&
+          Number.isFinite(item.durationMs)
+            ? item.durationMs
+            : null,
+        source:
+          typeof item.source === "string" &&
+          /^[A-Za-z]{1,40}$/.test(item.source)
+            ? item.source
+            : null,
+        cwd:
+          typeof item.cwd !== "string"
+            ? "missing"
+            : normalizeFile(item.cwd) === normalizeFile(request.cwd)
+              ? "same"
+              : "different",
+        argv: "not-provided",
+        ...(request.diagnosticText
+          ? {
+              ...(typeof item.command === "string"
+                ? { command: clean(item.command, 2000) }
+                : {}),
+              ...(typeof item.cwd === "string"
+                ? { cwdPath: clean(item.cwd, 1000) }
+                : {}),
+              ...(text !== undefined ? { output: clean(text, 4000) } : {}),
+            }
+          : {}),
+        outputSource:
+          typeof item.aggregatedOutput === "string"
+            ? "aggregated"
+            : delta !== undefined
+              ? "delta"
+              : "none",
+        outputTruncated: text !== undefined && text.length > 4000,
+      });
     },
     stop(code: string) {
       data.stops ??= [];

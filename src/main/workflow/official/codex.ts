@@ -247,6 +247,8 @@ export class CodexWorkflowAgent implements OfficialAgent {
       complete = r;
     });
     const evidence: Promise<void>[] = [];
+    // Bounded per-item output deltas, used only when the item has no aggregate.
+    const outputs = new Map<string, string>();
     const add = (
       item: Record<string, unknown>,
       status: "requested" | "completed" | "failed",
@@ -265,7 +267,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
       )
         return;
       if (item.type === "commandExecution" && status !== "requested")
-        diagnostic.commandExit(status, item.exitCode);
+        diagnostic.commandRun(item.id, status, item, outputs.get(item.id));
       diagnostic.tool({
         name: String(item.type),
         status,
@@ -331,6 +333,16 @@ export class CodexWorkflowAgent implements OfficialAgent {
           object(params.error).codexErrorInfo,
         );
       }
+      if (
+        method === "item/commandExecution/outputDelta" &&
+        request.diagnosticText &&
+        id(params.itemId) &&
+        typeof params.delta === "string"
+      )
+        outputs.set(
+          params.itemId,
+          ((outputs.get(params.itemId) ?? "") + params.delta).slice(-8000),
+        );
       if (method === "thread/tokenUsage/updated")
         usage = codexUsage(params.tokenUsage) ?? usage;
       if (method === "item/started" || method === "item/completed") {

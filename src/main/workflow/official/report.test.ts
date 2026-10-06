@@ -63,7 +63,25 @@ it("separates model evidence and escapes it without leaking diagnostic answer te
       command: "pwsh -Command <script>",
     },
   ];
+  call.diagnostics.commandRuns = [
+    {
+      itemId: "exec-1",
+      status: "failed",
+      exitCode: 1,
+      durationMs: null,
+      source: "agent",
+      cwd: "same",
+      argv: "not-provided",
+      output: "<b>error</b>",
+      outputSource: "aggregated",
+      outputTruncated: false,
+    },
+  ];
   const denied = officialWorkflowReport(record);
+  expect(denied).toContain(
+    "<td>exec-1</td><td>failed</td><td>1</td><td>未報告</td>",
+  );
+  expect(denied).toContain("&lt;b&gt;error&lt;/b&gt;");
   expect(denied).toContain("<td>拒否</td>");
   expect(denied).toContain("<td>program</td><td>shell-wrapper</td>");
   expect(denied).toContain("pwsh -Command &lt;script&gt;");

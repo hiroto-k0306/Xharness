@@ -76,3 +76,15 @@ npx tsx scripts/official-workflow.ts --authorized-live --synthetic-only --codex 
 単一タスクのUI E2Eでは中断→画面リロード→再承認→合格と両provider方向を確認。main serviceの新規instanceでは承認待ち復元、送信済み不確定callの拒否、変更workspaceの保全、事前確認失敗の記録を検証する。runtimeでverify/review checkpointから完了済みmodel作業を再送せず継続することと、test command変更時の拒否を確認する。
 
 親から後続ユーザー許可の引用と「同じコマンドを1回だけ再試行」の明示指示を受け、2026-10-06にその1回を再試行した。自動承認審査は引用を「untrusted assistant-provided evidence」と扱い、元のfake/mock限定を理由に再び起動前に拒否した。指示どおり停止し、経路変更や追加再試行はしていない。今回workflowの実プロバイダquery・サブスク使用は引き続き0。既存stage5の過去の実通信とは分ける。
+
+## 通常UI・中断再開の最終検証（2026-10-06）
+
+最終コードの検証対象は `e3090b2a45350a037011047df41ebb61f2942944`。全回帰は199ファイル・1787テストすべて合格（249.30秒）。typecheck、lint、format、Electron build、headless buildも合格した。以後の変更はこの検証記録のみ。
+
+GUI全体の最初の実行では22件合格・2件スキップ・既存改善比較1件タイムアウトだった。比較用selectが有効になる待機で止まり、新workflowのE2Eは合格していた。既存テストをコード変更なしで単独再実行すると1件合格（2.3秒）、続くGUI全体の再実行は23件合格・2件スキップ（56.0秒）。最初の失敗を取り消さず、タイミング依存の未解消事項として残す。スキップはportable exeとpackaged restartで、配布exeを作成・更新していないため未実行。
+
+途中で見つかったpreload公開APIの旧allowlistは、専用workflow操作を含む契約へ更新し、既存local file境界の検査を維持した。ElectronをNodeテストとして起動してしまう問題はPATHのNodeを使うことで修正し、その後の新workflow GUIは合格した。runtime/service/IPCの関連6ファイル・41テストも合格。新規service instanceによるプロセス喪失状態の復元・不明なdispatchの再送拒否と、保存verify/review段階からの再開はmockで検証した。配布版の実プロセス再起動は上記のとおり未実行。
+
+証拠: `.out/official-workflow-ui-final-validation.json`、`.out/official-workflow-ui-final-vitest.json`、`.out/official-workflow-ui-final-gui.log`（最初のGUI結果）、`.out/official-workflow-ui-final-gui-rerun.log`（再実行）、`.out/official-workflow-ui-final-gui-rerun.json`、`.out/official-workflow-ui.png`（通常UI）。スクリーンショットでは実Nodeテストの失敗・合格、別providerによる全差分レビューと修正1回を確認した。
+
+この新workflowの実通信再試行は1回のみで、審査が起動前に拒否したためprovider query・サブスク消費は0。DAG並列、一般プロジェクトへの適用、native会話そのもののresume、Windows Jobによる全孫プロセス管理は次段階のまま。ユーザーの元作業領域 `D:\AIwork\Xharness` はHEAD `50e7707c0704e1d5aea5818cdea4bae8a2ef7599`・cleanを確認し、push/merge・アプリ更新は行っていない。

@@ -21,6 +21,9 @@ import { type McpServerConfig } from "../mcp/config.js";
 import { shellSearchTools } from "../tools/shell-search.js";
 import { lifecycleTools } from "../tools/lifecycle.js";
 import { todoTools } from "../tools/todos.js";
+import { projectHistoryTools } from "../tools/project-history.js";
+import { projectMemoryTools } from "../tools/project-memory.js";
+import { projectSkillTools } from "../tools/project-skills.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import { type WorkflowRuntime } from "../workflow/runtime.js";
 import {
@@ -45,6 +48,11 @@ export interface Host {
   saveReport?(filename: string): Promise<string | undefined>;
 }
 export interface ControllerOptions {
+  localBrowserFactory?: import("../computer-use/adapter.js").LocalBrowserFactory;
+  localBrowserTimeoutMs?: number;
+  /** Offline tests may control quota scheduling without advancing global timers. */
+  quotaNow?(): number;
+  quotaTimers?: boolean;
   authentication?: Authentication;
   cliModel?: string;
   cliEffort?: Effort;
@@ -82,10 +90,16 @@ export interface ControllerOptions {
 
 /** セッションごとの実行時状態(メモリ上のみ) */
 export interface Runtime {
+  /** A resumed request never inherits automatic tool confirmation. */
+  quotaContinuation?: boolean;
+  quotaGuard?: () => Promise<boolean>;
+  lastStopCause?: string;
+  evaluationTaskId?: string;
   childHandoffs?: import("../agents/handoffs.js").ChildHandoffs;
   llmCalls?: import("../../shared/llm-calls.js").LlmCalls;
   rewindPrompt?: {
     requestId: string;
+    event?: Extract<UiEvent, { type: "rewind_request" }>;
     resolve(choice: import("../../shared/rewind.js").RewindChoice | null): void;
   };
   environment?: import("../tools/environment.js").EnvironmentReport;
@@ -107,6 +121,7 @@ export interface Runtime {
   abort?: AbortController;
   status: SessionStatus;
   pending?: {
+    event?: Extract<UiEvent, { type: "permission_request" }>;
     plan?: PlanItem[];
     requestId: string;
     resolve(decision: PermissionDecision): void;
@@ -160,6 +175,22 @@ export function createRuntime(): Runtime {
  * controller 自身がこれを実装し、モジュールはこの型だけに依存する。
  */
 export interface ControllerContext {
+  quotaPaused?(
+    session: StoredSession,
+    rt: Runtime,
+    evidence: {
+      rate: {
+        provider: string;
+        model: string;
+        receivedAt: number;
+        retryAfterSec?: number;
+        scope?: string;
+        windows?: import("../providers/provider.js").QuotaUsage["windows"];
+      };
+      unsafe: boolean;
+      saved: boolean;
+    },
+  ): Promise<void>;
   readonly options: ControllerOptions;
   readonly sessions: SessionStore;
   readonly receipts: ReceiptStore;
@@ -170,6 +201,7 @@ export interface ControllerContext {
   readonly quota: Partial<Record<"claude" | "codex", number>>;
   /** 枠ごとの最新の使用率とリセット時刻(Web 検索の auto 用。§22.2) */
   readonly usage: ProviderUsage;
+  readonly candidateQuotas?: import("./candidate-quota.js").CandidateQuotas;
   readonly worktreeBusy: Set<string>;
   /** Synchronous reservation covering send preparation and session operations. */
   readonly sessionBusy: Set<string>;
@@ -275,10 +307,7 @@ export function toReceipt(
     tool: r.tool,
     decision: isTool ? (r.decision === "error" ? "deny" : "allow") : undefined,
     durationMs,
-    usage: r.usage && {
-      inputTokens: r.usage.inputTokens,
-      outputTokens: r.usage.outputTokens,
-    },
+    usage: r.usage,
     summary:
       r.provider === "hook"
         ? `hook ${r.timing}:${r.step} → ${r.tool ?? "workflow"} ${r.decision}`
@@ -311,4 +340,46 @@ export function defaultTools(cwd: string, readOnly: boolean): ToolRegistry {
   if (!readOnly) return all;
   // 読み取り専用で開いたセッションは plan 相当: 書き込み系ツールを渡さない(§9.1, §18.2)
   return new Map([...all].filter(([, tool]) => tool.readOnly));
+}
+
+/** History tools keep the parent's registered project scope, including children. */
+export function sessionTools(
+  ctx: ControllerContext,
+  session: StoredSession,
+  cwd = session.cwd,
+): ToolRegistry {
+  return new Map([
+    ...(ctx.options.createTools ?? defaultTools)(cwd, session.readOnly),
+    ...projectHistoryTools({
+      home: ctx.options.home,
+      sessions: ctx.sessions,
+      workspaces: ctx.workspaces,
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      cwd,
+      clean: (text) => ctx.clean(text),
+    }),
+    ...projectMemoryTools(
+      {
+        home: ctx.options.home,
+        sessions: ctx.sessions,
+        workspaces: ctx.workspaces,
+        sessionId: session.id,
+        workspaceId: session.workspaceId,
+        cwd,
+        clean: (text) => ctx.clean(text),
+      },
+      !session.readOnly,
+      () => ctx.options.emit({ type: "memory_changed", sessionId: session.id }),
+    ),
+    ...projectSkillTools({
+      home: ctx.options.home,
+      sessions: ctx.sessions,
+      workspaces: ctx.workspaces,
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      cwd,
+      clean: (text) => ctx.clean(text),
+    }),
+  ]);
 }

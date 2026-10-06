@@ -146,7 +146,10 @@ it("renders all recorded demo steps with shared cards, only LLM call highlights 
   expect(document.querySelector(".report-overview")?.textContent).toContain(
     "権限拒否：1",
   );
-  const contextInput = cards[0]!.querySelector(".exchange > div")!;
+  const contextCard = cards.find((card) =>
+    card.querySelector("h3")?.textContent?.includes("STEP 1"),
+  )!;
+  const contextInput = contextCard.querySelector(".exchange > div")!;
   expect(contextInput.textContent).toContain("依頼・追加の指示");
   expect(contextInput.textContent).not.toContain("LLMの返答");
   for (const link of document.querySelectorAll('a[href^="#trace-"]'))

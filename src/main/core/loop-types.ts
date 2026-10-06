@@ -63,6 +63,7 @@ export interface LoopContext {
   route?: Route;
   fallbackRoute?: Route;
   visitedModels: Set<string>;
+  limitedProviders: Set<import("./types.js").ProviderId>;
   round: number;
   messages: Message[];
   request?: ProviderRequest;
@@ -141,6 +142,7 @@ export function createLoopContext(options: LoopOptions): LoopContext {
     throw new Error("Invalid round limit");
   return {
     visitedModels: new Set(),
+    limitedProviders: new Set(),
     round: 1,
     messages: structuredClone(options.messages),
     receipts: [],

@@ -1,5 +1,5 @@
 import { traceStream } from "../../core/trace.js";
-import { reserveLlmCall } from "../../core/llm-budget.js";
+import { reserveLlmCall, flushLlmCalls } from "../../core/llm-budget.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -76,6 +76,167 @@ export function routeFake(
   request: ProviderRequest,
   provider: ProviderId = "claude",
 ): FakeStep {
+  const memoryPrompt =
+    [...request.messages]
+      .reverse()
+      .flatMap((message) =>
+        message.role === "user"
+          ? message.content.flatMap((block) =>
+              block.type === "text" ? [block.text] : [],
+            )
+          : [],
+      )
+      .at(0) ?? "";
+  let skillDemo: string[] | null =
+    /^skills-demo: (list|load ([^ ]+) ([a-f0-9]{64}))$/i.exec(memoryPrompt);
+  const managerLoad =
+    /^選択したプロジェクトスキルを読み込んでください。\n(\{[^\n]+\})\n/.exec(
+      memoryPrompt,
+    );
+  let referenceInput = {};
+  if (managerLoad) {
+    try {
+      const input = JSON.parse(managerLoad[1]!) as {
+        source: string;
+        hash: string;
+        referenceSource?: string;
+        referenceHash?: string;
+      };
+      skillDemo = ["", "load", input.source, input.hash];
+      if (input.referenceSource)
+        referenceInput = {
+          referenceSource: input.referenceSource,
+          referenceHash: input.referenceHash,
+        };
+    } catch {
+      /* Invalid fake fixture does not become a tool call. */
+    }
+  }
+  if (skillDemo) {
+    const result = request.messages
+      .at(-1)
+      ?.content.find((b) => b.type === "tool_result");
+    return result?.type === "tool_result"
+      ? {
+          type: "message",
+          stopReason: "end_turn",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: `Skill reference data: ${String(result.content)}`,
+              },
+            ],
+          },
+        }
+      : {
+          type: "message",
+          stopReason: "tool_use",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "skill-demo",
+                name:
+                  skillDemo[1] === "list"
+                    ? "ListProjectSkills"
+                    : "LoadProjectSkill",
+                input:
+                  skillDemo[1] === "list"
+                    ? {}
+                    : {
+                        source: skillDemo[2],
+                        hash: skillDemo[3],
+                        ...referenceInput,
+                      },
+              },
+            ],
+          },
+        };
+  }
+  const memoryDemo = /^memory-demo: ([\w-]+)\/(\d+)$/i.exec(memoryPrompt);
+  if (memoryDemo)
+    return endsWithToolResult(request)
+      ? {
+          type: "message",
+          stopReason: "end_turn",
+          message: {
+            role: "assistant",
+            content: [
+              { type: "text", text: "Memory candidate saved for user review" },
+            ],
+          },
+        }
+      : {
+          type: "message",
+          stopReason: "tool_use",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "memory-demo",
+                name: "ProposeProjectMemory",
+                input: {
+                  kind: "decision",
+                  topic: "SQLite storage",
+                  content:
+                    "Use SQLite for the local storage decision; verify current requirements before reuse.",
+                  sources: [
+                    {
+                      sessionId: memoryDemo[1],
+                      messageLine: Number(memoryDemo[2]),
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        };
+  if (/^memory-search: /i.test(memoryPrompt))
+    return endsWithToolResult(request)
+      ? {
+          type: "message",
+          stopReason: "end_turn",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text:
+                  "Memory reference result: " +
+                  String(
+                    (
+                      request.messages
+                        .at(-1)
+                        ?.content.find((b) => b.type === "tool_result") as {
+                        content?: unknown;
+                      }
+                    )?.content,
+                  ),
+              },
+            ],
+          },
+        }
+      : {
+          type: "message",
+          stopReason: "tool_use",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "memory-search",
+                name: "SearchProjectMemory",
+                input: { query: memoryPrompt.slice(15) },
+              },
+            ],
+          },
+        };
+  if (/^quota-demo\b/i.test(lastUserText(request)))
+    return { type: "rate_limited", retryAfterSec: 120, scope: "5h" };
   const demo = phase5Demo(request);
   if (demo) return demo;
   if (request.webSearch)
@@ -83,6 +244,55 @@ export function routeFake(
       type: "fixture",
       name: provider === "codex" ? "phase3-web-live" : "phase3-web-haiku",
     };
+  // Explicit offline history demo for UI/headless regression checks.
+  const historyPrompt = [...request.messages]
+    .reverse()
+    .flatMap((message) =>
+      message.role === "user"
+        ? message.content.flatMap((block) =>
+            block.type === "text" ? [block.text] : [],
+          )
+        : [],
+    )
+    .at(0);
+  if (historyPrompt && /^history-demo: /i.test(historyPrompt)) {
+    const result = request.messages
+      .at(-1)
+      ?.content.find((block) => block.type === "tool_result");
+    return result?.type === "tool_result"
+      ? {
+          type: "message",
+          stopReason: "end_turn",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: `History reference data: ${typeof result.content === "string" ? result.content : "unavailable"}`,
+              },
+            ],
+          },
+        }
+      : {
+          type: "message",
+          stopReason: "tool_use",
+          message: {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: "history-demo",
+                name: "SearchProjectHistory",
+                input: {
+                  query: historyPrompt
+                    .slice("history-demo: ".length)
+                    .slice(0, 200),
+                },
+              },
+            ],
+          },
+        };
+  }
   if (provider === "codex") {
     if (endsWithToolResult(request))
       return { type: "fixture", name: "x3-tool-2" };
@@ -190,6 +400,8 @@ export class FakeProvider implements Provider {
     signal: AbortSignal,
   ): AsyncGenerator<ProviderEvent> {
     reserveLlmCall(signal, true);
+    await flushLlmCalls();
+    signal.throwIfAborted();
     this.options.onRequest?.(structuredClone(request));
     const step = this.script.shift() ?? routeFake(request, this.id);
     try {

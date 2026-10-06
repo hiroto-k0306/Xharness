@@ -1,5 +1,10 @@
 // main / preload / renderer が共有する契約。electron を import しない。
 import { parseRewindChoice } from "./rewind.js";
+import { parseMemoryAction } from "./project-memory.js";
+import { parseSkillUiRequest } from "./project-skills.js";
+import { parseImprovementAction } from "./improvements.js";
+import { parseHandoffAction } from "./handoffs.js";
+import { parseLocalBrowserAction } from "./local-browser.js";
 import { attachmentInfo, type ImageAttachment } from "./images.js";
 // DESIGN.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
 // §14.2のローカルリンク専用IPCはpreload内部だけで使用し、公開APIには含めない。
@@ -52,7 +57,7 @@ export interface Receipt {
   tool?: string;
   decision?: "allow" | "deny" | "ask→allow" | "ask→deny";
   durationMs: number;
-  usage?: { inputTokens: number; outputTokens: number };
+  usage?: import("../main/core/types.js").Usage;
   summary: string;
 }
 
@@ -68,6 +73,7 @@ export const EFFORT_VALUES: readonly Effort[] = [
 export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
+  quotaPause?: import("./quota-resume.js").QuotaPauseView;
   llmCalls?: import("./llm-calls.js").LlmCalls;
   imageBytes?: number;
   worktree?: { path: string; branch: string; baseBranch: string };
@@ -176,6 +182,7 @@ export type TranscriptItem =
  * "state" / "transcript" / "user_message" / "turn" / "tool_result" / "permission_resolved" も追加分。
  */
 export type UiEvent =
+  | { type: "memory_changed"; sessionId: string }
   | {
       type: "rewind_request";
       sessionId: string;
@@ -322,6 +329,37 @@ export type PermissionDecision = "allow" | "always" | "session" | "deny";
 
 export type HarnessCommand =
   | {
+      type: "local_browser";
+      sessionId: string;
+      request: import("./local-browser.js").LocalBrowserAction;
+    }
+  | {
+      type: "handoffs";
+      sessionId: string;
+      request: import("./handoffs.js").HandoffAction;
+    }
+  | {
+      type: "improvements";
+      sessionId: string;
+      operationId: string;
+      request: import("./improvements.js").ImprovementAction;
+    }
+  | {
+      type: "project_skills";
+      sessionId: string;
+      request: import("./project-skills.js").SkillUiRequest;
+    }
+  | {
+      type: "project_memory";
+      sessionId: string;
+      request: import("./project-memory.js").MemoryAction;
+    }
+  | {
+      type: "quota_resume";
+      sessionId: string;
+      action: "enable" | "cancel" | "now";
+    }
+  | {
       type: "rewind_response";
       sessionId: string;
       requestId: string;
@@ -393,7 +431,21 @@ export const REPORTED_ERRORS: readonly string[] = [
 ];
 
 export type CommandResult =
-  | { ok: true; workspaceId?: string; sessionId?: string }
+  | {
+      ok: true;
+      workspaceId?: string;
+      sessionId?: string;
+      memory?: import("./project-memory.js").MemoryList;
+      improvements?: import("./improvements.js").ImprovementView;
+      handoffs?: import("./handoffs.js").HandoffView;
+      localBrowser?: import("./local-browser.js").LocalBrowserView;
+      preparedPrompt?: string;
+      modelCandidates?: import("./model-candidates.js").ModelCandidateView;
+      skills?:
+        | import("./project-skills.js").SkillListing
+        | import("./project-skills.js").SkillPreview
+        | import("./project-skills.js").SkillReferenceInspection;
+    }
   | { ok: false; error: string };
 
 /** preload が window.harness として公開する型付き API。これ以外は渡さない。 */
@@ -418,6 +470,57 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "local_browser": {
+      const request = parseLocalBrowserAction(c.request);
+      return str(c.sessionId) &&
+        /^[\w-]{1,128}$/.test(c.sessionId) &&
+        request &&
+        jsonFits(c.request)
+        ? { type: "local_browser", sessionId: c.sessionId, request }
+        : undefined;
+    }
+    case "handoffs": {
+      const request = parseHandoffAction(c.request);
+      return str(c.sessionId) && /^[\w-]{1,128}$/.test(c.sessionId) && request
+        ? { type: "handoffs", sessionId: c.sessionId, request }
+        : undefined;
+    }
+    case "project_skills": {
+      const request = parseSkillUiRequest(c.request);
+      return str(c.sessionId) && request
+        ? { type: "project_skills", sessionId: c.sessionId, request }
+        : undefined;
+    }
+    case "improvements": {
+      const request = parseImprovementAction(c.request);
+      return str(c.sessionId) &&
+        str(c.operationId) &&
+        /^[\w-]{1,128}$/.test(c.operationId) &&
+        request &&
+        jsonFits(c.request)
+        ? {
+            type: "improvements",
+            sessionId: c.sessionId,
+            operationId: c.operationId,
+            request,
+          }
+        : undefined;
+    }
+    case "project_memory": {
+      const request = parseMemoryAction(c.request);
+      return str(c.sessionId) && request && jsonFits(c.request)
+        ? { type: "project_memory", sessionId: c.sessionId, request }
+        : undefined;
+    }
+    case "quota_resume":
+      return str(c.sessionId) &&
+        ["enable", "cancel", "now"].includes(String(c.action))
+        ? {
+            type: "quota_resume",
+            sessionId: c.sessionId,
+            action: c.action as "enable" | "cancel" | "now",
+          }
+        : undefined;
     case "rewind_response": {
       const choice = c.choice === null ? null : parseRewindChoice(c.choice);
       return str(c.sessionId) &&

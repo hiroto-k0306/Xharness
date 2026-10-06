@@ -147,16 +147,28 @@ it("switches provider at the next round, keeps opaque history and scopes /model 
       m.content.some((b) => b.type === "text" && b.text.startsWith("/model")),
     ),
   ).toBe(false);
-  const other = await controller.handle({
+  const restarted = new SessionController({
+    provider: a,
+    providers: [a, b],
+    model: "claude-opus-5-5",
+    home,
+    fake: true,
+    version: "test",
+    host: { pickFolder: async () => undefined },
+    emit: (event) => events.push(event),
+  });
+  await restarted.init();
+  const other = await restarted.handle({
     type: "new_session",
     workspaceId: null,
   });
   expect(other.ok).toBe(true);
   if (!other.ok) throw new Error("create failed");
   expect(
-    (await controller.state()).sessions.find((s) => s.id === other.sessionId)
+    (await restarted.state()).sessions.find((s) => s.id === other.sessionId)
       ?.model,
   ).toBe("claude-opus-5-5");
+  await restarted.shutdown();
 });
 it("persists fallback for this session and delivers missing usage as unknown to the UI", async () => {
   const aRequests: ProviderRequest[] = [],

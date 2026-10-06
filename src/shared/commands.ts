@@ -5,6 +5,11 @@ export interface CommandSuggestion {
 }
 export const builtinCommands: CommandSuggestion[] = [
   {
+    value: "/quota-resume",
+    args: "enable|cancel|now",
+    description: "保存した利用枠待ちの明示有効化・取消・手動再確認（desktop）",
+  },
+  {
     value: "/schedule",
     args: "help|after|every|idle|event|list|cancel",
     description: "起動中だけ有効な予約・イベント待ち（発火時にモデル通信）",

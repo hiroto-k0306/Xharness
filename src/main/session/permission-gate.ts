@@ -8,7 +8,7 @@ import {
   normalizeCall,
 } from "../core/permissions.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
-import { type PermissionDecision } from "../../shared/ipc.js";
+import { type PermissionDecision, type UiEvent } from "../../shared/ipc.js";
 import { summarizeInput } from "../../shared/summary.js";
 import { type StoredSession } from "./store.js";
 import { safeInput, type ControllerContext, type Runtime } from "./context.js";
@@ -61,6 +61,7 @@ export class PermissionGate {
     agentId,
   }: PermissionRequest): Promise<PermissionDecision> {
     const { ctx } = this;
+    forceAsk ||= !!rt.quotaContinuation;
     const fullCall = { ...call, id: "permission" };
     rt.asked = false;
     if (rt.config) {
@@ -84,6 +85,7 @@ export class PermissionGate {
       if (
         (latest.permissionMode ?? rt.config.permissions.mode) ===
           "acceptEdits" &&
+        !rt.quotaContinuation &&
         !latest.readOnly &&
         !session.readOnly &&
         !["ProjectSettings", "ProjectHooks", "McpServer", "McpPrompt"].includes(
@@ -96,9 +98,9 @@ export class PermissionGate {
     const requestId = randomUUID().slice(0, 8);
     rt.asked = true;
     rt.status = "ask";
-    ctx.options.emit({
+    const event: Extract<UiEvent, { type: "permission_request" }> = {
       type: "permission_request",
-      oneTime: forceAsk && call.name === "Bash",
+      oneTime: !!rt.quotaContinuation || (forceAsk && call.name === "Bash"),
       agentId,
       ...(call.name === "SubmitPlan"
         ? {
@@ -133,7 +135,8 @@ export class PermissionGate {
         ].includes(call.name)
           ? ctx.clean(JSON.stringify(call.input))
           : summarizeInput(call.name, call.input, ctx.clean, 300)),
-    });
+    };
+    ctx.options.emit(event);
     void ctx.emitState();
     const decision = await new Promise<PermissionDecision>(
       (resolveDecision) => {
@@ -144,6 +147,7 @@ export class PermissionGate {
         };
         const onAbort = () => done("deny");
         rt.pending = {
+          event,
           requestId,
           resolve: done,
           ...(call.name === "SubmitPlan"

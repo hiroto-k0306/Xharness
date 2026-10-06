@@ -10,6 +10,8 @@ import { type Tool } from "../tools/registry.js";
 import { type UiEvent } from "../../shared/ipc.js";
 import { defaultTools, SessionController, type Host } from "./controller.js";
 import { SessionStore } from "./store.js";
+import { evaluateTrace } from "./evaluation.js";
+import { readTraceReplay } from "./report-trace.js";
 
 let home: string;
 let workspace: string;
@@ -65,6 +67,43 @@ const idle = (id: string) =>
   events.some(
     (e) => e.type === "turn" && e.sessionId === id && e.status === "idle",
   );
+it("inherits an interrupted task after restart, then starts a new task after completion", async () => {
+  const c = make([{ type: "error", kind: "request" }]);
+  await c.init();
+  const created = await c.handle({ type: "new_session", workspaceId: null });
+  if (!created.ok || !created.sessionId) throw new Error("missing session");
+  const sessionId = created.sessionId;
+  await c.handle({ type: "send", sessionId, text: "first" });
+  await until(() => idle(sessionId));
+  const store = new SessionStore(home);
+  const original = await store.evaluationTask(sessionId);
+  expect(original?.active).toBe(true);
+  await c.shutdown();
+  events.length = 0;
+  const restarted = make();
+  await restarted.init();
+  await restarted.handle({ type: "send", sessionId, text: "resume" });
+  await until(() => idle(sessionId));
+  expect(await store.evaluationTask(sessionId)).toEqual({
+    id: original!.id,
+    active: false,
+    settled: true,
+    recoveryRequired: false,
+  });
+  const tasks = evaluateTrace(await readTraceReplay(home, sessionId, (s) => s));
+  expect(tasks).toHaveLength(1);
+  expect(tasks[0]).toMatchObject({
+    taskId: original!.id,
+    runs: 2,
+    outcome: "completed",
+  });
+  expect(new Set(tasks[0]!.calls.map((call) => call.attemptId)).size).toBe(2);
+  events.length = 0;
+  await restarted.handle({ type: "send", sessionId, text: "new task" });
+  await until(() => idle(sessionId));
+  expect((await store.evaluationTask(sessionId))!.id).not.toBe(original!.id);
+  await restarted.shutdown();
+});
 it("stops before a retry exceeds the cap, preserves history, and keeps the session total after restart", async () => {
   await writeFile(
     join(home, "config.yaml"),

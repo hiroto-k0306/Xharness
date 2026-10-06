@@ -82,6 +82,7 @@ export function ruleSubject(call: ToolCall): string {
   if (!input || typeof input !== "object") return "";
   // MCP のリソースはサーバー単位で許可する(§25.5)
   if (call.name === "ReadMcpResource") return String(input.server ?? "");
+  if (call.name === "ReadProjectHistory") return String(input.sessionId ?? "");
   return String(input.command ?? input.path ?? input.url ?? input.query ?? "");
 }
 /** 明らかに破壊的なコマンド。括弧や連結の中にあっても見つける */
@@ -234,7 +235,13 @@ export async function decidePermission(
     if (restricted("ask")) return "ask";
     return allowed ? "allow" : "ask";
   }
-  const write = ["Write", "Edit", "MultiEdit"].includes(call.name);
+  const write = [
+    "Write",
+    "Edit",
+    "MultiEdit",
+    "ProposeProjectMemory",
+    "LocalBrowserClick",
+  ].includes(call.name);
   if (mode === "plan" && write) return "deny";
   if (call.name === "Bash") {
     const shape = analyzeCommand(subject);

@@ -16,6 +16,12 @@ import {
 } from "./components/Activity.js";
 import { PermissionInline } from "./components/PermissionInline.js";
 import { PromptLine } from "./components/PromptLine.js";
+import { QuotaPause } from "./components/QuotaPause.js";
+import { ProjectMemoryPanel } from "./components/ProjectMemory.js";
+import { ImprovementsPanel } from "./components/Improvements.js";
+import { HandoffsPanel } from "./components/Handoffs.js";
+import { LocalBrowserPanel } from "./components/LocalBrowser.js";
+import { SkillsManager } from "./components/SkillsManager.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { StepTabs } from "./components/StepTabs.js";
 import { TitleBar } from "./components/TitleBar.js";
@@ -34,6 +40,9 @@ function modelLabel(model: string, effort: string): string {
 
 export function App() {
   const [modelOpen, setModelOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  const [improvementsOpen, setImprovementsOpen] = useState(false);
+  const [skillDraft, setSkillDraft] = useState("");
   const [selectedAgents, setSelectedAgents] = useState<Record<string, string>>(
     {},
   );
@@ -47,6 +56,8 @@ export function App() {
   useEffect(() => s.start(), []);
 
   const current = app?.currentSessionId ?? null;
+  useEffect(() => setSkillsOpen(false), [current]);
+  useEffect(() => setImprovementsOpen(false), [current]);
   const view = current ? views[current] : undefined;
   const session = app?.sessions.find((x) => x.id === current);
   const workspace = app?.workspaces.find((w) => w.id === session?.workspaceId);
@@ -458,7 +469,9 @@ export function App() {
               }}
             />
           ) : (
-            view?.pending && (
+            view?.pending &&
+            !skillsOpen &&
+            !improvementsOpen && (
               <PermissionInline
                 oneTime={view.pending.oneTime}
                 persistent={app.phase4}
@@ -527,7 +540,50 @@ export function App() {
               /compact を実行してください（保存済み画像は残ります）。
             </div>
           )}
+          {session?.quotaPause && current && (
+            <QuotaPause pause={session.quotaPause} sessionId={current} />
+          )}
+          {current && session?.workspaceId && (
+            <SkillsManager
+              key={`skills-${current}`}
+              sessionId={current}
+              open={skillsOpen}
+              onOpenChange={setSkillsOpen}
+              running={!!view?.running || waiting}
+              persistent={app.phase4}
+              receipts={view?.receipts ?? []}
+              permission={view?.pending}
+              draft={skillDraft}
+            />
+          )}
+          {current && session?.workspaceId && (
+            <LocalBrowserPanel
+              key={`local-browser-${current}`}
+              sessionId={current}
+            />
+          )}
+          {current && session?.workspaceId && (
+            <HandoffsPanel
+              key={`handoffs-${current}`}
+              session={session}
+              sessions={app.sessions}
+            />
+          )}
+          {current && session?.workspaceId && (
+            <ProjectMemoryPanel key={current} sessionId={current} />
+          )}
+          {current && session?.workspaceId && (
+            <ImprovementsPanel
+              key={`improvements-${current}`}
+              sessionId={current}
+              workspaceId={session.workspaceId}
+              permission={view?.pending}
+              open={improvementsOpen}
+              onOpenChange={setImprovementsOpen}
+            />
+          )}
           <PromptLine
+            onDraftChange={setSkillDraft}
             maxImages={app.images?.maxPerMessage}
             sessionId={current}
             imageInput={app.models?.find((m) => m.id === model)?.imageInput}

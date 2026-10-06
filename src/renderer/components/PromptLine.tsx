@@ -16,6 +16,7 @@ export interface PromptLineProps {
   imageInput?: boolean;
   onStop?(): void;
   onModel?(): void;
+  onDraftChange?(text: string): void;
   mode?: "default" | "acceptEdits" | "plan";
   readOnly?: boolean;
   onMode?(mode: "default" | "acceptEdits" | "plan"): void;
@@ -65,6 +66,7 @@ export function PromptLine(p: PromptLineProps) {
   const attachmentGeneration = useRef(0);
   const ref = useRef<HTMLTextAreaElement>(null);
   const disabled = p.running || p.blocked || reading;
+  useEffect(() => p.onDraftChange?.(text), [text, p.onDraftChange]);
   useEffect(() => {
     attachmentGeneration.current++;
     if (!sending.current) {

@@ -6,6 +6,8 @@ import {
 import { type ProviderEvent, type StopReason } from "../provider.js";
 import { readSse } from "./sse.js";
 import { claudeRateLimit } from "./rate-limit.js";
+import { tokenMeasurement } from "../token-usage.js";
+import { captureTraceUsage } from "../../core/trace.js";
 
 type ObjectValue = Record<string, unknown>;
 function object(value: unknown): ObjectValue {
@@ -20,12 +22,21 @@ function string(value: unknown): string {
 function usage(value: unknown, previous: Usage): Usage {
   const native = object(value);
   const result = { ...previous };
+  result.measurement = tokenMeasurement("claude", {
+    ...previous.measurement?.raw,
+    ...tokenMeasurement("claude", native).raw,
+  });
   if (Array.isArray(native.iterations) && native.iterations.length) {
     const iterations = native.iterations.map((v) =>
       usage(v, { inputTokens: 0, outputTokens: 0 }),
     );
     result.inputTokens = iterations.reduce((n, v) => n + v.inputTokens, 0);
     result.outputTokens = iterations.reduce((n, v) => n + v.outputTokens, 0);
+    for (const key of ["cacheReadTokens", "cacheWriteTokens"] as const) {
+      if (iterations.every((v) => v[key] !== undefined))
+        result[key] = iterations.reduce((n, v) => n + v[key]!, 0);
+    }
+    captureTraceUsage(result.measurement);
     return result;
   }
   for (const [source, target] of [
@@ -45,6 +56,7 @@ function usage(value: unknown, previous: Usage): Usage {
       result[target] = count;
     }
   }
+  captureTraceUsage(result.measurement);
   return result;
 }
 

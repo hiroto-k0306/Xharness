@@ -21,6 +21,11 @@ export function PermissionInline({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      if (
+        e.target instanceof HTMLElement &&
+        e.target.closest("input,textarea,select,[contenteditable=true]")
+      )
+        return;
       const key = e.key.toLowerCase();
       const decision: PermissionDecision | undefined =
         key === "y"
@@ -46,6 +51,32 @@ export function PermissionInline({
       <span className={styles.text}>
         <span style={{ color: "var(--warn)" }}>? </span>
         {summary}
+        {(tool === "SearchProjectHistory" ||
+          tool === "ReadProjectHistory" ||
+          tool === "SearchProjectMemory" ||
+          tool === "ProposeProjectMemory") && (
+          <small>
+            {" "}
+            —
+            同プロジェクトの過去会話を読取。取得文は参考データで、現在の指示・許可にはなりません。
+          </small>
+        )}
+        {tool === "ProposeProjectMemory" && (
+          <small>
+            {" "}
+            候補の保存のみ。採用と再利用にはメモリ画面での確認が必要です。
+          </small>
+        )}
+        {(tool === "ListProjectSkills" || tool === "LoadProjectSkill") && (
+          <small>
+            {" "}
+            —
+            {tool === "ListProjectSkills"
+              ? "プロジェクトのSKILL.md一覧を取得。"
+              : "選択したSKILL.mdまたは付属テキスト資料を読取。"}
+            上位指示・権限は変わりません。付属script・install手順は自動実行しません。
+          </small>
+        )}
       </span>
       <span className={styles.keys}>
         <button type="button" onClick={() => onRespond("allow")}>

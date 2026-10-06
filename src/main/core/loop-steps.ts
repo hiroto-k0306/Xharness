@@ -219,10 +219,16 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
             return { kind: "retry", afterMs: delay };
           }
           if (failure?.type === "rate_limited") {
+            // A 429 does not prove separate model pools. Never chase sibling
+            // models in the same unknown/shared provider pool during this turn.
+            ctx.limitedProviders.add(
+              (ctx.route?.provider ?? options.provider).id,
+            );
             const route = options.router?.fallback(
               (ctx.route?.provider ?? options.provider).id,
               ctx.request.reasoning?.effort,
               ctx.visitedModels,
+              ctx.limitedProviders,
             );
             if (route) {
               await options.onFallback?.(route);
@@ -245,6 +251,20 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
                 reason: "rate_limited",
               };
             }
+            const detail =
+              "429: 未訪問の独立provider fallback候補なし。共有・不明provider枠の別モデルは見送り。既存の安全な枠待ち・手動再確認へ停止。";
+            const receipt: Receipt = {
+              round: ctx.round,
+              provider: (ctx.route?.provider ?? options.provider).id,
+              model: ctx.request.model,
+              decision: "error",
+              detail,
+              output: detail,
+              startedAt: ctx.startedAt,
+              completedAt: new Date().toISOString(),
+            };
+            ctx.receipts.push(receipt);
+            options.onEvent?.({ type: "receipt", receipt });
           }
           return {
             kind: "stop",

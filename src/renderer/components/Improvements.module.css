@@ -1,0 +1,42 @@
+.panel pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.panel table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+}
+.panel th,
+.panel td {
+  border: 1px solid var(--line);
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.panel input[type="checkbox"] {
+  display: inline;
+  width: auto;
+}
+.candidates {
+  margin: 20px 0;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.candidates label {
+  display: block;
+  margin: 10px 0;
+}
+.candidates select,
+.candidates textarea {
+  display: block;
+  width: 100%;
+}
+.candidates details {
+  margin-top: 8px;
+}
+.candidates button {
+  display: block;
+  margin: 10px 0;
+}

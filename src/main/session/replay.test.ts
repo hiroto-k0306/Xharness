@@ -91,7 +91,9 @@ it("reads the real Haiku child Read round trip without inventing an absent recor
   expect(replay.frames.at(-1)!.receipt.output).toContain("local read check");
   const compared = await compareReplayPermissions(
     replay,
-    { mode: "default", rules: [] },
+    // The historical absolute path may be outside an isolated checkout.
+    // An explicit read rule keeps this test about the missing recorded decision.
+    { mode: "default", rules: [{ tool: "Read", decision: "allow" }] },
     process.cwd(),
     new AbortController().signal,
   );

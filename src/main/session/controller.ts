@@ -1,6 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { resolvePermissionMode } from "../../shared/permission-modes.js";
 import { SessionSchedules } from "./schedules.js";
+import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
+import { ProjectMemory } from "./project-memory.js";
+import { Improvements, ImprovementFault } from "./improvements.js";
+import { Handoffs, HandoffFault } from "./handoffs.js";
+import {
+  LocalBrowserSessions,
+  LocalBrowserFault,
+} from "../computer-use/session.js";
+import { CandidateQuotas } from "./candidate-quota.js";
+import { modelCandidates } from "./model-candidates.js";
+import { readSkillUi } from "./skill-ui.js";
+import { decidePermission } from "../core/permissions.js";
+import { captureQuotaPause } from "./quota-capture.js";
+import { resumeConditions, resumeHash } from "./resume-conditions.js";
+import { checkpointFile } from "./context.js";
 import { readLlmCalls } from "./llm-calls.js";
 import {
   attachmentInfo,
@@ -35,7 +50,12 @@ import { PermissionGate } from "./permission-gate.js";
 import { ReceiptStore } from "./receipts.js";
 import { Repository } from "./repository.js";
 import { compactNow, saveDefaultModel, setMode } from "./settings-commands.js";
-import { SessionStore, WorkspaceStore, type StoredSession } from "./store.js";
+import {
+  SessionStore,
+  WorkspaceStore,
+  RECOVERY_NOTICE,
+  type StoredSession,
+} from "./store.js";
 import { itemsFromMessages } from "./transcript.js";
 import { runMcpCommand, runSessionTurn } from "./turn.js";
 import { runRewind } from "./rewind-command.js";
@@ -71,6 +91,28 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private readonly localBrowser: LocalBrowserSessions;
+  private readonly browserJobs = new Map<string, AbortController>();
+  private readonly handoffs: Handoffs;
+  private readonly handoffBusy = new Set<string>();
+  private readonly candidatePreviews = new Map<
+    string,
+    {
+      snapshot: string;
+      fingerprint: string;
+      expiresAt: number;
+      operationId: string;
+    }
+  >();
+  private readonly improvementReads = new Map<
+    string,
+    { operationId: string; abort: AbortController }
+  >();
+  private readonly skillReads = new Map<
+    string,
+    { requestId: string; abort: AbortController }
+  >();
+  private readonly quotaPauses: QuotaPauses;
   private readonly schedules: SessionSchedules;
   private readonly runtimes = new Map<string, Runtime>();
   private readonly sessions: SessionStore;
@@ -95,6 +137,12 @@ export class SessionController {
   private imageSettings = { ...DEFAULT_IMAGES };
 
   constructor(private readonly options: ControllerOptions) {
+    this.localBrowser = new LocalBrowserSessions(
+      options.localBrowserFactory,
+      Date.now,
+      options.localBrowserTimeoutMs,
+    );
+    this.handoffs = new Handoffs(options.home);
     this.schedules = new SessionSchedules({
       now: () => Date.now(),
       busy: (id) =>
@@ -138,6 +186,8 @@ export class SessionController {
     const receipts = new ReceiptStore(options.home);
     const clean = (text: string) => redact(text, options.secrets ?? []);
     this.ctx = {
+      quotaPaused: (session, rt, evidence) =>
+        captureQuotaPause(this.ctx, this.quotaPauses, session, rt, evidence),
       options,
       sessions: this.sessions,
       receipts,
@@ -146,6 +196,7 @@ export class SessionController {
       trust: new WorkspaceTrust(options.home),
       quota: {},
       usage: {},
+      candidateQuotas: new CandidateQuotas(),
       worktreeBusy: new Set(),
       sessionBusy: new Set(),
       clean,
@@ -171,6 +222,16 @@ export class SessionController {
     };
     this.gate = new PermissionGate(this.ctx);
     this.repositories = new RepositoryOpener(this.ctx);
+    this.quotaPauses = new QuotaPauses({
+      home: options.home,
+      now: options.quotaNow ?? Date.now,
+      timers: options.quotaTimers,
+      changed: () => this.emitState(),
+      busy: (id) =>
+        this.ctx.sessionBusy.has(id) ||
+        (this.runtimes.get(id)?.status ?? "idle") !== "idle",
+      resume: (pause, signal) => this.resumeQuota(pause, signal),
+    });
   }
 
   async init() {
@@ -193,6 +254,8 @@ export class SessionController {
     }
     // 壊れた索引を退避したことなどは、最初の新規セッションで知らせる
     this.warnings.push(...this.sessions.warnings, ...this.workspaces.warnings);
+    await this.quotaPauses.load();
+    this.warnings.push(...this.quotaPauses.warnings);
   }
 
   private runtime(id: string): Runtime {
@@ -256,6 +319,7 @@ export class SessionController {
         : this.options.fallback,
       sessions: this.sessions.list().map((s) => ({
         ...s,
+        quotaPause: this.quotaPauses.view(s.id),
         llmCalls: this.runtimes.get(s.id)?.llmCalls,
         imageBytes: sessionImageBytes(this.runtimes.get(s.id)?.messages),
         status: this.runtimes.get(s.id)?.status ?? "idle",
@@ -296,8 +360,610 @@ export class SessionController {
   }
 
   async handle(command: HarnessCommand): Promise<CommandResult> {
+    if (this.stopped) return { ok: false, error: "アプリ終了処理中です。" };
     try {
       switch (command.type) {
+        case "local_browser": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          if (command.request.action === "stop") {
+            this.browserJobs.get(session.id)?.abort();
+            return {
+              ok: true,
+              localBrowser: await this.localBrowser.run(
+                {
+                  home: this.options.home,
+                  sessions: this.sessions,
+                  workspaces: this.workspaces,
+                  sessionId: session.id,
+                  workspaceId: session.workspaceId,
+                  cwd: session.cwd,
+                  clean: this.ctx.clean,
+                },
+                command.request,
+                async () => {},
+                (receipt) => this.ctx.record(this.runtime(session.id), receipt),
+              ),
+            };
+          }
+          const rt = this.runtime(session.id);
+          if (this.ctx.sessionBusy.has(session.id) || rt.status !== "idle")
+            return {
+              ok: false,
+              error: "会話の実行終了後にローカル観測を確認してください。",
+            };
+          const abort = new AbortController();
+          this.browserJobs.set(session.id, abort);
+          this.ctx.sessionBusy.add(session.id);
+          rt.abort = abort;
+          rt.status = "running";
+          const job = (async () => {
+            try {
+              await this.load(session.id);
+              await this.emitState();
+              abort.signal.throwIfAborted();
+              const localBrowser = await this.localBrowser.run(
+                {
+                  home: this.options.home,
+                  sessions: this.sessions,
+                  workspaces: this.workspaces,
+                  sessionId: session.id,
+                  workspaceId: session.workspaceId,
+                  cwd: session.cwd,
+                  clean: this.ctx.clean,
+                },
+                command.request,
+                async (tool) => {
+                  const current = this.sessions.get(session.id),
+                    root =
+                      current?.workspaceId &&
+                      this.workspaces.get(current.workspaceId)?.root;
+                  if (!current || abort.signal.aborted || this.stopped)
+                    throw new LocalBrowserFault("停止・取消しました。");
+                  const config = await loadProjectConfig(
+                    this.options.home,
+                    root || undefined,
+                    {
+                      trusted: !root || (await this.ctx.trust.isTrusted(root)),
+                    },
+                  );
+                  if (
+                    (await decidePermission(
+                      {
+                        id: "local-browser-ui",
+                        name: tool,
+                        input: command.request,
+                      },
+                      {
+                        ...config.permissions,
+                        mode: current.permissionMode ?? config.permissions.mode,
+                      },
+                      current.cwd,
+                      { readOnly: current.readOnly },
+                    )) === "deny"
+                  )
+                    throw new LocalBrowserFault(
+                      "現在の権限ではこの観測・操作を許可できません。",
+                    );
+                },
+                (receipt) => this.ctx.record(rt, receipt),
+              );
+              return { ok: true as const, localBrowser };
+            } catch (error) {
+              return {
+                ok: false as const,
+                error:
+                  error instanceof LocalBrowserFault
+                    ? error.message
+                    : "観測・実行・保存の結果を確認できません。一覧を確認してください。",
+              };
+            } finally {
+              rt.abort = undefined;
+              rt.status = "idle";
+              this.browserJobs.delete(session.id);
+              this.ctx.sessionBusy.delete(session.id);
+              await this.emitState();
+            }
+          })();
+          rt.done = job.then(() => undefined);
+          return job;
+        }
+        case "handoffs": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const held = new Set<string>();
+          try {
+            const handoffs = await this.handoffs.run(
+              {
+                home: this.options.home,
+                sessions: this.sessions,
+                workspaces: this.workspaces,
+                sessionId: session.id,
+                workspaceId: session.workspaceId,
+                cwd: session.cwd,
+                clean: this.ctx.clean,
+              },
+              command.request,
+              async (ids) => {
+                for (const id of ids) {
+                  const target = this.sessions.get(id);
+                  if (
+                    !target ||
+                    this.ctx.sessionBusy.has(id) ||
+                    this.runtime(id).status !== "idle"
+                  )
+                    throw new HandoffFault(
+                      "送信元と宛先の実行終了後に確認してください。",
+                    );
+                  this.ctx.sessionBusy.add(id);
+                  this.handoffBusy.add(id);
+                  held.add(id);
+                }
+                for (const id of ids) {
+                  const target = this.sessions.get(id)!;
+                  const root =
+                    target.workspaceId &&
+                    this.workspaces.get(target.workspaceId)?.root;
+                  const config = await loadProjectConfig(
+                    this.options.home,
+                    root || undefined,
+                    {
+                      trusted: !root || (await this.ctx.trust.isTrusted(root)),
+                    },
+                  );
+                  if (
+                    this.stopped ||
+                    target.permissionMode === "plan" ||
+                    (await decidePermission(
+                      {
+                        id: "handoff-ui",
+                        name: "ProposeProjectMemory",
+                        input: command.request,
+                      },
+                      {
+                        ...config.permissions,
+                        mode: target.permissionMode ?? config.permissions.mode,
+                      },
+                      target.cwd,
+                      { readOnly: target.readOnly },
+                    )) === "deny"
+                  )
+                    throw new HandoffFault(
+                      "現在の権限では受け渡しできません。",
+                    );
+                }
+              },
+            );
+            return { ok: true, handoffs };
+          } catch (e) {
+            return {
+              ok: false,
+              error:
+                e instanceof HandoffFault
+                  ? e.message
+                  : "配送状態を確認できません。受信一覧を再取得してください。",
+            };
+          } finally {
+            for (const id of held) {
+              this.ctx.sessionBusy.delete(id);
+              this.handoffBusy.delete(id);
+            }
+          }
+        }
+        case "project_skills": {
+          const request = command.request;
+          if (request.action === "cancel") {
+            const active = this.skillReads.get(command.sessionId);
+            if (active?.requestId !== request.requestId)
+              return { ok: false, error: "No such skill read" };
+            active.abort.abort();
+            return { ok: true };
+          }
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const rt = this.runtime(session.id);
+          if (this.ctx.sessionBusy.has(session.id) || rt.status !== "idle")
+            return {
+              ok: false,
+              error: "実行終了後にスキルを確認してください。",
+            };
+          const abort = new AbortController();
+          this.skillReads.set(session.id, {
+            requestId: request.requestId,
+            abort,
+          });
+          this.ctx.sessionBusy.add(session.id);
+          rt.abort = abort;
+          rt.status = "running";
+          const job = (async () => {
+            await this.load(session.id);
+            if (abort.signal.aborted)
+              return { ok: false as const, error: "取消しました。" };
+            return readSkillUi(
+              this.ctx,
+              this.gate,
+              session,
+              rt,
+              request,
+              abort.signal,
+            );
+          })().finally(async () => {
+            this.skillReads.delete(session.id);
+            this.ctx.sessionBusy.delete(session.id);
+            rt.status = "idle";
+            rt.abort = undefined;
+            await this.emitState();
+            if (rt.closing) this.ctx.dropRuntime(session.id);
+          });
+          rt.done = job.then(
+            () => undefined,
+            () => undefined,
+          );
+          return await job;
+        }
+        case "improvements": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const rt = this.runtime(session.id),
+            scope = {
+              home: this.options.home,
+              sessions: this.sessions,
+              workspaces: this.workspaces,
+              sessionId: session.id,
+              workspaceId: session.workspaceId,
+              cwd: session.cwd,
+              clean: this.ctx.clean,
+            };
+          if (command.request.action === "list")
+            return {
+              ok: true,
+              improvements: await new Improvements(scope).list(),
+            };
+          if (command.request.action === "cancel") {
+            if (
+              this.candidatePreviews.get(session.id)?.operationId ===
+              command.operationId
+            )
+              this.candidatePreviews.delete(session.id);
+            const current = this.improvementReads.get(session.id);
+            if (current?.operationId === command.operationId)
+              current.abort.abort();
+            return { ok: true };
+          }
+          if (this.ctx.sessionBusy.has(session.id) || rt.status !== "idle")
+            return {
+              ok: false,
+              error: "実行終了後に改善版を確認してください。",
+            };
+          const abort = new AbortController(),
+            request = command.request;
+          this.improvementReads.set(session.id, {
+            operationId: command.operationId,
+            abort,
+          });
+          this.ctx.sessionBusy.add(session.id);
+          rt.abort = abort;
+          rt.status = "running";
+          const job = (async () => {
+            const root = this.ctx.workspaceRoot(session),
+              config = await loadProjectConfig(this.options.home, root, {
+                trusted: !root || (await this.ctx.trust.isTrusted(root)),
+              });
+            if (
+              (await decidePermission(
+                {
+                  id: "improvement-ui",
+                  name: "ProposeProjectMemory",
+                  input: request,
+                },
+                {
+                  ...config.permissions,
+                  mode: session.permissionMode ?? config.permissions.mode,
+                },
+                session.cwd,
+                { readOnly: session.readOnly },
+              )) === "deny"
+            )
+              return {
+                ok: false as const,
+                error: "現在の権限では改善版を操作できません。",
+              };
+            const service = new Improvements(
+              scope,
+              async (source) => {
+                rt.config = config;
+                if (
+                  !(await this.gate.ask({
+                    session,
+                    rt,
+                    call: { name: "LoadProjectSkill", input: source },
+                    signal: abort.signal,
+                    forceAsk: true,
+                  }))
+                )
+                  throw new ImprovementFault(
+                    "出典の確認を拒否・取消しました。",
+                  );
+              },
+              abort.signal,
+            );
+            if (
+              request.action === "model_candidates" ||
+              request.action === "select_model_candidate"
+            ) {
+              const prepared = await service.action({
+                ...request,
+                action: "prepare",
+              });
+              const providers = this.options.providers ?? [
+                this.options.provider,
+              ];
+              const models = loadModelCatalog()
+                .filter(
+                  (m) =>
+                    m.enabled &&
+                    providers.some(
+                      (p) =>
+                        p.id === m.provider &&
+                        p.models().some((x) => x.id === m.id),
+                    ),
+                )
+                .map((m) => ({
+                  id: m.id,
+                  provider: m.provider,
+                  efforts: Object.keys(m.efforts ?? {}) as Effort[],
+                }));
+              // Test/dev fake is an explicit separate configuration, never a live model.
+              if (
+                this.options.fake &&
+                providers.some((p) => p.models().some((m) => m.id === "fake"))
+              )
+                models.push({
+                  id: "fake",
+                  provider: providers[0]!.id,
+                  efforts: ["high"],
+                });
+              const candidates = await modelCandidates(
+                scope,
+                prepared.improvements,
+                request,
+                models,
+                this.ctx.candidateQuotas!,
+                (this.options.quotaNow ?? Date.now)(),
+              );
+              abort.signal.throwIfAborted();
+              if (request.action === "select_model_candidate") {
+                const chosen = candidates.candidates.find(
+                  (x) => x.id === request.candidateId,
+                );
+                const preview = this.candidatePreviews.get(session.id),
+                  now = (this.options.quotaNow ?? Date.now)();
+                if (
+                  preview?.snapshot !== request.snapshot ||
+                  preview.expiresAt <= now
+                )
+                  throw new ImprovementFault(
+                    "候補確認が期限切れ・取消・再起動で無効です。再取得して確認してください。",
+                  );
+                if (candidates.snapshot !== preview.fingerprint)
+                  throw new ImprovementFault(
+                    "根拠・枠・条件・時刻が変わりました。候補を再取得して確認してください。",
+                  );
+                candidates.snapshot = request.snapshot;
+                if (!chosen?.selectable || request.confirmed !== true)
+                  throw new ImprovementFault(
+                    "共有枠枯渇・未確認の候補は選択できません。枠待ちを確認してください。",
+                  );
+                await this.load(session.id);
+                abort.signal.throwIfAborted();
+                const latest = this.sessions.get(session.id);
+                if (
+                  latest?.model === chosen.model &&
+                  (!chosen.effort || latest.effort === chosen.effort)
+                )
+                  throw new ImprovementFault(
+                    "既にこのモデル・effortを選択済みです。再取得してください。",
+                  );
+                if (
+                  rt.receipts?.some(
+                    (r) =>
+                      r.tool === "SelectModelCandidate" &&
+                      (r.input as { snapshot?: string })?.snapshot ===
+                        request.snapshot,
+                  )
+                )
+                  throw new ImprovementFault(
+                    "この候補確認は選択済みです。再取得してください。",
+                  );
+                await this.quotaPauses.cancel(
+                  session.id,
+                  "明示モデル選択により以前の自動再開を取り消しました。",
+                );
+                this.schedules.cancel(session.id);
+                abort.signal.throwIfAborted();
+                const applied = await this.setModel(
+                  session.id,
+                  chosen.model,
+                  chosen.effort,
+                  abort.signal,
+                  { provider: chosen.provider, model: chosen.model },
+                );
+                if (!applied.ok) return applied;
+                this.candidatePreviews.delete(session.id);
+                await this.ctx.record(rt, {
+                  id: `candidates-${randomUUID()}`,
+                  sessionId: session.id,
+                  ts: (this.options.quotaNow ?? Date.now)(),
+                  provider: "harness",
+                  kind: "tool",
+                  durationMs: 0,
+                  tool: "SelectModelCandidate",
+                  summary: this.ctx.clean(
+                    `明示選択 ${chosen.id}: ${request.reason}`,
+                  ),
+                  input: {
+                    snapshot: request.snapshot,
+                    comparison: request.id,
+                    version: request.versionId,
+                    case: request.caseId,
+                  },
+                  output: this.ctx.clean(JSON.stringify(chosen)),
+                  decision: "allow",
+                });
+                this.options.emit({
+                  type: "notice",
+                  sessionId: session.id,
+                  message: this.ctx.clean(
+                    `明示選択 ${chosen.id}。既定値・fallback設定は変更しません。${chosen.reasons.join(" ")}`,
+                  ),
+                  tone: "dim",
+                });
+              } else {
+                await this.load(session.id);
+                abort.signal.throwIfAborted();
+                const fingerprint = candidates.snapshot;
+                candidates.snapshot = resumeHash({
+                  fingerprint,
+                  nonce: randomUUID(),
+                });
+                await this.ctx.record(rt, {
+                  id: `candidates-${randomUUID()}`,
+                  sessionId: session.id,
+                  ts: candidates.observedAt,
+                  provider: "harness",
+                  kind: "tool",
+                  durationMs: 0,
+                  tool: "ModelCandidates",
+                  summary: "同条件のモデル候補を確認（通信なし）",
+                  input: {
+                    comparison: request.id,
+                    version: request.versionId,
+                    case: request.caseId,
+                  },
+                  output: this.ctx.clean(JSON.stringify(candidates)),
+                  decision: "allow",
+                });
+                abort.signal.throwIfAborted();
+                for (const [id, preview] of this.candidatePreviews)
+                  if (preview.expiresAt <= candidates.observedAt)
+                    this.candidatePreviews.delete(id);
+                if (this.candidatePreviews.size >= 100)
+                  this.candidatePreviews.clear();
+                this.candidatePreviews.set(session.id, {
+                  snapshot: candidates.snapshot,
+                  fingerprint,
+                  expiresAt: candidates.expiresAt,
+                  operationId: command.operationId,
+                });
+              }
+              return { ok: true as const, modelCandidates: candidates };
+            }
+            return { ok: true as const, ...(await service.action(request)) };
+          })()
+            .catch((error) => ({
+              ok: false as const,
+              error:
+                error instanceof ImprovementFault
+                  ? error.message
+                  : abort.signal.aborted
+                    ? "取消しました。再取得して保存状態を確認してください。"
+                    : "改善操作に失敗しました。出典・保存状態を確認して再取得してください。",
+            }))
+            .finally(async () => {
+              this.improvementReads.delete(session.id);
+              this.ctx.sessionBusy.delete(session.id);
+              rt.status = "idle";
+              rt.pending = undefined;
+              rt.abort = undefined;
+              this.options.emit({
+                type: "turn",
+                sessionId: session.id,
+                status: "idle",
+              });
+              await this.emitState();
+            });
+          rt.done = job.then(
+            () => undefined,
+            () => undefined,
+          );
+          return await job;
+        }
+        case "project_memory": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const memory = new ProjectMemory(
+            {
+              home: this.options.home,
+              sessions: this.sessions,
+              workspaces: this.workspaces,
+              sessionId: session.id,
+              workspaceId: session.workspaceId,
+              cwd: session.cwd,
+              clean: this.ctx.clean,
+            },
+            () =>
+              this.options.emit({
+                type: "memory_changed",
+                sessionId: session.id,
+              }),
+          );
+          if (command.request.action === "list")
+            return { ok: true, memory: await memory.list() };
+          if (
+            this.ctx.sessionBusy.has(session.id) ||
+            (this.runtimes.get(session.id)?.status ?? "idle") !== "idle"
+          )
+            return {
+              ok: false,
+              error: "実行終了後にメモリを確認・編集してください。",
+            };
+          this.ctx.sessionBusy.add(session.id);
+          try {
+            const root = this.ctx.workspaceRoot(session);
+            const config = await loadProjectConfig(this.options.home, root, {
+              trusted: !root || (await this.ctx.trust.isTrusted(root)),
+            });
+            if (
+              (await decidePermission(
+                {
+                  id: "memory-ui",
+                  name: "ProposeProjectMemory",
+                  input: command.request,
+                },
+                {
+                  ...config.permissions,
+                  mode: session.permissionMode ?? config.permissions.mode,
+                },
+                session.cwd,
+                { readOnly: session.readOnly },
+              )) === "deny"
+            )
+              return {
+                ok: false,
+                error: "現在の権限ではメモリを変更できません。",
+              };
+            // Each explicit UI action authorizes this bounded edit, never a lasting tool grant.
+            if (this.stopped || !this.sessions.get(session.id))
+              return { ok: false, error: "Session unavailable" };
+            return { ok: true, memory: await memory.action(command.request) };
+          } finally {
+            this.ctx.sessionBusy.delete(session.id);
+          }
+        }
+        case "quota_resume": {
+          if (this.stopped || !this.sessions.get(command.sessionId))
+            return { ok: false, error: "Session unavailable" };
+          const error = await this.quotaPauses.action(
+            command.sessionId,
+            command.action,
+          );
+          return error ? { ok: false, error } : { ok: true };
+        }
         case "rewind_response": {
           const rt = this.runtimes.get(command.sessionId);
           if (
@@ -327,7 +993,12 @@ export class SessionController {
           this.ctx.sessionBusy.add(command.sessionId);
           try {
             this.schedules.cancel(command.sessionId);
+            await this.quotaPauses.cancel(
+              command.sessionId,
+              "会話を削除したため取消しました。",
+            );
             await this.sessions.delete(command.sessionId);
+            await this.localBrowser.stop(command.sessionId);
             this.ctx.dropRuntime(command.sessionId);
             if (this.current === command.sessionId) {
               this.current = null;
@@ -340,6 +1011,9 @@ export class SessionController {
           }
         }
         case "refresh_auth":
+          this.candidatePreviews.clear();
+          this.ctx.candidateQuotas?.clear("claude");
+          this.ctx.candidateQuotas?.clear("codex");
           if (!this.options.fake) await this.options.authentication?.refresh();
           await this.emitState();
           return { ok: true };
@@ -357,6 +1031,8 @@ export class SessionController {
               ok: false,
               error: "すべての実行が終了してから認証してください",
             };
+          this.candidatePreviews.clear();
+          this.ctx.candidateQuotas?.clear(command.provider);
           await this.options.authentication.authenticate(command.provider);
           await this.emitState();
           return { ok: true };
@@ -370,12 +1046,69 @@ export class SessionController {
           this.repositories.abort();
           return { ok: true };
         case "set_mode":
+          if (
+            this.handoffBusy.has(command.sessionId) ||
+            this.browserJobs.has(command.sessionId) ||
+            this.improvementReads.has(command.sessionId)
+          )
+            return {
+              ok: false,
+              error:
+                "受け渡し・ローカル操作・改善操作の終了後に権限を変更してください。",
+            };
           return await setMode(this.ctx, command);
         case "ready": {
+          for (const abort of this.browserJobs.values()) abort.abort();
+          await this.localBrowser.stopAll();
+          await Promise.all(
+            [...this.browserJobs.keys()].map(
+              (id) => this.runtimes.get(id)?.done,
+            ),
+          );
+          this.handoffs.clear();
+          this.candidatePreviews.clear();
+          // A reloaded renderer no longer owns local read promises. Cancel those
+          // reads, without cancelling a paused task or granting its permissions.
+          const reads = [...this.skillReads.entries()];
+          for (const [, read] of reads) read.abort.abort();
+          const improvements = [...this.improvementReads.entries()];
+          for (const [, read] of improvements) read.abort.abort();
+          await Promise.all(
+            [...reads, ...improvements].map(
+              ([id]) => this.runtimes.get(id)?.done,
+            ),
+          );
           await this.refreshCommands();
           await this.emitState();
+          for (const [id, rt] of this.runtimes) {
+            if (rt.status === "idle") continue;
+            this.options.emit({
+              type: "transcript",
+              sessionId: id,
+              items: itemsFromMessages(rt.messages),
+            });
+            this.options.emit({
+              type: "receipt_history",
+              sessionId: id,
+              receipts: rt.receipts ?? [],
+            });
+            this.options.emit({
+              type: "turn",
+              sessionId: id,
+              status: "running",
+            });
+            if (rt.pending?.event) this.options.emit(rt.pending.event);
+            if (rt.rewindPrompt?.event)
+              this.options.emit(rt.rewindPrompt.event);
+          }
           if (this.current) {
             await this.emitTranscript(this.current);
+            if ((this.runtimes.get(this.current)?.status ?? "idle") === "idle")
+              this.options.emit({
+                type: "turn",
+                sessionId: this.current,
+                status: "idle",
+              });
             const session = this.sessions.get(this.current);
             if (session) await this.reportMissingCwd(session);
           }
@@ -409,16 +1142,43 @@ export class SessionController {
           return { ok: true, workspaceId };
         }
         case "forget_workspace":
+          if (
+            [...this.browserJobs.keys()].some(
+              (id) =>
+                this.sessions.get(id)?.workspaceId === command.workspaceId,
+            )
+          )
+            return {
+              ok: false,
+              error: "ローカル操作の終了後にprojectを変更してください。",
+            };
+          if (
+            [...this.handoffBusy].some(
+              (id) =>
+                this.sessions.get(id)?.workspaceId === command.workspaceId,
+            )
+          )
+            return {
+              ok: false,
+              error: "受け渡し終了後にprojectを変更してください。",
+            };
           await this.workspaces.forget(command.workspaceId);
           await this.emitState();
           return { ok: true };
         case "set_model":
+          if (this.improvementReads.has(command.sessionId))
+            return {
+              ok: false,
+              error: "候補・改善操作の終了後にモデルを選択してください。",
+            };
           return await this.setModel(
             command.sessionId,
             command.model,
             command.effort,
           );
         case "close_session":
+          this.browserJobs.get(command.sessionId)?.abort();
+          await this.localBrowser.stop(command.sessionId);
           return await this.closeSession(command.sessionId);
         case "export_report": {
           if (!this.sessions.get(command.sessionId))
@@ -451,10 +1211,16 @@ export class SessionController {
         case "send":
           return this.send(command.sessionId, command.text, command.images);
         case "abort": {
+          this.browserJobs.get(command.sessionId)?.abort();
+          await this.localBrowser.stop(command.sessionId);
           this.preparations.get(command.sessionId)?.abort.abort();
           this.schedules.cancel(command.sessionId);
           const rt = this.runtimes.get(command.sessionId);
           if (rt) this.release(rt);
+          await this.quotaPauses.cancel(
+            command.sessionId,
+            "明示停止により自動再開を取り消しました。",
+          );
           return { ok: true };
         }
         case "plan_response": {
@@ -649,6 +1415,7 @@ export class SessionController {
     };
     this.preparations.set(sessionId, preparation);
     try {
+      await this.localBrowser.stop(sessionId);
       return await this.sendPrepared(sessionId, text, images, scheduled, abort);
     } catch (error) {
       if (abort.signal.aborted)
@@ -716,6 +1483,23 @@ export class SessionController {
     if (root && this.ctx.worktreeBusy.has(root))
       return { ok: false, error: "Workspace writer busy" };
     const command = text.trim();
+    if (/^\/quota-resume(?:\s|$)/.test(command)) {
+      const [, action, extra] = command.split(/\s+/);
+      if (!extra && ["enable", "cancel", "now"].includes(action ?? ""))
+        return this.handle({
+          type: "quota_resume",
+          sessionId,
+          action: action as "enable" | "cancel" | "now",
+        });
+      this.options.emit({
+        type: "notice",
+        sessionId,
+        tone: "dim",
+        message:
+          "枠待ち: UIで自動再開・取消・手動再確認を選択できます。/quota-resume enable|cancel|now。通常会話(off)のツール実行前だけ対象です。",
+      });
+      return { ok: true };
+    }
     if (/^\/(?:schedule|signal)(?:\s|$)/.test(command))
       return this.schedules.command(sessionId, command);
     const notice = (message: string): CommandResult => {
@@ -907,6 +1691,8 @@ export class SessionController {
     this.options.emit({ type: "turn", sessionId, status: "running" });
     // Resolve user definitions once. The expansion is a user message, never a second command.
     try {
+      if ((await this.sessions.evaluationTask(sessionId))?.recoveryRequired)
+        return { ok: false, error: RECOVERY_NOTICE };
       const expanded = expandCommand(
         text,
         await userCommands(
@@ -932,6 +1718,10 @@ export class SessionController {
       // The reservation covers preparation too, so stop/close/shutdown can cancel it.
       if (await this.reportMissingCwd(session))
         return { ok: false, error: "Working directory not found" };
+      await this.quotaPauses.cancel(
+        sessionId,
+        "新しい指示を受けたため、以前の自動再開を取り消しました。",
+      );
       abort.signal.throwIfAborted();
       launched = true;
       void runSessionTurn(this.ctx, this.gate, session, rt, text, images, abort)
@@ -963,6 +1753,119 @@ export class SessionController {
         finish();
         await this.emitState();
       }
+    }
+  }
+
+  /** Testable clock tick; the desktop timer uses the same durable lease path. */
+  async tickQuotaResume() {
+    await this.quotaPauses.tick();
+  }
+
+  private async resumeQuota(
+    pause: QuotaPause,
+    signal: AbortSignal,
+  ): Promise<string | undefined> {
+    const id = pause.sessionId;
+    const session = this.sessions.get(id);
+    if (
+      this.stopped ||
+      signal.aborted ||
+      !session ||
+      this.ctx.sessionBusy.has(id) ||
+      (this.runtimes.get(id)?.status ?? "idle") !== "idle"
+    )
+      return "会話が利用できないため自動再開しません。";
+    if (
+      this.otherWriterRunning(session) ||
+      (this.ctx.workspaceRoot(session) &&
+        this.ctx.worktreeBusy.has(this.ctx.workspaceRoot(session)!))
+    )
+      return "作業場所が使用中です。手動で確認してください。";
+    this.ctx.sessionBusy.add(id);
+    const abort = new AbortController();
+    const cancel = () => abort.abort();
+    signal.addEventListener("abort", cancel, { once: true });
+    let rt: Runtime | undefined;
+    try {
+      if (
+        this.authenticationRequired(session) ||
+        this.options.authentication?.isBusy() ||
+        (!this.options.fake &&
+          this.options.authentication
+            ?.snapshot()
+            .some(
+              (auth) =>
+                auth.provider === pause.provider && auth.status !== "available",
+            ))
+      )
+        return "認証の確認が必要です。枠待ちとは別に認証欄で確認してください。";
+      const task = await this.sessions.evaluationTask(id);
+      if (
+        !task?.active ||
+        task.recoveryRequired ||
+        task.id !== pause.snapshot.taskId
+      )
+        return "保存・タスク境界が一致しません。レポートを確認してください。";
+      if (
+        session.model !== pause.model ||
+        session.effort !== pause.snapshot.effort ||
+        session.premiseHash !== pause.snapshot.premiseHash ||
+        session.readOnly !== pause.snapshot.readOnly ||
+        session.permissionMode !== pause.snapshot.permissionMode
+      )
+        return "モデル・effort・権限・前提が変わったため停止しました。";
+      if (
+        (await resumeConditions(this.ctx, session)) !==
+        pause.snapshot.conditionsHash
+      )
+        return "設定・作業場所・HEAD・前提が変わったため停止しました。";
+      this.ctx.dropRuntime(id); // Rebuild fresh tools/system; never restore temporary grants.
+      rt = await this.load(id);
+      rt.checkpoint = await checkpointFile(this.options.home, id).read(
+        undefined,
+      );
+      if (
+        rt.messages.length !== pause.snapshot.messageCount ||
+        resumeHash(rt.messages) !== pause.snapshot.messagesHash ||
+        resumeHash(rt.checkpoint ?? null) !== pause.snapshot.checkpointHash ||
+        rt.messages.at(-1)?.role !== "user"
+      )
+        return "会話または圧縮チェックポイントが変わったため停止しました。";
+      abort.signal.throwIfAborted();
+      rt.status = "running";
+      rt.quotaContinuation = true;
+      rt.abort = abort;
+      rt.quotaGuard = async () =>
+        (await resumeConditions(this.ctx, session)) ===
+        pause.snapshot.conditionsHash;
+      rt.done = runSessionTurn(
+        this.ctx,
+        this.gate,
+        session,
+        rt,
+        "",
+        undefined,
+        abort,
+        true,
+      );
+      await rt.done;
+      const settled = await this.sessions.evaluationTask(id);
+      if (settled?.id !== pause.snapshot.taskId || settled.settled !== true)
+        return "再開結果の保存が未確定です。レポートを確認してください。";
+      if (rt.lastStopCause === "rate_limited")
+        return "枠がまだ利用できません。新しい枠待ち情報を確認してください。";
+      return ["end_turn", "reported_done", "workflow_complete"].includes(
+        rt.lastStopCause ?? "",
+      )
+        ? undefined
+        : "再開が正常完了していません。権限・認証・前提・レポートを手動で確認してください。";
+    } catch {
+      return "再開の前提・保存・実行を確認できないため停止しました。";
+    } finally {
+      if (rt) rt.quotaContinuation = false;
+      signal.removeEventListener("abort", cancel);
+      this.ctx.sessionBusy.delete(id);
+      await this.emitState();
     }
   }
 
@@ -1023,6 +1926,8 @@ export class SessionController {
     sessionId: string,
     spec: string,
     effort?: Effort,
+    signal?: AbortSignal,
+    expected?: { provider: string; model: string },
   ): Promise<CommandResult> {
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, error: "Unknown session" };
@@ -1034,6 +1939,16 @@ export class SessionController {
         )
       : undefined;
     const resolved = resolveModel(spec, cfg?.aliases ?? this.options.aliases);
+    if (
+      expected &&
+      (resolved?.model !== expected.model ||
+        resolved?.provider !== expected.provider)
+    )
+      return {
+        ok: false,
+        error:
+          "aliasが候補のモデルを変更します。設定と候補を再確認してください。",
+      };
     const known =
       resolved &&
       (this.options.providers ?? [this.options.provider]).some((p) =>
@@ -1050,6 +1965,7 @@ export class SessionController {
       (!catalog || (effort && catalog.efforts && !catalog.efforts[effort]))
     )
       return { ok: false, error: "Unavailable model or effort" };
+    signal?.throwIfAborted();
     await this.sessions.save({
       ...session,
       model: resolved.model,
@@ -1064,8 +1980,13 @@ export class SessionController {
    * 履歴は残る(一覧からは消えない)。
    */
   private async closeSession(sessionId: string): Promise<CommandResult> {
+    this.candidatePreviews.delete(sessionId);
     this.preparations.get(sessionId)?.abort.abort();
     this.schedules.cancel(sessionId);
+    await this.quotaPauses.cancel(
+      sessionId,
+      "会話を閉じたため、自動再開を取り消しました。",
+    );
     if (!this.sessions.get(sessionId))
       return { ok: false, error: "Unknown session" };
     const rt = this.runtimes.get(sessionId);
@@ -1090,7 +2011,12 @@ export class SessionController {
 
   /** アプリ終了前に呼ぶ。全セッションの権限待ちを deny にして中断し、履歴の保存まで待つ。 */
   async shutdown(timeoutMs = 3000): Promise<void> {
+    // Fence new commands and automatic work before the first asynchronous close.
     this.stopped = true;
+    for (const abort of this.browserJobs.values()) abort.abort();
+    this.handoffs.clear();
+    this.candidatePreviews.clear();
+    const quotaClosed = this.quotaPauses.close();
     this.schedules.close();
     this.repositories.abort();
     const running: Promise<void>[] = [];
@@ -1102,6 +2028,9 @@ export class SessionController {
       this.release(rt);
       if (rt.done) running.push(rt.done);
     }
+    await this.localBrowser.stopAll();
+    await this.handoffs.drain();
+    await quotaClosed;
     await Promise.race([
       Promise.all(running),
       new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),

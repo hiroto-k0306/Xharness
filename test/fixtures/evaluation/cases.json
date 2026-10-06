@@ -1,0 +1,20 @@
+[
+  {
+    "id": "read-facts-v1", "taskType": "read", "difficulty": "small",
+    "prompt": "Read the fixture and report its count.", "initial": "count=3",
+    "actions": [{ "name": "Read", "input": {} }], "answer": "count=3",
+    "expectedArtifact": "count=3", "requiredReads": 1, "requiredReviews": 0
+  },
+  {
+    "id": "edit-exact-v1", "taskType": "edit", "difficulty": "small",
+    "prompt": "Replace the fixture with count=4; preserve exact formatting.", "initial": "count=3",
+    "actions": [{ "name": "Read", "input": {} }, { "name": "Write", "input": { "content": "count=4" } }], "answer": "updated",
+    "expectedArtifact": "count=4", "requiredReads": 1, "requiredReviews": 0
+  },
+  {
+    "id": "review-repair-v1", "taskType": "review-repair", "difficulty": "small",
+    "prompt": "Review, repair the wrong count, and review again.", "initial": "count=0",
+    "actions": [{ "name": "RequestReview", "input": {} }, { "name": "Write", "input": { "content": "count=4" } }, { "name": "RequestReview", "input": {} }], "answer": "repaired",
+    "expectedArtifact": "count=4", "requiredReads": 0, "requiredReviews": 2
+  }
+]

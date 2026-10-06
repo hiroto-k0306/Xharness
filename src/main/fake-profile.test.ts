@@ -4,15 +4,17 @@ import { fakeUserDataPath } from "./fake-profile.js";
 
 describe("fakeUserDataPath", () => {
   const home = resolve("isolated-gui-home");
-  it("isolates the explicitly selected development fake profile", () => {
-    expect(fakeUserDataPath(true, false, home)).toBe(
-      join(home, "electron-user-data"),
-    );
-  });
+  it.each([false, true])(
+    "isolates the explicitly selected fake profile (packaged=%s)",
+    (packaged) => {
+      expect(fakeUserDataPath(true, packaged, home)).toBe(
+        join(home, "electron-user-data"),
+      );
+    },
+  );
   it.each<[boolean, boolean, string | undefined]>([
     [false, false, home],
     [false, true, home],
-    [true, true, home],
     [true, false, undefined],
     [true, false, ""],
     [false, false, "relative"],
@@ -25,6 +27,6 @@ describe("fakeUserDataPath", () => {
   it("rejects a relative fake home without echoing its value", () => {
     expect(() =>
       fakeUserDataPath(true, false, "private-relative-path"),
-    ).toThrow("開発版 --fake の XHARNESS_HOME は絶対パスで指定してください");
+    ).toThrow("--fake の XHARNESS_HOME は絶対パスで指定してください");
   });
 });

@@ -84,6 +84,8 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
   if (e.type === "rewind_request")
     return put(s, e.sessionId, { ...view(s, e.sessionId), rewind: e });
   switch (e.type) {
+    case "memory_changed":
+      return s;
     case "workflow":
       return put(s, e.sessionId, {
         ...view(s, e.sessionId),
@@ -238,6 +240,7 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
       });
     case "permission_resolved": {
       const v = view(s, e.sessionId);
+      if (v.pending?.requestId !== e.requestId) return s;
       const receiptId = v.pending?.receiptId;
       return put(s, e.sessionId, {
         ...v,

@@ -55,10 +55,8 @@ export async function runRewind(
         resolve(choice);
       };
       const cancel = () => done(null);
-      rt.rewindPrompt = { requestId, resolve: done };
-      abort.signal.addEventListener("abort", cancel, { once: true });
-      emit({
-        type: "rewind_request",
+      const event = {
+        type: "rewind_request" as const,
         sessionId,
         requestId,
         preview: {
@@ -68,7 +66,10 @@ export async function runRewind(
             path: ctx.clean(f.path),
           })),
         },
-      });
+      };
+      rt.rewindPrompt = { requestId, resolve: done, event };
+      abort.signal.addEventListener("abort", cancel, { once: true });
+      emit(event);
       if (abort.signal.aborted) cancel();
     });
     if (!choice || abort.signal.aborted) return;

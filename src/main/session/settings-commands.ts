@@ -1,4 +1,8 @@
-import { withSessionTrace } from "../core/trace.js";
+import {
+  withSessionTrace,
+  withTraceFields,
+  traceOperation,
+} from "../core/trace.js";
 import { TurnEvents } from "./turn-events.js";
 import { permissionModeLabels } from "../../shared/permission-modes.js";
 import { withSessionCalls } from "./llm-calls.js";
@@ -20,6 +24,7 @@ import {
   type HarnessCommand,
 } from "../../shared/ipc.js";
 import { checkpointFile, pad, type ControllerContext } from "./context.js";
+import { RECOVERY_NOTICE } from "./store.js";
 
 /** セッションの権限モードを切り替え、その事実をレシートに残す(§9.1) */
 export async function setMode(
@@ -95,7 +100,13 @@ export async function compactNow(
   let stopCause: string | undefined;
   ctx.options.emit({ type: "turn", sessionId, status: "running" });
   const events = new TurnEvents(ctx, session, rt);
+  let evaluationTask: Awaited<ReturnType<typeof ctx.sessions.evaluationTask>>;
+  let operationId: string | undefined;
+  let persisted = false;
   try {
+    evaluationTask = await ctx.sessions.evaluationTask(sessionId);
+    if (evaluationTask?.recoveryRequired)
+      return { ok: false, error: RECOVERY_NOTICE };
     const file = checkpointFile(ctx.options.home, sessionId);
     rt.checkpoint ??= await file.read(undefined);
     abort.signal.throwIfAborted();
@@ -111,6 +122,13 @@ export async function compactNow(
     )
       return { ok: false, error: PREMISE_NOTICE };
     const limits = (await loadProjectConfig(ctx.options.home)).limits;
+    operationId = evaluationTask?.id ?? randomUUID();
+    await ctx.sessions.recordEvaluationTask(
+      sessionId,
+      operationId,
+      evaluationTask?.active ?? false,
+      false,
+    );
     const result = await withSessionCalls(
       {
         home: ctx.options.home,
@@ -128,28 +146,36 @@ export async function compactNow(
           sessionId,
           ctx.clean,
           async () =>
-            prepareProviderHistory(rt.messages, {
-              onAuthRefresh: events.onEvent,
-              provider,
-              model: session.model,
-              signal: abort.signal,
-              system:
-                rt.premises?.system ??
-                rt.system ??
-                (await systemPrompt(
-                  ctx,
-                  session.cwd,
-                  !session.workspaceId,
-                  rt.config,
-                  session.fileLinkGuidanceVersion === 1,
-                )),
-              tools:
-                rt.premises?.tools ??
-                [...(rt.tools?.values() ?? [])].map((t) => t.spec),
-              checkpoint: rt.checkpoint,
-              threshold: 0.8,
-              force: true,
-            }),
+            withTraceFields(
+              {
+                taskId: evaluationTask?.active ? evaluationTask.id : undefined,
+              },
+              () =>
+                traceOperation("step", "manual_compact", {}, async () =>
+                  prepareProviderHistory(rt.messages, {
+                    onAuthRefresh: events.onEvent,
+                    provider,
+                    model: session.model,
+                    signal: abort.signal,
+                    system:
+                      rt.premises?.system ??
+                      rt.system ??
+                      (await systemPrompt(
+                        ctx,
+                        session.cwd,
+                        !session.workspaceId,
+                        rt.config,
+                        session.fileLinkGuidanceVersion === 1,
+                      )),
+                    tools:
+                      rt.premises?.tools ??
+                      [...(rt.tools?.values() ?? [])].map((t) => t.spec),
+                    checkpoint: rt.checkpoint,
+                    threshold: 0.8,
+                    force: true,
+                  }),
+                ),
+            ),
           {
             onWarning: (message) =>
               ctx.options.emit({
@@ -178,6 +204,14 @@ export async function compactNow(
         durationMs: 0,
         summary: "Manual compact",
       });
+    await Promise.all(events.receiptWrites);
+    await ctx.sessions.recordEvaluationTask(
+      sessionId,
+      operationId,
+      evaluationTask?.active ?? false,
+      true,
+    );
+    persisted = true;
     ctx.options.emit({
       type: "notice",
       tone: "dim",
@@ -205,6 +239,14 @@ export async function compactNow(
     }
     return { ok: false, error: "圧縮に失敗しました。元の履歴を維持しています" };
   } finally {
+    // Failure before a known outcome remains fenced; no replay of the operation.
+    if (operationId && !persisted)
+      ctx.options.emit({
+        type: "notice",
+        sessionId,
+        tone: "warn",
+        message: RECOVERY_NOTICE,
+      });
     await Promise.all(events.receiptWrites).catch(() => {
       ctx.options.emit({
         type: "notice",

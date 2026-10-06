@@ -1,15 +1,17 @@
 import { createHash } from "node:crypto";
 import {
-  appendFile,
   mkdir,
   readFile,
   rename,
   rm,
   stat,
-  writeFile,
+  open,
+  realpath,
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { type Message } from "../core/types.js";
+import { appendDurableLog } from "./durable-log.js";
+import { readTraceReplay } from "./report-trace.js";
 import { FileCheckpointStore } from "../checkpoints/store.js";
 import {
   type ProviderName,
@@ -27,6 +29,8 @@ export type StoredSession = Omit<SessionSummary, "status" | "branch"> & {
 };
 
 let tempSeq = 0;
+export const RECOVERY_NOTICE =
+  "前回の保存が未確定です。外部副作用を再実行しないため、この会話の実行を停止しています。HTMLレポートで記録を確認し、新しいセッションを使用してください。";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -70,7 +74,13 @@ export class JsonFile<T> {
     const run = this.chain.then(async () => {
       await mkdir(dirname(this.path), { recursive: true });
       const temp = `${this.path}.${process.pid}.${++tempSeq}.tmp`;
-      await writeFile(temp, text, "utf8");
+      const file = await open(temp, "w");
+      try {
+        await file.writeFile(text, "utf8");
+        await file.sync();
+      } finally {
+        await file.close();
+      }
       for (let attempt = 0; ; attempt++) {
         try {
           await rename(temp, this.path);
@@ -231,6 +241,71 @@ export class SessionStore {
     this.sessions = (await this.index.read([])).filter(
       (s) => !this.deleted.has(s.id),
     );
+    for (const session of this.sessions)
+      await this.recoverEvaluation(session.id);
+  }
+  /** Repair identity from passive logs only. Never replay providers, commands or tools. */
+  private async recoverEvaluation(sessionId: string) {
+    const saved = await this.evaluationTask(sessionId);
+    if (
+      !saved ||
+      saved.settled === true ||
+      (!saved.active && saved.settled !== false)
+    )
+      return;
+    let trace: Awaited<ReturnType<typeof readTraceReplay>>;
+    try {
+      trace = await readTraceReplay(this.home, sessionId, (s) => s);
+    } catch {
+      if (saved.settled === undefined)
+        await this.recordEvaluationTask(
+          sessionId,
+          saved.id,
+          saved.active,
+          false,
+        );
+      this.index.warnings.push(
+        `${sessionId}: ${RECOVERY_NOTICE} トレースを読み取れませんでした。`,
+      );
+      return;
+    }
+    const roots = trace?.records.filter(
+      (r) =>
+        r.kind === "task" &&
+        r.phase === "start" &&
+        r.input &&
+        typeof r.input === "object" &&
+        "taskId" in r.input &&
+        r.input.taskId === saved.id,
+    );
+    const last = roots?.at(-1);
+    const end =
+      last &&
+      trace?.records.findLast((r) => r.phase === "end" && r.id === last.id);
+    const output =
+      end?.output && typeof end.output === "object"
+        ? (end.output as Record<string, unknown>)
+        : {};
+    const complete =
+      ["workflow_complete", "reported_done"].includes(
+        String(output.stopCause),
+      ) ||
+      (output.stopCause === "end_turn" &&
+        [undefined, "off", "complete"].includes(
+          output.workflowPhase as string | undefined,
+        ));
+    if (saved.settled === false || (last && !end)) {
+      if (saved.active && complete)
+        await this.recordEvaluationTask(sessionId, saved.id, false, false);
+      else if (saved.settled === undefined)
+        await this.recordEvaluationTask(
+          sessionId,
+          saved.id,
+          saved.active,
+          false,
+        );
+      this.index.warnings.push(`${sessionId}: ${RECOVERY_NOTICE}`);
+    }
   }
   /** 旧い索引にはモデルが無い。メモリ上だけ既定値で補う(次の保存で書かれる)。 */
   fillDefaults(defaults: { model: string; effort: StoredSession["effort"] }) {
@@ -282,7 +357,7 @@ export class SessionStore {
           content: m.content.map(block),
         }),
       );
-      await appendFile(this.history(id), lines.join("\n") + "\n", "utf8");
+      await appendDurableLog(this.history(id), lines.join("\n"));
     });
   }
   async messages(id: string): Promise<Message[]> {
@@ -315,6 +390,152 @@ export class SessionStore {
     }
     return out;
   }
+  /** Bounded, live lookup for history tools. Never follow a history/home alias. */
+  async ownsHome(expectedHome: string): Promise<boolean> {
+    try {
+      const actual = await realpath(this.home);
+      return process.platform === "win32"
+        ? actual.toLowerCase() === expectedHome.toLowerCase()
+        : actual === expectedHome;
+    } catch {
+      return false;
+    }
+  }
+  async historyRecords(id: string, expectedHome: string) {
+    if (!this.get(id)) return undefined;
+    const same = (a: string, b: string) =>
+      process.platform === "win32"
+        ? a.toLowerCase() === b.toLowerCase()
+        : a === b;
+    try {
+      const home = await realpath(this.home);
+      if (!same(home, expectedHome)) return undefined;
+      const directory = join(home, "sessions");
+      if (!same(await realpath(directory), directory)) return undefined;
+      const path = join(directory, `${id}.jsonl`);
+      if (!same(await realpath(this.history(id)), path)) return undefined;
+      const file = await open(path, "r");
+      try {
+        const before = await file.stat();
+        // Skip rather than returning pre-rewind text from an incomplete scan.
+        if (!before.isFile() || before.size > 1024 * 1024)
+          return { records: [], truncated: true };
+        const bytes = Buffer.alloc(before.size);
+        const { bytesRead } = await file.read(bytes, 0, bytes.length, 0);
+        const after = await stat(path);
+        if (
+          bytesRead !== before.size ||
+          before.size !== after.size ||
+          before.mtimeMs !== after.mtimeMs ||
+          before.ino !== after.ino ||
+          !same(await realpath(path), path) ||
+          !same(await realpath(this.home), expectedHome) ||
+          !same(await realpath(directory), directory) ||
+          !this.get(id)
+        )
+          return undefined;
+        const records: { line: number; message: Message }[] = [];
+        for (const [index, line] of bytes
+          .toString("utf8")
+          .split("\n")
+          .entries()) {
+          try {
+            const message = JSON.parse(line) as Message;
+            if (!message || !Array.isArray(message.content)) continue;
+            const keep = message.meta?.rewind?.keep;
+            if (keep !== undefined) {
+              if (
+                !Number.isSafeInteger(keep) ||
+                keep < 0 ||
+                keep > records.length
+              )
+                return undefined; // Fail closed on an ambiguous rewind.
+              records.splice(keep);
+            }
+            records.push({ line: index + 1, message });
+          } catch {
+            /* Old/torn JSONL lines are not searchable. */
+          }
+        }
+        return this.get(id) ? { records, truncated: false } : undefined;
+      } finally {
+        await file.close();
+      }
+    } catch {
+      return undefined;
+    }
+  }
+  async evaluationTask(id: string): Promise<
+    | {
+        id: string;
+        active: boolean;
+        settled?: boolean;
+        recoveryRequired?: boolean;
+      }
+    | undefined
+  > {
+    let raw: string;
+    try {
+      raw = await readFile(
+        this.history(id).replace(/\.jsonl$/, ".evaluation.jsonl"),
+        "utf8",
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      throw error;
+    }
+    let latest:
+      | {
+          id: string;
+          active: boolean;
+          settled?: boolean;
+          recoveryRequired?: boolean;
+        }
+      | undefined;
+    for (const line of raw.split("\n")) {
+      try {
+        const value = JSON.parse(line)?.evaluationTask;
+        if (
+          value &&
+          typeof value.id === "string" &&
+          /^[\w-]{1,512}$/.test(value.id) &&
+          typeof value.active === "boolean"
+        )
+          latest = {
+            id: value.id,
+            active: value.active,
+            ...(typeof value.settled === "boolean"
+              ? { settled: value.settled, recoveryRequired: !value.settled }
+              : {}),
+          };
+      } catch {
+        /* A partial final journal line must not hide earlier lifecycle records. */
+      }
+    }
+    return latest;
+  }
+  async recordEvaluationTask(
+    sessionId: string,
+    id: string,
+    active: boolean,
+    settled?: boolean,
+  ) {
+    if (!/^[\w-]{1,512}$/.test(id))
+      throw new Error("Invalid evaluation task id");
+    await this.write(sessionId, async () => {
+      if (this.deleted.has(sessionId)) return;
+      await mkdir(join(this.home, "sessions"), { recursive: true });
+      await appendDurableLog(
+        this.history(sessionId).replace(/\.jsonl$/, ".evaluation.jsonl"),
+        "\n" +
+          JSON.stringify({
+            evaluationTask: { id, active, settled },
+            at: new Date().toISOString(),
+          }) +
+          "\n",
+      );
+    });
+  }
   async delete(id: string) {
     // Fence stale turns/saves and remove from lookup BEFORE any await.
     this.deleted.add(id);
@@ -322,6 +543,9 @@ export class SessionStore {
     return this.write(id, async () => {
       await new FileCheckpointStore(this.home).remove(id);
       await rm(this.history(id), { force: true });
+      await rm(this.history(id).replace(/\.jsonl$/, ".evaluation.jsonl"), {
+        force: true,
+      });
       await rm(this.history(id).replace(/\.jsonl$/, ".llm-calls.json"), {
         force: true,
       });

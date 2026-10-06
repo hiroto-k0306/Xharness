@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, safeStorage, shell } from "electron";
 import { homedir } from "node:os";
 import { mkdirSync } from "node:fs";
 import { fakeUserDataPath } from "./fake-profile.js";
+import { acquireHomeWriter } from "./home-writer.js";
 import { loadMainConfig } from "./config/config.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +18,7 @@ import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
+import { createLocalBrowser } from "./local-browser-electron.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
 import {
   confirmAuthentication,
@@ -34,7 +36,7 @@ import {
 const here = fileURLToPath(new URL(".", import.meta.url));
 const startup = parseStartupArgs(process.argv.slice(1));
 const fake = startup.fake;
-// userData は単一起動ロックより前に分離する。実版・配布版は従来の保存先。
+// 明示的なfakeのuserDataは単一起動ロックより前に分離する。実版は従来の保存先。
 const fakeUserData = fakeUserDataPath(
   fake,
   app.isPackaged,
@@ -93,6 +95,17 @@ async function start() {
   const base = process.env.XHARNESS_HOME;
   // --fake は本物のセッション履歴を汚さないよう別の場所を使う
   const home = base ?? join(homedir(), fake ? ".xharness-fake" : ".xharness");
+  try {
+    // Hold until process exit; never release while shutdown's timed-out writes may run.
+    await acquireHomeWriter(home);
+  } catch (error) {
+    dialog.showErrorBox(
+      "XHarness",
+      error instanceof Error ? error.message : "保存先を使用できません",
+    );
+    app.exit(1);
+    return;
+  }
   const fixtures = app.isPackaged
     ? join(process.resourcesPath, "fixtures")
     : join(app.getAppPath(), "test/fixtures/claude");
@@ -188,6 +201,7 @@ async function start() {
     // --fake では資格情報ファイルを読まない
     secrets,
     host: createHost(() => window),
+    localBrowserFactory: createLocalBrowser,
     emit: (event) => sendEvent(window, event),
     // MCP の OAuth トークンは OS の暗号化(Windows では DPAPI)で保存する。使えなければ OAuth を使わない
     ...(!fake && safeStorage.isEncryptionAvailable()

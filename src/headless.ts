@@ -1,4 +1,8 @@
-import { withSessionTrace } from "./main/core/trace.js";
+import {
+  withSessionTrace,
+  withTraceFields,
+  traceOperation,
+} from "./main/core/trace.js";
 import { readLlmCalls, withSessionCalls } from "./main/session/llm-calls.js";
 import {
   costSummary,
@@ -26,6 +30,7 @@ import {
   WorkspaceStore,
   JsonFile,
   type StoredSession,
+  RECOVERY_NOTICE,
 } from "./main/session/store.js";
 import {
   loadProjectConfig,
@@ -48,6 +53,9 @@ import { defaultTools } from "./main/session/controller.js";
 import { childNeedsAsk } from "./main/agents/permissions.js";
 import { type Message } from "./main/core/types.js";
 import { redact } from "./main/core/redact.js";
+import { projectHistoryTools } from "./main/tools/project-history.js";
+import { projectMemoryTools } from "./main/tools/project-memory.js";
+import { projectSkillTools } from "./main/tools/project-skills.js";
 import { WorkspaceTrust } from "./main/config/trust.js";
 import { McpApprovals } from "./main/mcp/approvals.js";
 import {
@@ -86,8 +94,22 @@ import {
   compareReplayPermissions,
 } from "./main/session/replay.js";
 import { exportExecutionReport } from "./main/session/report.js";
+import { acquireHomeWriter, HomeWriterBusy } from "./main/home-writer.js";
 
 export async function headless(args = process.argv.slice(2)) {
+  if (["--help", "--report", "--replay"].some((arg) => args.includes(arg)))
+    return headlessUnlocked(args);
+  const home =
+    process.env.XHARNESS_HOME ??
+    join(homedir(), args.includes("--fake") ? ".xharness-fake" : ".xharness");
+  const writer = await acquireHomeWriter(home);
+  try {
+    await headlessUnlocked(args);
+  } finally {
+    await writer.release();
+  }
+}
+async function headlessUnlocked(args: string[]) {
   if (args.includes("--help")) {
     process.stdout.write(
       "XHarness Phase 6\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\nnode dist/headless.js --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path] [--fake]\nnode dist/headless.js --report sessionId --output new-report.html [--fake]\n/model provider:model [effort] /mode default|acceptEdits|plan /phase plan|implement|review /review /compact /exit /clear · Ctrl+C interrupts a turn\n",
@@ -184,6 +206,8 @@ export async function headless(args = process.argv.slice(2)) {
     ? sessions.get(option("--resume", ""))
     : undefined;
   if (args.includes("--resume") && !resume) throw new Error("Unknown session");
+  if (resume && (await sessions.evaluationTask(resume.id))?.recoveryRequired)
+    throw new Error(RECOVERY_NOTICE);
   const cwd = resume?.cwd ?? resolve(option("--cwd", process.cwd()));
   if (!(await stat(cwd)).isDirectory())
     throw new Error("Working directory unavailable");
@@ -285,6 +309,36 @@ export async function headless(args = process.argv.slice(2)) {
   };
   session = { ...session, environment };
   await sessions.save(session);
+  for (const [name, tool] of new Map([
+    ...projectHistoryTools({
+      home,
+      sessions,
+      workspaces,
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      cwd,
+      clean,
+    }),
+    ...projectMemoryTools({
+      home,
+      sessions,
+      workspaces,
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      cwd,
+      clean,
+    }),
+    ...projectSkillTools({
+      home,
+      sessions,
+      workspaces,
+      sessionId: session.id,
+      workspaceId: session.workspaceId,
+      cwd,
+      clean,
+    }),
+  ]))
+    tools.set(name, tool);
   let messages: Message[] = resume ? await sessions.messages(session.id) : [];
   let persisted = messages.length;
   const fileCheckpoints = new FileCheckpointStore(home);
@@ -507,6 +561,18 @@ export async function headless(args = process.argv.slice(2)) {
       if (input.trim() === "/compact") {
         const compactAbort = new AbortController();
         try {
+          const evaluationTask = await sessions.evaluationTask(session.id);
+          if (evaluationTask?.recoveryRequired) {
+            process.stdout.write(RECOVERY_NOTICE + "\n");
+            continue;
+          }
+          const operationId = evaluationTask?.id ?? randomUUID();
+          await sessions.recordEvaluationTask(
+            session.id,
+            operationId,
+            evaluationTask?.active ?? false,
+            false,
+          );
           const prepared = await withSessionCalls(
             {
               home,
@@ -520,19 +586,29 @@ export async function headless(args = process.argv.slice(2)) {
                 session.id,
                 clean,
                 () =>
-                  prepareProviderHistory(messages, {
-                    provider: router.provider(model!),
-                    model: model!,
-                    system,
-                    tools: [...tools.values()].map((t) => t.spec),
-                    signal: AbortSignal.any([
-                      compactAbort.signal,
-                      AbortSignal.timeout(60000),
-                    ]),
-                    checkpoint,
-                    force: true,
-                    threshold: project.context.compactThreshold,
-                  }),
+                  withTraceFields(
+                    {
+                      taskId: evaluationTask?.active
+                        ? evaluationTask.id
+                        : undefined,
+                    },
+                    () =>
+                      traceOperation("step", "manual_compact", {}, () =>
+                        prepareProviderHistory(messages, {
+                          provider: router.provider(model!),
+                          model: model!,
+                          system,
+                          tools: [...tools.values()].map((t) => t.spec),
+                          signal: AbortSignal.any([
+                            compactAbort.signal,
+                            AbortSignal.timeout(60000),
+                          ]),
+                          checkpoint,
+                          force: true,
+                          threshold: project.context.compactThreshold,
+                        }),
+                      ),
+                  ),
                 {
                   onWarning: (message) => process.stderr.write(message + "\n"),
                 },
@@ -543,6 +619,12 @@ export async function headless(args = process.argv.slice(2)) {
           );
           checkpoint = prepared.checkpoint;
           if (checkpoint) await checkpointFile().write(checkpoint);
+          await sessions.recordEvaluationTask(
+            session.id,
+            operationId,
+            evaluationTask?.active ?? false,
+            true,
+          );
           process.stdout.write(
             prepared.compacted
               ? "History compacted; original retained\n"
@@ -743,6 +825,10 @@ export async function headless(args = process.argv.slice(2)) {
         }
         return ["y", "s", "a"].includes(choice);
       };
+      if ((await sessions.evaluationTask(session.id))?.recoveryRequired) {
+        process.stdout.write(RECOVERY_NOTICE + "\n");
+        continue;
+      }
       if (
         !workflow ||
         (!workflow.manualReview &&
@@ -754,7 +840,11 @@ export async function headless(args = process.argv.slice(2)) {
           (hooks, signal) =>
             ask({ name: "ProjectHooks", input: { hooks } }, signal, cwd, true),
         );
+        const previousTask = await sessions.evaluationTask(session.id);
         workflow = new WorkflowRuntime({
+          evaluationTaskId: previousTask?.active
+            ? previousTask.id
+            : randomUUID(),
           approveHooks: (_hooks, signal) => approveHooks(signal),
           home,
           cwd,
@@ -764,6 +854,36 @@ export async function headless(args = process.argv.slice(2)) {
           router,
           createTools: (directory) => {
             const available = defaultTools(directory, false);
+            for (const [name, tool] of new Map([
+              ...projectHistoryTools({
+                home,
+                sessions,
+                workspaces,
+                sessionId: session.id,
+                workspaceId: session.workspaceId,
+                cwd: directory,
+                clean,
+              }),
+              ...projectMemoryTools({
+                home,
+                sessions,
+                workspaces,
+                sessionId: session.id,
+                workspaceId: session.workspaceId,
+                cwd: directory,
+                clean,
+              }),
+              ...projectSkillTools({
+                home,
+                sessions,
+                workspaces,
+                sessionId: session.id,
+                workspaceId: session.workspaceId,
+                cwd: directory,
+                clean,
+              }),
+            ]))
+              available.set(name, tool);
             if (config.web.enabled)
               for (const [name, tool] of webTools(
                 () => router.provider(model!),
@@ -821,6 +941,14 @@ export async function headless(args = process.argv.slice(2)) {
         });
       }
       let compactionFailure: string | undefined;
+      await sessions.recordEvaluationTask(
+        session.id,
+        workflow.evaluationTaskId,
+        true,
+        false,
+      );
+      await sessions.append(session.id, messages.slice(persisted), clean);
+      persisted = messages.length;
       const turnAbort = controller;
       const result = await withSessionCalls(
         { home, id: session.id, limits: project.limits, abort: controller },
@@ -927,11 +1055,26 @@ export async function headless(args = process.argv.slice(2)) {
       persisted = messages.length;
       session = { ...session, model, effort, updatedAt: Date.now() };
       await sessions.save(session);
+      await sessions.recordEvaluationTask(
+        session.id,
+        workflow.evaluationTaskId,
+        !(
+          result.stopCause === "workflow_complete" ||
+          result.stopCause === "reported_done" ||
+          (result.stopCause === "end_turn" &&
+            ["off", "complete"].includes(workflow.state.phase))
+        ),
+        true,
+      );
       if (bufferedText) process.stdout.write(clean(bufferedText));
       controller = undefined;
       process.stdout.write(
         `\n[stopped: ${result.stopCause}; receipts: ${result.receipts.length}]\n`,
       );
+      if (result.stopCause === "rate_limited")
+        process.stdout.write(
+          "[quota resume: manual only; headless does not restore an automatic quota-wait schedule]\n",
+        );
     }
   } finally {
     controller?.abort();
@@ -945,16 +1088,18 @@ export async function headless(args = process.argv.slice(2)) {
         !["--resume", "--cwd", "--model", "--effort"].includes(args[i]!) &&
         !["--resume", "--cwd", "--model", "--effort"].includes(args[i - 1]!),
     );
-    await headless([...next, "--resume", resumeNext]);
+    await headlessUnlocked([...next, "--resume", resumeNext]);
   }
 }
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  headless().catch(() => {
+  headless().catch((error) => {
     process.stderr.write(
-      "Headless failed; check workspace, credentials and installed tools\n",
+      error instanceof HomeWriterBusy
+        ? error.message + "\n"
+        : "Headless failed; check workspace, credentials and installed tools\n",
     );
     process.exitCode = 1;
   });

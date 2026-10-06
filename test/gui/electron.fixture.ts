@@ -9,6 +9,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { type ChildProcess } from "node:child_process";
 
 const root = resolve(fileURLToPath(new URL("../../", import.meta.url)));
 
@@ -19,6 +20,7 @@ export const test = base.extend<{
   electronApp: async ({}, use) => {
     const home = await mkdtemp(join(tmpdir(), "xharness-gui-"));
     let application: ElectronApplication | undefined;
+    let processHandle: ChildProcess | undefined;
     try {
       const env = Object.fromEntries(
         Object.entries(process.env).filter(
@@ -31,12 +33,15 @@ export const test = base.extend<{
             ].includes(key),
         ),
       ) as Record<string, string>;
+      const executablePath = process.env.XHARNESS_TEST_EXECUTABLE;
       application = await electron.launch({
         cwd: root,
-        args: [root, "--fake"],
+        ...(executablePath ? { executablePath } : {}),
+        args: executablePath ? ["--fake"] : [root, "--fake"],
         env: { ...env, XHARNESS_HOME: home },
         timeout: 15_000,
       });
+      processHandle = application.process();
       // メインプロセスで確認する。既存プロファイルへの接続なら操作せず失敗させる。
       expect(
         await application.evaluate(({ app }) => ({
@@ -47,10 +52,19 @@ export const test = base.extend<{
         userData: join(home, "electron-user-data"),
         sessionData: join(home, "electron-user-data"),
       });
+      if (executablePath) {
+        expect(await application.evaluate(({ app }) => app.isPackaged)).toBe(
+          true,
+        );
+        expect(
+          await application.evaluate(({ app }) => app.getPath("exe")),
+        ).toBe(resolve(executablePath));
+      }
       await use(application);
     } finally {
       try {
-        await application?.close();
+        if (application && processHandle?.exitCode === null)
+          await application.close();
       } finally {
         await rm(home, { recursive: true, force: true, maxRetries: 5 });
       }

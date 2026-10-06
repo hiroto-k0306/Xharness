@@ -1,4 +1,4 @@
-import { beginTrace, withTraceFields } from "./trace.js";
+import { beginTrace, withTraceFields, withTaskTrace } from "./trace.js";
 import { llmStopCause } from "./llm-budget.js";
 import { hookSnapshot, type HookResult } from "../hooks/step-hooks.js";
 import { createSteps } from "./loop-steps.js";
@@ -142,6 +142,15 @@ async function runHook(
 }
 
 export async function runTurn(options: LoopOptions, signal: AbortSignal) {
+  return withTaskTrace(
+    {
+      model: options.current?.().model ?? options.model,
+      effort: options.reasoning?.effort,
+    },
+    () => runTurnWithCleanup(options, signal),
+  );
+}
+async function runTurnWithCleanup(options: LoopOptions, signal: AbortSignal) {
   try {
     return await runTurnSteps(options, signal);
   } finally {

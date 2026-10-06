@@ -1,5 +1,6 @@
 // 1ターン(ユーザーの1発言 → 応答の完了)を実行し、履歴とレシートを保存する。
 import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
 import { checkPremises } from "./premises.js";
 import { withSessionCalls } from "./llm-calls.js";
@@ -30,7 +31,7 @@ import { TurnEvents, usageEvent } from "./turn-events.js";
 import { createWorkflow, needsNewWorkflow } from "./workflow-factory.js";
 import {
   checkpointFile,
-  defaultTools,
+  sessionTools,
   safeInput,
   STOP_NOTICE,
   type ControllerContext,
@@ -212,11 +213,7 @@ async function prepareRuntime(
 ) {
   const { options } = ctx;
   const root = ctx.workspaceRoot(session);
-  rt.tools ??= (options.createTools ?? defaultTools)(
-    // Per-session policies are evaluated at the permission gate.
-    session.cwd,
-    session.readOnly,
-  );
+  rt.tools ??= sessionTools(ctx, session);
   if (options.phase4) {
     rt.config = await loadTrustedConfig(ctx, gate, session, rt, root, signal);
     rt.mainConfig = await loadMainConfig(options.home, undefined, root);
@@ -269,6 +266,7 @@ export async function runSessionTurn(
   text: string,
   images?: import("../../shared/images.js").ImageAttachment[],
   abort = new AbortController(),
+  continuation = false,
 ): Promise<void> {
   rt.abort = abort;
   try {
@@ -284,7 +282,17 @@ export async function runSessionTurn(
           void ctx.emitState();
         },
       },
-      () => runSessionBody(ctx, gate, session, rt, text, abort, images),
+      () =>
+        runSessionBody(
+          ctx,
+          gate,
+          session,
+          rt,
+          text,
+          abort,
+          images,
+          continuation,
+        ),
     );
   } catch (error) {
     const stopCause =
@@ -294,6 +302,7 @@ export async function runSessionTurn(
           ? "aborted"
           : "step_failed";
     rt.status = "idle";
+    rt.lastStopCause = stopCause;
     rt.abort = undefined;
     ctx.options.emit({
       type: "notice",
@@ -321,6 +330,7 @@ async function runSessionBody(
   text: string,
   abort: AbortController,
   images?: import("../../shared/images.js").ImageAttachment[],
+  continuation = false,
 ): Promise<void> {
   const { options } = ctx;
   const { emit } = options;
@@ -366,14 +376,19 @@ async function runSessionBody(
     }
     text = expanded.text;
   }
-  session = await beginTurn(
-    ctx,
-    session,
-    rt,
-    text,
-    mcpChangeNote(rt.mcp),
-    images,
-  );
+  if (!continuation)
+    session = await beginTurn(
+      ctx,
+      session,
+      rt,
+      text,
+      mcpChangeNote(rt.mcp),
+      images,
+    );
+  else {
+    emit({ type: "turn", sessionId, status: "running" });
+    await ctx.emitState();
+  }
   let stopCause = "step_failed";
   try {
     const { web } = await prepareRuntime(
@@ -426,7 +441,9 @@ async function runSessionBody(
         !!rt.trustedSession ||
         (await ctx.trust.isTrusted(trustRoot)),
     );
-    if (needsNewWorkflow(rt))
+    if (needsNewWorkflow(rt)) {
+      const previous = await ctx.sessions.evaluationTask(sessionId);
+      rt.evaluationTaskId = previous?.active ? previous.id : randomUUID();
       rt.workflow = createWorkflow(ctx, gate, {
         session,
         rt,
@@ -434,6 +451,20 @@ async function runSessionBody(
         web,
         events,
       });
+    }
+    await ctx.sessions.recordEvaluationTask(
+      sessionId,
+      rt.evaluationTaskId!,
+      true,
+      false,
+    );
+    // Persist the accepted request before any provider/tool side effect.
+    await ctx.sessions.append(
+      sessionId,
+      rt.messages.slice(rt.persisted),
+      ctx.clean,
+    );
+    rt.persisted = rt.messages.length;
     // 自動圧縮に失敗したら、このターンでは再試行しない(次のターンで再試行する)
     let compactionFailure: string | undefined;
     const result = await rt.workflow!.run(
@@ -454,6 +485,11 @@ async function runSessionBody(
             ))
           )
             return { messages, stop: "premise_mismatch" };
+          if (rt.quotaGuard) {
+            const guard = rt.quotaGuard;
+            rt.quotaGuard = undefined;
+            if (!(await guard())) return { messages, stop: "premise_mismatch" };
+          }
           if (!options.phase4) return { messages };
           const limit = route.provider
             .models()
@@ -558,7 +594,7 @@ async function runSessionBody(
             rt,
             call,
             receiptId: events.receiptByCall.get(call.id),
-            forceAsk: context?.forceAsk,
+            forceAsk: !!context?.forceAsk || rt.quotaContinuation,
             signal,
           });
           if (options.phase4) {
@@ -655,6 +691,7 @@ async function finishTurn(
 ) {
   const { emit } = ctx.options;
   const sessionId = session.id;
+  let saved = false;
   try {
     await flushLlmCalls();
     stopCause = llmStopCause() ?? stopCause;
@@ -672,13 +709,41 @@ async function finishTurn(
       updatedAt: Date.now(),
       providers: usedProviders(rt.messages, latest.providers),
     });
+    if (rt.evaluationTaskId)
+      await ctx.sessions.recordEvaluationTask(
+        sessionId,
+        rt.evaluationTaskId,
+        !(
+          stopCause === "workflow_complete" ||
+          stopCause === "reported_done" ||
+          (stopCause === "end_turn" &&
+            ["off", "complete"].includes(rt.workflow?.state.phase ?? ""))
+        ),
+        true,
+      );
+    saved = true;
   } catch {
     emit({ type: "error", sessionId, message: "履歴の保存に失敗しました" });
   }
+  if (stopCause === "rate_limited" && events.quotaRate && ctx.quotaPaused)
+    await ctx
+      .quotaPaused(ctx.sessions.get(sessionId) ?? session, rt, {
+        rate: events.quotaRate,
+        unsafe: events.resumeUnsafe || !!rt.abort?.signal.aborted,
+        saved,
+      })
+      .catch(() =>
+        emit({
+          type: "error",
+          sessionId,
+          message: "枠待ちを安全に保存できません。自動再開しません。",
+        }),
+      );
   rt.abort = undefined;
   rt.pending = undefined;
   rt.status = "idle";
   const notice = STOP_NOTICE[stopCause];
+  rt.lastStopCause = stopCause;
   if (
     stopCause === "authentication" &&
     !ctx.options.fake &&

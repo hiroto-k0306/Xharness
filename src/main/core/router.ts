@@ -36,6 +36,7 @@ export class Router {
     from: ProviderId,
     effort: ReasoningEffort | undefined,
     visited: ReadonlySet<string>,
+    limitedProviders: ReadonlySet<ProviderId> = new Set(),
   ): Route | undefined {
     const spec = this.fallbacks[from];
     const resolved = spec && resolveModel(spec, this.aliases);
@@ -43,6 +44,7 @@ export class Router {
     const provider = this.providers.find(
       (p) =>
         p.id === resolved.provider &&
+        !limitedProviders.has(p.id) &&
         p.models().some((m) => m.id === resolved.model),
     );
     return provider

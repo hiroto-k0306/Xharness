@@ -1,13 +1,17 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { imageMetadata } from "../../shared/images.js";
+import { type TokenMeasurement } from "../providers/token-usage.js";
 import { createTraceStorage, type TraceStorageOptions } from "./trace-store.js";
 
 export interface TraceRecord {
   id: string;
   sequence: number;
   phase: "start" | "end";
-  kind: "step" | "llm" | "tool" | "delegation";
+  kind: "step" | "llm" | "tool" | "delegation" | "task";
+  taskId?: string;
+  /** Stable identity of one dispatched model attempt; retries receive a new UUID. */
+  attemptId?: string;
   agentId: string;
   parentSpan?: string;
   step?: string;
@@ -58,6 +62,7 @@ interface Writer {
   write(record: TraceRecord): void;
 }
 interface Scope {
+  taskId?: string;
   writer: Writer;
   agentId: string;
   parentSpan?: string;
@@ -65,6 +70,7 @@ interface Scope {
   round?: number;
   callId?: string;
   capture?: (value: unknown) => void;
+  captureUsage?: (value: TokenMeasurement) => void;
 }
 const scopes = new AsyncLocalStorage<Scope>();
 
@@ -99,6 +105,18 @@ export async function withSessionTrace<T>(
                         "dispatched" in record.output &&
                         record.output.dispatched,
                       truncated: true,
+                      tokenMeasurement:
+                        "tokenMeasurement" in record.output
+                          ? record.output.tokenMeasurement
+                          : undefined,
+                      usage:
+                        "usage" in record.output
+                          ? record.output.usage
+                          : undefined,
+                      usageComplete:
+                        "usageComplete" in record.output
+                          ? record.output.usageComplete
+                          : false,
                       body: "容量上限のため省略",
                     }
                   : "容量上限のため省略",
@@ -145,6 +163,7 @@ export function beginTrace(
     sequence: ++scope.writer.sequence,
     phase: "start",
     kind,
+    taskId: scope.taskId,
     agentId: scope.agentId,
     parentSpan: scope.parentSpan,
     step: scope.step,
@@ -155,6 +174,7 @@ export function beginTrace(
     simulated,
     at: new Date().toISOString(),
   };
+  if (kind === "llm") record.attemptId = record.id;
   scope.writer.write(record);
   return {
     fields: { parentSpan: record.id },
@@ -169,6 +189,33 @@ export function beginTrace(
       });
     },
   };
+}
+
+/** A parent run owns nested workers, reviews, retries and automatic compaction. */
+export async function withTaskTrace<T extends { stopCause: string }>(
+  input: { model: string; effort?: string; taskId?: string },
+  run: () => Promise<T>,
+  workflowPhase?: () => string,
+): Promise<T> {
+  const scope = scopes.getStore();
+  if (!scope || scope.taskId) return run();
+  const span = beginTrace("task", "評価タスク", input);
+  return withTraceFields(
+    { ...span.fields, taskId: input.taskId ?? span.fields.parentSpan },
+    async () => {
+      try {
+        const result = await run();
+        span.end(
+          { stopCause: result.stopCause, workflowPhase: workflowPhase?.() },
+          result.stopCause,
+        );
+        return result;
+      } catch (error) {
+        span.end({ stopCause: "unhandled_failure" }, "unhandled_failure");
+        throw error;
+      }
+    },
+  );
 }
 
 export async function traceOperation<T>(
@@ -211,6 +258,11 @@ export function captureTraceResponse(value: unknown) {
   }
 }
 
+/** Adapters supply usage semantics; the trace layer only stores the snapshot. */
+export function captureTraceUsage(value: TokenMeasurement) {
+  scopes.getStore()?.captureUsage?.(value);
+}
+
 /** Bind every iterator.next(), so nested async generators retain the call scope. */
 export async function* traceStream<T extends { type: string }>(
   label: string,
@@ -231,6 +283,9 @@ export async function* traceStream<T extends { type: string }>(
   let body: unknown;
   let dispatched = false;
   let status = "応答未完了";
+  let lastUsage: unknown;
+  let usageComplete = false;
+  let measured: TokenMeasurement | undefined;
   const capture = (value: unknown) => {
     const safe = traceJson(value, scope.writer.clean);
     const parsed: unknown = JSON.parse(safe);
@@ -254,7 +309,13 @@ export async function* traceStream<T extends { type: string }>(
     raw.push(JSON.parse(safe));
   };
   const iterator = stream[Symbol.asyncIterator]();
-  const fields = { ...span.fields, capture };
+  const fields = {
+    ...span.fields,
+    capture,
+    captureUsage: (value: TokenMeasurement) => {
+      measured = value;
+    },
+  };
   try {
     while (true) {
       const next = await withTraceFields(fields, () => iterator.next());
@@ -262,7 +323,11 @@ export async function* traceStream<T extends { type: string }>(
       const event = next.value;
       if (!["text_delta", "reasoning_delta"].includes(event.type))
         decoded.push(event);
-      if (event.type === "message_done") status = "完了";
+      if (event.type === "message_done") {
+        status = "完了";
+        lastUsage = "usage" in event ? event.usage : undefined;
+        usageComplete = true;
+      }
       if (event.type === "error") status = "エラー";
       if (event.type === "rate_limited") status = "利用制限";
       yield event;
@@ -275,7 +340,16 @@ export async function* traceStream<T extends { type: string }>(
       await withTraceFields(fields, () => iterator.return?.());
     } finally {
       span.end(
-        { body, dispatched, events: decoded, response: raw, truncated },
+        {
+          body,
+          dispatched,
+          events: decoded,
+          response: raw,
+          truncated,
+          tokenMeasurement: measured,
+          usage: lastUsage,
+          usageComplete,
+        },
         status,
       );
     }

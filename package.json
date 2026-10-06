@@ -8,6 +8,7 @@
     "node": "^22.20.0 || ^24.16.0"
   },
   "scripts": {
+    "handoff": "tsx scripts/handoff.ts",
     "postinstall": "node node_modules/electron/install.js",
     "test": "vitest run --exclude=spike/.out/** --exclude=.tools/** --exclude=dist/** --maxWorkers=1 --testTimeout=30000",
     "test:gui": "pnpm build && playwright test",
@@ -15,6 +16,8 @@
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "report:demo": "tsx scripts/report-demo.ts",
+    "evaluation:offline": "tsx scripts/evaluation-offline.ts",
+    "evaluation:compare": "tsx scripts/evaluation-compare.ts",
     "headless": "tsx src/headless.ts",
     "build:headless": "tsc --noEmit false --rootDir src --outDir dist --incremental false --project tsconfig.headless.json",
     "spike:claude:creds": "tsx spike/claude/c1-creds.ts",

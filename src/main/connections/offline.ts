@@ -111,14 +111,18 @@ export async function compareOfflineConnections() {
           signal,
           () => {},
         );
-        result = outcome.proposal?.answer ?? "";
+        result =
+          outcome.error === "denied"
+            ? "denied"
+            : (outcome.proposal?.answer ?? "");
       }
       const expected = fixture === "fixed-echo" ? "OK" : "denied";
       rows.push({
         fixture,
         variant,
         passed:
-          outcome.status === "completed" &&
+          (outcome.status === "completed" ||
+            (fixture === "heldout-denied" && outcome.error === "denied")) &&
           result === expected &&
           count === (fixture === "fixed-echo" ? 1 : 0),
         outcome,

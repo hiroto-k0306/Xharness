@@ -55,6 +55,7 @@ export class SiwcInference implements ModelInference {
             input: input.history,
             store: false,
             stream: true,
+            ...(input.effort ? { reasoning: { effort: input.effort } } : {}),
           },
         },
         inner,

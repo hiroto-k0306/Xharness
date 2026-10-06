@@ -7,16 +7,18 @@ import {
   type ModelInference,
   type Outcome,
   type Action,
+  type FailureCode,
 } from "./contracts.js";
 import { RunBoundary, type ToolGateway } from "./boundary.js";
-import { measure } from "./measurement.js";
+import { measureSdkResult } from "./measurement.js";
 
 /** Narrow SDK port: concrete query/tool/createSdkMcpServer binding is not installed by this prototype. */
 export interface SdkOptions {
   model: string;
+  effort?: Input["effort"];
   systemPrompt: string;
   tools: [];
-  settingsSources: [];
+  settingSources: [];
   strictMcpConfig: true;
   mcpServers: Record<string, unknown>;
   allowedTools: string[];
@@ -69,6 +71,7 @@ async function sdkRun(
     ? input.tools.map((name) => `mcp__xharness__${name}`)
     : [];
   const handlers: Record<string, (action: Action) => Promise<unknown>> = {};
+  let toolFailure: FailureCode | undefined;
   for (const tool of gateway ? input.tools : []) {
     if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(tool))
       throw new BoundaryError("unsupported");
@@ -90,6 +93,7 @@ async function sdkRun(
         );
         return { content: [{ type: "text", text }] };
       } catch (e) {
+        toolFailure = e instanceof BoundaryError ? e.code : "transport";
         return {
           isError: true,
           content: [
@@ -105,9 +109,10 @@ async function sdkRun(
   try {
     const options: SdkOptions = {
       model: input.model,
+      effort: input.effort,
       systemPrompt: input.instructions,
       tools: [],
-      settingsSources: [],
+      settingSources: [],
       strictMcpConfig: true,
       mcpServers: gateway ? { xharness: binding.createXServer(handlers) } : {},
       allowedTools: names,
@@ -156,6 +161,38 @@ async function sdkRun(
       if (signal.aborted) throw new BoundaryError("cancelled");
       if (!raw || typeof raw !== "object") throw new BoundaryError("malformed");
       const event = raw as Record<string, unknown>;
+      if (event.type === "rate_limit_event") {
+        const info = event.rate_limit_info as
+          Record<string, unknown> | undefined;
+        if (
+          info?.status === "rejected" ||
+          info?.isUsingOverage === true ||
+          info?.overageInUse === true ||
+          info?.errorCode === "credits_required"
+        )
+          return {
+            status: "quota-paused" as const,
+            error: "quota" as const,
+            measurement: null,
+            quota: {
+              source: "sdk-event" as const,
+              observedAt: new Date().toISOString(),
+              usedPercent: null,
+              resetAt: null,
+              limited: true,
+              native: {
+                ...(typeof info.utilization === "number" &&
+                Number.isFinite(info.utilization)
+                  ? { utilization: info.utilization }
+                  : {}),
+                ...(typeof info.resetsAt === "number" &&
+                Number.isFinite(info.resetsAt)
+                  ? { resetsAt: info.resetsAt }
+                  : {}),
+              },
+            },
+          };
+      }
       if (event.session_id !== undefined) {
         if (
           typeof event.session_id !== "string" ||
@@ -166,11 +203,18 @@ async function sdkRun(
       }
       // Never resume provider session IDs; only verify SDK consistency within this one query.
       if (event.type === "result") {
+        progress("finished");
+        if (gateway && toolFailure)
+          return {
+            status: "failed" as const,
+            error: toolFailure,
+            measurement: measureSdkResult(event),
+          };
         if (event.subtype !== "success")
           return {
             status: "failed" as const,
             error: "transport" as const,
-            measurement: measure("sdk-result", event.usage),
+            measurement: measureSdkResult(event),
           };
         try {
           if (gateway && typeof event.result !== "string")
@@ -184,17 +228,16 @@ async function sdkRun(
                 [],
               )
             : validateProposal(event.structured_output, input.tools);
-          progress("finished");
           return {
             status: "completed" as const,
             proposal,
-            measurement: measure("sdk-result", event.usage),
+            measurement: measureSdkResult(event),
           };
         } catch (e) {
           return {
             status: "failed" as const,
             error: e instanceof BoundaryError ? e.code : ("malformed" as const),
-            measurement: measure("sdk-result", event.usage),
+            measurement: measureSdkResult(event),
           };
         }
       }

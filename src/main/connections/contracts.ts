@@ -16,6 +16,7 @@ export interface Proposal {
 }
 export interface Input extends Scope {
   model: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   instructions: string;
   /** Complete X-owned context; never implicit provider session continuation. */
   history: { role: "user" | "assistant"; content: string }[];
@@ -36,6 +37,7 @@ export interface QuotaEvidence {
   usedPercent: number | null;
   resetAt: string | null;
   limited: boolean;
+  native?: { utilization?: number; resetsAt?: number };
 }
 export interface Outcome extends Scope {
   mode: ConnectionMode;

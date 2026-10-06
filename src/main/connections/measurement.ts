@@ -19,3 +19,31 @@ export function measure(
     output: totals.output,
   };
 }
+
+/** SDK modelUsage is cumulative query-pipeline usage; main-loop usage is only a fallback. */
+export function measureSdkResult(event: Record<string, unknown>) {
+  const models = event.modelUsage;
+  if (models && typeof models === "object" && Object.keys(models).length) {
+    const iterations = Object.values(models).map((value) => {
+      const m =
+        value && typeof value === "object"
+          ? (value as Record<string, unknown>)
+          : {};
+      return {
+        input_tokens: m.inputTokens,
+        output_tokens: m.outputTokens,
+        cache_read_input_tokens: m.cacheReadInputTokens,
+        cache_creation_input_tokens: m.cacheCreationInputTokens,
+      };
+    });
+    return measure("sdk-result", { iterations });
+  }
+  const usage = event.usage as Record<string, unknown> | undefined;
+  if (
+    event.subtype !== "success" &&
+    usage?.input_tokens === 0 &&
+    usage?.output_tokens === 0
+  )
+    return null;
+  return measure("sdk-result", usage);
+}

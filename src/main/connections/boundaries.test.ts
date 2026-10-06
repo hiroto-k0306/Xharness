@@ -390,7 +390,7 @@ describe("X-owned connection boundaries", () => {
     expect(result.proposal?.actions).toEqual([action]);
     expect(query.mock.calls[0]?.[0].options).toMatchObject({
       tools: [],
-      settingsSources: [],
+      settingSources: [],
       strictMcpConfig: true,
       mcpServers: {},
       allowedTools: [],
@@ -443,7 +443,7 @@ describe("X-owned connection boundaries", () => {
       signal(),
       (p) => phases.push(p),
     );
-    expect(result.status).toBe("completed");
+    expect(result.status).toBe("failed");
     expect(g.execute).toHaveBeenCalledTimes(1);
     expect(g.authorize).toHaveBeenCalled();
     expect(options?.allowedTools).toEqual(["mcp__xharness__echo"]);

@@ -25,6 +25,8 @@ export function officialSdkBinding(
   const env: NodeJS.ProcessEnv = Object.fromEntries(
     Object.keys(config.env).map((key) => [key, undefined]),
   );
+  for (const key of Object.keys(process.env))
+    if (!Object.hasOwn(env, key)) env[key] = undefined;
   // No API credentials, proxy routes, plugins, arbitrary NODE_OPTIONS, or shell overrides.
   for (const key of [
     "PATH",
@@ -56,21 +58,33 @@ export function officialSdkBinding(
               input: z.record(z.string(), z.unknown()),
             },
             async (args) => {
-              const result = await handler({
-                id: args.id,
-                tool: name,
-                input: args.input,
-              });
-              if (!result || typeof result !== "object")
-                throw new BoundaryError("malformed");
-              const value = result as { content?: unknown; isError?: unknown };
-              const content = z
-                .array(z.object({ type: z.literal("text"), text: z.string() }))
-                .parse(value.content);
-              return {
-                content,
-                ...(value.isError === true ? { isError: true } : {}),
-              };
+              try {
+                const result = await handler({
+                  id: args.id,
+                  tool: name,
+                  input: args.input,
+                });
+                if (!result || typeof result !== "object")
+                  throw new BoundaryError("malformed");
+                const value = result as {
+                  content?: unknown;
+                  isError?: unknown;
+                };
+                const content = z
+                  .array(
+                    z.object({ type: z.literal("text"), text: z.string() }),
+                  )
+                  .parse(value.content);
+                return {
+                  content,
+                  ...(value.isError === true ? { isError: true } : {}),
+                };
+              } catch {
+                return {
+                  isError: true,
+                  content: [{ type: "text" as const, text: "X tool failed" }],
+                };
+              }
             },
             { alwaysLoad: true },
           ),

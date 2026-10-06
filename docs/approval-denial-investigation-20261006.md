@@ -125,3 +125,50 @@
 ### 次に必要な判断
 
 workspaceの場所（現在はXHARNESS_HOME配下）で、Codexのsandbox実行が作業ディレクトリを使えるかの確認が必要。許可対象・sandbox設定は変更していない。調査には、Codex側の実行条件の確認、または新たな通信予算の承認が必要。
+
+## 原因の確定：elevated sandboxでのPowerShellの現在位置（2026-10-07）
+
+追加予算（Codex最大2回・Claude0回）の承認を受けたが、モデル通信は使っていない。既存のログと、ローカルの `codex sandbox` だけで原因を確定した。
+
+### 既存ログ
+
+`~/.codex/.sandbox/sandbox.2026-10-06.log` を読み取った。Codexの設定は `[windows] sandbox = "elevated"`。
+
+承認したコマンドが実行された2回の直後に、`codex-command-runner-0.160.1.exe` が同じエラーを出していた（試行4の23:37:58.806、試行5の23:50:47.807）。
+
+```
+junction: failed to create C:\Users\Default\.codex\.sandbox\cwd: アクセスが拒否されました。 (os error 5)
+```
+
+直前の `codex-windows-sandbox-setup.exe` は、workspaceへの書込ACE付与と `.git` のdeny ACEを `errors=[]` で完了している。
+
+### 切り分け（`codex sandbox`、モデル通信なし、ユーザー承認済み）
+
+`codex.exe sandbox -c sandbox_mode="workspace-write" -c windows.sandbox="elevated" -- powershell.exe -NoProfile -Command …` を、使い捨てフォルダ2か所で各1回実行した。
+
+| cwd                                 | 終了 | PowerShellの現在位置 | OSの作業ディレクトリ | `add.mjs`    |
+| ----------------------------------- | ---- | -------------------- | -------------------- | ------------ |
+| `%TEMP%\xh-sandbox-probe-q467p5`    | 0    | **`C:\`**            | probeフォルダ        | **読めない** |
+| `D:\AIwork\xh-sandbox-probe-q467p5` | 0    | probeフォルダ        | probeフォルダ        | 読める       |
+
+Temp側だけ、同じjunctionエラーが記録された（00:02:50.839）。D:側には記録されていない。サンドボックスの `USERPROFILE` は両方とも `C:\Users\ahwri`。
+
+Codexのsetupは各probeフォルダにsandbox groupの書込ACEを付与した。probeフォルダは作業後に削除した。`AppData` への読取ACEは、試行時にCodexが付与済みのものがそのまま残っている。
+
+### 結論
+
+- 原因：Codexのelevated sandbox（codex-command-runner 0.160.1）で、cwdがユーザーのTemp配下のとき、作業ディレクトリ用のjunctionを `C:\Users\Default\.codex\.sandbox\cwd` に作れない（アクセス拒否）。このとき**OSの作業ディレクトリは正しいが、Windows PowerShellの現在位置が `C:\` になる**。そのため相対パス `add.mjs` が `C:\add.mjs` として解決され、`PathNotFound`（終了コード1）になった。
+- 同じcwdでもユーザープロファイル外（D:）ではjunctionエラーがなく、正常に動いた。
+- XHarnessの承認判定・cwdの受け渡し・応答は原因ではない。
+
+### 未確認（推測しない）
+
+- junctionを使う条件と、失敗時に `C:\` になる仕様上の理由（Codex側の実装は未確認）。
+- Temp以外のユーザープロファイル配下（例：既定の `~\.xharness`）でも同じになるか。今回は試していない。
+- 実際のApp Server経由で、プロファイル外のworkspaceなら実装が完了するか。モデル通信を使っていないため未確認。
+
+### 対策の候補（未実施・要判断）
+
+1. 公式workflowの合成workspaceを、ユーザープロファイル外に作る（設定または検証用の `XHARNESS_HOME` の場所）。
+2. Codex側の不具合として報告する（junctionの作成先が `C:\Users\Default` になる点）。
+3. 現状の記録・停止のまま運用する（相対パスの読み取りが失敗し、承認済み操作でも完了しない）。

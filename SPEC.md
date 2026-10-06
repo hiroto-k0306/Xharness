@@ -186,6 +186,23 @@ WindowsではJobとStart-Processの追跡を使い、WindowStyle HiddenでJobを
 
 ## 7. モデル・文脈・画像・使用量
 
+モデルの情報と役割は [catalog/models.yaml](catalog/models.yaml) に一元化する（2026-10-07ユーザー承認）。コードは共通resolver（`src/main/config/catalog.ts`）だけを通してモデルIDと既定effortを得る。
+
+- `roles`：既定のメインモデル、枠切れ時のfallback、explorer、reviewer（Claude・Codexそれぞれのコード向け）、補助処理（Web要約・検索）、公式workflowの質問、Codex会話の圧縮、公式CLIによる認証更新の確認、接続テスト、公式workflow旧記録の計画・レビュー。設定ファイルの指定があればそちらが優先する。
+- 別名（`provider:alias`）はカタログの `alias` から作る。
+- 能力はモデル名の文字列ではなくカタログで判定する。
+  - effortを送るかどうか：`efforts` の有無
+  - Claudeのサーバー圧縮：`capabilities.serverCompaction`
+  - 公式SDKのモデル別の使用量枠：`capabilities.quotaWindow`
+  - 別表記ID：`acceptedIds`
+  - カタログに無いIDだけは、従来のprovider推定を使う。
+- 画面のprovider判定・effort表示・質問先表示は、mainが送るカタログの解決結果を使う。
+- 役割のモデルが無効・提供終了（`retiresAt`・`retired`）・カタログに無い場合は、理由を示して停止し、別モデルへは置き換えない。
+- 公式workflowは、タスク開始時に計画モデルの選択キー・provider・送信用ID・effort・カタログ版（version・updatedAt・内容のsha256）を記録し、再開時はその記録を使う。
+  - 再開時に、記録した計画・実装・レビューのモデルがカタログで無効・提供終了なら、理由を示して停止する。
+  - 計画に提示するモデルは、公式接続の一覧にあり、かつカタログで有効なものに限る。
+- 計画は選択中のメインモデル、実装・レビューは計画で選ばれたモデルを使う方針と、利用不可時の停止方針・認証方式・許可範囲は変更していない。
+
 モデルとeffortは設定・UI・`/model`で選ぶ。モデルの能力に合わせAdapterが変換する。再試行可能な通信障害には上限付き再試行を行い、未知のエラーを無条件に繰り返さない。Codexの実測済み過負荷type / codeは最大3回再試行し、失敗試行の未確定表示を除去する。401時の処理は§8。
 
 再試行の対象は、HTTP 5xx、通信段階の失敗、Claudeの`overloaded_error` / `api_error`、Codexの`server_is_overloaded`。待ち時間は1・2・4秒で、1周あたり最大3回。429は`retry-after`が60秒以内(`retryWaitSec`)なら待って最大3回再試行する。再試行・フォールバックの試行も、1回ごとに通信回数へ数える。

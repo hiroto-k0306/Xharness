@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   OfficialWorkflowCommand,
   OfficialWorkflowView,
 } from "../../shared/official-workflow.js";
 import styles from "./OfficialWorkflowPanel.module.css";
+import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
 export function OfficialWorkflowPanel() {
   const [open, setOpen] = useState(false),
     [view, setView] = useState<OfficialWorkflowView>(),
@@ -13,6 +14,7 @@ export function OfficialWorkflowPanel() {
     [pending, setPending] = useState(false);
   const [codexPath, setCodexPath] = useState("");
   const [question, setQuestion] = useState("");
+  const sending = useRef(false);
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -33,6 +35,8 @@ export function OfficialWorkflowPanel() {
     };
   }, [open]);
   const send = async (command: OfficialWorkflowCommand) => {
+    if (sending.current) return;
+    sending.current = true;
     setPending(true);
     setError("");
     try {
@@ -41,6 +45,7 @@ export function OfficialWorkflowPanel() {
     } catch {
       setError("操作を完了できませんでした。自動再送はしていません。");
     } finally {
+      sending.current = false;
       setPending(false);
     }
   };
@@ -87,6 +92,50 @@ export function OfficialWorkflowPanel() {
             公式接続設定を保存
           </button>
           <p role="status">{view?.connection?.message}</p>
+          {view?.operationApproval && (
+            <section
+              className={styles.operationApproval}
+              role="alertdialog"
+              aria-label="今回の操作の承認"
+              key={view.operationApproval.approvalId}
+            >
+              <h3>操作の許可が必要です</h3>
+              <p>
+                今回の読み取り操作だけを許可します。60秒以内に回答がなければ拒否します。
+              </p>
+              <p>操作：{view.operationApproval.command}</p>
+              <p>対象：{view.operationApproval.targets.join(", ")}</p>
+              <p>作業場所：{view.operationApproval.cwd}</p>
+              <p>要求理由：{view.operationApproval.reason}</p>
+              <p>
+                セッション：{view.operationApproval.sessionId} / request：
+                {view.operationApproval.requestId}
+              </p>
+              <p>
+                期限：
+                {new Date(
+                  view.operationApproval.expiresAt,
+                ).toLocaleTimeString()}
+              </p>
+              {[true, false].map((allow) => (
+                <button
+                  key={String(allow)}
+                  disabled={pending}
+                  onClick={() =>
+                    void send({
+                      action: "tool_decision",
+                      id: view.operationApproval!.workflowId,
+                      approvalId: view.operationApproval!.approvalId,
+                      digest: view.operationApproval!.digest,
+                      allow,
+                    })
+                  }
+                >
+                  {allow ? "今回の操作だけ許可" : "拒否"}
+                </button>
+              ))}
+            </section>
+          )}
           <p>
             計画はOpus、実装候補はHaiku / Codex
             Luna。最大7回のphase呼出・各120秒・修正2回で終了します。SDK内部のモデル往復数は別です。
@@ -281,6 +330,14 @@ export function OfficialWorkflowPanel() {
               ))}
               <details>
                 <summary>使用量・native状態・保存証跡</summary>
+                {r.calls.map((call) =>
+                  "diagnostics" in call && call.diagnostics ? (
+                    <OfficialModelEvidence
+                      key={call.requestId}
+                      data={call.diagnostics}
+                    />
+                  ) : null,
+                )}
                 <pre>
                   {JSON.stringify(
                     {

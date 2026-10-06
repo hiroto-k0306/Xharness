@@ -62,6 +62,78 @@ async function wait(
   }
   throw new Error("Workflow fixture did not reach expected state");
 }
+it.each([true, false])(
+  "exposes per-operation approval and consumes only a matching UI decision (%s)",
+  async (allow) => {
+    const path = await home();
+    let approved: boolean | undefined;
+    const instance = service(path, async (cwd) => {
+      const fake = fixtureAgents("codex"),
+        original = fake.agents.codex.run;
+      fake.agents.codex.run = async (request, signal) => {
+        if (request.phase === "implement") {
+          approved = await request.approve(
+            "item/commandExecution/requestApproval",
+            {
+              requestId: request.requestId,
+              sessionId: "native-session",
+              turnId: "native-turn",
+              itemId: "read",
+              command: "Get-Content add.mjs",
+              cwd,
+              targets: ["add.mjs"],
+              reason: "Inspect source",
+            },
+            signal,
+          );
+          if (!approved)
+            return {
+              status: "cancelled",
+              dispatched: true,
+              usage: null,
+              elapsedMs: 1,
+              observedModels: [],
+            };
+        }
+        return original(request, signal);
+      };
+      return fixtureWorkflowOptions(cwd, { agents: fake.agents });
+    });
+    await instance.command({ action: "create", provider: "codex" });
+    const planned = await wait(instance, (v) => !!v.approval);
+    await instance.command({ action: "approve", ...planned.approval! });
+    const pending = (await wait(instance, (v) => !!v.operationApproval))
+      .operationApproval!;
+    await instance.command({
+      action: "tool_decision",
+      id: pending.workflowId,
+      approvalId: pending.approvalId,
+      digest: "0".repeat(64),
+      allow: true,
+    });
+    expect(instance.view().operationApproval).toEqual(pending);
+    const decision = {
+      action: "tool_decision" as const,
+      id: pending.workflowId,
+      approvalId: pending.approvalId,
+      digest: pending.digest,
+      allow,
+    };
+    await instance.command(decision);
+    await instance.command({ ...decision, allow: !allow });
+    await wait(instance, (v) => !v.activeId);
+    expect(approved).toBe(allow);
+    expect(instance.view().operationApproval).toBeUndefined();
+    expect(
+      JSON.stringify(
+        await readFile(
+          join(path, "official-workflows", pending.workflowId, "workflow.json"),
+          "utf8",
+        ),
+      ),
+    ).not.toContain(pending.approvalId);
+  },
+);
 it("persists denied approval across restart, asks again, and finishes without replaying planning", async () => {
   const path = await home(),
     first = service(path);

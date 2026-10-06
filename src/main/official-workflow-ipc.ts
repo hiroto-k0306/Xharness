@@ -33,6 +33,15 @@ const command = z.discriminatedUnion("action", [
     })
     .strict(),
   z.object({ action: z.enum(["cancel", "resume"]), id }).strict(),
+  z
+    .object({
+      action: z.literal("tool_decision"),
+      id,
+      approvalId: id,
+      digest: z.string().regex(/^[a-f0-9]{64}$/),
+      allow: z.boolean(),
+    })
+    .strict(),
 ]);
 export function registerOfficialWorkflowIpc(
   getWindow: () => BrowserWindow | null,

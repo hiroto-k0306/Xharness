@@ -40,3 +40,10 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
+.operationApproval {
+  border: 2px solid #e6af48;
+  background: #302615;
+  padding: 16px;
+  margin: 16px 0;
+  overflow-wrap: anywhere;
+}

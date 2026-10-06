@@ -28,6 +28,7 @@ import { gitWorkspace } from "./workspace.js";
 import { ClaudeWorkflowAgent } from "./claude.js";
 import { CodexWorkflowAgent } from "./codex.js";
 import { connectionFailure } from "./connection-failure.js";
+import { OperationApprovals } from "./operation-approval.js";
 import { planContract, schemas, implementationContract } from "./contracts.js";
 import { createDagWorkspace, dagWorkflowOptions } from "./dag-fixtures.js";
 import { runOfficialDag, type DagOptions } from "./dag.js";
@@ -39,6 +40,7 @@ import type {
 const uuid = (id: unknown): id is string =>
   typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id);
 export class OfficialWorkflowService {
+  private operationApprovals = new OperationApprovals();
   private root: string;
   private records = new Map<string, WorkflowRecord>();
   private active?: {
@@ -204,6 +206,7 @@ export class OfficialWorkflowService {
             : "未設定：公式Codexのexeを指定してください。認証情報は入力しません。",
       },
       activeId: this.active?.id ?? this.preparing?.id,
+      operationApproval: this.operationApprovals.view(),
       approval: this.approval
         ? { id: this.approval.id, digest: this.approval.digest }
         : undefined,
@@ -329,6 +332,10 @@ export class OfficialWorkflowService {
     options.id = id;
     options.resume = resume;
     options.save = (r) => this.save(r);
+    options.approveTool = (name, input, signal) =>
+      name === "item/commandExecution/requestApproval"
+        ? this.operationApprovals.ask(id, input, signal)
+        : Promise.resolve(false);
     options.approve = async (_plan, digest, signal) =>
       new Promise<boolean>((accept) => {
         const finish = (yes: boolean) => {
@@ -372,6 +379,7 @@ export class OfficialWorkflowService {
       .finally(() => {
         this.active = undefined;
         this.approval = undefined;
+        this.operationApprovals.cancel();
       });
     this.active = { id, controller, done };
   }
@@ -470,6 +478,15 @@ export class OfficialWorkflowService {
   ): Promise<OfficialWorkflowView> {
     await this.loading;
     if (command.action === "list") return this.view();
+    if (command.action === "tool_decision") {
+      this.operationApprovals.decide(
+        command.id,
+        command.approvalId,
+        command.digest,
+        command.allow,
+      );
+      return this.view();
+    }
     if (command.action === "cancel") {
       if (this.preparing?.id === command.id) this.preparing.controller.abort();
       if (this.active?.id === command.id) {

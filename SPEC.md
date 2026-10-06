@@ -462,6 +462,10 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 ## 15. 公式エージェント単一タスク実験
 
+Codexの残量と認証・課金経路は別に検証する。公式App Server 0.160.0のread応答にある`ordinaryUsageAllowed`を通常枠の許可根拠にし、未知を割合やreset時刻から補わない。`credits`残高だけで従量課金中と判定しない。現在の実験はChatGPT認証の個人向けPlus/Pro系plan、上書きのない公式openai接続先、標準速度、provider/model fallback無効に限定する。認証・plan・thread応答の経路が確認できない場合は具体的理由を表示し停止する。APIキー、追加credits利用への切替、購入や課金設定変更は行わない。workspaceの従量課金経路は未対応。
+
+`account/rateLimits/updated`は部分通知であり、read専用の許可項目の欠落を枠切れにしない。明示的な制限は即停止し、それ以外は`account/rateLimits/read`を最大10秒・同時1件で再取得する。再確認中は新たなモデル入力・ツール承認・完了結果の採用を待つ。実行中turnを再送せず、失敗・未知・拒否は理由を区別して停止する。遅れて届く成功応答で新しい停止を解除せず、認証状態変更も停止対象とする。根拠と実通信結果は[使用量再確認の検証](docs/official-workflow-quota-recheck-20261006.md)を参照。
+
 ユーザー承認済みの追加経路として、開発用の固定synthetic workflowを実装する。Claude SDKで読み取り専用のOpus計画、利用可能な公式model/effort/枠の検証、利用者の計画承認、SDKまたはCodex公式App Serverによるnative実装、実プロセスのテスト、実装と別providerによる固定base/head全diffレビュー、最大2修正を行う。Codexは公式App Server自身のChatGPT認証を使い、SIWC登録を条件にしない。Xが権限・取消・保存intent・commit・証跡・評価を管理する。既存routingやstage5の通常テキスト経路は変更しない。
 
 固定合成課題の単一タスクを通常UIの「公式workflow」パネルと開発CLIで扱う。UIで計画確認/承認/中断と安全なcheckpoint再開を実装し、保存したHEADと実行条件digestを照合する。不確定なquery/commit/testは自動再送せず、プロセス中断状態を明示して作業を保全する。新しい実通信は都度明示許可が必要。既存§8の通常テキスト接続のworkflow未対応はそのままとし、この独立パネル/CLIを例外とする。SDK利用例外もこの経路に限定する。詳細と再実行・制約は[公式workflow単一タスク](docs/official-workflow-single-task.md)。

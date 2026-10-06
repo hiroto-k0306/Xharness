@@ -37,6 +37,8 @@ export const workflowCodexConfig = (readonly: boolean) => ({
   mcp_servers: {},
   web_search: "disabled",
   model_provider: "openai",
+  forced_login_method: "chatgpt",
+  service_tier: "default",
 });
 async function initialize(server: AppServerPort, signal: AbortSignal) {
   await server.request(
@@ -51,8 +53,7 @@ async function initialize(server: AppServerPort, signal: AbortSignal) {
 }
 export function codexQuota(raw: unknown): QuotaSnapshot {
   const data = object(raw),
-    limits = object(data.rateLimits),
-    credits = object(limits.credits);
+    limits = object(data.rateLimits);
   const windows = ["primary", "secondary"].map((kind) => {
     const w = object(limits[kind]);
     return {
@@ -75,16 +76,24 @@ export function codexQuota(raw: unknown): QuotaSnapshot {
   // Included-usage permission is authoritative; percentages do not prove recovery or billing route.
   const allowed =
     data.ordinaryUsageAllowed === false ||
-    credits.hasCredits === true ||
-    credits.unlimited === true ||
+    limits.spendControlReached === true ||
+    typeof limits.rateLimitReachedType === "string" ||
     windows.some((w) => w.usedPercent !== null && w.usedPercent >= 100)
       ? false
-      : data.ordinaryUsageAllowed === true &&
-          credits.hasCredits === false &&
-          credits.unlimited === false
+      : data.ordinaryUsageAllowed === true
         ? true
         : null;
-  return { source: "app-server", allowed, windows };
+  return {
+    source: "app-server",
+    allowed,
+    windows,
+    reason:
+      allowed === false
+        ? "通常利用枠の制限を公式App Serverが報告しました。追加creditsへ切り替えません。"
+        : allowed === null
+          ? "公式App Serverのread応答でordinaryUsageAllowedを確認できません。残量割合から推測せず停止しました。"
+          : undefined,
+  };
 }
 async function authorize(server: AppServerPort, signal: AbortSignal) {
   const response = object(
@@ -92,9 +101,21 @@ async function authorize(server: AppServerPort, signal: AbortSignal) {
   );
   if (object(response.account).type !== "chatgpt")
     throw new WorkflowFailure("chatgpt-auth-required");
-  return codexQuota(
-    await server.request("account/rateLimits/read", {}, signal),
-  );
+  // Credits are a balance, not the route of this request. This experiment
+  // supports personal included plans only; credit-based workspace routes are unknown.
+  if (
+    !["plus", "pro", "prolite", "promax"].includes(
+      String(object(response.account).planType),
+    )
+  )
+    throw new WorkflowFailure("included-plan-unverified");
+  try {
+    return codexQuota(
+      await server.request("account/rateLimits/read", {}, signal),
+    );
+  } catch {
+    throw new WorkflowFailure("quota-read-failed");
+  }
 }
 /** App Server owns ChatGPT authentication and its native agent loop. SIWC is not involved. */
 export class CodexWorkflowAgent implements OfficialAgent {
@@ -162,6 +183,44 @@ export class CodexWorkflowAgent implements OfficialAgent {
     const observedModels = new Set<string>(),
       items = new Map<string, Record<string, unknown>>();
     let stopped: "quota-paused" | "failed" | undefined;
+    let stopReason: string | undefined;
+    let authorized = false;
+    let quotaRead: Promise<void> | undefined;
+    let rechecks = 0;
+    const pause = (reason: string) => {
+      stopped = "quota-paused";
+      stopReason = reason;
+      controller.abort();
+    };
+    const recheckQuota = () => {
+      if (quotaRead || controller.signal.aborted) return;
+      // Single flight for sparse bursts. An explicit denial below still aborts
+      // immediately, and a late successful read cannot undo that denial.
+      quotaRead = (async () => {
+        rechecks++;
+        try {
+          const raw = await server.request(
+            "account/rateLimits/read",
+            {},
+            AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]),
+          );
+          if (controller.signal.aborted) return;
+          quota = codexQuota(raw);
+          if (quota.allowed !== true) pause(quota.reason!);
+        } catch {
+          if (!controller.signal.aborted)
+            pause(
+              "使用量の部分通知を受信しましたが、account/rateLimits/readの再取得に失敗しました。枠切れとは断定せず停止しました。",
+            );
+        }
+      })().finally(() => {
+        quotaRead = undefined;
+      });
+    };
+    const waitQuota = async () => {
+      while (quotaRead) await quotaRead;
+      controller.signal.throwIfAborted();
+    };
     let complete!: (turn: Record<string, unknown>) => void;
     const terminal = new Promise<Record<string, unknown>>((r) => {
       complete = r;
@@ -203,11 +262,20 @@ export class CodexWorkflowAgent implements OfficialAgent {
     };
     const unsubscribe = server.subscribe((method, params) => {
       if (method === "account/rateLimits/updated") {
-        quota = codexQuota(params);
-        if (quota.allowed !== true) {
-          stopped = "quota-paused";
-          controller.abort();
-        }
+        const update = codexQuota(params);
+        if (update.allowed === false) {
+          quota = update;
+          pause(update.reason!);
+        } else recheckQuota();
+        return;
+      }
+      if (method === "account/updated") {
+        // initialize can announce the existing account before account/read.
+        // That is not a change; authorize() still verifies it before dispatch.
+        if (authorized)
+          pause(
+            "実行中に認証状態が変更されました。ChatGPTの通常枠経路を再確認するまで停止します。",
+          );
         return;
       }
       if (!nativeSessionId || params.threadId !== nativeSessionId) return;
@@ -265,6 +333,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
         controller.signal.aborted
       )
         return { decision: "decline" };
+      await waitQuota();
       let allowed = false;
       if (method === "item/commandExecution/requestApproval") {
         allowed =
@@ -299,6 +368,8 @@ export class CodexWorkflowAgent implements OfficialAgent {
         status: allowed ? "allowed" : "denied",
         source: "plan",
       });
+      // Persistence/path checks above can yield while a new quota update arrives.
+      await waitQuota();
       return { decision: allowed ? "accept" : "decline" };
     });
     const result = (
@@ -312,8 +383,9 @@ export class CodexWorkflowAgent implements OfficialAgent {
       nativeTurnId,
       observedModels: [...observedModels],
       usage,
-      quota,
+      quota: quota ? { ...quota, rechecks } : undefined,
       elapsedMs: Date.now() - started,
+      error: stopReason,
     });
     const stop = () => {
       if (nativeSessionId && nativeTurnId)
@@ -330,7 +402,11 @@ export class CodexWorkflowAgent implements OfficialAgent {
     try {
       await initialize(server, controller.signal);
       quota = await authorize(server, controller.signal);
-      if (quota.allowed !== true) return result("quota-paused");
+      authorized = true;
+      if (quota.allowed !== true) {
+        stopReason = quota.reason;
+        return result("quota-paused");
+      }
       const configuration = object(
         await server.request(
           "config/read",
@@ -338,6 +414,20 @@ export class CodexWorkflowAgent implements OfficialAgent {
           controller.signal,
         ),
       );
+      const configured = object(configuration.config);
+      if (
+        object(configured.model_providers).openai != null ||
+        configured.openai_base_url != null ||
+        (configured.chatgpt_base_url != null &&
+          ![
+            "https://chatgpt.com/backend-api",
+            "https://chatgpt.com/backend-api/",
+          ].includes(String(configured.chatgpt_base_url)))
+      ) {
+        stopReason =
+          "公式openai接続先の上書き設定があるため、ChatGPTの通常枠経路を確認できません。送信していません。";
+        return result("failed");
+      }
       const config: Record<string, unknown> = workflowCodexConfig(readonly);
       for (const name of Object.keys(
         object(object(configuration.config).mcp_servers),
@@ -345,12 +435,14 @@ export class CodexWorkflowAgent implements OfficialAgent {
         if (!/^[A-Za-z0-9_-]{1,100}$/.test(name)) return result("failed");
         config[`mcp_servers.${name}.enabled`] = false;
       }
+      await waitQuota();
       const thread = object(
         await server.request(
           "thread/start",
           {
             model: request.model.model,
             modelProvider: "openai",
+            serviceTier: "default",
             cwd: request.cwd,
             ephemeral: true,
             approvalPolicy: readonly ? "never" : "untrusted",
@@ -367,8 +459,17 @@ export class CodexWorkflowAgent implements OfficialAgent {
       const native = object(thread.thread);
       if (!id(native.id) || thread.model !== request.model.model)
         return result("failed");
+      if (
+        thread.modelProvider !== "openai" ||
+        thread.serviceTier !== "default"
+      ) {
+        stopReason =
+          "thread/startの応答で公式openai・標準速度の経路を確認できません。モデル入力は送信していません。";
+        return result("failed");
+      }
       nativeSessionId = native.id;
       observedModels.add(thread.model as string);
+      await waitQuota();
       dispatched = true;
       const turn = object(
         await server.request(
@@ -378,6 +479,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
             cwd: request.cwd,
             model: request.model.model,
             effort: request.effort,
+            serviceTierForTurn: "default",
             approvalPolicy: readonly ? "never" : "untrusted",
             sandboxPolicy: readonly
               ? { type: "readOnly", networkAccess: false }
@@ -398,7 +500,9 @@ export class CodexWorkflowAgent implements OfficialAgent {
       const startedTurn = object(turn.turn);
       if (id(startedTurn.id)) nativeTurnId = startedTurn.id;
       const final = await abortable(terminal, controller.signal);
+      await waitQuota();
       await Promise.all(evidence);
+      await waitQuota();
       if (stopped) return result(stopped);
       if (final.status !== "completed")
         return result(final.status === "interrupted" ? "cancelled" : "failed");
@@ -411,7 +515,25 @@ export class CodexWorkflowAgent implements OfficialAgent {
         "completed",
         typeof answer === "string" ? JSON.parse(answer) : undefined,
       );
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof WorkflowFailure &&
+        error.code === "quota-read-failed"
+      )
+        stopReason =
+          "account/rateLimits/readで通常利用枠を取得できません。枠切れとは断定せず停止しました。";
+      if (
+        error instanceof WorkflowFailure &&
+        error.code === "chatgpt-auth-required"
+      )
+        stopReason =
+          "公式App ServerがChatGPT認証を報告していません。API認証へ切り替えず停止しました。";
+      if (
+        error instanceof WorkflowFailure &&
+        error.code === "included-plan-unverified"
+      )
+        stopReason =
+          "ChatGPTの個人向けPlus/Proプランを確認できません。従量課金の有無を推測せず停止しました。";
       const measured = usage as RuntimeUsage | null;
       if (measured) measured.complete = false;
       return result(

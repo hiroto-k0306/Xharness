@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
+import { dagResumeBlockReason } from "./dag.js";
 import {
   beginTrace,
   withTraceFields,
@@ -55,7 +56,11 @@ export interface WorkflowRecord {
     | "review"
     | "fix"
     | "complete";
-  pendingEffect?: { kind: "commit" | "test"; id: string };
+  pendingEffect?: {
+    kind: "commit" | "test" | "worktree" | "integrate";
+    id: string;
+  };
+  dag?: import("./dag.js").DagState;
   resumed?: number;
   executionDigest?: string;
   base: string;
@@ -66,6 +71,7 @@ export interface WorkflowRecord {
   calls: (
     | {
         requestId: string;
+        nodeId?: string;
         phase: AgentRequest["phase"];
         provider: ModelCandidate["provider"];
         requestedModel: string;
@@ -74,6 +80,7 @@ export interface WorkflowRecord {
       }
     | ({
         requestId: string;
+        nodeId?: string;
         phase: AgentRequest["phase"];
         provider: ModelCandidate["provider"];
         requestedModel: string;
@@ -543,6 +550,7 @@ export async function runOfficialSingleTask(
 
 /** No provider query or filesystem effect is automatically replayed after an uncertain boundary. */
 export function resumeBlockReason(record: WorkflowRecord): string | null {
+  if (record.dag) return dagResumeBlockReason(record);
   if (!record.executionDigest) return "execution-scope-not-checkpointed";
   if (
     record.status === "completed" ||

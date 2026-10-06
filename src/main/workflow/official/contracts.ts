@@ -184,6 +184,7 @@ export function validateOfficialPlan(
   models: ModelCandidate[],
   files: string[],
   tests: TestSpec[],
+  serializeConflicts = false,
 ) {
   const plan = planContract.parse(value);
   const ids = new Set(plan.tasks.map((t) => t.id));
@@ -242,7 +243,34 @@ export function validateOfficialPlan(
           b.files.some((g) => normalizeFile(f) === normalizeFile(g)),
         )
       )
-        throw new WorkflowFailure("file-conflict");
+        if (!serializeConflicts) throw new WorkflowFailure("file-conflict");
     }
+  if (serializeConflicts) {
+    // Existing dependency order first; adding edges only forward in this order
+    // cannot introduce a cycle, even if the planner lists dependants first.
+    const order: typeof plan.tasks = [];
+    const visited = new Set<string>();
+    const append = (task: (typeof plan.tasks)[number]) => {
+      if (visited.has(task.id)) return;
+      visited.add(task.id);
+      task.dependsOn.forEach((id) =>
+        append(plan.tasks.find((t) => t.id === id)!),
+      );
+      order.push(task);
+    };
+    plan.tasks.forEach(append);
+    for (let i = 0; i < order.length; i++)
+      for (let j = i + 1; j < order.length; j++) {
+        const before = order[i]!,
+          after = order[j]!;
+        if (
+          before.files.some((f) =>
+            after.files.some((g) => normalizeFile(f) === normalizeFile(g)),
+          ) &&
+          !after.dependsOn.includes(before.id)
+        )
+          after.dependsOn.push(before.id);
+      }
+  }
   return plan;
 }

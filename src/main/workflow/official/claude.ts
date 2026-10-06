@@ -12,6 +12,7 @@ import { tokenMeasurement } from "../../providers/token-usage.js";
 import { abortable } from "../../connections/siwc-http-utils.js";
 import { scopedPath, runtimeEnvironment } from "./workspace.js";
 import { spawnOwnedProcess } from "./owned-process.js";
+import { sdkExecutable } from "./sdk-executable.js";
 import { digest } from "./runtime.js";
 import { sdkUsage, object, modelName } from "./usage.js";
 import {
@@ -121,7 +122,7 @@ function baseOptions(cwd: string, abortController: AbortController): Options {
     abortController,
     stderr: () => {},
     spawnClaudeCodeProcess: (options) =>
-      spawnOwnedProcess(options.command, options.args, {
+      spawnOwnedProcess(sdkExecutable(options.command), options.args, {
         cwd: options.cwd ?? cwd,
         env: options.env,
         signal: options.signal,

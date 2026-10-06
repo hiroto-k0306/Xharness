@@ -172,3 +172,65 @@ Codexのsetupは各probeフォルダにsandbox groupの書込ACEを付与した�
 1. 公式workflowの合成workspaceを、ユーザープロファイル外に作る（設定または検証用の `XHARNESS_HOME` の場所）。
 2. Codex側の不具合として報告する（junctionの作成先が `C:\Users\Default` になる点）。
 3. 現状の記録・停止のまま運用する（相対パスの読み取りが失敗し、承認済み操作でも完了しない）。
+
+## D:配下での読み取り再検証（2026-10-07、公式App Server経由）
+
+ユーザー承認の範囲は次のとおり。
+
+- 経路：開発専用の未コミットprobe（`.out/appserver-probe.ts`）が `CodexWorkflowAgent` を1回だけ直接呼ぶ。承認・判定・記録は製品と同じコード。
+- 承認：利用者が自分のターミナルで `allow` を入力した場合だけ許可する。
+- 通信：Codex最大3回（各1回ずつ追加承認）、Claude 0回。
+- probeの条件：ファイル変更要求はすべて拒否し停止する。登録テストは空にし、自動許可なし。最初のコマンドが終わった時点で停止する。
+- 許容した変更：検証用workspaceへの限定ACLと、そのパス1件のtrusted登録。
+
+### 事前確認（読み取りのみ）
+
+- `C:\Users\ahwri\AppData` のCodex ACE：`kogangerion\CodexSandboxUsers`（SID `S-1-5-21-…-1010`）に Allow ReadAndExecute（`(OI)(CI)`、非継承の明示ACE）。初回付与は2026-09-17のCodex初期setupで、今回の作業より前。
+- 変更前ACLの記録はない。`setup_marker.json` のread/write rootsは空、`deny_read_acl_state.json` は空、ログにも復元・バックアップの記録はない。
+- XHarnessの実装phaseを動かすたびに、App Serverが `~/.codex/config.toml` へ `[projects.'<workspace>'] trust_level = "trusted"` を追加している。XHarnessのコードはこのファイルを書かない。どの操作で書かれるかは未確認。
+
+### 結果
+
+| #   | 内容                                                                   | 結果                                                                                                                                                                      |
+| --- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | 依頼文が「Diagnostic only」で始まっていた                              | Codexが「読み取り専用レビューではツール不可」というXHarness固定指示に従い、コマンドを実行せず終了。読み取りは未試行（依頼文の不備）                                       |
+| 2   | 依頼文を「Implementation step 1」に修正                                | Codexが `"…powershell.exe" -NoProfile -Command 'Get-Content -Raw add.mjs'` を要求。`-NoProfile` 付きは完全一致形の外のため、`program: shell-wrapper` で拒否               |
+| 3   | `-NoProfile -Command` の完全一致形を追加（ユーザー承認、SPEC §15更新） | **利用者が `allow` を入力。終了コード0、258ms、出力は `add.mjs` の内容そのもの（`export const add = (a, b) => a - b;`）**。itemのcwdはworkspaceと一致。junctionエラーなし |
+
+3回目のsetupが付与したACEは次の3つで、workspaceの削除とともに消えた。
+
+- workspaceに `CodexSandboxUsers` の (OI)(CI)(M)
+- workspaceにcapability SIDの (OI)(CI)(M)
+- `workspace\.git` へのdeny
+
+3回とも `add.mjs` は未変更で、ファイル変更要求は0件。probeは最初のコマンドの完了で停止したため、3回目のrun状態は `cancelled`（意図した停止）。
+
+### 通信
+
+| 回  | In                   | Out  |
+| --- | -------------------- | ---- |
+| 1   | 11,113（cached 0）   | 55   |
+| 2   | 欠測（`usage=null`） | 欠測 |
+| 3   | 欠測（`usage=null`） | 欠測 |
+
+Claudeは0回。
+
+### trustedに追加された項目（削除は未実施・要確認）
+
+- `d:\aiwork\xh-appserver-probe-b10913\workspace`
+- `d:\aiwork\xh-appserver-probe-522737\workspace`
+- `d:\aiwork\xh-appserver-probe-c5a858\workspace`
+- 以前の試行によるTemp配下の10件
+
+### 証跡
+
+workspaceは削除し、証跡はworkspaceの外に残した。
+
+- `D:\AIwork\xh-appserver-probe-b10913\evidence\evidence.json`
+- `D:\AIwork\xh-appserver-probe-522737\evidence\evidence.json`
+- `D:\AIwork\xh-appserver-probe-c5a858\evidence\evidence.json`
+
+### 確認できた範囲と未確認
+
+- 確認できたこと：ユーザープロファイル外（D:）のworkspaceなら、公式App Server経由で、利用者が個別承認したGet-Contentが成功する。
+- 未確認：製品UIでの確認、実装・独立テスト・レビュー、配布版での動作、Temp以外のプロファイル配下（既定の `~\.xharness` など）での挙動。製品のworkspaceの場所は変更していない。

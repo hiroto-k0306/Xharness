@@ -49,3 +49,17 @@ npx tsx scripts/official-workflow.ts --authorized-live --synthetic-only --codex 
 - 品質を満たす同種課題/model/effortごとに比較する。異なる難度の単純順位、枠のtoken換算、API価格との混同、auto routing変更は行わない。
 
 環境: Windows、Node 24.16.0、Codex同梱PowerShell 7.6.5、既存Claude Agent SDK 0.3.290、公式Codex 0.160.0。依存追加・認証変更・push/mergeなし。検証対象と結果は文書末尾とローカル.outに記録する。
+
+## 2026-10-06 検証結果
+
+ブランチは`feature/official-workflow-single-task`。公式adapter・状態機械の検証対象は`95f8e91047be5b0d473cd93b2b9804a9b5a6d78c`。全回帰197ファイル/1780テスト合格（226.93秒）、typecheck/lint/format、Electron/headless build合格。既存fake GUIは22合格・2スキップ（50.1秒）。スキップはportable exeとpackaged restartで、今回配布exeを作成・更新していないため。
+
+最後にmock CodexのfixtureをOpenAI内数/thread累積usageへ合わせた`0066c0f6acdf225d1e4367025ab9543617aac39e`で、関連4ファイル/34テスト（12.8秒）、typecheck/lint/format、両buildを再確認し全合格。全回帰の重複実行はしていない。描画検証の一時CJSが後続lintに含まれて1件失敗したため、生成した一時helperだけを片付け、最終lintが合格した。
+
+両方向のmock E2Eは初回テストexit 1→修正1回→最終exit 0、固定base/headの別providerレビュー2回、ローカルcommit2個でcompleted。各5模擬callsの既知合計In70/Out10。cache writeは3/5 callsで取得し、残りを0としない。実テストはNodeプロセス、モデルはmockである。実モデルの品質比較には使わない。
+
+`report.html`を隔離Electronで開き、模擬表示・実テスト欄・全diffレビュー欄とcall行を確認、スクリーンショットを保存した。最終mock証跡は`.out/official-workflow-evidence/claude-implementation.{html,json}`と`codex-implementation.{html,json}`、`report-ui.png`。trace元homeはそれぞれ`C:\Users\ahwri\AppData\Local\Temp\xh-official-evidence-1mQyOt`と`xh-official-evidence-lgY8R3`。作業Gitも別の一時リポジトリで保全している。
+
+検証JSONは`.out/official-workflow-final-validation.json`（全体）、`official-workflow-final-fixture-validation.json`（最終fixture）、`official-workflow-vitest.json`（全テスト）、`official-workflow-focused.json`（関連テスト）、`official-workflow-report-ui.json`（HTML表示）。元の`D:\AIwork\Xharness`はHEAD`50e7707c0704e1d5aea5818cdea4bae8a2ef7599`・cleanのまま。
+
+今回の新workflowの実通信は0件。最小synthetic live確認は自動承認審査が、委任元のfake/mock限定・サブスク使用禁止を理由に起動前に拒否した。回避・再試行せず、認証変更・新規登録・課金fallbackもしていない。実SDK/App Serverによる計画→実装→レビューの成功は未確認であり、別途明示許可を要する。

@@ -10,6 +10,26 @@ const request = (diagnosticText = false) =>
     cwd: "synthetic",
     diagnosticText,
   }) as AgentRequest;
+it("retains allowlisted version and model-switch evidence without notice prose", () => {
+  const d = diagnostics(request(), "read-only", "plan");
+  d.claude({
+    type: "system",
+    subtype: "init",
+    model: "haiku",
+    claude_code_version: "2.1.290",
+  });
+  d.claude({
+    type: "system",
+    subtype: "model_refusal_fallback",
+    original_model: "haiku",
+    fallback_model: "sonnet",
+    content: "never-save-notice",
+  });
+  d.modelSwitch("sonnet", "opus", "auto");
+  expect(d.data.cliVersion).toBe("2.1.290");
+  expect(d.data.modelChanges).toHaveLength(2);
+  expect(JSON.stringify(d.data)).not.toContain("never-save");
+});
 it("retains separate event model evidence and never thinking, secrets or unrequested text", () => {
   const d = diagnostics(request(true), "read-only", "plan");
   d.claude({ type: "system", subtype: "init", model: "haiku" });

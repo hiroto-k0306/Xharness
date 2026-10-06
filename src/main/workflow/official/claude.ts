@@ -322,6 +322,21 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
             ? { behavior: "allow" }
             : { behavior: "deny", message: "X workflow boundary" },
         hooks: {
+          PostModelSwitch: [
+            {
+              hooks: [
+                async (hook) => {
+                  if (hook.hook_event_name === "PostModelSwitch")
+                    diagnostic.modelSwitch(
+                      hook.from_model,
+                      hook.to_model,
+                      hook.source,
+                    );
+                  return {};
+                },
+              ],
+            },
+          ],
           PreToolUse: [
             {
               hooks: [

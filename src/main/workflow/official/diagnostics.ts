@@ -4,6 +4,9 @@ import { modelName, object } from "./usage.js";
 export interface AgentDiagnostics {
   requestId: string;
   requestedModel: string;
+  resolvedRequestedModel?: string;
+  cliVersion?: string;
+  modelChanges?: { from: string; to: string; source: string }[];
   phase: AgentRequest["phase"];
   cwd: string;
   sandbox: string;
@@ -27,6 +30,9 @@ export function diagnostics(
   const data: AgentDiagnostics = {
     requestId: request.requestId,
     requestedModel: request.model.model,
+    resolvedRequestedModel: modelName(request.model.resolvedModel)
+      ? request.model.resolvedModel
+      : undefined,
     phase: request.phase,
     cwd: request.cwd,
     sandbox,
@@ -38,6 +44,20 @@ export function diagnostics(
   };
   return {
     data,
+    modelSwitch(from: unknown, to: unknown, source: unknown) {
+      if (
+        modelName(from) &&
+        modelName(to) &&
+        typeof source === "string" &&
+        ["command", "picker", "sdk", "auto", "resume", "refusal"].includes(
+          source,
+        )
+      ) {
+        data.modelChanges ??= [];
+        if (data.modelChanges.length < 20)
+          data.modelChanges.push({ from, to, source });
+      }
+    },
     tool(e: ToolEvidence) {
       if (data.tools.length < 100)
         data.tools.push({ name: e.name, status: e.status });
@@ -47,6 +67,15 @@ export function diagnostics(
         data.finalAnswer = safeDiagnosticText(value);
     },
     claude(event: Record<string, unknown>) {
+      if (
+        event.type === "system" &&
+        event.subtype === "init" &&
+        typeof event.claude_code_version === "string" &&
+        /^\d+\.\d+\.\d+$/.test(event.claude_code_version)
+      )
+        data.cliVersion = event.claude_code_version;
+      if (event.type === "system" && event.subtype === "model_refusal_fallback")
+        this.modelSwitch(event.original_model, event.fallback_model, "refusal");
       if (
         event.type === "system" &&
         event.subtype === "init" &&

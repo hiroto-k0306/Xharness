@@ -100,6 +100,15 @@ function fakeServer(quotaOverride: Record<string, unknown> = {}) {
           };
           listener?.("item/completed", {
             threadId: "thread-fixture",
+            item: {
+              id: "exec-fixture",
+              type: "functionCallOutput",
+              name: "exec",
+              output: "never-persist-tool-body",
+            },
+          });
+          listener?.("item/completed", {
+            threadId: "thread-fixture",
             turnId: "turn-fixture",
             item,
           });
@@ -174,6 +183,7 @@ it.each(["review", "implement", "conversation"] as const)(
       requestedModel: "fixture-codex",
       finalAnswer: '{"summary":"OK"}',
       termination: "completed",
+      tools: [{ name: "exec", status: "completed" }],
     });
     expect(result.nativeSessionId).toBe("thread-fixture");
     expect(result.nativeTurnId).toBe("turn-fixture");
@@ -197,6 +207,9 @@ it.each(["review", "implement", "conversation"] as const)(
       "features.multi_agent": false,
       "features.hooks": false,
       "features.plugins": false,
+      "features.code_mode": phase === "implement",
+      "features.code_mode_host": phase === "implement",
+      "features.code_mode_only": false,
       "mcp_servers.outside.enabled": false,
       forced_login_method: "chatgpt",
       service_tier: "default",
@@ -205,6 +218,9 @@ it.each(["review", "implement", "conversation"] as const)(
     expect(turn.outputSchema).toEqual(schemas.implement);
     expect(turn.summary).toBe("none");
     expect(turn.serviceTierForTurn).toBe("default");
+    expect(turn.approvalPolicy).toBe(
+      phase === "implement" ? "untrusted" : "never",
+    );
     expect(turn.sandboxPolicy).toEqual(
       phase !== "implement"
         ? { type: "readOnly", networkAccess: false }

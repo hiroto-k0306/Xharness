@@ -464,6 +464,8 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 公式phaseの診断はrequest IDに結び付け、送信モデル・phase・cwd・sandbox・承認設定・ツール名と状態・終了理由を保存する。ClaudeはSDK初期モデル、assistantモデルとparent_tool_use_id（欠測はunknown）、resultのモデル別トークン値を別々に保持する。モデル名の集合から主応答や補助処理の役割を推測しない。通常の最終返答は明示的な合成課題診断だけで最大8000文字を保存し、認証情報をマスクする。思考ブロック・rawイベント・ツール本文・認証応答は保存しない。一般のAgentRequestは本文保存を既定で無効にする。
 
+Codex実装/fixのnative exec用に公式code-mode hostを使用する。起動時の一律無効化を行わず、phase設定で実装/fixだけcode_mode/hostを有効にする。code_mode_onlyは無効にし、読み取りphaseには既存のツール無効設定を適用する。workspace-write、networkAccess:false、untrusted承認、既存のscope・テストコマンド照合は維持する。hostの起動失敗や権限拒否は停止対象で、sandboxを緩めない。
+
 Codexの残量と認証・課金経路は別に検証する。公式App Server 0.160.0のread応答にある`ordinaryUsageAllowed`を通常枠の許可根拠にし、未知を割合やreset時刻から補わない。`credits`残高だけで従量課金中と判定しない。現在の実験はChatGPT認証の個人向けPlus/Pro系plan、上書きのない公式openai接続先、標準速度、provider/model fallback無効に限定する。認証・plan・thread応答の経路が確認できない場合は具体的理由を表示し停止する。APIキー、追加credits利用への切替、購入や課金設定変更は行わない。workspaceの従量課金経路は未対応。
 
 `account/rateLimits/updated`は部分通知であり、read専用の許可項目の欠落を枠切れにしない。明示的な制限は即停止し、それ以外は`account/rateLimits/read`を最大10秒・同時1件で再取得する。再確認中は新たなモデル入力・ツール承認・完了結果の採用を待つ。実行中turnを再送せず、失敗・未知・拒否は理由を区別して停止する。遅れて届く成功応答で新しい停止を解除せず、認証状態変更も停止対象とする。根拠と実通信結果は[使用量再確認の検証](docs/official-workflow-quota-recheck-20261006.md)を参照。

@@ -28,8 +28,10 @@ export const workflowCodexConfig = (readonly: boolean) => ({
   "features.computer_use": false,
   "features.browser_use": false,
   "features.browser_use_external": false,
-  "features.code_mode": false,
-  "features.code_mode_host": false,
+  // Native exec composition requires its host; this is not a sandbox bypass.
+  "features.code_mode": !readonly,
+  "features.code_mode_host": !readonly,
+  "features.code_mode_only": false,
   "features.skill_search": false,
   "features.skill_mcp_dependency_install": false,
   "features.tool_suggest": false,
@@ -236,6 +238,14 @@ export class CodexWorkflowAgent implements OfficialAgent {
       item: Record<string, unknown>,
       status: "requested" | "completed" | "failed",
     ) => {
+      if (item.type === "functionCallOutput" && modelName(item.name))
+        diagnostic.tool({
+          name: item.name,
+          status,
+          actionId: "native-function",
+          inputDigest: "",
+          source: "native-sandbox",
+        });
       if (
         !id(item.id) ||
         !["commandExecution", "fileChange"].includes(String(item.type))

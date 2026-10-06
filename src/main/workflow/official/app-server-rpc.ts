@@ -49,6 +49,8 @@ export class AppServerRpc implements AppServerPort {
       [
         "app-server",
         "--stdio",
+        "--enable",
+        "code_mode_host",
         ...[
           "multi_agent",
           "multi_agent_v2",
@@ -59,7 +61,6 @@ export class AppServerRpc implements AppServerPort {
           "computer_use",
           "browser_use",
           "browser_use_external",
-          "code_mode_host",
           "skill_search",
           "skill_mcp_dependency_install",
           "tool_suggest",

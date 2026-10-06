@@ -22,7 +22,7 @@ function key(clientId: string, subject: string) {
     .update(JSON.stringify([clientId, subject]))
     .digest("hex");
 }
-function valid(value: unknown): value is SiwcGrant {
+export function validSiwcGrant(value: unknown): value is SiwcGrant {
   if (!value || typeof value !== "object") return false;
   const v = value as SiwcGrant;
   return (
@@ -71,7 +71,7 @@ export function protectedSiwcStore(
         if (!encrypted) return undefined;
         const value: unknown = JSON.parse(protector.decrypt(encrypted));
         if (
-          !valid(value) ||
+          !validSiwcGrant(value) ||
           value.clientId !== clientId ||
           value.subject !== subject
         )
@@ -85,7 +85,7 @@ export function protectedSiwcStore(
     save(value: SiwcGrant) {
       value = structuredClone(value);
       return mutate(async () => {
-        if (!protector.available() || !valid(value))
+        if (!protector.available() || !validSiwcGrant(value))
           throw new BoundaryError("unconfigured");
         try {
           const encrypted = protector.encrypt(JSON.stringify(value));

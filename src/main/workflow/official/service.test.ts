@@ -17,6 +17,8 @@ import {
   type OfficialAgent,
 } from "./contracts.js";
 import { fixtureWorkflowOptions, fixtureAgents } from "./fixtures.js";
+import { QUESTION_MODELS } from "../../../shared/official-workflow.js";
+import { loadModelCatalog } from "../../config/model-catalog.js";
 const homes: string[] = [];
 const services: OfficialWorkflowService[] = [];
 it("refuses native DAG before catalog/auth/runtime preflight", async () => {
@@ -587,7 +589,7 @@ it.each([
     "Codex usage unknown",
     "C:/configured/codex.exe",
     "quota-unknown",
-    /^質問先のCodexを利用できないか/,
+    /^質問先のモデル「gpt-6-luna」を利用できないか/,
     1,
   ],
 ] as const)(
@@ -619,7 +621,9 @@ it("stops a Claude question when Claude is unusable even though Codex is availab
     provider: "claude",
     text: "質問",
   });
-  expect(view.error).toMatch(/^質問先のClaude（Haiku）を利用できないか/);
+  expect(view.error).toMatch(
+    /^質問先のモデル「claude-haiku-4-5-20251001」を利用できないか/,
+  );
   expect(claude.calls).toEqual({ discover: 1, run: 0 });
   expect(codex.calls).toEqual({ discover: 0, run: 0 });
 });
@@ -648,3 +652,118 @@ it.each(["claude", "codex"] as const)(
     expect(view.activeId).toBeUndefined();
   },
 );
+function listAgent(
+  provider: "claude" | "codex",
+  list: { model: string; quotaAllowed?: boolean | null }[],
+) {
+  const calls = { discover: 0, run: 0, ran: [] as string[] };
+  const agent: OfficialAgent = {
+    provider,
+    async discover() {
+      calls.discover++;
+      return list.map((m) => ({
+        provider,
+        model: m.model,
+        resolvedModel: provider === "claude" ? m.model : undefined,
+        efforts: [null, "low"],
+        available: true,
+        quotaAllowed: m.quotaAllowed === undefined ? true : m.quotaAllowed,
+        capabilitySource:
+          provider === "claude" ? "official-sdk" : "official-app-server",
+      }));
+    },
+    async run(request) {
+      calls.run++;
+      calls.ran.push(request.model.model);
+      return {
+        status: "completed",
+        dispatched: true,
+        output: { summary: "ok" },
+        observedModels: [request.model.model],
+        usage: null,
+        elapsedMs: 1,
+      };
+    },
+  };
+  return { agent, calls };
+}
+const codexList = [
+  { model: "gpt-6.1-sol" },
+  { model: "gpt-6-astra" },
+  { model: QUESTION_MODELS.codex },
+];
+const claudeList = [
+  { model: "claude-opus-5-5" },
+  { model: "claude-sonnet-5-5" },
+  { model: QUESTION_MODELS.claude },
+];
+it.each([
+  ["codex", "listed last", codexList],
+  ["codex", "listed first", [...codexList].reverse()],
+  ["claude", "listed last", claudeList],
+  ["claude", "listed first", [...claudeList].reverse()],
+] as const)(
+  "selects exactly the fixed %s question model regardless of list order (%s)",
+  async (provider, _order, list) => {
+    const target = listAgent(provider, [...list]),
+      other = listAgent(provider === "claude" ? "codex" : "claude", []);
+    const path = await home();
+    const instance = new OfficialWorkflowService({
+      home: path,
+      fake: false,
+      codexPath: "C:/configured/codex.exe",
+      agents: { [provider]: target.agent, [other.agent.provider]: other.agent },
+    });
+    services.push(instance);
+    await instance.command({ action: "chat", provider, text: "質問" });
+    const view = await wait(instance, (v) => !v.activeId);
+    expect(target.calls.ran).toEqual([QUESTION_MODELS[provider]]);
+    // The recorded selection is the same value the panel displays.
+    expect(view.records[0]!.record.calls[0]!.requestedModel).toBe(
+      QUESTION_MODELS[provider],
+    );
+    expect(other.calls.discover).toBe(0);
+  },
+);
+it.each([
+  [
+    "missing",
+    codexList.filter((m) => m.model !== QUESTION_MODELS.codex),
+    /一覧にありません/,
+  ],
+  [
+    "listed but not usable",
+    codexList.map((m) =>
+      m.model === QUESTION_MODELS.codex ? { ...m, quotaAllowed: null } : m,
+    ),
+    /を利用できないか、通常枠を確認できません/,
+  ],
+] as const)(
+  "stops when the fixed Codex question model is %s, without using another Codex model",
+  async (_label, list, reason) => {
+    const codex = listAgent("codex", [...list]);
+    const path = await home();
+    const instance = new OfficialWorkflowService({
+      home: path,
+      fake: false,
+      codexPath: "C:/configured/codex.exe",
+      agents: { codex: codex.agent },
+    });
+    services.push(instance);
+    const view = await instance.command({
+      action: "chat",
+      provider: "codex",
+      text: "質問",
+    });
+    expect(view.error).toMatch(/^質問先のモデル「gpt-6-luna」/);
+    expect(view.error).toMatch(reason);
+    expect(codex.calls.run).toBe(0);
+  },
+);
+it("uses question models that exist and are enabled in the shipped catalog", () => {
+  const catalog = loadModelCatalog();
+  for (const provider of ["claude", "codex"] as const)
+    expect(
+      catalog.find((m) => m.id === QUESTION_MODELS[provider]),
+    ).toMatchObject({ provider, enabled: true });
+});

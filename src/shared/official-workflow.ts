@@ -1,6 +1,14 @@
 import type { WorkflowRecord } from "../main/workflow/official/runtime.js";
 import type { PendingOperation } from "../main/workflow/official/operation-approval.js";
 export const OFFICIAL_WORKFLOW_CHANNEL = "xharness:official-workflow";
+/**
+ * The one model per company used for questions (full IDs from catalog/models.yaml).
+ * The service selects exactly this ID and the panel displays the same value.
+ */
+export const QUESTION_MODELS = {
+  claude: "claude-haiku-4-5-20251001",
+  codex: "gpt-6-luna",
+} as const;
 export type OfficialWorkflowCommand =
   | { action: "list" }
   | { action: "configure"; codexPath: string }

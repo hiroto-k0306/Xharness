@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type {
-  OfficialWorkflowCommand,
-  OfficialWorkflowView,
+import {
+  QUESTION_MODELS,
+  type OfficialWorkflowCommand,
+  type OfficialWorkflowView,
 } from "../../shared/official-workflow.js";
 import styles from "./OfficialWorkflowPanel.module.css";
 import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
@@ -267,13 +268,15 @@ export function OfficialWorkflowPanel({
           >
             質問だけ送信
           </button>
-          <p>
+          <p aria-label="質問先">
             質問先：
-            {questionProvider === "claude"
-              ? "Claude（Haiku）"
-              : questionProvider === "codex"
-                ? "Codex"
-                : "未選択"}
+            {!questionProvider
+              ? "未選択"
+              : `${questionProvider === "claude" ? "Claude" : "Codex"} ${
+                  view?.simulated
+                    ? "模擬モデル"
+                    : QUESTION_MODELS[questionProvider]
+                }`}
             {mainProvider
               ? "（メインモデルの会社）"
               : "（模擬：実装候補の選択）"}

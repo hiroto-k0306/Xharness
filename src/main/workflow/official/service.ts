@@ -44,9 +44,10 @@ import {
 } from "./contracts.js";
 import { createDagWorkspace, dagWorkflowOptions } from "./dag-fixtures.js";
 import { runOfficialDag, type DagOptions } from "./dag.js";
-import type {
-  OfficialWorkflowCommand,
-  OfficialWorkflowView,
+import {
+  QUESTION_MODELS,
+  type OfficialWorkflowCommand,
+  type OfficialWorkflowView,
 } from "../../../shared/official-workflow.js";
 
 const uuid = (id: unknown): id is string =>
@@ -571,17 +572,28 @@ export class OfficialWorkflowService {
             });
           return provider === "claude" ? pinClaudeModels(found) : found;
         })();
-    const model = candidates.find(
+    // Exactly the fixed question model, independent of list order. The
+    // simulated mode keeps its fixture model for the provider.
+    const wanted = QUESTION_MODELS[provider];
+    const connection =
+      provider === "claude" ? "Claude SDK" : "Codex App Server";
+    const listed = candidates.find(
       (m) =>
         m.provider === provider &&
-        m.available &&
-        m.quotaAllowed === true &&
-        (provider === "codex" || /haiku/.test(m.model + m.resolvedModel)),
+        (this.settings.fake
+          ? m.model ===
+            (provider === "claude" ? "fixture-haiku" : "fixture-codex")
+          : m.model === wanted),
     );
-    if (!model)
+    if (!listed)
       throw new Error(
-        `質問先の${provider === "claude" ? "Claude（Haiku）" : "Codex"}を利用できないか、通常枠を確認できません。別の会社のモデルへは切り替えていません。`,
+        `質問先のモデル「${wanted}」が公式${connection}の一覧にありません。別のモデルへは切り替えていません。`,
       );
+    if (!listed.available || listed.quotaAllowed !== true)
+      throw new Error(
+        `質問先のモデル「${wanted}」を利用できないか、通常枠を確認できません。別のモデルへは切り替えていません。`,
+      );
+    const model = listed;
     return {
       agent: this.settings.fake ? undefined : this.agent(provider),
       model,

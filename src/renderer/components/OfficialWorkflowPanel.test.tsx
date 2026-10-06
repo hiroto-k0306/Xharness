@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OfficialWorkflowPanel } from "./OfficialWorkflowPanel.js";
-import type {
-  OfficialWorkflowCommand,
-  OfficialWorkflowView,
+import {
+  QUESTION_MODELS,
+  type OfficialWorkflowCommand,
+  type OfficialWorkflowView,
 } from "../../shared/official-workflow.js";
 afterEach(() => vi.unstubAllGlobals());
 it.each([true, false])(
@@ -64,5 +65,51 @@ it.each([true, false])(
     );
     release();
     await waitFor(() => expect(button).not.toBeDisabled());
+  },
+);
+it.each(["claude", "codex"] as const)(
+  "displays the same fixed question model the service selects and sends to that company (%s)",
+  async (provider) => {
+    const view: OfficialWorkflowView = {
+      available: true,
+      storageReady: true,
+      simulated: false,
+      connection: {
+        codexPath: "C:/codex.exe",
+        workspaceRoot: "",
+        status: "configured",
+        message: "configured",
+      },
+      records: [],
+    };
+    const commands: OfficialWorkflowCommand[] = [];
+    vi.stubGlobal("harness", {
+      officialWorkflow: vi.fn(async (command: OfficialWorkflowCommand) => {
+        commands.push(command);
+        return view;
+      }),
+    });
+    render(
+      <OfficialWorkflowPanel
+        mainModel={provider === "claude" ? "claude-opus-5-5" : "gpt-6.1-sol"}
+        mainEffort="high"
+        mainProvider={provider}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "公式workflow" }));
+    await waitFor(() =>
+      expect(screen.getByLabelText("質問先")).toHaveTextContent(
+        QUESTION_MODELS[provider],
+      ),
+    );
+    fireEvent.change(screen.getByLabelText("公式接続への質問"), {
+      target: { value: "質問" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "質問だけ送信" }));
+    await waitFor(() =>
+      expect(commands.filter((c) => c.action === "chat")).toEqual([
+        { action: "chat", provider, text: "質問" },
+      ]),
+    );
   },
 );

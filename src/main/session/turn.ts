@@ -444,7 +444,10 @@ async function runSessionBody(
       );
       rt.persisted = rt.messages.length;
       const model =
-        resolveModel(session.model, options.aliases)?.model ?? session.model;
+        session.connection === "openai-siwc"
+          ? session.model
+          : (resolveModel(session.model, options.aliases)?.model ??
+            session.model);
       rt.system ??= await systemPrompt(
         ctx,
         session.cwd,
@@ -458,7 +461,11 @@ async function runSessionBody(
         clean,
         () =>
           withTaskTrace(
-            { taskId: rt.evaluationTaskId!, model, effort: session.effort },
+            {
+              taskId: rt.evaluationTaskId!,
+              model,
+              effort: session.siwcServerDefault ? undefined : session.effort,
+            },
             () =>
               runConnectedTurnOwned(
                 options.home,
@@ -466,7 +473,9 @@ async function runSessionBody(
                   provider: options.provider,
                   sessionId,
                   model,
-                  reasoning: { effort: session.effort },
+                  ...(session.siwcServerDefault
+                    ? {}
+                    : { reasoning: { effort: session.effort } }),
                   system: rt.system!,
                   messages: rt.messages,
                   tools: rt.tools!,

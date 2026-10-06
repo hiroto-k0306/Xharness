@@ -1064,6 +1064,7 @@ export class SessionController {
             };
           return await setMode(this.ctx, command);
         case "ready": {
+          this.connectionCheck?.abort.abort();
           for (const abort of this.browserJobs.values()) abort.abort();
           await this.localBrowser.stopAll();
           await Promise.all(
@@ -1171,8 +1172,9 @@ export class SessionController {
           await this.workspaces.forget(command.workspaceId);
           await this.emitState();
           return { ok: true };
+        case "siwc_account":
         case "check_connection": {
-          if (command.cancel) {
+          if (command.type === "check_connection" && command.cancel) {
             if (
               this.connectionCheck &&
               this.connectionCheck.sessionId !== command.sessionId
@@ -1205,7 +1207,15 @@ export class SessionController {
           };
           this.connectionCheck = check;
           try {
-            await this.options.connections.check(check.abort.signal);
+            if (command.type === "siwc_account") {
+              if (!this.options.connections.account)
+                return { ok: false, error: "SIWC接続は未設定です。" };
+              await this.options.connections.account(
+                command.action,
+                command.account,
+                check.abort.signal,
+              );
+            } else await this.options.connections.check(check.abort.signal);
             return {
               ok: !check.abort.signal.aborted,
               ...(check.abort.signal.aborted
@@ -1238,8 +1248,15 @@ export class SessionController {
           this.ctx.sessionBusy.add(session.id);
           try {
             const rt = await this.load(session.id);
+            const connectionAccount =
+              command.connection === "openai-siwc"
+                ? this.options.connections
+                    .views()
+                    .find((v) => v.mode === "openai-siwc")?.siwc?.selected
+                : undefined;
             if (
-              (session.connection ?? "legacy") !== command.connection &&
+              ((session.connection ?? "legacy") !== command.connection ||
+                session.connectionAccount !== connectionAccount) &&
               rt.messages.length
             )
               return {
@@ -1250,6 +1267,47 @@ export class SessionController {
             await this.sessions.save({
               ...(this.sessions.get(session.id) ?? session),
               connection: command.connection,
+              connectionAccount,
+            });
+            await this.emitState();
+            return { ok: true };
+          } finally {
+            this.ctx.sessionBusy.delete(session.id);
+          }
+        }
+        case "set_siwc_model": {
+          const session = this.sessions.get(command.sessionId);
+          const view = this.options.connections
+            ?.views()
+            .find((v) => v.mode === "openai-siwc");
+          if (
+            !session ||
+            this.connectionCheck ||
+            this.ctx.sessionBusy.has(session.id) ||
+            this.runtime(session.id).status !== "idle" ||
+            view?.status !== "available" ||
+            !view.siwc?.models.some((m) => m.slug === command.model)
+          )
+            return {
+              ok: false,
+              error: "選択したアカウントのモデル一覧を確認してください。",
+            };
+          this.ctx.sessionBusy.add(session.id);
+          try {
+            const rt = await this.load(session.id);
+            if (
+              rt.messages.length &&
+              (session.connection !== "openai-siwc" ||
+                session.connectionAccount !== view.siwc.selected)
+            )
+              return {
+                ok: false,
+                error: "空の新規セッションで接続とモデルを選択してください。",
+              };
+            await this.sessions.save({
+              ...session,
+              model: command.model,
+              siwcServerDefault: true,
             });
             await this.emitState();
             return { ok: true };
@@ -1547,6 +1605,9 @@ export class SessionController {
       if (
         !isConnectionChoice(selected) ||
         view?.status !== "available" ||
+        (selected === "openai-siwc" &&
+          this.sessions.get(sessionId)?.connectionAccount !==
+            view?.siwc?.selected) ||
         !this.options.connections?.selection(
           selected,
           this.sessions.get(sessionId)!.cwd,
@@ -1565,11 +1626,23 @@ export class SessionController {
       );
       if (
         !this.options.fake &&
-        route?.provider !== (selected === "openai-siwc" ? "codex" : "claude")
+        selected !== "openai-siwc" &&
+        route?.provider !== "claude"
       )
         return {
           ok: false,
           error: "接続方式に対応するモデルを明示選択してください。",
+        };
+      if (
+        selected === "openai-siwc" &&
+        view?.siwc &&
+        !view.siwc.models.some(
+          (m) => m.slug === this.sessions.get(sessionId)!.model,
+        )
+      )
+        return {
+          ok: false,
+          error: "選択したアカウントのモデル一覧からモデルを選択してください。",
         };
     }
     const imageSettings = (await loadMainConfig(this.options.home)).images;
@@ -2106,6 +2179,7 @@ export class SessionController {
     await this.sessions.save({
       ...session,
       model: resolved.model,
+      siwcServerDefault: false,
       effort: effort ?? session.effort,
     });
     await this.emitState();
@@ -2177,5 +2251,6 @@ export class SessionController {
       Promise.all([...this.runtimes.values()].map((rt) => rt.mcp?.close())),
       new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),
     ]);
+    await this.options.connections?.close?.();
   }
 }

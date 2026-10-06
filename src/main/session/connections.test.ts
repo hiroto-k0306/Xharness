@@ -52,6 +52,150 @@ it("rejects malformed choices at IPC before they can reach the controller", () =
     }),
   ).toMatchObject({ connection: "claude-mcp" });
 });
+it("accepts account catalog models without CLI aliases and refuses cross-account history", async () => {
+  let key = "11111111-1111-1111-1111-111111111111";
+  let sent = 0;
+  const registry: UiConnections = {
+    views: () => [
+      {
+        mode: "openai-siwc",
+        label: "SIWC",
+        status: "available",
+        reason: "fixture",
+        siwc: {
+          selected: key,
+          accounts: [
+            {
+              key,
+              label: "ChatGPT account 1",
+              signedIn: true,
+              planEnabled: true,
+            },
+          ],
+          busy: false,
+          welcome: false,
+          models: [{ slug: "gpt-fixture-new", displayName: "Fixture" }],
+        },
+      },
+    ],
+    check: async () => {},
+    selection: () => ({
+      mode: "openai-siwc",
+      simulated: true,
+      siwc: {
+        registrationConfirmed: true,
+        grantSource: "registered-client",
+        async *send(request) {
+          sent++;
+          expect(request.body.model).toBe("gpt-fixture-new");
+          expect(request.body.reasoning).toBeUndefined();
+          yield {
+            type: "response.output_text.delta",
+            delta: JSON.stringify({ answer: "OK", actions: [] }),
+          };
+          yield {
+            type: "response.completed",
+            response: {
+              status: "completed",
+              usage: { input_tokens: 2, output_tokens: 1 },
+            },
+          };
+        },
+      },
+    }),
+  };
+  const f = await fixture(registry);
+  expect(
+    (
+      await f.c.handle({
+        type: "set_siwc_model",
+        sessionId: f.id,
+        model: "gpt-not-in-account",
+      })
+    ).ok,
+  ).toBe(false);
+  expect(
+    (
+      await f.c.handle({
+        type: "set_siwc_model",
+        sessionId: f.id,
+        model: "gpt-fixture-new",
+      })
+    ).ok,
+  ).toBe(true);
+  await f.c.handle({
+    type: "set_connection",
+    sessionId: f.id,
+    connection: "openai-siwc",
+  });
+  await f.c.handle({ type: "send", sessionId: f.id, text: "Fixture" });
+  await vi.waitFor(() =>
+    expect(
+      f.events.some(
+        (e) =>
+          e.type === "turn" &&
+          e.status === "idle" &&
+          e.stopCause === "end_turn",
+      ),
+    ).toBe(true),
+  );
+  expect(sent).toBe(1);
+  key = "22222222-2222-2222-2222-222222222222";
+  expect(
+    (
+      await f.c.handle({
+        type: "send",
+        sessionId: f.id,
+        text: "Do not transfer",
+      })
+    ).ok,
+  ).toBe(false);
+  expect(
+    (
+      await f.c.handle({
+        type: "set_connection",
+        sessionId: f.id,
+        connection: "openai-siwc",
+      })
+    ).ok,
+  ).toBe(false);
+  expect(sent).toBe(1);
+  await f.c.shutdown();
+});
+it("rejects malformed SIWC IPC and strips values outside the public projection", () => {
+  for (const action of ["secret-export", "refresh-token"])
+    expect(
+      parseCommand({ type: "siwc_account", sessionId: "s", action }),
+    ).toBeUndefined();
+  expect(
+    parseCommand({
+      type: "siwc_account",
+      sessionId: "s",
+      action: "select",
+      account: "dummy-provider-subject",
+    }),
+  ).toBeUndefined();
+  expect(
+    parseCommand({
+      type: "set_siwc_model",
+      sessionId: "s",
+      model: "model\nsecret",
+    }),
+  ).toBeUndefined();
+  expect(
+    parseCommand({
+      type: "siwc_account",
+      sessionId: "s",
+      action: "connect",
+      token: "dummy-secret",
+    }),
+  ).toEqual({
+    type: "siwc_account",
+    sessionId: "s",
+    action: "connect",
+    account: undefined,
+  });
+});
 it("repeated explicit selections survive restart and preserve model/config/auth files", async () => {
   const f = await fixture();
   const marker = "auth-placeholder-without-secrets";

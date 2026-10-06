@@ -4,6 +4,8 @@ import {
   isConnectionChoice,
   type ConnectionChoice,
   type ConnectionView,
+  SIWC_ACTIONS,
+  type SiwcAction,
 } from "./connections.js";
 import { parseMemoryAction } from "./project-memory.js";
 import { parseSkillUiRequest } from "./project-skills.js";
@@ -79,6 +81,8 @@ export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
   connection?: ConnectionChoice;
+  connectionAccount?: string;
+  siwcServerDefault?: boolean;
   quotaPause?: import("./quota-resume.js").QuotaPauseView;
   llmCalls?: import("./llm-calls.js").LlmCalls;
   imageBytes?: number;
@@ -404,7 +408,14 @@ export type HarnessCommand =
     }
   | { type: "set_model"; sessionId: string; model: string; effort?: Effort }
   | { type: "set_connection"; sessionId: string; connection: ConnectionChoice }
+  | { type: "set_siwc_model"; sessionId: string; model: string }
   | { type: "check_connection"; sessionId: string; cancel?: boolean }
+  | {
+      type: "siwc_account";
+      sessionId: string;
+      action: SiwcAction;
+      account?: string;
+    }
   | { type: "set_default_model"; model: string; effort?: Effort }
   | { type: "close_session"; sessionId: string }
   | {
@@ -479,6 +490,24 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "set_siwc_model":
+      return str(c.sessionId) &&
+        typeof c.model === "string" &&
+        /^[A-Za-z0-9_.-]{1,100}$/.test(c.model)
+        ? { type: "set_siwc_model", sessionId: c.sessionId, model: c.model }
+        : undefined;
+    case "siwc_account":
+      return str(c.sessionId) &&
+        SIWC_ACTIONS.includes(c.action as SiwcAction) &&
+        (c.account === undefined ||
+          (typeof c.account === "string" && /^[a-f0-9-]{36}$/.test(c.account)))
+        ? {
+            type: "siwc_account",
+            sessionId: c.sessionId,
+            action: c.action as SiwcAction,
+            account: c.account as string | undefined,
+          }
+        : undefined;
     case "set_connection":
       return str(c.sessionId) && isConnectionChoice(c.connection)
         ? {

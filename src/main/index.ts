@@ -19,6 +19,10 @@ import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
 import { developmentUiConnections } from "./connections/ui-registry.js";
+import {
+  connectionTestProfile,
+  connectionTestTools,
+} from "./connections/test-profile.js";
 import { createLocalBrowser } from "./local-browser-electron.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
 import {
@@ -37,12 +41,16 @@ import {
 const here = fileURLToPath(new URL(".", import.meta.url));
 const startup = parseStartupArgs(process.argv.slice(1));
 const fake = startup.fake;
-// 明示的なfakeのuserDataは単一起動ロックより前に分離する。実版は従来の保存先。
-const fakeUserData = fakeUserDataPath(
-  fake,
+const testUserData = connectionTestProfile(
+  process.argv.slice(1),
   app.isPackaged,
   process.env.XHARNESS_HOME,
 );
+const connectionTest = !!testUserData;
+// 明示的なfakeのuserDataは単一起動ロックより前に分離する。実版は従来の保存先。
+const fakeUserData =
+  testUserData ??
+  fakeUserDataPath(fake, app.isPackaged, process.env.XHARNESS_HOME);
 if (fakeUserData) {
   mkdirSync(fakeUserData, { recursive: true });
   app.setPath("userData", fakeUserData);
@@ -142,51 +150,56 @@ async function start() {
       await authentication?.refresh();
     },
   });
-  const providers = fake
-    ? [
-        new FakeProvider({ fixturesDir: fixtures, quota: true }),
-        new FakeProvider({
-          provider: "codex",
-          quota: true,
-          fixturesDir: app.isPackaged
-            ? join(process.resourcesPath, "fixtures-codex")
-            : join(app.getAppPath(), "test/fixtures/codex"),
-        }),
-      ]
-    : [
-        new RefreshingProvider(new ClaudeAdapter(), autoRefresh),
-        new RefreshingProvider(
-          new CodexAdapter({
-            toolImageMode: async () =>
-              (await loadMainConfig(home)).providers.codex.toolImageMode,
+  const providers =
+    fake || connectionTest
+      ? [
+          new FakeProvider({ fixturesDir: fixtures, quota: true }),
+          new FakeProvider({
+            provider: "codex",
+            quota: true,
+            fixturesDir: app.isPackaged
+              ? join(process.resourcesPath, "fixtures-codex")
+              : join(app.getAppPath(), "test/fixtures/codex"),
           }),
-          autoRefresh,
-        ),
-      ];
-  const secrets = fake ? [] : await readLocalSecrets();
-  const authentication = fake
-    ? undefined
-    : new Authentication({
-        autoRefreshEnabled: () => autoRefreshEnabled,
-        autoRefreshBusy: () => autoRefresh.isBusy(),
-        confirm: (provider) => confirmAuthentication(window, provider),
-        launch: launchOfficialLogin,
-        refreshSecrets: async () => {
-          for (const secret of await readLocalSecrets())
-            if (!secrets.includes(secret)) secrets.push(secret);
-        },
-        changed: () => {
-          void controller
-            ?.state()
-            .then((state) => sendEvent(window, { type: "state", state }))
-            .catch(() => undefined);
-        },
-      });
+        ]
+      : [
+          new RefreshingProvider(new ClaudeAdapter(), autoRefresh),
+          new RefreshingProvider(
+            new CodexAdapter({
+              toolImageMode: async () =>
+                (await loadMainConfig(home)).providers.codex.toolImageMode,
+            }),
+            autoRefresh,
+          ),
+        ];
+  const secrets = fake || connectionTest ? [] : await readLocalSecrets();
+  const authentication =
+    fake || connectionTest
+      ? undefined
+      : new Authentication({
+          autoRefreshEnabled: () => autoRefreshEnabled,
+          autoRefreshBusy: () => autoRefresh.isBusy(),
+          confirm: (provider) => confirmAuthentication(window, provider),
+          launch: launchOfficialLogin,
+          refreshSecrets: async () => {
+            for (const secret of await readLocalSecrets())
+              if (!secrets.includes(secret)) secrets.push(secret);
+          },
+          changed: () => {
+            void controller
+              ?.state()
+              .then((state) => sendEvent(window, { type: "state", state }))
+              .catch(() => undefined);
+          },
+        });
   controller = new SessionController({
     ...(!app.isPackaged
-      ? { connections: developmentUiConnections(home, fake) }
+      ? { connections: developmentUiConnections(home, fake, connectionTest) }
       : {}),
     authentication,
+    ...(connectionTest
+      ? { connectionTest: true, createTools: connectionTestTools }
+      : {}),
     phase4: true,
     cliModel: startup.model,
     cliEffort: startup.effort as
@@ -208,7 +221,7 @@ async function start() {
     localBrowserFactory: createLocalBrowser,
     emit: (event) => sendEvent(window, event),
     // MCP の OAuth トークンは OS の暗号化(Windows では DPAPI)で保存する。使えなければ OAuth を使わない
-    ...(!fake && safeStorage.isEncryptionAvailable()
+    ...(!fake && !connectionTest && safeStorage.isEncryptionAvailable()
       ? {
           mcpSecrets: fileSecretStore(join(home, "secrets"), {
             encrypt: (text) => safeStorage.encryptString(text),

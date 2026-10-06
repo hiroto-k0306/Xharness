@@ -1535,6 +1535,11 @@ export class SessionController {
     if (this.connectionCheck)
       return { ok: false, error: "接続確認の完了後に送信してください。" };
     const selected = this.sessions.get(sessionId)?.connection ?? "legacy";
+    if (this.options.connectionTest && selected === "legacy")
+      return {
+        ok: false,
+        error: "Fixture profile requires an explicit new connection",
+      };
     if (selected !== "legacy") {
       const view = (
         this.options.connections?.views() ?? unavailableConnections()

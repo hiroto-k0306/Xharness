@@ -49,6 +49,7 @@ export function unavailableConnections(): ConnectionView[] {
 export function developmentUiConnections(
   home: string,
   fake: boolean,
+  connectionTest = false,
 ): UiConnections {
   let available = false;
   const views = unavailableConnections();
@@ -90,6 +91,10 @@ export function developmentUiConnections(
     },
     selection(mode, cwd) {
       if (mode === "openai-siwc" || (!fake && !available)) return undefined;
+      const live = !fake
+        ? personalSdkBinding(cwd, undefined, unavailable)
+        : undefined;
+      let queries = 0;
       return {
         mode,
         ...(fake
@@ -114,7 +119,21 @@ export function developmentUiConnections(
                 },
               },
             }
-          : { sdk: personalSdkBinding(cwd, undefined, unavailable) }),
+          : {
+              sdk: connectionTest
+                ? {
+                    ...live!,
+                    async *query(request) {
+                      if (++queries > (mode === "claude-proposals" ? 2 : 1))
+                        throw new Error("Fixture query limit");
+                      yield* live!.query({
+                        ...request,
+                        options: { ...request.options, maxTurns: 3 },
+                      });
+                    },
+                  }
+                : live,
+            }),
       };
     },
   };

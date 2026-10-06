@@ -48,6 +48,8 @@ export interface Host {
   saveReport?(filename: string): Promise<string | undefined>;
 }
 export interface ControllerOptions {
+  /** Explicit isolated development fixture; no general-purpose or legacy tools. */
+  connectionTest?: boolean;
   connections?: import("../connections/ui-registry.js").UiConnections;
   localBrowserFactory?: import("../computer-use/adapter.js").LocalBrowserFactory;
   localBrowserTimeoutMs?: number;
@@ -349,6 +351,8 @@ export function sessionTools(
   session: StoredSession,
   cwd = session.cwd,
 ): ToolRegistry {
+  if (ctx.options.connectionTest)
+    return ctx.options.createTools!(cwd, session.readOnly);
   return new Map([
     ...(ctx.options.createTools ?? defaultTools)(cwd, session.readOnly),
     ...projectHistoryTools({

@@ -472,7 +472,7 @@ async function runSessionBody(
                   tools: rt.tools!,
                   checkpoint,
                   redact: clean,
-                  maxRounds: 4,
+                  maxRounds: options.connectionTest ? 2 : 4,
                   permission: (call, signal) =>
                     gate.ask({
                       session,
@@ -480,6 +480,7 @@ async function runSessionBody(
                       call,
                       receiptId: events.receiptByCall.get(call.id),
                       signal,
+                      forceAsk: options.connectionTest,
                     }),
                   onEvent: events.onEvent,
                 },

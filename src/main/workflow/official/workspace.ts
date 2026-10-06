@@ -1,4 +1,5 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
+import { spawnOwnedProcess } from "./owned-process.js";
 import { lstat, realpath, readFile } from "node:fs/promises";
 import { resolve, relative, isAbsolute, dirname } from "node:path";
 import {
@@ -255,7 +256,7 @@ export function runAcceptance(
       });
     };
     try {
-      const child = spawn(spec.program, spec.args, {
+      const child = spawnOwnedProcess(spec.program, spec.args, {
         cwd,
         signal: inner,
         shell: false,
@@ -268,7 +269,9 @@ export function runAcceptance(
       };
       child.stdout.on("data", append);
       child.stderr.on("data", append);
-      child.once("error", () => finish(null));
+      // Await close after an AbortError as well: reporting cancellation must not
+      // release the workflow while the owned supervisor still holds its Job.
+      child.once("error", () => {});
       child.once("close", finish);
     } catch {
       finish(null);

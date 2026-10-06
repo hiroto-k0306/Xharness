@@ -1,4 +1,5 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawnOwnedProcess } from "./owned-process.js";
 import { runtimeEnvironment } from "./workspace.js";
 import { WorkflowFailure } from "./contracts.js";
 import { object } from "./usage.js";
@@ -38,7 +39,7 @@ export class AppServerRpc implements AppServerPort {
     { resolve(v: unknown): void; reject(e: Error): void; cleanup(): void }
   >();
   constructor(executable: string, cwd: string) {
-    this.#child = spawn(
+    this.#child = spawnOwnedProcess(
       executable,
       [
         "app-server",
@@ -63,7 +64,6 @@ export class AppServerRpc implements AppServerPort {
         cwd,
         windowsHide: true,
         env: runtimeEnvironment(),
-        stdio: "pipe",
       },
     );
     this.#child.stdout.setEncoding("utf8");

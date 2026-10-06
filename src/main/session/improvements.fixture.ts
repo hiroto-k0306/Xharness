@@ -77,11 +77,11 @@ export async function fixture(
     if (!r.ok || !r.improvements) throw new Error(JSON.stringify(r));
     return r.improvements;
   };
-  const baseline = async () => {
+  const baseline = async (body = "Answer briefly") => {
     const r = await action({
       action: "create",
       name: "Fixed recipe",
-      body: "Answer briefly",
+      body,
       cases,
       source: {},
     });

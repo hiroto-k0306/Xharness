@@ -297,7 +297,8 @@ export function routeFake(
     if (endsWithToolResult(request))
       return { type: "fixture", name: "x3-tool-2" };
     const text = lastUserText(request).toLowerCase();
-    if (text.includes("429")) return { type: "rate_limited", retryAfterSec: 3 };
+    // UUIDs and content hashes in fixed evaluations are data, not fault controls.
+    if (/\b429\b/.test(text)) return { type: "rate_limited", retryAfterSec: 3 };
     if (text.includes("read") || text.includes("tool"))
       return { type: "fixture", name: "x3-tool-1" };
     return {
@@ -310,7 +311,7 @@ export function routeFake(
   if (endsWithToolResult(request))
     return { type: "fixture", name: "phase1-headless-read-2" };
   const text = lastUserText(request).toLowerCase();
-  if (text.includes("429")) return { type: "rate_limited", retryAfterSec: 3 };
+  if (/\b429\b/.test(text)) return { type: "rate_limited", retryAfterSec: 3 };
   if (text.includes("cut"))
     return { type: "fixture", name: "phase1-haiku-text", cutAfterEvents: 4 };
   if (text.includes("slow"))

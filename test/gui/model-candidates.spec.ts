@@ -2,6 +2,7 @@ import { test, expect } from "./electron.fixture.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 test("fake candidate reasons require explicit selection and preserve defaults after reload", async ({
   gui,
   electronApp,
@@ -28,8 +29,18 @@ test("fake candidate reasons require explicit selection and preserve defaults af
     );
     if (!made.ok || !made.sessionId) throw new Error("session");
     const sessionId = made.sessionId;
+    let body = "",
+      n = 0;
+    do {
+      body = `Reply concisely fixture ${n++}`;
+    } while (
+      !createHash("sha256")
+        .update(JSON.stringify(body))
+        .digest("hex")
+        .includes("429")
+    );
     const created = await gui.evaluate(
-      (sessionId) =>
+      ({ sessionId, body }) =>
         window.harness.command({
           type: "improvements",
           sessionId,
@@ -37,7 +48,7 @@ test("fake candidate reasons require explicit selection and preserve defaults af
           request: {
             action: "create",
             name: "モデル候補fixture",
-            body: "Reply concisely",
+            body,
             source: {},
             cases: [
               {
@@ -51,7 +62,7 @@ test("fake candidate reasons require explicit selection and preserve defaults af
             ],
           },
         }),
-      sessionId,
+      { sessionId, body },
     );
     if (!created.ok || !created.improvements) throw new Error("comparison");
     let entry = created.improvements.entries[0]!;

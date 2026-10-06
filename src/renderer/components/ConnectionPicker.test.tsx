@@ -97,3 +97,41 @@ it("cancels an explicit pending SDK check without creating a login request", asy
   finish();
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });
+it("starts SIWC only explicitly and cancels pending authorization when closed", async () => {
+  let finish!: (value: { ok: boolean }) => void;
+  const accountCommand = vi.fn(
+      () =>
+        new Promise<{ ok: boolean }>((r) => {
+          finish = r;
+        }),
+    ),
+    command = vi.fn(async () => ({ ok: true }));
+  render(
+    <ConnectionPicker
+      views={views}
+      current="openai-siwc"
+      disabled={false}
+      command={command}
+      accountCommand={accountCommand}
+    />,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "接続方式: OpenAI SIWC" }),
+  );
+  expect(accountCommand).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("link", { name: "公式の登録・認可手順" }),
+  ).toHaveAttribute(
+    "href",
+    "https://developers.openai.com/siwc/token-sharing-open-source/sign-in",
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Continue with ChatGPT" }),
+  );
+  expect(accountCommand).toHaveBeenCalledWith("connect", undefined);
+  expect(screen.getByRole("button", { name: "接続を適用" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "キャンセル" }));
+  expect(command).toHaveBeenCalledWith("cancel", "openai-siwc");
+  finish({ ok: false });
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});

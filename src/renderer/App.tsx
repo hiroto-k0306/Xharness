@@ -501,7 +501,22 @@ export function App() {
               key={current}
               views={app.connections}
               current={session?.connection ?? "legacy"}
+              modelCommand={(slug) =>
+                window.harness.command({
+                  type: "set_siwc_model",
+                  sessionId: current,
+                  model: slug,
+                })
+              }
               disabled={session?.status !== "idle"}
+              accountCommand={(action, account) =>
+                window.harness.command({
+                  type: "siwc_account",
+                  sessionId: current,
+                  action,
+                  account,
+                })
+              }
               command={(action, connection) =>
                 window.harness.command(
                   action === "apply"
@@ -514,6 +529,21 @@ export function App() {
                 )
               }
             />
+          )}
+          {session?.connection === "openai-siwc" && (
+            <span>
+              Using ChatGPT plan
+              {session.siwcServerDefault
+                ? " · 推論設定: モデルの既定値"
+                : ""} ·{" "}
+              <a
+                href="https://chatgpt.com/#settings/Usage"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Manage usage
+              </a>
+            </span>
           )}
           {modelOpen && current && (
             <ModelPicker

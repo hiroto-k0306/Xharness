@@ -36,7 +36,12 @@ export class AppServerRpc implements AppServerPort {
   ) => Promise<unknown>;
   #pending = new Map<
     number,
-    { resolve(v: unknown): void; reject(e: Error): void; cleanup(): void }
+    {
+      method: string;
+      resolve(v: unknown): void;
+      reject(e: Error): void;
+      cleanup(): void;
+    }
   >();
   constructor(executable: string, cwd: string) {
     this.#child = spawnOwnedProcess(
@@ -135,7 +140,9 @@ export class AppServerRpc implements AppServerPort {
       this.#pending.delete(message.id);
       pending.cleanup();
       if (message.error !== undefined)
-        pending.reject(new WorkflowFailure("app-server-request-failed"));
+        pending.reject(
+          new WorkflowFailure(`app-server-request-failed:${pending.method}`),
+        );
       else pending.resolve(message.result);
     }
   }
@@ -165,7 +172,7 @@ export class AppServerRpc implements AppServerPort {
         signal.removeEventListener("abort", cancel);
       };
       signal.addEventListener("abort", cancel, { once: true });
-      this.#pending.set(id, { resolve, reject, cleanup });
+      this.#pending.set(id, { method, resolve, reject, cleanup });
       try {
         this.#write({ id, method, params });
       } catch {

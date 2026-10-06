@@ -19,7 +19,7 @@ export type PersonalStart = (request: {
   prompt: AsyncIterable<SDKUserMessage>;
   options: Options;
 }) => PersonalQuery;
-class PersonalApprovalError extends BoundaryError {
+export class PersonalApprovalError extends BoundaryError {
   constructor(
     readonly reason: string,
     readonly status: "unconfigured" | "needs_auth" = "unconfigured",

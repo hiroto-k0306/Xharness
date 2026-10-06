@@ -27,6 +27,7 @@ import { officialWorkflowReport } from "./report.js";
 import { gitWorkspace } from "./workspace.js";
 import { ClaudeWorkflowAgent } from "./claude.js";
 import { CodexWorkflowAgent } from "./codex.js";
+import { connectionFailure } from "./connection-failure.js";
 import { planContract, schemas, implementationContract } from "./contracts.js";
 import { createDagWorkspace, dagWorkflowOptions } from "./dag-fixtures.js";
 import { runOfficialDag, type DagOptions } from "./dag.js";
@@ -268,8 +269,12 @@ export class OfficialWorkflowService {
     const claude = new ClaudeWorkflowAgent(),
       codex = CodexWorkflowAgent.local(this.settings.codexPath);
     const models = [
-      ...(await codex.discover(cwd, signal)),
-      ...(await claude.discover(cwd, signal)),
+      ...(await codex.discover(cwd, signal).catch((e: unknown) => {
+        throw new Error(connectionFailure("codex", e));
+      })),
+      ...(await claude.discover(cwd, signal).catch((e: unknown) => {
+        throw new Error(connectionFailure("claude", e));
+      })),
     ];
     const opus = models.find(
       (m) =>
@@ -578,6 +583,11 @@ export class OfficialWorkflowService {
         this.launch(record.id, options, record);
       }
     } catch (error) {
+      this.error =
+        error instanceof Error &&
+        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude)/.test(error.message)
+          ? error.message
+          : "workflowを開始できませんでした。再送していません。";
       const prepared = this.preparing && this.records.get(this.preparing.id);
       if (prepared?.status === "planning" && !prepared.calls.length) {
         prepared.status = this.preparing?.controller.signal.aborted
@@ -585,15 +595,12 @@ export class OfficialWorkflowService {
           : "failed";
         prepared.error = this.preparing?.controller.signal.aborted
           ? "cancelled"
-          : "connection-preflight-unavailable";
+          : /^(公式Codex|公式Claude)/.test(this.error)
+            ? this.error
+            : "connection-preflight-unavailable";
         prepared.finishedAt = new Date().toISOString();
         await this.save(prepared);
       }
-      this.error =
-        error instanceof Error &&
-        /^(不確定|作業領域|必要な公式|公式Codex)/.test(error.message)
-          ? error.message
-          : "workflowを開始できませんでした。再送していません。";
     } finally {
       this.busy = false;
       this.preparing = undefined;

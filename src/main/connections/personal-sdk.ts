@@ -31,6 +31,13 @@ class PersonalApprovalError extends BoundaryError {
 /** SDK owns authentication. No credential-file reader, login, account identifiers or raw errors leave here. */
 export async function approvePersonalQuery(
   active: PersonalQuery,
+  onUsage?: (
+    usage: Awaited<
+      ReturnType<
+        PersonalQuery["usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET"]
+      >
+    >,
+  ) => void,
 ): Promise<void> {
   const account = await active.accountInfo();
   if (account.apiProvider !== "firstParty")
@@ -62,6 +69,7 @@ export async function approvePersonalQuery(
     throw new PersonalApprovalError(
       "公式SDKからExtra Usage無効の値を取得できませんでした。不明のまま送信しません。",
     );
+  onUsage?.(usage);
 }
 
 async function approvalWithAbort(active: PersonalQuery, signal: AbortSignal) {

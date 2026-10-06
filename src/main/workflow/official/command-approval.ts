@@ -286,30 +286,36 @@ const SYSTEM_POWERSHELL = [
   "powershell.exe",
 ];
 /**
- * Exactly `"<system powershell.exe>" -Command '<inner>'`, the form Codex uses on
- * Windows. Returns the inner text, undefined when the command is not this
- * wrapper at all, or "ambiguous" for any near-miss (other shell, option, quote).
+ * Exactly `"<system powershell.exe>" -Command '<inner>'` or
+ * `"<system powershell.exe>" -NoProfile -Command '<inner>'`, the forms Codex
+ * uses on Windows (the second approved 2026-10-07). Returns the inner text,
+ * undefined when the command is not this wrapper at all, or "ambiguous" for any
+ * near-miss (other shell, option, order, quote).
  */
 export function windowsPowerShellCommand(
   command: string,
 ): string | undefined | "ambiguous" {
   if (!/^\s*"?[^"\s]*(?:powershell|pwsh)(?:\.exe)?"?(?:\s|$)/i.test(command))
     return undefined;
-  const option = " -Command '";
   // Codex shows the argv with either single or doubled path separators.
-  for (const separator of ["\\", "\\\\"]) {
-    const prefix = '"' + SYSTEM_POWERSHELL.join(separator) + '"' + option;
-    if (
-      command.length > prefix.length + 1 &&
-      command.slice(0, prefix.length).toLowerCase() === prefix.toLowerCase() &&
-      command.slice(prefix.length - option.length, prefix.length) === option &&
-      command.endsWith("'")
-    ) {
-      const inner = command.slice(prefix.length, -1);
-      // One single-quoted argument: no further quotes, escapes or expansion.
-      return inner.trim() && !/['"`$\r\n\0]/.test(inner) ? inner : "ambiguous";
+  for (const option of [" -Command '", " -NoProfile -Command '"])
+    for (const separator of ["\\", "\\\\"]) {
+      const prefix = '"' + SYSTEM_POWERSHELL.join(separator) + '"' + option;
+      if (
+        command.length > prefix.length + 1 &&
+        command.slice(0, prefix.length).toLowerCase() ===
+          prefix.toLowerCase() &&
+        command.slice(prefix.length - option.length, prefix.length) ===
+          option &&
+        command.endsWith("'")
+      ) {
+        const inner = command.slice(prefix.length, -1);
+        // One single-quoted argument: no further quotes, escapes or expansion.
+        return inner.trim() && !/['"`$\r\n\0]/.test(inner)
+          ? inner
+          : "ambiguous";
+      }
     }
-  }
   return "ambiguous";
 }
 

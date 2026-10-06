@@ -223,7 +223,22 @@ it.each([
   ],
   [
     "extra option",
-    wrap("Get-Content add.mjs").replace(" -Command", " -NoProfile -Command"),
+    wrap("Get-Content add.mjs").replace(" -Command", " -NoLogo -Command"),
+  ],
+  [
+    "options in another order",
+    wrap("Get-Content add.mjs").replace(" -Command", " -Command -NoProfile"),
+  ],
+  [
+    "repeated option",
+    wrap("Get-Content add.mjs").replace(
+      " -Command",
+      " -NoProfile -NoProfile -Command",
+    ),
+  ],
+  [
+    "lower-case NoProfile",
+    wrap("Get-Content add.mjs").replace(" -Command", " -noprofile -Command"),
   ],
   [
     "lower-case option",
@@ -298,5 +313,34 @@ it.each([
         stage: "envelope",
         reason: "environment",
       });
+  },
+);
+
+it.each([B + B, B])(
+  "also unwraps the exact -NoProfile -Command form into a per-operation request (separator %j)",
+  async (separator) => {
+    const command = wrap("Get-Content -Raw add.mjs", separator).replace(
+      " -Command",
+      " -NoProfile -Command",
+    );
+    expect(await classifyCommand(request(), params(command))).toMatchObject({
+      kind: "operation",
+      operation: { command, cwd, targets: ["add.mjs"] },
+    });
+    expect(
+      await classifyCommand(
+        request(),
+        params(
+          wrap("Get-Content add.mjs; whoami", separator).replace(
+            " -Command",
+            " -NoProfile -Command",
+          ),
+        ),
+      ),
+    ).toMatchObject({
+      kind: "rejected",
+      stage: "syntax",
+      reason: "not-simple",
+    });
   },
 );

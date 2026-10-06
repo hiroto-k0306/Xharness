@@ -1,5 +1,18 @@
 import type { AgentRequest, AgentResult, ToolEvidence } from "./contracts.js";
 import { modelName, object } from "./usage.js";
+import { redact } from "../../core/redact.js";
+import type { CommandShape, RejectionStage } from "./command-approval.js";
+
+export interface ApprovalDiagnostic {
+  method: string;
+  decision: "allowed" | "denied";
+  source: ToolEvidence["source"];
+  stage?: RejectionStage;
+  reason?: string;
+  shape?: CommandShape;
+  /** Present only for approved synthetic diagnostics, after secret redaction. */
+  command?: string;
+}
 
 export interface AgentDiagnostics {
   requestId: string;
@@ -14,6 +27,15 @@ export interface AgentDiagnostics {
   termination?: string;
   finalAnswer?: string;
   tools: { name: string; status: ToolEvidence["status"] }[];
+  approvals?: ApprovalDiagnostic[];
+  /** Number of environments in the thread/start response (null when absent). */
+  threadEnvironments?: number | null;
+  /** Exit codes of finished native commands; output text is never stored. */
+  commandExits?: { status: "completed" | "failed"; exitCode: number | null }[];
+  /** Fixed XHarness stop codes; never native text. */
+  stops?: string[];
+  /** Codex CodexErrorInfo variant names only; messages are never stored. */
+  nativeErrors?: { source: "turn" | "notification"; info: string }[];
   sdkInitialModels: string[];
   assistants: {
     model: string | null;
@@ -61,6 +83,46 @@ export function diagnostics(
     tool(e: ToolEvidence) {
       if (data.tools.length < 100)
         data.tools.push({ name: e.name, status: e.status });
+    },
+    commandExit(status: "completed" | "failed", exitCode: unknown) {
+      data.commandExits ??= [];
+      if (data.commandExits.length < 50)
+        data.commandExits.push({
+          status,
+          exitCode:
+            typeof exitCode === "number" && Number.isInteger(exitCode)
+              ? exitCode
+              : null,
+        });
+    },
+    stop(code: string) {
+      data.stops ??= [];
+      if (data.stops.length < 20) data.stops.push(code);
+    },
+    nativeError(source: "turn" | "notification", raw: unknown) {
+      const name =
+        typeof raw === "string"
+          ? raw
+          : raw && typeof raw === "object"
+            ? (Object.keys(raw)[0] ?? "unknown")
+            : raw == null
+              ? "none"
+              : "unknown";
+      const info = /^[A-Za-z]{1,40}$/.test(name) ? name : "unknown";
+      data.nativeErrors ??= [];
+      if (data.nativeErrors.length < 20)
+        data.nativeErrors.push({ source, info });
+      return info;
+    },
+    approval(entry: ApprovalDiagnostic, command?: unknown) {
+      data.approvals ??= [];
+      if (data.approvals.length >= 20) return;
+      data.approvals.push({
+        ...structuredClone(entry),
+        ...(request.diagnosticText && typeof command === "string"
+          ? { command: redact(safeDiagnosticText(command.slice(0, 2000))) }
+          : {}),
+      });
     },
     answer(value: unknown) {
       if (request.diagnosticText && typeof value === "string")

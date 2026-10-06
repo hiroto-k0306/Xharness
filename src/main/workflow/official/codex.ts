@@ -5,7 +5,12 @@ import { codexUsage, object, modelName } from "./usage.js";
 import { scopedPath } from "./workspace.js";
 import { digest } from "./runtime.js";
 import { diagnostics } from "./diagnostics.js";
-import { commandApproval } from "./command-approval.js";
+import {
+  classifyCommand,
+  commandApproval,
+  type ApprovalRejection,
+  type CommandShape,
+} from "./command-approval.js";
 import {
   normalizeFile,
   WorkflowFailure,
@@ -196,6 +201,13 @@ export class CodexWorkflowAgent implements OfficialAgent {
     let authorized = false;
     let quotaRead: Promise<void> | undefined;
     let rechecks = 0;
+    // Fixed-code stop for paths that previously ended without any reason.
+    const fail = (code: string) => {
+      diagnostic.stop(code);
+      stopped = "failed";
+      stopReason ??= `Codexの実行を停止しました（${code}）。自動再試行はしません。`;
+      controller.abort();
+    };
     const pause = (reason: string) => {
       stopped = "quota-paused";
       stopReason = reason;
@@ -252,6 +264,8 @@ export class CodexWorkflowAgent implements OfficialAgent {
         !["commandExecution", "fileChange"].includes(String(item.type))
       )
         return;
+      if (item.type === "commandExecution" && status !== "requested")
+        diagnostic.commandExit(status, item.exitCode);
       diagnostic.tool({
         name: String(item.type),
         status,
@@ -308,9 +322,14 @@ export class CodexWorkflowAgent implements OfficialAgent {
         nativeTurnId &&
         params.turnId !== nativeTurnId
       ) {
-        stopped = "failed";
-        controller.abort();
+        fail("turn-mismatch");
         return;
+      }
+      if (method === "error") {
+        diagnostic.nativeError(
+          "notification",
+          object(params.error).codexErrorInfo,
+        );
       }
       if (method === "thread/tokenUsage/updated")
         usage = codexUsage(params.tokenUsage) ?? usage;
@@ -326,10 +345,8 @@ export class CodexWorkflowAgent implements OfficialAgent {
         if (
           item.type === "collabAgentToolCall" ||
           item.type === "subAgentActivity"
-        ) {
-          stopped = "failed";
-          controller.abort();
-        }
+        )
+          fail("nested-agent");
         add(
           item,
           method === "item/started"
@@ -341,12 +358,18 @@ export class CodexWorkflowAgent implements OfficialAgent {
       }
       if (method === "model/rerouted") {
         if (modelName(params.toModel)) observedModels.add(params.toModel);
-        stopped = "failed";
-        controller.abort();
+        fail("model-rerouted");
       }
       if (method === "turn/started" || method === "turn/completed") {
         const turn = object(params.turn);
         if (id(turn.id)) nativeTurnId = turn.id;
+        if (method === "turn/completed" && turn.status === "failed") {
+          const info = diagnostic.nativeError(
+            "turn",
+            object(turn.error).codexErrorInfo,
+          );
+          stopReason ??= `Codexがturnを失敗で終了しました（${info}）。自動再試行はしません。`;
+        }
         if (method === "turn/completed") complete(turn);
         if (method === "turn/completed" && typeof turn.status === "string")
           diagnostic.data.termination = [
@@ -359,14 +382,31 @@ export class CodexWorkflowAgent implements OfficialAgent {
       }
     });
     const approvalsSeen = new Set<string>();
+    let threadEnvironments: number | null | undefined;
+    const approvalContext = () => ({
+      localEnvironmentOnly:
+        threadEnvironments === 0 || threadEnvironments === null,
+    });
     server.approve(async (method, params) => {
-      if (
-        params.threadId !== nativeSessionId ||
-        (nativeTurnId != null && params.turnId !== nativeTurnId) ||
-        readonly ||
-        controller.signal.aborted
-      )
+      const binding: ApprovalRejection | undefined =
+        params.threadId !== nativeSessionId
+          ? { stage: "binding", reason: "thread-mismatch" }
+          : nativeTurnId != null && params.turnId !== nativeTurnId
+            ? { stage: "binding", reason: "turn-mismatch" }
+            : readonly
+              ? { stage: "binding", reason: "readonly-phase" }
+              : controller.signal.aborted
+                ? { stage: "binding", reason: "already-stopped" }
+                : undefined;
+      if (binding) {
+        diagnostic.approval({
+          method,
+          decision: "denied",
+          source: "plan",
+          ...binding,
+        });
         return { decision: "decline" };
+      }
       await waitQuota();
       const snapshot = structuredClone(params);
       const fingerprint = digest(snapshot);
@@ -376,21 +416,48 @@ export class CodexWorkflowAgent implements OfficialAgent {
         params.turnId,
         params.itemId,
       ]);
-      if (approvalsSeen.has(approvalKey)) return { decision: "decline" };
+      if (approvalsSeen.has(approvalKey)) {
+        diagnostic.approval({
+          method,
+          decision: "denied",
+          source: "plan",
+          stage: "binding",
+          reason: "duplicate-request",
+        });
+        return { decision: "decline" };
+      }
       approvalsSeen.add(approvalKey);
       let allowed = false;
       let explicit = false;
+      let rejection: ApprovalRejection | undefined;
+      let shape: CommandShape | undefined;
       if (method === "item/commandExecution/requestApproval") {
-        const operation = await commandApproval(request, snapshot);
-        allowed = operation === "test";
-        if (operation && operation !== "test") {
+        const decision = await classifyCommand(
+          request,
+          snapshot,
+          approvalContext(),
+        );
+        shape = decision.shape;
+        allowed = decision.kind === "test";
+        if (decision.kind === "rejected")
+          rejection = { stage: decision.stage, reason: decision.reason };
+        if (decision.kind === "operation") {
           explicit = true;
-          allowed = await request.approve(method, operation, controller.signal);
+          allowed = await request.approve(
+            method,
+            decision.operation,
+            controller.signal,
+          );
           // A grant belongs to this immutable request, never a later changed command.
           if (allowed)
             allowed =
               digest(params) === fingerprint &&
-              !!(await commandApproval(request, snapshot));
+              !!(await commandApproval(request, snapshot, approvalContext()));
+          if (!allowed)
+            rejection = {
+              stage: "binding",
+              reason: "user-declined-or-expired",
+            };
         }
       } else if (method === "item/fileChange/requestApproval") {
         const item = id(params.itemId) ? items.get(params.itemId) : undefined;
@@ -408,12 +475,23 @@ export class CodexWorkflowAgent implements OfficialAgent {
               )
             ) {
               allowed = false;
+              rejection = { stage: "target", reason: "not-planned-file" };
               break;
             }
             await scopedPath(request.cwd, path);
           }
-        }
-      } else throw new WorkflowFailure("unsupported-approval");
+        } else rejection = { stage: "envelope", reason: "changes-unknown" };
+      } else {
+        diagnostic.approval({
+          method: /^[A-Za-z/_]{1,80}$/.test(method) ? method : "unknown",
+          decision: "denied",
+          source: "plan",
+          stage: "envelope",
+          reason: "method-unsupported",
+        });
+        fail("unsupported-server-request");
+        throw new WorkflowFailure("unsupported-approval");
+      }
       await request.tool({
         actionId: id(params.itemId) ? params.itemId : request.requestId,
         name: method,
@@ -430,13 +508,35 @@ export class CodexWorkflowAgent implements OfficialAgent {
       });
       // Persistence/path checks above can yield while a new quota update arrives.
       await waitQuota();
-      if (allowed && explicit)
-        allowed = !!(await commandApproval(request, snapshot));
-      if (allowed && digest(params) !== fingerprint) allowed = false;
+      if (
+        allowed &&
+        explicit &&
+        !(await commandApproval(request, snapshot, approvalContext()))
+      ) {
+        allowed = false;
+        rejection = { stage: "binding", reason: "scope-changed" };
+      }
+      if (allowed && digest(params) !== fingerprint) {
+        allowed = false;
+        rejection = { stage: "binding", reason: "request-changed" };
+      }
+      diagnostic.approval(
+        {
+          method,
+          decision: allowed ? "allowed" : "denied",
+          source: explicit ? "explicit" : "plan",
+          ...rejection,
+          shape,
+        },
+        snapshot.command,
+      );
       if (!allowed) {
+        const code = rejection
+          ? `（${rejection.stage}: ${rejection.reason}）`
+          : "";
         stopReason = explicit
-          ? "今回の操作が拒否・取消・期限切れになりました。自動再試行はしません。"
-          : "許可範囲外または安全に解釈できない操作のため停止しました。";
+          ? `今回の操作が拒否・取消・期限切れになりました${code}。自動再試行はしません。`
+          : `許可範囲外または安全に解釈できない操作のため停止しました${code}。`;
         stopped = "failed";
         controller.abort();
       }
@@ -545,6 +645,12 @@ export class CodexWorkflowAgent implements OfficialAgent {
           "thread/startの応答で公式openai・標準速度の経路を確認できません。モデル入力は送信していません。";
         return result("failed");
       }
+      threadEnvironments = Array.isArray(native.environments)
+        ? native.environments.length
+        : native.environments == null
+          ? null
+          : undefined;
+      diagnostic.data.threadEnvironments = threadEnvironments ?? null;
       nativeSessionId = native.id;
       observedModels.add(thread.model as string);
       await waitQuota();

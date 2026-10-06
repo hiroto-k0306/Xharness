@@ -592,3 +592,393 @@ it("cancels an uncooperative server without retrying or substituting another pro
   expect(mock.close).toHaveBeenCalled();
   expect(result.usage).toBeNull();
 });
+it.each([true, false])(
+  "records a fixed denial stage and reason, and command text only for synthetic diagnostics (%s)",
+  async (diagnosticText) => {
+    const mock = fakeServer(),
+      original = mock.server.request;
+    let decision: unknown;
+    const params = {
+      threadId: "thread-fixture",
+      turnId: "turn-fixture",
+      itemId: "exec-fixture",
+      cwd: process.cwd(),
+      command:
+        "pwsh.exe -NoProfile -Command Get-Content add.mjs Bearer never-persist-token",
+    };
+    mock.server.request = async (method, raw, signal) => {
+      if (method !== "turn/start") return original(method, raw, signal);
+      queueMicrotask(() => {
+        void (async () => {
+          mock.emit("turn/started", {
+            threadId: params.threadId,
+            turn: { id: params.turnId },
+          });
+          decision = await mock.approval()(
+            "item/commandExecution/requestApproval",
+            params,
+          );
+          mock.emit("turn/completed", {
+            threadId: params.threadId,
+            turn: { id: params.turnId, status: "completed" },
+          });
+        })();
+      });
+      return { turn: { id: params.turnId } };
+    };
+    const r = { ...request("implement"), diagnosticText };
+    const result = await new CodexWorkflowAgent(() => mock.server).run(
+      r,
+      new AbortController().signal,
+    );
+    expect(decision).toEqual({ decision: "decline" });
+    expect(r.approve).not.toHaveBeenCalled();
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("program: shell-wrapper");
+    const [entry] = result.diagnostics!.approvals!;
+    expect(entry).toMatchObject({
+      method: "item/commandExecution/requestApproval",
+      decision: "denied",
+      source: "plan",
+      stage: "program",
+      reason: "shell-wrapper",
+      shape: { program: "pwsh.exe", wrapper: true, cwd: "same" },
+    });
+    if (diagnosticText) {
+      expect(entry!.command).toContain("Get-Content add.mjs");
+      expect(entry!.command).toContain("[redacted]");
+    } else expect(entry!.command).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain("never-persist-token");
+  },
+);
+it("records binding denials such as a mismatched turn without asking the user", async () => {
+  const mock = fakeServer(),
+    original = mock.server.request;
+  let decision: unknown;
+  mock.server.request = async (method, raw, signal) => {
+    if (method !== "turn/start") return original(method, raw, signal);
+    queueMicrotask(() => {
+      void (async () => {
+        mock.emit("turn/started", {
+          threadId: "thread-fixture",
+          turn: { id: "turn-fixture" },
+        });
+        decision = await mock.approval()(
+          "item/commandExecution/requestApproval",
+          {
+            threadId: "thread-fixture",
+            turnId: "other-turn",
+            itemId: "exec",
+            cwd: process.cwd(),
+            command: "Get-Content add.mjs",
+          },
+        );
+        mock.emit("turn/completed", {
+          threadId: "thread-fixture",
+          turn: { id: "turn-fixture", status: "completed" },
+        });
+      })();
+    });
+    return { turn: { id: "turn-fixture" } };
+  };
+  const r = request("implement");
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    r,
+    new AbortController().signal,
+  );
+  expect(decision).toEqual({ decision: "decline" });
+  expect(r.approve).not.toHaveBeenCalled();
+  expect(result.diagnostics!.approvals).toEqual([
+    {
+      method: "item/commandExecution/requestApproval",
+      decision: "denied",
+      source: "plan",
+      stage: "binding",
+      reason: "turn-mismatch",
+    },
+  ]);
+});
+it("asks once for the wrapped Codex read and answers only a one-time accept, never the amendment", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "xh-codex-wrapped-"));
+  try {
+    await writeFile(join(cwd, "add.mjs"), "synthetic");
+    const mock = fakeServer(),
+      original = mock.server.request;
+    let decision: unknown;
+    const B = "\\";
+    const command = `"C:${B + B}Windows${B + B}System32${B + B}WindowsPowerShell${B + B}v1.0${B + B}powershell.exe" -Command 'Get-Content -Raw add.mjs'`;
+    const params = {
+      kind: "command",
+      threadId: "thread-fixture",
+      turnId: "turn-fixture",
+      itemId: "exec-fixture",
+      startedAtMs: 1,
+      environmentId: null,
+      cwd,
+      command,
+      commandActions: [{ type: "read" }],
+      proposedExecpolicyAmendment: ["Get-Content"],
+      availableDecisions: [
+        "accept",
+        {
+          acceptWithExecpolicyAmendment: {
+            execpolicy_amendment: ["Get-Content"],
+          },
+        },
+        "decline",
+      ],
+    };
+    mock.server.request = async (method, raw, signal) => {
+      if (method !== "turn/start") return original(method, raw, signal);
+      queueMicrotask(() => {
+        void (async () => {
+          mock.emit("turn/started", {
+            threadId: params.threadId,
+            turn: { id: params.turnId },
+          });
+          decision = await mock.approval()(
+            "item/commandExecution/requestApproval",
+            params,
+          );
+          mock.emit("turn/completed", {
+            threadId: params.threadId,
+            turn: { id: params.turnId, status: "completed" },
+          });
+        })();
+      });
+      return { turn: { id: params.turnId } };
+    };
+    const r = {
+      ...request("implement"),
+      cwd,
+      requestId: "11111111-1111-4111-8111-111111111111",
+    };
+    r.approve = vi.fn(async () => true);
+    await new CodexWorkflowAgent(() => mock.server).run(
+      r,
+      new AbortController().signal,
+    );
+    expect(r.approve).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(r.approve).mock.calls[0]![1]).toMatchObject({
+      command,
+      cwd,
+      targets: ["add.mjs"],
+      itemId: "exec-fixture",
+    });
+    expect(decision).toEqual({ decision: "accept" });
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+it.each([
+  [
+    "turn failure",
+    (emit: (m: string, p: Record<string, unknown>) => void) =>
+      emit("turn/completed", {
+        threadId: "thread-fixture",
+        turn: {
+          id: "turn-fixture",
+          status: "failed",
+          error: {
+            message: "never-persist-native-message",
+            codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 502 } },
+          },
+        },
+      }),
+    { nativeErrors: [{ source: "turn", info: "httpConnectionFailed" }] },
+    "httpConnectionFailed",
+  ],
+  [
+    "model reroute",
+    (emit: (m: string, p: Record<string, unknown>) => void) => {
+      emit("model/rerouted", {
+        threadId: "thread-fixture",
+        turnId: "turn-fixture",
+        toModel: "other-model",
+      });
+      emit("turn/completed", {
+        threadId: "thread-fixture",
+        turn: { id: "turn-fixture", status: "completed" },
+      });
+    },
+    { stops: ["model-rerouted"] },
+    "model-rerouted",
+  ],
+] as const)(
+  "records a fixed reason for a %s instead of ending silently",
+  async (_label, events, expected, code) => {
+    const mock = fakeServer(),
+      original = mock.server.request;
+    mock.server.request = async (method, raw, signal) => {
+      if (method !== "turn/start") return original(method, raw, signal);
+      queueMicrotask(() => {
+        mock.emit("turn/started", {
+          threadId: "thread-fixture",
+          turn: { id: "turn-fixture" },
+        });
+        events(mock.emit);
+      });
+      return { turn: { id: "turn-fixture" } };
+    };
+    const result = await new CodexWorkflowAgent(() => mock.server).run(
+      request("implement"),
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("failed");
+    expect(result.diagnostics).toMatchObject(expected);
+    expect(result.error).toContain(code);
+    expect(JSON.stringify(result)).not.toContain("never-persist");
+  },
+);
+it("records the method of an unsupported server request and stops", async () => {
+  const mock = fakeServer(),
+    original = mock.server.request;
+  let outcome: unknown;
+  mock.server.request = async (method, raw, signal) => {
+    if (method !== "turn/start") return original(method, raw, signal);
+    queueMicrotask(() => {
+      void (async () => {
+        mock.emit("turn/started", {
+          threadId: "thread-fixture",
+          turn: { id: "turn-fixture" },
+        });
+        outcome = await mock
+          .approval()("item/permissions/requestApproval", {
+            threadId: "thread-fixture",
+            turnId: "turn-fixture",
+          })
+          .catch(() => "rejected");
+      })();
+    });
+    return { turn: { id: "turn-fixture" } };
+  };
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    request("implement"),
+    new AbortController().signal,
+  );
+  expect(outcome).toBe("rejected");
+  expect(result.status).toBe("failed");
+  expect(result.diagnostics).toMatchObject({
+    stops: ["unsupported-server-request"],
+    approvals: [
+      {
+        method: "item/permissions/requestApproval",
+        stage: "envelope",
+        reason: "method-unsupported",
+      },
+    ],
+  });
+});
+it.each([
+  [[], true],
+  [
+    [{ environmentId: "remote", cwd: "C:/remote", runtimeWorkspaceRoots: [] }],
+    false,
+  ],
+])(
+  "allows the implicit environment id only when thread/start selected no environment (%j)",
+  async (environments, asked) => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-codex-env-"));
+    try {
+      await writeFile(join(cwd, "add.mjs"), "synthetic");
+      const mock = fakeServer(),
+        original = mock.server.request;
+      let decision: unknown;
+      const params = {
+        kind: "command",
+        threadId: "thread-fixture",
+        turnId: "turn-fixture",
+        itemId: "exec-fixture",
+        environmentId: "local",
+        cwd,
+        command: "Get-Content -Raw add.mjs",
+        availableDecisions: ["accept", "cancel"],
+      };
+      mock.server.request = async (method, raw, signal) => {
+        if (method === "thread/start") {
+          const started = object(await original(method, raw, signal));
+          return {
+            ...started,
+            thread: { ...object(started.thread), environments },
+          };
+        }
+        if (method !== "turn/start") return original(method, raw, signal);
+        queueMicrotask(() => {
+          void (async () => {
+            mock.emit("turn/started", {
+              threadId: params.threadId,
+              turn: { id: params.turnId },
+            });
+            decision = await mock.approval()(
+              "item/commandExecution/requestApproval",
+              params,
+            );
+            mock.emit("turn/completed", {
+              threadId: params.threadId,
+              turn: { id: params.turnId, status: "completed" },
+            });
+          })();
+        });
+        return { turn: { id: params.turnId } };
+      };
+      const r = {
+        ...request("implement"),
+        cwd,
+        requestId: "11111111-1111-4111-8111-111111111111",
+      };
+      r.approve = vi.fn(async () => true);
+      const result = await new CodexWorkflowAgent(() => mock.server).run(
+        r,
+        new AbortController().signal,
+      );
+      expect(r.approve).toHaveBeenCalledTimes(asked ? 1 : 0);
+      expect(decision).toEqual({ decision: asked ? "accept" : "decline" });
+      expect(result.diagnostics?.threadEnvironments).toBe(environments.length);
+      if (!asked)
+        expect(result.diagnostics?.approvals?.[0]).toMatchObject({
+          stage: "envelope",
+          reason: "environment",
+          shape: { environment: "local" },
+        });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+);
+it("records the exit code of a finished native command but never its output", async () => {
+  const mock = fakeServer(),
+    original = mock.server.request;
+  mock.server.request = async (method, raw, signal) => {
+    if (method !== "turn/start") return original(method, raw, signal);
+    queueMicrotask(() => {
+      mock.emit("turn/started", {
+        threadId: "thread-fixture",
+        turn: { id: "turn-fixture" },
+      });
+      mock.emit("item/completed", {
+        threadId: "thread-fixture",
+        turnId: "turn-fixture",
+        item: {
+          id: "exec-fixture",
+          type: "commandExecution",
+          status: "failed",
+          exitCode: 1,
+          aggregatedOutput: "never-persist-output",
+        },
+      });
+      mock.emit("turn/completed", {
+        threadId: "thread-fixture",
+        turn: { id: "turn-fixture", status: "completed" },
+      });
+    });
+    return { turn: { id: "turn-fixture" } };
+  };
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    request("implement"),
+    new AbortController().signal,
+  );
+  expect(result.diagnostics?.commandExits).toEqual([
+    { status: "failed", exitCode: 1 },
+  ]);
+  expect(JSON.stringify(result)).not.toContain("never-persist-output");
+});

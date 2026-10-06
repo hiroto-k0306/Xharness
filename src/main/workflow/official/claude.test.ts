@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { rm } from "node:fs/promises";
+import { rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   Options,
@@ -274,6 +274,34 @@ it("preserves native implementation tools but bounds files, commands and duplica
   expect(JSON.stringify(vi.mocked(req.tool).mock.calls)).not.toContain(
     "fixture-secret",
   );
+});
+it("denies cross-worktree paths, junction escapes, child/background shell and hidden MCP tools before execution", async () => {
+  const root = await cwd(),
+    outside = await cwd();
+  await symlink(outside, join(root, "escape"), "junction");
+  const mock = mockStart(async (options) => {
+    const denied = [
+      ["Write", { file_path: join(outside, "add.mjs"), content: "blocked" }],
+      [
+        "Write",
+        { file_path: join(root, "escape/add.mjs"), content: "blocked" },
+      ],
+      ["Write", { file_path: "../add.mjs", content: "blocked" }],
+      ["Bash", { command: fixtureTest().command, run_in_background: true }],
+      ["Bash", { command: fixtureTest().command + " && node child.mjs" }],
+      ["mcp__hidden__write", {}],
+      ["Agent", {}],
+    ] as const;
+    for (const [index, [name, input]] of denied.entries())
+      expect(await pre(options, name, input, `deny-${index}`)).toMatchObject({
+        hookSpecificOutput: { permissionDecision: "deny" },
+      });
+  });
+  const result = await new ClaudeWorkflowAgent(mock.start).run(
+    request(root),
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
 });
 it("cancels uncooperative SDK iteration and never retries or falls back", async () => {
   const root = await cwd(),

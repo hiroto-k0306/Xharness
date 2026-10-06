@@ -183,6 +183,17 @@ it.each(["review", "implement"] as const)(
     const turn = mock.calls.find(([m]) => m === "turn/start")![1];
     expect(turn.outputSchema).toEqual(schemas.implement);
     expect(turn.summary).toBe("none");
+    expect(turn.sandboxPolicy).toEqual(
+      phase === "review"
+        ? { type: "readOnly", networkAccess: false }
+        : {
+            type: "workspaceWrite",
+            writableRoots: [request(phase).cwd],
+            networkAccess: false,
+            excludeSlashTmp: true,
+            excludeTmpdirEnvVar: true,
+          },
+    );
     expect(JSON.stringify(result)).not.toMatch(/never-persist/);
     expect(mock.close).toHaveBeenCalled();
   },

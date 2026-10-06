@@ -6,6 +6,36 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runAcceptance } from "./workspace.js";
 import { spawnOwnedProcess } from "./owned-process.js";
+it.skipIf(process.platform !== "win32")(
+  "preserves bidirectional stdio without parsing or logging native messages",
+  async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-owned-stdio-"));
+    const child = spawnOwnedProcess(
+      process.execPath,
+      [
+        "-e",
+        "process.stdin.once('data',b=>{process.stdout.write(b);process.stdin.pause();process.exit(0)})",
+      ],
+      { cwd },
+    );
+    let output = "";
+    child.stdout.on("data", (b) => (output += b));
+    child.stderr.resume();
+    try {
+      child.stdin.write('{"method":"fixture/no-provider","id":1}\n');
+      const code = await new Promise((r) => child.once("close", r));
+      expect(code).toBe(0);
+      expect(JSON.parse(output)).toEqual({
+        method: "fixture/no-provider",
+        id: 1,
+      });
+    } finally {
+      child.kill();
+      await rm(cwd, { recursive: true, force: true, maxRetries: 10 });
+    }
+  },
+  30000,
+);
 
 async function fixture() {
   const cwd = await mkdtemp(join(tmpdir(), "xh-owned-job-"));

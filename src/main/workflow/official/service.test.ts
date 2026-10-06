@@ -6,6 +6,28 @@ import { OfficialWorkflowService } from "./service.js";
 import { fixtureWorkflowOptions, fixtureAgents } from "./fixtures.js";
 const homes: string[] = [];
 const services: OfficialWorkflowService[] = [];
+it("refuses native DAG before catalog/auth/runtime preflight", async () => {
+  const path = await home();
+  let lookedUp = false;
+  const instance = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    codexPath: "never-executed",
+    options: async () => {
+      lookedUp = true;
+      throw new Error("must not start");
+    },
+  });
+  services.push(instance);
+  const view = await instance.command({
+    action: "create",
+    provider: "codex",
+    mode: "dag",
+  });
+  expect(lookedUp).toBe(false);
+  expect(view.records).toHaveLength(0);
+  expect(view.error).toBeTruthy();
+});
 afterEach(async () => {
   for (const service of services.splice(0)) await service.close();
   for (const home of homes.splice(0))

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { sdkUsage } from "./usage.js";
+import { sdkUsage, codexUsage } from "./usage.js";
 import { digest, type WorkflowOptions } from "./runtime.js";
 import type {
   OfficialPlan,
@@ -170,16 +170,26 @@ export function fixtureAgents(
         output,
         observedModels: [request.model.model],
         elapsedMs: 1,
-        usage: sdkUsage({
-          modelUsage: {
-            [request.model.model]: {
-              inputTokens: 10,
-              outputTokens: 2,
-              cacheReadInputTokens: 3,
-              cacheCreationInputTokens: 1,
-            },
-          },
-        }),
+        usage:
+          provider === "codex"
+            ? codexUsage({
+                total: {
+                  inputTokens: 14,
+                  outputTokens: 2,
+                  cachedInputTokens: 3,
+                  totalTokens: 16,
+                },
+              })
+            : sdkUsage({
+                modelUsage: {
+                  [request.model.model]: {
+                    inputTokens: 10,
+                    outputTokens: 2,
+                    cacheReadInputTokens: 3,
+                    cacheCreationInputTokens: 1,
+                  },
+                },
+              }),
       };
     },
   });

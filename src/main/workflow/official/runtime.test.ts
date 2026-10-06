@@ -70,7 +70,12 @@ it.each(["claude", "codex"] as const)(
       input: { known: 70 },
       output: { known: 10 },
       reasoning: { known: null, measuredCalls: 0 },
+      cacheWrite: { known: 3, measuredCalls: 3 },
     });
+    for (const call of result.calls) {
+      if ("usage" in call && call.usage)
+        expect(call.usage.measurement.provider).toBe(call.provider);
+    }
     const html = officialWorkflowReport(result);
     expect(html).toContain("模擬実行");
     expect(html).toContain("プロセスで確認");

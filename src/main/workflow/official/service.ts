@@ -29,7 +29,12 @@ import { ClaudeWorkflowAgent } from "./claude.js";
 import { CodexWorkflowAgent } from "./codex.js";
 import { connectionFailure } from "./connection-failure.js";
 import { OperationApprovals } from "./operation-approval.js";
-import { planContract, schemas, implementationContract } from "./contracts.js";
+import {
+  planContract,
+  schemas,
+  implementationContract,
+  type ModelCandidate,
+} from "./contracts.js";
 import { createDagWorkspace, dagWorkflowOptions } from "./dag-fixtures.js";
 import { runOfficialDag, type DagOptions } from "./dag.js";
 import type {
@@ -275,20 +280,22 @@ export class OfficialWorkflowService {
       ...(await codex.discover(cwd, signal).catch((e: unknown) => {
         throw new Error(connectionFailure("codex", e));
       })),
-      ...(await claude.discover(cwd, signal).catch((e: unknown) => {
-        throw new Error(connectionFailure("claude", e));
-      })),
+      ...pinClaudeModels(
+        await claude.discover(cwd, signal).catch((e: unknown) => {
+          throw new Error(connectionFailure("claude", e));
+        }),
+      ),
     ];
     const opus = models.find(
       (m) =>
         m.provider === "claude" &&
-        (m.model === "opus" || m.resolvedModel?.includes("opus")) &&
+        m.model.includes("opus") &&
         m.quotaAllowed === true,
     );
     const haiku = models.find(
       (m) =>
         m.provider === "claude" &&
-        (m.model === "haiku" || m.resolvedModel?.includes("haiku")) &&
+        m.model.includes("haiku") &&
         m.quotaAllowed === true,
     );
     const review = models.find(
@@ -630,4 +637,23 @@ export class OfficialWorkflowService {
     this.active?.controller.abort();
     await this.active?.done;
   }
+}
+/**
+ * Live Claude calls use the full model ID that the official SDK resolved,
+ * never an alias. Candidates without a confirmed full ID are not used.
+ */
+export function pinClaudeModels(models: ModelCandidate[]): ModelCandidate[] {
+  const pinned = new Map<string, ModelCandidate>();
+  for (const m of models) {
+    const id = m.resolvedModel;
+    if (
+      m.provider !== "claude" ||
+      typeof id !== "string" ||
+      !/^claude-[a-z0-9.-]{1,100}$/.test(id) ||
+      pinned.has(id)
+    )
+      continue;
+    pinned.set(id, { ...m, model: id, resolvedModel: id });
+  }
+  return [...pinned.values()];
 }

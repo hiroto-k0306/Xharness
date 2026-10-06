@@ -2,7 +2,8 @@ import { afterEach, it, expect } from "vitest";
 import { mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { OfficialWorkflowService } from "./service.js";
+import { OfficialWorkflowService, pinClaudeModels } from "./service.js";
+import type { ModelCandidate } from "./contracts.js";
 import { fixtureWorkflowOptions, fixtureAgents } from "./fixtures.js";
 const homes: string[] = [];
 const services: OfficialWorkflowService[] = [];
@@ -309,4 +310,24 @@ it("ends consecutive questions and post-work chat after one bounded call and pre
     records.map((r) => r.answer),
   );
   expect(restored.activeId).toBeUndefined();
+});
+it("pins live Claude candidates to confirmed full model IDs and drops unconfirmed aliases", () => {
+  const base = {
+    provider: "claude" as const,
+    efforts: [null],
+    available: true,
+    quotaAllowed: true,
+    capabilitySource: "official-sdk",
+  };
+  const pinned = pinClaudeModels([
+    { ...base, model: "default", resolvedModel: "claude-opus-5-5" },
+    { ...base, model: "opus", resolvedModel: "claude-opus-5-5" },
+    { ...base, model: "haiku", resolvedModel: "claude-haiku-4-5-20251001" },
+    { ...base, model: "sonnet" },
+    { ...base, model: "odd", resolvedModel: "not a model id" },
+  ] as ModelCandidate[]);
+  expect(pinned.map((m) => [m.model, m.resolvedModel])).toEqual([
+    ["claude-opus-5-5", "claude-opus-5-5"],
+    ["claude-haiku-4-5-20251001", "claude-haiku-4-5-20251001"],
+  ]);
 });

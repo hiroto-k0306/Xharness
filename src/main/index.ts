@@ -19,6 +19,14 @@ import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
 import { developmentUiConnections } from "./connections/ui-registry.js";
+import { SiwcManager } from "./connections/siwc-manager.js";
+import { SiwcVault } from "./connections/siwc-vault.js";
+import {
+  windowsSiwcBackend,
+  windowsSiwcProtector,
+} from "./connections/siwc-windows.js";
+import { fixtureSiwcManager } from "./connections/siwc-fixture.js";
+import { siwcFixtureProfile } from "./connections/siwc-fixture-profile.js";
 import {
   connectionTestProfile,
   connectionTestTools,
@@ -47,6 +55,13 @@ const testUserData = connectionTestProfile(
   process.env.XHARNESS_HOME,
 );
 const connectionTest = !!testUserData;
+const siwcFixture = siwcFixtureProfile(
+  process.argv.slice(1),
+  fake,
+  app.isPackaged,
+  process.env.XHARNESS_HOME,
+  connectionTest,
+);
 // 明示的なfakeのuserDataは単一起動ロックより前に分離する。実版は従来の保存先。
 const fakeUserData =
   testUserData ??
@@ -194,9 +209,31 @@ async function start() {
               .catch(() => undefined);
           },
         });
+  const vault = new SiwcVault(
+    windowsSiwcBackend(home),
+    windowsSiwcProtector(safeStorage),
+  );
+  const siwc =
+    !app.isPackaged && (!fake || siwcFixture)
+      ? siwcFixture
+        ? fixtureSiwcManager(vault)
+        : new SiwcManager(vault, (url) => shell.openExternal(url), {
+            rememberSecrets: (values) => {
+              for (const secret of values)
+                if (!secrets.includes(secret)) secrets.push(secret);
+            },
+          })
+      : undefined;
   controller = new SessionController({
     ...(!app.isPackaged
-      ? { connections: developmentUiConnections(home, fake, connectionTest) }
+      ? {
+          connections: developmentUiConnections(
+            home,
+            fake,
+            connectionTest,
+            siwc,
+          ),
+        }
       : {}),
     authentication,
     ...(connectionTest

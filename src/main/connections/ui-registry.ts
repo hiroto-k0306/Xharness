@@ -1,15 +1,23 @@
 import type {
   ConnectionChoice,
   ConnectionView,
+  SiwcAction,
 } from "../../shared/connections.js";
 import type { ConnectionSelection } from "./integration.js";
 import { checkPersonalSdk, personalSdkBinding } from "./personal-sdk.js";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { SiwcManager } from "./siwc-manager.js";
 
 export interface UiConnections {
   views(): ConnectionView[];
   check(signal: AbortSignal): Promise<void>;
+  account?(
+    action: SiwcAction,
+    key: string | undefined,
+    signal: AbortSignal,
+  ): Promise<void>;
+  close?(): Promise<void>;
   selection(
     mode: Exclude<ConnectionChoice, "legacy">,
     cwd: string,
@@ -50,6 +58,7 @@ export function developmentUiConnections(
   home: string,
   fake: boolean,
   connectionTest = false,
+  siwc?: SiwcManager,
 ): UiConnections {
   let available = false;
   const views = unavailableConnections();
@@ -69,7 +78,14 @@ export function developmentUiConnections(
       view.reason = "fake：通信せず固定応答で接続操作を検証";
     }
   return {
-    views: () => structuredClone(views),
+    views: () =>
+      views.map((v) =>
+        v.mode === "openai-siwc" && siwc ? siwc.view() : structuredClone(v),
+      ),
+    account: siwc
+      ? (action, key, signal) => siwc.command(action, key, signal)
+      : undefined,
+    close: siwc ? () => siwc.close() : undefined,
     async check(signal) {
       if (fake) return;
       const cwd = join(home, "connection-check");
@@ -90,7 +106,13 @@ export function developmentUiConnections(
       }
     },
     selection(mode, cwd) {
-      if (mode === "openai-siwc" || (!fake && !available)) return undefined;
+      if (mode === "openai-siwc") {
+        const binding = siwc?.binding();
+        return binding
+          ? { mode, siwc: binding, ...(fake ? { simulated: true } : {}) }
+          : undefined;
+      }
+      if (!fake && !available) return undefined;
       const live = !fake
         ? personalSdkBinding(cwd, undefined, unavailable)
         : undefined;

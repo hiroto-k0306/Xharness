@@ -264,6 +264,12 @@ Codexの画像入りツール結果は、既定ではfunction_call_outputのinpu
 
 非packaged版の通常UIでセッション単位の既存方式・SIWC・Claude Agent SDK A/Bを選択し、未設定／利用可能／認可必要と理由を表示する。旧recordは既存方式。空の新規セッションでのみ方式を変更でき、モデル・effort・既存設定は変更しない。未設定は送信前に拒否し、既存方式へ自動fallbackしない。本人のClaudeローカル開発では公式SDK自身のaccountInfoとUsage確認でfirst-partyサブスク・APIキー経路なし・Extra Usage無効を確認し、各送信でも入力を保留して再確認する。Xは資格情報の独自読出しや新規ログインをしない。利用可能状態は再起動で再確認する。SDK利用の別クレジット移行停止と第三者向け配布条件は分けて扱う。今回はHaikuの短文queryを1回だけ確認した。既存インストール・packaged版は更新しない。新接続の通常テキストAgent Loop以外（画像・workflow・補助モデル通信・slash command・Xフック）は未対応。設定済みXフックがあれば保護を無視せず通信前に停止する。最新の手順・制約・ライブ結果は [開発版接続UI](docs/official-connections-ui.md) を参照。
 
+### 接続の隔離UI検証とSIWCの認証前コード（2026-10-06追記）
+
+非packagedの明示 `--connection-test` は絶対パスの空homeだけを使い、Electron profileを先に分離する。従来の認証reader/更新/ログインとlegacy送信を接続せず、無害な固定ツール1個に限定する。本人の公式SDK認証でA/Bを各1タスク実測し、BはX承認/実行/結果保存に合格、Aはactionを提案せず不合格だった。Aの役割指示とmodel/effortのtrace形式を修正したが、その後のA実通信は未検証。実通信の指定回数を越えて再送しない。
+
+SIWCはPKCE/state/nonce、固定loopback callback、発行IDでのexchange、ID token署名/identity/scope照合、公開Responsesのstream/cancel/error、models取得、保護保存インターフェースを実装しmockで検証した。通常UIでは未設定のままで、実登録/OAuth/実資格情報保存は行っていない。登録/account管理UI、stable host IDの保存接続、OS保護されたowner-only/atomicな永続backendのアプリ接続、refresh運用は残る。登録だけが不足とは扱わない。根拠・実測usage・制約: [接続stage4](docs/official-connections-stage4.md)。
+
 ## 9. Web・MCP・フック・拡張
 
 WebSearch / WebFetchを提供し、検索プロバイダ、検索回数、取得文字数、キャッシュを設定する。URLや接続先の検証を行い、取得内容は外部データとして扱う。検索には補助モデル通信が発生する経路がある。

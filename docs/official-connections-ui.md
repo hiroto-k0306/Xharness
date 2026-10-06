@@ -41,3 +41,4 @@ XHarnessという実アプリ名をagent_name_hintに一貫して使う。host�
 focused: connections全体、session/connections、session/controller、shared/ipc、ConnectionPicker、electron-bundleの117件。SDK実型を使い、Usage不明/Extra Usage有効/API経路の送信防止、確認中止・遅延、選択保存・再起動、元設定保持、未設定拒否、両fake方式の履歴/traceを確認する。fake GUIのconnections/smoke/evaluation、typecheck、lint、format、Electron/headless buildも対象。全回帰は最後のコード・文書をコミットした最終HEADで実行し、`.out/connections-ui-final-full.json` と `.out/connections-ui-final-validation.json` に記録する。過去段階の合格件数は最終HEAD結果として流用しない。
 
 残課題：SIWC正式登録とtransport、Claude第三者向け配布の承認判断、SDK experimental usage API変更への追従、A/B最終UIのライブ動作、画像・workflow・補助モデル呼出しへの新接続拡張。既存インストール更新は別途依頼時に扱う。
+この文書は7fc4d90時点の記録です。最新のA/B UI実測・SIWC実装と制約は [stage4](official-connections-stage4.md) を参照してください。

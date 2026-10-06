@@ -34,7 +34,7 @@ export function unavailableConnections(): ConnectionView[] {
       label: connectionLabels["openai-siwc"],
       status: "unconfigured",
       reason:
-        "専用の発行済みclient ID・独立したplan-use認可・SIWC transportが未登録。CLI資格情報では代用しません。",
+        "専用の発行済みclient ID・独立したplan-use認可とアカウント接続が未設定。transport・callback・保護保存インターフェースは実装済みですが実登録・認可は未実施です。CLI資格情報では代用しません。",
     },
     ...(["claude-proposals", "claude-mcp"] as const).map((mode) => ({
       mode,

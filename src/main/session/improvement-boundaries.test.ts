@@ -3,6 +3,25 @@ import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { fixture, cases } from "./improvements.fixture.js";
 import { Improvements } from "./improvements.js";
+import { createHash } from "node:crypto";
+it("completes a fixed evaluation whose provenance contains a hash with 429", async () => {
+  const f = await fixture();
+  let body = "",
+    n = 0;
+  do {
+    body = `Answer briefly fixture ${n++}`;
+  } while (
+    !createHash("sha256")
+      .update(JSON.stringify(body))
+      .digest("hex")
+      .includes("429")
+  );
+  const e = await f.baseline(body);
+  expect(e.versions[0]!.hash).toContain("429");
+  const evaluated = await f.evaluate(e, e.versions[0]!.id);
+  expect(evaluated.view).toBeDefined();
+  expect(f.requests).toHaveBeenCalledTimes(1);
+});
 it("holds permission mode while an already authorized improvement is awaiting IO", async () => {
   const f = await fixture(),
     e = await f.baseline();

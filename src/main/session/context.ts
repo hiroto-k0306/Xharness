@@ -48,6 +48,16 @@ export interface Host {
   saveReport?(filename: string): Promise<string | undefined>;
 }
 export interface ControllerOptions {
+  /** Native official path, no legacy provider fallback; never enabled by saved legacy session fields. */
+  officialSession?: (
+    request: import("../../shared/official-session.js").OfficialSessionSubmission,
+    signal: AbortSignal,
+  ) => Promise<
+    import("../../shared/official-session.js").OfficialSessionResult
+  >;
+  /** Explicit isolated development fixture; no general-purpose or legacy tools. */
+  connectionTest?: boolean;
+  connections?: import("../connections/ui-registry.js").UiConnections;
   localBrowserFactory?: import("../computer-use/adapter.js").LocalBrowserFactory;
   localBrowserTimeoutMs?: number;
   /** Offline tests may control quota scheduling without advancing global timers. */
@@ -348,6 +358,8 @@ export function sessionTools(
   session: StoredSession,
   cwd = session.cwd,
 ): ToolRegistry {
+  if (ctx.options.connectionTest)
+    return ctx.options.createTools!(cwd, session.readOnly);
   return new Map([
     ...(ctx.options.createTools ?? defaultTools)(cwd, session.readOnly),
     ...projectHistoryTools({

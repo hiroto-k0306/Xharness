@@ -1,5 +1,13 @@
 // main / preload / renderer が共有する契約。electron を import しない。
 import { parseRewindChoice } from "./rewind.js";
+import { parseOfficialTaskScope } from "./official-session.js";
+import {
+  isConnectionChoice,
+  type ConnectionChoice,
+  type ConnectionView,
+  SIWC_ACTIONS,
+  type SiwcAction,
+} from "./connections.js";
 import { parseMemoryAction } from "./project-memory.js";
 import { parseSkillUiRequest } from "./project-skills.js";
 import { parseImprovementAction } from "./improvements.js";
@@ -73,6 +81,9 @@ export const EFFORT_VALUES: readonly Effort[] = [
 export type SessionStatus = "idle" | "running" | "ask";
 
 export interface SessionSummary {
+  connection?: ConnectionChoice;
+  connectionAccount?: string;
+  siwcServerDefault?: boolean;
   quotaPause?: import("./quota-resume.js").QuotaPauseView;
   llmCalls?: import("./llm-calls.js").LlmCalls;
   imageBytes?: number;
@@ -104,6 +115,9 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  /** Ordinary submissions use native official agents; saved legacy choices do not enable HTTP. */
+  officialDefault?: boolean;
+  connections?: ConnectionView[];
   images?: typeof import("./images.js").DEFAULT_IMAGES;
   commands?: import("./commands.js").CommandSuggestion[];
   authentication?: AuthenticationView[];
@@ -182,6 +196,7 @@ export type TranscriptItem =
  * "state" / "transcript" / "user_message" / "turn" / "tool_result" / "permission_resolved" も追加分。
  */
 export type UiEvent =
+  | { type: "official_scope_required"; sessionId: string; text?: string }
   | { type: "memory_changed"; sessionId: string }
   | {
       type: "rewind_request";
@@ -384,6 +399,7 @@ export type HarnessCommand =
   | { type: "abort_repository" }
   | {
       type: "send";
+      officialTask?: import("./official-session.js").OfficialTaskScope;
       sessionId: string;
       text: string;
       images?: import("./images.js").ImageAttachment[];
@@ -396,6 +412,15 @@ export type HarnessCommand =
       decision: PermissionDecision;
     }
   | { type: "set_model"; sessionId: string; model: string; effort?: Effort }
+  | { type: "set_connection"; sessionId: string; connection: ConnectionChoice }
+  | { type: "set_siwc_model"; sessionId: string; model: string }
+  | { type: "check_connection"; sessionId: string; cancel?: boolean }
+  | {
+      type: "siwc_account";
+      sessionId: string;
+      action: SiwcAction;
+      account?: string;
+    }
   | { type: "set_default_model"; model: string; effort?: Effort }
   | { type: "close_session"; sessionId: string }
   | {
@@ -450,6 +475,9 @@ export type CommandResult =
 
 /** preload が window.harness として公開する型付き API。これ以外は渡さない。 */
 export interface HarnessApi {
+  officialWorkflow?(
+    command: import("./official-workflow.js").OfficialWorkflowCommand,
+  ): Promise<import("./official-workflow.js").OfficialWorkflowView>;
   command(command: HarnessCommand): Promise<CommandResult>;
   onEvent(listener: (event: UiEvent) => void): () => void;
 }
@@ -470,6 +498,41 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
   if (!value || typeof value !== "object") return undefined;
   const c = value as Record<string, unknown>;
   switch (c.type) {
+    case "set_siwc_model":
+      return str(c.sessionId) &&
+        typeof c.model === "string" &&
+        /^[A-Za-z0-9_.-]{1,100}$/.test(c.model)
+        ? { type: "set_siwc_model", sessionId: c.sessionId, model: c.model }
+        : undefined;
+    case "siwc_account":
+      return str(c.sessionId) &&
+        SIWC_ACTIONS.includes(c.action as SiwcAction) &&
+        (c.account === undefined ||
+          (typeof c.account === "string" && /^[a-f0-9-]{36}$/.test(c.account)))
+        ? {
+            type: "siwc_account",
+            sessionId: c.sessionId,
+            action: c.action as SiwcAction,
+            account: c.account as string | undefined,
+          }
+        : undefined;
+    case "set_connection":
+      return str(c.sessionId) && isConnectionChoice(c.connection)
+        ? {
+            type: "set_connection",
+            sessionId: c.sessionId,
+            connection: c.connection,
+          }
+        : undefined;
+    case "check_connection":
+      return str(c.sessionId) &&
+        (c.cancel === undefined || typeof c.cancel === "boolean")
+        ? {
+            type: "check_connection",
+            sessionId: c.sessionId,
+            cancel: c.cancel === true,
+          }
+        : undefined;
     case "local_browser": {
       const request = parseLocalBrowserAction(c.request);
       return str(c.sessionId) &&
@@ -567,6 +630,11 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
     case "pick_folder":
       return { type: c.type };
     case "send": {
+      const officialTask =
+        c.officialTask === undefined
+          ? undefined
+          : parseOfficialTaskScope(c.officialTask);
+      if (c.officialTask !== undefined && !officialTask) return undefined;
       if (
         !str(c.sessionId) ||
         typeof c.text !== "string" ||
@@ -575,7 +643,12 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
         return undefined;
       if (c.images === undefined)
         return str(c.text, MAX_TEXT)
-          ? { type: "send", sessionId: c.sessionId, text: c.text }
+          ? {
+              type: "send",
+              sessionId: c.sessionId,
+              text: c.text,
+              ...(officialTask ? { officialTask } : {}),
+            }
           : undefined;
       if (!Array.isArray(c.images)) return undefined;
       if (!c.text && !c.images.length) return undefined;
@@ -584,7 +657,13 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
           attachmentInfo(i);
           return { mediaType: i.mediaType, data: i.data };
         });
-        return { type: "send", sessionId: c.sessionId, text: c.text, images };
+        return {
+          type: "send",
+          sessionId: c.sessionId,
+          text: c.text,
+          images,
+          ...(officialTask ? { officialTask } : {}),
+        };
       } catch {
         return undefined;
       }

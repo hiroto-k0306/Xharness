@@ -43,7 +43,9 @@
     "package": "pnpm icon && pnpm build && electron-builder --win",
     "package:dir": "pnpm icon && pnpm build && electron-builder --win --dir",
     "release:collect": "tsx scripts/collect-release.ts",
-    "release": "pnpm package && pnpm release:collect"
+    "release": "pnpm package && pnpm release:collect",
+    "connections:offline": "tsx scripts/connections-offline.ts",
+    "connections:dev": "tsx scripts/connections-dev.ts"
   },
   "devDependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",
@@ -86,9 +88,11 @@
     ]
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.290",
     "@modelcontextprotocol/sdk": "1.31.0",
     "ignore": "7.0.11",
     "turndown": "^7.2.4",
-    "undici": "^7.30.0"
+    "undici": "^7.30.0",
+    "zod": "4.3.6"
   }
 }

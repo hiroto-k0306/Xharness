@@ -56,6 +56,22 @@ describe("FakeProvider", () => {
     const events = await gather(new FakeProvider(), request("trigger 429"));
     expect(events).toEqual([{ type: "rate_limited", retryAfterSec: 3 }]);
   });
+  it.each(["claude", "codex"] as const)(
+    "%s does not interpret UUID or hash substrings as a 429 control",
+    (provider) => {
+      const text =
+        "XHarness fixed evaluation 00000429-0000-4000-8000-000000000001/ping\n" +
+        "Version SHA-256: " +
+        "a".repeat(30) +
+        "429" +
+        "b".repeat(31) +
+        "\nTask:\nReply pong";
+      expect(routeFake(request(text), provider).type).toBe("fixture");
+      expect(routeFake(request("trigger 429"), provider).type).toBe(
+        "rate_limited",
+      );
+    },
+  );
   it("reproduces a stream cut as an error with no completion", async () => {
     const events = await gather(new FakeProvider(), request("cut"));
     expect(events.some((e) => e.type === "message_done")).toBe(false);

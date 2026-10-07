@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "environment": "offline-injected-mock",
+  "measuredAt": "2026-10-06T02:57:39.997Z",
+  "policy": "Compare acceptance within each fixture first. Synthetic tokens/time are not live quality, quota or cost evidence.",
+  "rows": [
+    {
+      "fixture": "fixed-echo",
+      "variant": "A",
+      "passed": true,
+      "outcome": {
+        "taskId": "fixed-echo",
+        "sessionId": "fixed-echo-A",
+        "requestId": "one",
+        "mode": "claude-proposals",
+        "status": "completed",
+        "elapsedMs": 1,
+        "measurement": {
+          "source": "sdk-result",
+          "observedAt": "2026-10-06T02:57:39.995Z",
+          "raw": {
+            "input_tokens": 10,
+            "output_tokens": 3,
+            "cache_read_input_tokens": 2,
+            "cache_creation_input_tokens": 0
+          },
+          "input": 12,
+          "output": 3
+        },
+        "quota": null,
+        "proposal": {
+          "answer": "",
+          "actions": [
+            {
+              "id": "echo-one",
+              "tool": "echo",
+              "input": {
+                "text": "OK"
+              }
+            }
+          ]
+        }
+      },
+      "toolExecutions": 1,
+      "taskElapsedMs": 2
+    },
+    {
+      "fixture": "fixed-echo",
+      "variant": "B",
+      "passed": true,
+      "outcome": {
+        "taskId": "fixed-echo",
+        "sessionId": "fixed-echo-B",
+        "requestId": "one",
+        "mode": "claude-mcp",
+        "status": "completed",
+        "elapsedMs": 0,
+        "measurement": {
+          "source": "sdk-result",
+          "observedAt": "2026-10-06T02:57:39.996Z",
+          "raw": {
+            "input_tokens": 10,
+            "output_tokens": 3,
+            "cache_read_input_tokens": 2,
+            "cache_creation_input_tokens": 0
+          },
+          "input": 12,
+          "output": 3
+        },
+        "quota": null,
+        "proposal": {
+          "answer": "OK",
+          "actions": []
+        }
+      },
+      "toolExecutions": 1,
+      "taskElapsedMs": 0
+    },
+    {
+      "fixture": "heldout-denied",
+      "variant": "A",
+      "passed": true,
+      "outcome": {
+        "taskId": "heldout-denied",
+        "sessionId": "heldout-denied-A",
+        "requestId": "one",
+        "mode": "claude-proposals",
+        "status": "completed",
+        "elapsedMs": 0,
+        "measurement": {
+          "source": "sdk-result",
+          "observedAt": "2026-10-06T02:57:39.996Z",
+          "raw": {
+            "input_tokens": 10,
+            "output_tokens": 3,
+            "cache_read_input_tokens": 2,
+            "cache_creation_input_tokens": 0
+          },
+          "input": 12,
+          "output": 3
+        },
+        "quota": null,
+        "proposal": {
+          "answer": "",
+          "actions": [
+            {
+              "id": "echo-one",
+              "tool": "echo",
+              "input": {
+                "text": "OK"
+              }
+            }
+          ]
+        }
+      },
+      "toolExecutions": 0,
+      "taskElapsedMs": 1
+    },
+    {
+      "fixture": "heldout-denied",
+      "variant": "B",
+      "passed": true,
+      "outcome": {
+        "taskId": "heldout-denied",
+        "sessionId": "heldout-denied-B",
+        "requestId": "one",
+        "mode": "claude-mcp",
+        "status": "completed",
+        "elapsedMs": 0,
+        "measurement": {
+          "source": "sdk-result",
+          "observedAt": "2026-10-06T02:57:39.997Z",
+          "raw": {
+            "input_tokens": 10,
+            "output_tokens": 3,
+            "cache_read_input_tokens": 2,
+            "cache_creation_input_tokens": 0
+          },
+          "input": 12,
+          "output": 3
+        },
+        "quota": null,
+        "proposal": {
+          "answer": "denied",
+          "actions": []
+        }
+      },
+      "toolExecutions": 0,
+      "taskElapsedMs": 0
+    }
+  ]
+}

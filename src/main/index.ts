@@ -2,11 +2,13 @@ import { app, BrowserWindow, dialog, safeStorage, shell } from "electron";
 import { homedir } from "node:os";
 import { mkdirSync } from "node:fs";
 import { fakeUserDataPath } from "./fake-profile.js";
+import { officialProfile, unavailableLegacy } from "./official-profile.js";
 import { acquireHomeWriter } from "./home-writer.js";
 import { loadMainConfig } from "./config/config.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStartupArgs, resolveStartup } from "./config/config.js";
+import { connectionTestStartup } from "./config/catalog.js";
 import { readLocalSecrets } from "./auth/local-secrets.js";
 import { Authentication } from "./auth/authentication.js";
 import { AutoRefresh } from "./auth/auto-refresh.js";
@@ -18,7 +20,23 @@ import { ClaudeAdapter } from "./providers/claude/adapter.js";
 import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
+import { developmentUiConnections } from "./connections/ui-registry.js";
+import { SiwcManager } from "./connections/siwc-manager.js";
+import { SiwcVault } from "./connections/siwc-vault.js";
+import {
+  windowsSiwcBackend,
+  windowsSiwcProtector,
+} from "./connections/siwc-windows.js";
+import { fixtureSiwcManager } from "./connections/siwc-fixture.js";
+import { siwcFixtureProfile } from "./connections/siwc-fixture-profile.js";
+import {
+  connectionTestProfile,
+  connectionTestTools,
+} from "./connections/test-profile.js";
 import { createLocalBrowser } from "./local-browser-electron.js";
+import { OfficialWorkflowService } from "./workflow/official/service.js";
+import { verificationMode } from "./workflow/official/fault-injection.js";
+import { registerOfficialWorkflowIpc } from "./official-workflow-ipc.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
 import {
   confirmAuthentication,
@@ -36,12 +54,32 @@ import {
 const here = fileURLToPath(new URL(".", import.meta.url));
 const startup = parseStartupArgs(process.argv.slice(1));
 const fake = startup.fake;
-// 明示的なfakeのuserDataは単一起動ロックより前に分離する。実版は従来の保存先。
-const fakeUserData = fakeUserDataPath(
-  fake,
+const officialUserData = officialProfile(
+  process.argv.slice(1),
+  process.env.XHARNESS_HOME,
+);
+const officialOnly = !!officialUserData;
+const testUserData = connectionTestProfile(
+  process.argv.slice(1),
   app.isPackaged,
   process.env.XHARNESS_HOME,
 );
+const connectionTest = !!testUserData;
+const siwcFixture = siwcFixtureProfile(
+  process.argv.slice(1),
+  fake,
+  app.isPackaged,
+  process.env.XHARNESS_HOME,
+  connectionTest,
+);
+// Ordinary startup now uses official native agents. Development fixtures retain their explicit paths.
+// Existing settings/history remain in the same home; legacy HTTP is never an implicit fallback.
+const officialDefault = !connectionTest && !siwcFixture;
+// 明示的なfakeのuserDataは単一起動ロックより前に分離する。実版は従来の保存先。
+const fakeUserData =
+  officialUserData ??
+  testUserData ??
+  fakeUserDataPath(fake, app.isPackaged, process.env.XHARNESS_HOME);
 if (fakeUserData) {
   mkdirSync(fakeUserData, { recursive: true });
   app.setPath("userData", fakeUserData);
@@ -50,6 +88,7 @@ let quitting = false;
 
 let window: BrowserWindow | null = null;
 let controller: SessionController | undefined;
+let officialWorkflow: OfficialWorkflowService | undefined;
 
 function createWindow() {
   window = new BrowserWindow({
@@ -115,8 +154,16 @@ async function start() {
   try {
     main = await resolveStartup({
       home,
-      cliModel: startup.model ?? (fake ? "fake" : undefined),
-      cliEffort: startup.effort,
+      cliModel:
+        startup.model ??
+        (connectionTest
+          ? connectionTestStartup().model
+          : fake
+            ? "fake"
+            : undefined),
+      cliEffort:
+        startup.effort ??
+        (connectionTest ? connectionTestStartup().effort : undefined),
       supported: ["claude", "codex"],
       ...(fake ? { read: async () => "" } : {}),
     });
@@ -141,55 +188,102 @@ async function start() {
       await authentication?.refresh();
     },
   });
-  const providers = fake
-    ? [
-        new FakeProvider({ fixturesDir: fixtures, quota: true }),
-        new FakeProvider({
-          provider: "codex",
-          quota: true,
-          fixturesDir: app.isPackaged
-            ? join(process.resourcesPath, "fixtures-codex")
-            : join(app.getAppPath(), "test/fixtures/codex"),
-        }),
-      ]
-    : [
-        new RefreshingProvider(new ClaudeAdapter(), autoRefresh),
-        new RefreshingProvider(
-          new CodexAdapter({
-            toolImageMode: async () =>
-              (await loadMainConfig(home)).providers.codex.toolImageMode,
-          }),
-          autoRefresh,
-        ),
-      ];
-  const secrets = fake ? [] : await readLocalSecrets();
-  const authentication = fake
-    ? undefined
-    : new Authentication({
-        autoRefreshEnabled: () => autoRefreshEnabled,
-        autoRefreshBusy: () => autoRefresh.isBusy(),
-        confirm: (provider) => confirmAuthentication(window, provider),
-        launch: launchOfficialLogin,
-        refreshSecrets: async () => {
-          for (const secret of await readLocalSecrets())
-            if (!secrets.includes(secret)) secrets.push(secret);
-        },
-        changed: () => {
-          void controller
-            ?.state()
-            .then((state) => sendEvent(window, { type: "state", state }))
-            .catch(() => undefined);
-        },
-      });
+  const providers =
+    officialOnly || officialDefault
+      ? [unavailableLegacy("claude"), unavailableLegacy("codex")]
+      : fake || connectionTest
+        ? [
+            new FakeProvider({ fixturesDir: fixtures, quota: true }),
+            new FakeProvider({
+              provider: "codex",
+              quota: true,
+              fixturesDir: app.isPackaged
+                ? join(process.resourcesPath, "fixtures-codex")
+                : join(app.getAppPath(), "test/fixtures/codex"),
+            }),
+          ]
+        : [
+            new RefreshingProvider(new ClaudeAdapter(), autoRefresh),
+            new RefreshingProvider(
+              new CodexAdapter({
+                toolImageMode: async () =>
+                  (await loadMainConfig(home)).providers.codex.toolImageMode,
+              }),
+              autoRefresh,
+            ),
+          ];
+  const secrets =
+    fake || connectionTest || officialOnly || officialDefault
+      ? []
+      : await readLocalSecrets();
+  const authentication =
+    fake || connectionTest || officialOnly || officialDefault
+      ? undefined
+      : new Authentication({
+          autoRefreshEnabled: () => autoRefreshEnabled,
+          autoRefreshBusy: () => autoRefresh.isBusy(),
+          confirm: (provider) => confirmAuthentication(window, provider),
+          launch: launchOfficialLogin,
+          refreshSecrets: async () => {
+            for (const secret of await readLocalSecrets())
+              if (!secrets.includes(secret)) secrets.push(secret);
+          },
+          changed: () => {
+            void controller
+              ?.state()
+              .then((state) => sendEvent(window, { type: "state", state }))
+              .catch(() => undefined);
+          },
+        });
+  const vault = new SiwcVault(
+    windowsSiwcBackend(home),
+    windowsSiwcProtector(safeStorage),
+  );
+  const siwc =
+    !officialOnly &&
+    !officialDefault &&
+    !app.isPackaged &&
+    (!fake || siwcFixture)
+      ? siwcFixture
+        ? fixtureSiwcManager(vault)
+        : new SiwcManager(vault, (url) => shell.openExternal(url), {
+            rememberSecrets: (values) => {
+              for (const secret of values)
+                if (!secrets.includes(secret)) secrets.push(secret);
+            },
+          })
+      : undefined;
   controller = new SessionController({
+    ...(officialDefault
+      ? {
+          officialSession: (request, signal) =>
+            officialWorkflow!.submitSession(request, signal),
+        }
+      : {}),
+    ...(!officialOnly && !officialDefault && !app.isPackaged
+      ? {
+          connections: developmentUiConnections(
+            home,
+            fake,
+            connectionTest,
+            siwc,
+          ),
+        }
+      : {}),
     authentication,
+    ...(connectionTest
+      ? { connectionTest: true, createTools: connectionTestTools }
+      : {}),
     phase4: true,
-    cliModel: startup.model,
-    cliEffort: startup.effort as
+    cliModel:
+      startup.model ??
+      (connectionTest ? connectionTestStartup().model : undefined),
+    cliEffort: (startup.effort ??
+      (connectionTest ? connectionTestStartup().effort : undefined)) as
       "low" | "medium" | "high" | "xhigh" | "max" | undefined,
     provider: providers.find((p) => p.id === main.choice.provider)!,
     providers,
-    fallback: main.fallback,
+    fallback: officialOnly || officialDefault ? {} : main.fallback,
     web: main.web,
     model: main.choice.model,
     effort: main.choice.effort,
@@ -204,7 +298,11 @@ async function start() {
     localBrowserFactory: createLocalBrowser,
     emit: (event) => sendEvent(window, event),
     // MCP の OAuth トークンは OS の暗号化(Windows では DPAPI)で保存する。使えなければ OAuth を使わない
-    ...(!fake && safeStorage.isEncryptionAvailable()
+    ...(!fake &&
+    !connectionTest &&
+    !officialOnly &&
+    !officialDefault &&
+    safeStorage.isEncryptionAvailable()
       ? {
           mcpSecrets: fileSecretStore(join(home, "secrets"), {
             encrypt: (text) => safeStorage.encryptString(text),
@@ -227,6 +325,14 @@ async function start() {
     () => controller!,
     () => window,
   );
+  officialWorkflow = new OfficialWorkflowService({
+    home,
+    fake,
+    codexPath: main.auth.codexCliPath,
+    // Explicit flag + environment value + isolated home only; off otherwise.
+    verification: verificationMode(process.argv.slice(1), process.env),
+  });
+  registerOfficialWorkflowIpc(() => window, officialWorkflow);
   createWindow();
 }
 
@@ -250,7 +356,10 @@ else {
     if (quitting || !controller) return;
     quitting = true;
     event.preventDefault();
-    void controller.shutdown().finally(() => app.quit());
+    void Promise.allSettled([
+      controller.shutdown(),
+      officialWorkflow?.close(),
+    ]).finally(() => app.quit());
   });
   app.on("activate", () => {
     if (!BrowserWindow.getAllWindows().length) createWindow();

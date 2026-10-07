@@ -29,6 +29,31 @@ const text = (text: string): FakeStep => ({
   stopReason: "end_turn",
   message: { role: "assistant", content: [{ type: "text", text }] },
 });
+it("ends consecutive questions and code explanation after one answer each", async () => {
+  const s = await setup(
+    [
+      text("回答1"),
+      text("回答2"),
+      text("この関数は加算します。"),
+      text("must not send"),
+    ],
+    [],
+  );
+  const questions = [
+    "何ができますか？",
+    "使い方を教えて",
+    "コードを説明するだけにしてください",
+  ];
+  for (let i = 1; i <= 3; i++) {
+    expect((await s.run(undefined, questions[i - 1])).stopCause).toBe(
+      "end_turn",
+    );
+    expect(s.requests).toHaveLength(i);
+    expect(s.runtime.state.phase).toBe("off");
+  }
+  expect(s.checks()).toBe(0);
+  expect(s.approvals()).toBe(0);
+});
 it("TodoWrite does not replace the plan or waive review for real changes", async () => {
   const s = await setup(
     [
@@ -383,7 +408,10 @@ async function setup(
     providers,
     approvals: () => approvals,
     checks: () => checks,
-    run: (checkpoint?: WriteCheckpoint) =>
+    run: (
+      checkpoint?: WriteCheckpoint,
+      userText = "PARENT HISTORY - never give this to a child",
+    ) =>
       runtime.run(
         {
           checkpoint,
@@ -397,7 +425,7 @@ async function setup(
               content: [
                 {
                   type: "text",
-                  text: "PARENT HISTORY - never give this to a child",
+                  text: userText,
                 },
               ],
             },

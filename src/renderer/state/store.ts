@@ -23,6 +23,7 @@ export interface PendingPermission {
   summary: string;
 }
 export interface SessionView {
+  officialScopeText?: string;
   rewind?: Extract<UiEvent, { type: "rewind_request" }>;
   agents?: Record<
     string,
@@ -84,6 +85,11 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
   if (e.type === "rewind_request")
     return put(s, e.sessionId, { ...view(s, e.sessionId), rewind: e });
   switch (e.type) {
+    case "official_scope_required":
+      return put(s, e.sessionId, {
+        ...view(s, e.sessionId),
+        officialScopeText: e.text,
+      });
     case "memory_changed":
       return s;
     case "workflow":
@@ -391,6 +397,7 @@ interface UiStore extends EventState {
   send(
     text: string,
     images?: import("../../shared/images.js").ImageAttachment[],
+    officialTask?: import("../../shared/official-session.js").OfficialTaskScope,
   ): Promise<boolean>;
   abort(): void;
   respond(decision: PermissionDecision): void;
@@ -430,7 +437,7 @@ export const useStore = create<UiStore>()((set, get) => ({
     void window.harness.command({ type: "ready" });
     return off;
   },
-  async send(text, images) {
+  async send(text, images, officialTask) {
     const trimmed = text.trim();
     if (!trimmed && !images?.length) return false;
     let id = get().app?.currentSessionId ?? null;
@@ -451,6 +458,7 @@ export const useStore = create<UiStore>()((set, get) => ({
       type: "send",
       sessionId,
       text: trimmed,
+      ...(officialTask ? { officialTask } : {}),
       ...(images?.length ? { images } : {}),
     });
     if (!result.ok && !REPORTED_ERRORS.includes(result.error))

@@ -1,6 +1,8 @@
 // 1ターン(ユーザーの1発言 → 応答の完了)を実行し、履歴とレシートを保存する。
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { runConnectedTurnOwned } from "../connections/integration.js";
+import { withSessionTrace, withTaskTrace } from "../core/trace.js";
 import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
 import { checkPremises } from "./premises.js";
 import { withSessionCalls } from "./llm-calls.js";
@@ -26,6 +28,7 @@ import { diagnoseEnvironment } from "../tools/environment.js";
 import { FileCheckpointStore } from "../checkpoints/store.js";
 import { type Receipt } from "../../shared/ipc.js";
 import { usedProviders, type StoredSession } from "./store.js";
+import { itemsFromMessages } from "./transcript.js";
 import { type PermissionGate } from "./permission-gate.js";
 import { TurnEvents, usageEvent } from "./turn-events.js";
 import { createWorkflow, needsNewWorkflow } from "./workflow-factory.js";
@@ -258,6 +261,149 @@ async function prepareRuntime(
   return { web };
 }
 
+/** One native submission; inferred work waits for scope and plan approval. */
+export async function runOfficialSessionTurn(
+  ctx: ControllerContext,
+  session: StoredSession,
+  rt: Runtime,
+  text: string,
+  abort: AbortController,
+  task?: import("../../shared/official-session.js").OfficialTaskScope,
+) {
+  const events = new TurnEvents(ctx, session, rt);
+  const startedAt = performance.now();
+  let stopCause = "step_failed";
+  ctx.options.emit({ type: "official_scope_required", sessionId: session.id });
+  try {
+    const history = rt.messages.slice(-10).flatMap((m) => {
+      const text = m.content
+        .filter((b) => b.type === "text")
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .join("\n");
+      return text && (m.role === "user" || m.role === "assistant")
+        ? [{ role: m.role, text }]
+        : [];
+    });
+    session = await beginTurn(ctx, session, rt, text);
+    // Persist the input even if configuration or native connection prevents dispatch.
+    await ctx.sessions.append(
+      session.id,
+      rt.messages.slice(rt.persisted),
+      ctx.clean,
+    );
+    rt.persisted = rt.messages.length;
+    const projectRoot = ctx.workspaceRoot(session);
+    const config = await loadProjectConfig(
+      ctx.options.home,
+      task ? projectRoot : undefined,
+    );
+    const agents = await loadAgentConfig(
+      ctx.options.home,
+      task ? projectRoot : undefined,
+    );
+    if (
+      config.limits.llmCallsPerTurn ||
+      config.limits.llmCallsPerSession ||
+      agents.hooks?.length ||
+      agents.waveChecks.length ||
+      (task &&
+        (config.permissions.rules.length ||
+          config.permissions.mode === "plan" ||
+          config.untrusted))
+    )
+      throw new Error(
+        "公式入力の初期対応では既存の通信回数上限・フック・プロジェクト権限設定を適用できません。設定を無視せず停止しました。保存設定は変更していません。",
+      );
+    const chosen = resolveModel(session.model, ctx.options.aliases);
+    if (!chosen)
+      throw new Error(
+        "選択モデルを公式IDへ解決できません。旧HTTPへ切り替えません。",
+      );
+    abort.signal.throwIfAborted();
+    const result = await ctx.options.officialSession!(
+      {
+        sessionId: session.id,
+        cwd: session.cwd,
+        model: `${chosen.provider}:${chosen.model}`,
+        effort: session.effort,
+        text: ctx.clean(text),
+        history,
+        ...(task ? { task } : {}),
+        ...(session.worktree && projectRoot
+          ? { worktreeSource: projectRoot }
+          : {}),
+      },
+      abort.signal,
+    );
+    const summary = ctx.clean(result.summary);
+    events.record({
+      id: events.nextReceiptId(),
+      sessionId: session.id,
+      ts: Date.now(),
+      provider: "harness",
+      kind: "tool",
+      tool: "OfficialWorkflow",
+      durationMs: Math.round(performance.now() - startedAt),
+      input: {
+        workflowId: result.workflowId,
+        intent: task || result.taskRequired ? "work" : "question",
+      },
+      summary: `公式workflow ${result.workflowId} / ${result.status}。詳細のusage・テスト・レビューは公式workflowの保存記録を参照。`,
+    });
+    rt.messages.push({
+      role: "assistant",
+      content: [{ type: "text", text: summary }],
+    });
+    ctx.options.emit({
+      type: "transcript",
+      sessionId: session.id,
+      items: itemsFromMessages(rt.messages),
+    });
+    ctx.options.emit({
+      type: "notice",
+      sessionId: session.id,
+      tone: "dim",
+      message: `公式workflow ${result.workflowId} / ${result.status}。計画承認・テスト・レビュー・使用量は公式workflowで確認できます。`,
+    });
+    stopCause = abort.signal.aborted
+      ? "aborted"
+      : result.status === "completed"
+        ? result.taskRequired
+          ? "awaiting_user"
+          : task
+            ? "workflow_complete"
+            : "end_turn"
+        : result.status === "cancelled" || abort.signal.aborted
+          ? "aborted"
+          : "review_attention";
+    ctx.options.emit({
+      type: "official_scope_required",
+      sessionId: session.id,
+      text:
+        result.taskRequired &&
+        result.status === "completed" &&
+        !abort.signal.aborted
+          ? ctx.clean(text)
+          : undefined,
+    });
+  } catch (error) {
+    stopCause = abort.signal.aborted ? "aborted" : "step_failed";
+    if (!abort.signal.aborted)
+      ctx.options.emit({
+        type: "error",
+        sessionId: session.id,
+        message: ctx.clean(
+          error instanceof Error
+            ? error.message
+            : "公式接続を実行できません。旧HTTPへ切り替えません。",
+        ),
+      });
+  } finally {
+    events.flush();
+    await finishTurn(ctx, session, rt, events, stopCause);
+  }
+}
+
 export async function runSessionTurn(
   ctx: ControllerContext,
   gate: PermissionGate,
@@ -390,6 +536,129 @@ async function runSessionBody(
     await ctx.emitState();
   }
   let stopCause = "step_failed";
+  if (session.connection && session.connection !== "legacy") {
+    let featureReason: string | undefined;
+    try {
+      const selection = options.connections?.selection(
+        session.connection,
+        session.cwd,
+      );
+      if (!selection) throw new Error("Connection unavailable");
+      rt.tools ??= sessionTools(ctx, session);
+      rt.config = await loadTrustedConfig(
+        ctx,
+        gate,
+        session,
+        rt,
+        ctx.workspaceRoot(session),
+        abort.signal,
+      );
+      const trustRoot = ctx.workspaceRoot(session);
+      const agentConfig = await loadAgentConfig(
+        options.home,
+        session.workspaceId ? session.cwd : undefined,
+        !trustRoot ||
+          !!rt.trustedSession ||
+          (await ctx.trust.isTrusted(trustRoot)),
+      );
+      if (agentConfig.hooks?.length || agentConfig.waveChecks?.length) {
+        featureReason =
+          "新接続は設定済みのXフック・wave checkに未対応です。保護設定を無視せず停止します。既存方式の新規セッションを使用してください。";
+        throw new Error("Unsupported hooks");
+      }
+      const checkpoint = await new FileCheckpointStore(options.home).begin(
+        sessionId,
+        session.cwd,
+        rt.messages.length - 1,
+        clean,
+        (message) => emit({ type: "notice", sessionId, tone: "warn", message }),
+      );
+      const previous = await ctx.sessions.evaluationTask(sessionId);
+      rt.evaluationTaskId = previous?.active ? previous.id : randomUUID();
+      await ctx.sessions.recordEvaluationTask(
+        sessionId,
+        rt.evaluationTaskId,
+        true,
+        false,
+      );
+      await ctx.sessions.append(
+        sessionId,
+        rt.messages.slice(rt.persisted),
+        clean,
+      );
+      rt.persisted = rt.messages.length;
+      const model =
+        session.connection === "openai-siwc"
+          ? session.model
+          : (resolveModel(session.model, options.aliases)?.model ??
+            session.model);
+      rt.system ??= await systemPrompt(
+        ctx,
+        session.cwd,
+        !session.workspaceId,
+        rt.config,
+        session.fileLinkGuidanceVersion === 1,
+      );
+      const result = await withSessionTrace(
+        options.home,
+        sessionId,
+        clean,
+        () =>
+          withTaskTrace(
+            {
+              taskId: rt.evaluationTaskId!,
+              model,
+              effort: session.siwcServerDefault ? undefined : session.effort,
+            },
+            () =>
+              runConnectedTurnOwned(
+                options.home,
+                {
+                  provider: options.provider,
+                  sessionId,
+                  model,
+                  ...(session.siwcServerDefault
+                    ? {}
+                    : { reasoning: { effort: session.effort } }),
+                  system: rt.system!,
+                  messages: rt.messages,
+                  tools: rt.tools!,
+                  checkpoint,
+                  redact: clean,
+                  maxRounds: options.connectionTest ? 2 : 4,
+                  permission: (call, signal) =>
+                    gate.ask({
+                      session,
+                      rt,
+                      call,
+                      receiptId: events.receiptByCall.get(call.id),
+                      signal,
+                      forceAsk: options.connectionTest,
+                    }),
+                  onEvent: events.onEvent,
+                },
+                { ...selection, taskId: rt.evaluationTaskId! },
+                abort.signal,
+              ),
+          ),
+      );
+      rt.messages = result.messages;
+      stopCause = result.stopCause;
+    } catch {
+      stopCause = abort.signal.aborted ? "aborted" : "step_failed";
+      if (!abort.signal.aborted)
+        emit({
+          type: "error",
+          sessionId,
+          message:
+            featureReason ??
+            "新接続を開始できませんでした。公式認証・Usage設定と実行台帳を確認してください。自動切替は行いません。",
+        });
+    }
+    events.flush();
+    await finishTurn(ctx, session, rt, events, llmStopCause() ?? stopCause);
+    return;
+  }
   try {
     const { web } = await prepareRuntime(
       ctx,
@@ -717,7 +986,8 @@ async function finishTurn(
           stopCause === "workflow_complete" ||
           stopCause === "reported_done" ||
           (stopCause === "end_turn" &&
-            ["off", "complete"].includes(rt.workflow?.state.phase ?? ""))
+            ((!!session.connection && session.connection !== "legacy") ||
+              ["off", "complete"].includes(rt.workflow?.state.phase ?? "")))
         ),
         true,
       );
@@ -746,6 +1016,7 @@ async function finishTurn(
   rt.lastStopCause = stopCause;
   if (
     stopCause === "authentication" &&
+    (!session.connection || session.connection === "legacy") &&
     !ctx.options.fake &&
     (events.activeProvider === "claude" || events.activeProvider === "codex")
   )

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { isConnectionChoice } from "../../shared/connections.js";
+import { unavailableConnections } from "../connections/ui-registry.js";
 import { resolvePermissionMode } from "../../shared/permission-modes.js";
 import { SessionSchedules } from "./schedules.js";
 import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
@@ -57,7 +59,11 @@ import {
   type StoredSession,
 } from "./store.js";
 import { itemsFromMessages } from "./transcript.js";
-import { runMcpCommand, runSessionTurn } from "./turn.js";
+import {
+  runMcpCommand,
+  runSessionTurn,
+  runOfficialSessionTurn,
+} from "./turn.js";
 import { runRewind } from "./rewind-command.js";
 import { rewindTurns, parseRewindChoice } from "../../shared/rewind.js";
 import { FileCheckpointStore } from "../checkpoints/store.js";
@@ -91,6 +97,7 @@ export type { ControllerOptions, Host } from "./context.js";
  * - settings-commands.ts  権限モード・既定モデル・/compact
  */
 export class SessionController {
+  private connectionCheck?: { sessionId: string; abort: AbortController };
   private readonly localBrowser: LocalBrowserSessions;
   private readonly browserJobs = new Map<string, AbortController>();
   private readonly handoffs: Handoffs;
@@ -296,7 +303,11 @@ export class SessionController {
     const workspaces = await this.workspaces.summaries();
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
+      officialDefault: !!this.options.officialSession,
       commands: this.commands,
+      ...(this.options.connections
+        ? { connections: this.options.connections.views() }
+        : {}),
       images: this.imageSettings,
       authentication: this.options.fake
         ? undefined
@@ -1058,6 +1069,7 @@ export class SessionController {
             };
           return await setMode(this.ctx, command);
         case "ready": {
+          this.connectionCheck?.abort.abort();
           for (const abort of this.browserJobs.values()) abort.abort();
           await this.localBrowser.stopAll();
           await Promise.all(
@@ -1165,6 +1177,149 @@ export class SessionController {
           await this.workspaces.forget(command.workspaceId);
           await this.emitState();
           return { ok: true };
+        case "siwc_account":
+        case "check_connection": {
+          if (command.type === "check_connection" && command.cancel) {
+            if (
+              this.connectionCheck &&
+              this.connectionCheck.sessionId !== command.sessionId
+            )
+              return { ok: false, error: "別のセッションの接続確認です。" };
+            this.connectionCheck?.abort.abort();
+            return { ok: true };
+          }
+          if (!this.options.connections)
+            return { ok: false, error: "開発版でのみ接続確認できます。" };
+          if (
+            this.connectionCheck ||
+            this.sessions
+              .list()
+              .some(
+                (s) =>
+                  this.ctx.sessionBusy.has(s.id) ||
+                  this.runtime(s.id).status !== "idle",
+              )
+          )
+            return {
+              ok: false,
+              error: "実行・接続確認の完了後に確認してください。",
+            };
+          if (!this.sessions.get(command.sessionId))
+            return { ok: false, error: "Unknown session" };
+          const check = {
+            sessionId: command.sessionId,
+            abort: new AbortController(),
+          };
+          this.connectionCheck = check;
+          try {
+            if (command.type === "siwc_account") {
+              if (!this.options.connections.account)
+                return { ok: false, error: "SIWC接続は未設定です。" };
+              await this.options.connections.account(
+                command.action,
+                command.account,
+                check.abort.signal,
+              );
+            } else await this.options.connections.check(check.abort.signal);
+            return {
+              ok: !check.abort.signal.aborted,
+              ...(check.abort.signal.aborted
+                ? { error: "接続確認をキャンセルしました。" }
+                : {}),
+            } as CommandResult;
+          } finally {
+            if (this.connectionCheck === check)
+              this.connectionCheck = undefined;
+            await this.emitState();
+          }
+        }
+        case "set_connection": {
+          const session = this.sessions.get(command.sessionId);
+          if (
+            !this.options.connections ||
+            !session ||
+            !isConnectionChoice(command.connection)
+          )
+            return { ok: false, error: "開発版の接続選択を確認してください。" };
+          if (
+            this.ctx.sessionBusy.has(session.id) ||
+            this.runtime(session.id).status !== "idle" ||
+            this.connectionCheck
+          )
+            return {
+              ok: false,
+              error: "実行・接続確認の完了後に選択してください。",
+            };
+          this.ctx.sessionBusy.add(session.id);
+          try {
+            const rt = await this.load(session.id);
+            const connectionAccount =
+              command.connection === "openai-siwc"
+                ? this.options.connections
+                    .views()
+                    .find((v) => v.mode === "openai-siwc")?.siwc?.selected
+                : undefined;
+            if (
+              ((session.connection ?? "legacy") !== command.connection ||
+                session.connectionAccount !== connectionAccount) &&
+              rt.messages.length
+            )
+              return {
+                ok: false,
+                error:
+                  "接続方式は空の新規セッションで選択してください。既存履歴を異なる認証経路へ転送しません。",
+              };
+            await this.sessions.save({
+              ...(this.sessions.get(session.id) ?? session),
+              connection: command.connection,
+              connectionAccount,
+            });
+            await this.emitState();
+            return { ok: true };
+          } finally {
+            this.ctx.sessionBusy.delete(session.id);
+          }
+        }
+        case "set_siwc_model": {
+          const session = this.sessions.get(command.sessionId);
+          const view = this.options.connections
+            ?.views()
+            .find((v) => v.mode === "openai-siwc");
+          if (
+            !session ||
+            this.connectionCheck ||
+            this.ctx.sessionBusy.has(session.id) ||
+            this.runtime(session.id).status !== "idle" ||
+            view?.status !== "available" ||
+            !view.siwc?.models.some((m) => m.slug === command.model)
+          )
+            return {
+              ok: false,
+              error: "選択したアカウントのモデル一覧を確認してください。",
+            };
+          this.ctx.sessionBusy.add(session.id);
+          try {
+            const rt = await this.load(session.id);
+            if (
+              rt.messages.length &&
+              (session.connection !== "openai-siwc" ||
+                session.connectionAccount !== view.siwc.selected)
+            )
+              return {
+                ok: false,
+                error: "空の新規セッションで接続とモデルを選択してください。",
+              };
+            await this.sessions.save({
+              ...session,
+              model: command.model,
+              siwcServerDefault: true,
+            });
+            await this.emitState();
+            return { ok: true };
+          } finally {
+            this.ctx.sessionBusy.delete(session.id);
+          }
+        }
         case "set_model":
           if (this.improvementReads.has(command.sessionId))
             return {
@@ -1177,6 +1332,8 @@ export class SessionController {
             command.effort,
           );
         case "close_session":
+          if (this.connectionCheck?.sessionId === command.sessionId)
+            this.connectionCheck.abort.abort();
           this.browserJobs.get(command.sessionId)?.abort();
           await this.localBrowser.stop(command.sessionId);
           return await this.closeSession(command.sessionId);
@@ -1209,8 +1366,16 @@ export class SessionController {
           return { ok: true };
         }
         case "send":
-          return this.send(command.sessionId, command.text, command.images);
+          return this.send(
+            command.sessionId,
+            command.text,
+            command.images,
+            undefined,
+            command.officialTask,
+          );
         case "abort": {
+          if (this.connectionCheck?.sessionId === command.sessionId)
+            this.connectionCheck.abort.abort();
           this.browserJobs.get(command.sessionId)?.abort();
           await this.localBrowser.stop(command.sessionId);
           this.preparations.get(command.sessionId)?.abort.abort();
@@ -1371,6 +1536,7 @@ export class SessionController {
     text: string,
     images?: ImageAttachment[],
     scheduled?: AbortSignal,
+    officialTask?: import("../../shared/official-session.js").OfficialTaskScope,
   ): Promise<CommandResult> {
     // Stop must remain usable while preparation/compact is awaiting I/O.
     if (
@@ -1416,7 +1582,14 @@ export class SessionController {
     this.preparations.set(sessionId, preparation);
     try {
       await this.localBrowser.stop(sessionId);
-      return await this.sendPrepared(sessionId, text, images, scheduled, abort);
+      return await this.sendPrepared(
+        sessionId,
+        text,
+        images,
+        scheduled,
+        abort,
+        officialTask,
+      );
     } catch (error) {
       if (abort.signal.aborted)
         return { ok: false, error: "送信を中断しました。" };
@@ -1435,7 +1608,110 @@ export class SessionController {
     images: ImageAttachment[] | undefined,
     scheduled: AbortSignal | undefined,
     abort: AbortController,
+    officialTask?: import("../../shared/official-session.js").OfficialTaskScope,
   ): Promise<CommandResult> {
+    if (this.options.officialSession) {
+      const session = this.sessions.get(sessionId)!;
+      if (this.stopped) return { ok: false, error: "Shutting down" };
+      const previous = await this.sessions.evaluationTask(sessionId);
+      if (previous?.recoveryRequired)
+        return { ok: false, error: RECOVERY_NOTICE };
+      if (previous?.active)
+        return {
+          ok: false,
+          error:
+            "旧経路の未完了タスクを公式経路へ引き継ぐことはできません。記録と作業を保全し、新しいセッションを使用してください。",
+        };
+      if (images?.length || text.trim().startsWith("/"))
+        return {
+          ok: false,
+          error:
+            "公式経路はテキストの質問・作業依頼のみ対応しています。画像・旧slashコマンドには送信しません。モデルはモデル切替で選択してください。",
+        };
+      if (
+        officialTask &&
+        (session.readOnly ||
+          session.permissionMode === "plan" ||
+          !session.workspaceId)
+      )
+        return {
+          ok: false,
+          error:
+            "作業依頼は書込み可能なプロジェクトを選択し、対象ファイルと独立テストを指定してください。",
+        };
+      if (!text.trim() || text.length > 4000)
+        return { ok: false, error: "公式経路の入力は1〜4000文字です。" };
+      const rt = await this.load(sessionId);
+      if (rt.status !== "idle")
+        return { ok: false, error: "Turn already running" };
+      abort.signal.throwIfAborted();
+      rt.abort = abort;
+      rt.status = "running";
+      rt.done = runOfficialSessionTurn(
+        this.ctx,
+        session,
+        rt,
+        text,
+        abort,
+        officialTask,
+      ).catch(() => undefined);
+      return { ok: true, sessionId };
+    }
+    if (this.connectionCheck)
+      return { ok: false, error: "接続確認の完了後に送信してください。" };
+    const selected = this.sessions.get(sessionId)?.connection ?? "legacy";
+    if (this.options.connectionTest && selected === "legacy")
+      return {
+        ok: false,
+        error: "Fixture profile requires an explicit new connection",
+      };
+    if (selected !== "legacy") {
+      const view = (
+        this.options.connections?.views() ?? unavailableConnections()
+      ).find((v) => v.mode === selected);
+      if (
+        !isConnectionChoice(selected) ||
+        view?.status !== "available" ||
+        (selected === "openai-siwc" &&
+          this.sessions.get(sessionId)?.connectionAccount !==
+            view?.siwc?.selected) ||
+        !this.options.connections?.selection(
+          selected,
+          this.sessions.get(sessionId)!.cwd,
+        )
+      )
+        return { ok: false, error: view?.reason ?? "接続設定が不正です。" };
+      if (images?.length || text.trim().startsWith("/"))
+        return {
+          ok: false,
+          error:
+            "新接続では通常のテキスト入力のみ対応しています。画像・段階指示・圧縮コマンドは未対応です。",
+        };
+      const route = resolveModel(
+        this.sessions.get(sessionId)!.model,
+        this.options.aliases,
+      );
+      if (
+        !this.options.fake &&
+        selected !== "openai-siwc" &&
+        route?.provider !== "claude"
+      )
+        return {
+          ok: false,
+          error: "接続方式に対応するモデルを明示選択してください。",
+        };
+      if (
+        selected === "openai-siwc" &&
+        view?.siwc &&
+        !view.siwc.models.some(
+          (m) => m.slug === this.sessions.get(sessionId)!.model,
+        )
+      )
+        return {
+          ok: false,
+          error: "選択したアカウントのモデル一覧からモデルを選択してください。",
+        };
+    }
     const imageSettings = (await loadMainConfig(this.options.home)).images;
     abort.signal.throwIfAborted();
     this.imageSettings = imageSettings;
@@ -1870,6 +2146,7 @@ export class SessionController {
   }
 
   private authenticationRequired(session: StoredSession) {
+    if (session.connection && session.connection !== "legacy") return false;
     if (this.options.fake || !this.options.authentication) return false;
     const provider = resolveModel(
       session.model,
@@ -1969,6 +2246,7 @@ export class SessionController {
     await this.sessions.save({
       ...session,
       model: resolved.model,
+      siwcServerDefault: false,
       effort: effort ?? session.effort,
     });
     await this.emitState();
@@ -2013,6 +2291,7 @@ export class SessionController {
   async shutdown(timeoutMs = 3000): Promise<void> {
     // Fence new commands and automatic work before the first asynchronous close.
     this.stopped = true;
+    this.connectionCheck?.abort.abort();
     for (const abort of this.browserJobs.values()) abort.abort();
     this.handoffs.clear();
     this.candidatePreviews.clear();
@@ -2039,5 +2318,6 @@ export class SessionController {
       Promise.all([...this.runtimes.values()].map((rt) => rt.mcp?.close())),
       new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),
     ]);
+    await this.options.connections?.close?.();
   }
 }

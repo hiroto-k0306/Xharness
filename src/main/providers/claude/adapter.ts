@@ -7,6 +7,7 @@ import {
   type ProviderRequest,
 } from "../provider.js";
 import { toClaudeRequest } from "./convert.js";
+import { loadCatalog } from "../../config/catalog.js";
 import { claudeRateLimit } from "./rate-limit.js";
 import { decodeClaudeStream } from "./stream.js";
 import { claudeUsage } from "./usage.js";
@@ -21,15 +22,15 @@ export class ClaudeAdapter implements Provider {
   readonly id = "claude";
   constructor(private readonly options: ClaudeAdapterOptions = {}) {}
   models() {
-    return [
-      "claude-haiku-4-5",
-      "claude-haiku-4-5-20251001",
-      "claude-opus-5-5",
-      "claude-sonnet-5-5",
-    ].map((id) => ({
-      id,
-      contextTokens: id.startsWith("claude-haiku") ? 200000 : 1000000,
-    }));
+    // Enabled Claude models in the catalog, including their accepted alternate IDs.
+    return loadCatalog()
+      .models.filter((m) => m.provider === "claude" && m.enabled)
+      .flatMap((m) =>
+        [...(m.acceptedIds ?? []), m.id].map((id) => ({
+          id,
+          contextTokens: m.contextTokens ?? 0,
+        })),
+      );
   }
   async *stream(
     request: ProviderRequest,

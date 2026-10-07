@@ -378,10 +378,12 @@ export function createSteps(options: LoopOptions): Record<StepName, Step> {
                     item.call.name,
                     item.call.input,
                     () =>
-                      item.tool!.execute(item.call.input, signal, {
-                        redact: options.redact,
-                        checkpoint: options.checkpoint,
-                      }),
+                      options.executeTool
+                        ? options.executeTool(item.call, item.tool!, signal)
+                        : item.tool!.execute(item.call.input, signal, {
+                            redact: options.redact,
+                            checkpoint: options.checkpoint,
+                          }),
                     { callId: item.call.id },
                   );
               if (item.result.stop && !item.result.isError)

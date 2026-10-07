@@ -16,7 +16,7 @@
 
 ## 2. 対象・構成・技術
 
-個人のWindows環境で動く汎用コーディングエージェント。公式CLIで認証したClaude / ChatGPTの資格情報を読み、プロバイダAdapterからHTTP/SSEでモデルを利用する。公式CLIの画面を通常会話の実行エンジンとして使う構成ではない。
+個人のWindows環境で動く汎用コーディングエージェント。公式CLIで認証したClaude / ChatGPTの資格情報を読み、プロバイダAdapterからHTTP/SSEでモデルを利用する。旧HTTP Adapter/headlessの方式は残す。2026-10-07のユーザー指示によるdesktopの公式SDK/App Server既定経路と初期対応範囲は§15末尾に記す。
 
 | 項目         | 現行の構成                                                                        |
 | ------------ | --------------------------------------------------------------------------------- |
@@ -186,6 +186,23 @@ WindowsではJobとStart-Processの追跡を使い、WindowStyle HiddenでJobを
 
 ## 7. モデル・文脈・画像・使用量
 
+モデルの情報と役割は [catalog/models.yaml](catalog/models.yaml) に一元化する（2026-10-07ユーザー承認）。コードは共通resolver（`src/main/config/catalog.ts`）だけを通してモデルIDと既定effortを得る。
+
+- `roles`：既定のメインモデル、枠切れ時のfallback、explorer、reviewer（Claude・Codexそれぞれのコード向け）、補助処理（Web要約・検索）、公式workflowの質問、Codex会話の圧縮、公式CLIによる認証更新の確認、接続テスト。設定ファイルの指定があればそちらが優先する。effortは役割の値、無ければそのモデルの `defaultEffort`（`efforts` の無いモデルには送らない）を、送信と表示の両方に使う（質問・Web要約・検索・接続テスト・Claude変換の省略時を含む）。
+- 別名（`provider:alias`）はカタログの `alias` から作る。
+- 能力はモデル名の文字列ではなくカタログで判定する。
+  - effortを送るかどうか：`efforts` の有無
+  - Claudeのサーバー圧縮：`capabilities.serverCompaction`
+  - 公式SDKのモデル別の使用量枠：`capabilities.quotaWindow`
+  - 別表記ID：`acceptedIds`
+  - カタログに無いIDだけは、従来のprovider推定を使う。
+- 画面のprovider判定・effort表示・質問先表示は、mainが送るカタログの解決結果を使う。
+- 役割のモデルが無効・提供終了（`retiresAt`・`retired`）・カタログに無い場合は、理由を示して停止し、別モデルへは置き換えない。
+- 公式workflowは、タスク開始時に計画モデルの選択キー・provider・送信用ID・effort・カタログ版（version・updatedAt・内容のsha256）を記録し、再開時はその記録を使う。
+  - 再開時に、記録した計画・実装・レビューのモデルがカタログで無効・提供終了なら、理由を示して停止する。
+  - 計画に提示するモデルは、公式接続の一覧にあり、かつカタログで有効なものに限る。
+- 計画は選択中のメインモデル、実装・レビューは計画で選ばれたモデルを使う方針と、利用不可時の停止方針・認証方式・許可範囲は変更していない。
+
 モデルとeffortは設定・UI・`/model`で選ぶ。モデルの能力に合わせAdapterが変換する。再試行可能な通信障害には上限付き再試行を行い、未知のエラーを無条件に繰り返さない。Codexの実測済み過負荷type / codeは最大3回再試行し、失敗試行の未確定表示を除去する。401時の処理は§8。
 
 再試行の対象は、HTTP 5xx、通信段階の失敗、Claudeの`overloaded_error` / `api_error`、Codexの`server_is_overloaded`。待ち時間は1・2・4秒で、1周あたり最大3回。429は`retry-after`が60秒以内(`retryWaitSec`)なら待って最大3回再試行する。再試行・フォールバックの試行も、1回ごとに通信回数へ数える。
@@ -253,6 +270,22 @@ Codexの画像入りツール結果は、既定ではfunction_call_outputのinpu
 **headlessにはこの自動更新ラッパーを接続していない。** `--fake`では実資格情報・更新CLIを使わない。実際の期限切れでの自動更新は基準日時点で未確認。資格情報の期限を編集して試さない。
 
 実装: [auto-refresh.ts](src/main/auth/auto-refresh.ts)、[プロバイダラッパー](src/main/providers/auth-refresh.ts)。詳細・試験結果: [auth-refresh-progress.md](docs/auth-refresh-progress.md)。
+
+### 正式接続境界の実験（通常経路には未接続）
+
+ユーザー承認済みの次段階として、src/main/connections/ にモデル推論と公式エージェント委任を分離した契約を追加した。OpenAI SIWC / Responses と Claude Agent SDK の提案方式・XツールMCP方式を、注入した認証・通信・SDKポートで比較する。計画・承認・ツール実行・履歴・評価はX側に保持する。モデル通信にSDKを使わない既存経路の規則に対する例外は、この未接続の実験に限定する。
+
+正式なクライアント登録・独立した認可・サブスク利用条件が未設定なら新方式は利用不可。CLI資格情報の転用、API課金への自動切替、既存設定の変更はしない。公式Claude SDK 0.3.290のAPI型・query・tool・MCPサーバーを結合し、単一writer下の永続intent台帳と既存Agent Loopの承認・使用量・trace・履歴保存に接続した。開発側の `connections:dev --connection` で明示選択する。通常アプリのUI・認証・ルーティングは変更せず、実通信も未確認。詳細・再実行・不足条件: [接続統合](docs/official-connections-integration.md)。
+
+### 開発版UIの明示接続選択（2026-10-06追記）
+
+非packaged版の通常UIでセッション単位の既存方式・SIWC・Claude Agent SDK A/Bを選択し、未設定／利用可能／認可必要と理由を表示する。旧recordは既存方式。空の新規セッションでのみ方式を変更でき、モデル・effort・既存設定は変更しない。未設定は送信前に拒否し、既存方式へ自動fallbackしない。本人のClaudeローカル開発では公式SDK自身のaccountInfoとUsage確認でfirst-partyサブスク・APIキー経路なし・Extra Usage無効を確認し、各送信でも入力を保留して再確認する。Xは資格情報の独自読出しや新規ログインをしない。利用可能状態は再起動で再確認する。SDK利用の別クレジット移行停止と第三者向け配布条件は分けて扱う。今回はHaikuの短文queryを1回だけ確認した。既存インストール・packaged版は更新しない。新接続の通常テキストAgent Loop以外（画像・workflow・補助モデル通信・slash command・Xフック）は未対応。設定済みXフックがあれば保護を無視せず通信前に停止する。最新の手順・制約・ライブ結果は [開発版接続UI](docs/official-connections-ui.md) を参照。
+
+### 接続の隔離UI検証とSIWCの認証前コード（2026-10-06追記）
+
+非packagedの明示 `--connection-test` は絶対パスの空homeだけを使い、Electron profileを先に分離する。従来の認証reader/更新/ログインとlegacy送信を接続せず、無害な固定ツール1個に限定する。本人の公式SDK認証でA/Bを各1タスク実測し、BはX承認/実行/結果保存に合格、Aはactionを提案せず不合格だった。Aの役割指示とmodel/effortのtrace形式を修正したが、その後のA実通信は未検証。実通信の指定回数を越えて再送しない。
+
+SIWCはPKCE/state/nonce、固定loopback callback、発行IDでのexchange、ID token署名/identity/scope照合、公開Responsesのstream/cancel/errorを実装しmockで検証した。[接続stage4](docs/official-connections-stage4.md) は当時の記録として保持する。ユーザー承認済みstage5では開発UIの登録/account選択・解除・welcome・catalog、stable host ID、Windows DPAPI/owner ACL/atomic保存とexclusive lease、refresh運用を接続した。回転前の停止意図と新tokenの保存を送信より先に行い、曖昧な失敗では旧refreshを自動再送せず再認可する。sessionのaccount参照はローカルUUID、SIWCモデルは公開catalog slugとserver-default reasoningを使い旧recordとの互換性を保つ。実登録/OAuth/provider通信/実token保存は0回。実アカウントのcatalog・推論・更新・解除とpreview/配布条件は未確認。Aの追加固定課題1タスクは合格、Bは前回成功を再利用。根拠・usage・検証範囲: [接続stage5](docs/official-connections-stage5.md)。
 
 ## 9. Web・MCP・フック・拡張
 
@@ -443,3 +476,71 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 | §26             | §4〜7、§11（汎用ツール・画像・巻き戻し・引き継ぎ・予約）        |
 
 過去のdocs内のDESIGN.md参照は、その作業当時の根拠として残す。新しい仕様変更はこの文書へ反映し、過去の試験結果を遡って書き換えない。
+
+## 15. 公式エージェント単一タスク実験
+
+Codexのcommand承認は登録済みテストの単一コマンド照合を維持し、それ以外の安全に解釈できる操作を「今回の操作だけ許可／拒否」の画面へ渡す。現在の追加対象は、計画で承認した通常ファイル1件へのGet-Content（Path/LiteralPath、Rawのみ）。作業場所、対象、要求理由、native session/turn、request IDを表示する。複合式・不明な構文・リンク・範囲外・秘密のパス・network/追加permissionは確認前に拒否する。Codexが付ける永続policy変更の提案（proposedExecpolicyAmendment）は、提案があるだけでは拒否しない。応答は常に今回だけの`accept`か`decline`で、`acceptWithExecpolicyAmendment`/`acceptForSession`は返さず、選択肢に`accept`がなければ拒否する。Windows上のCodexが使う`"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Command '<中身>'`と、`-Command`の前に`-NoProfile`だけが付いた形（2026-10-07ユーザー承認）の完全一致形（パス区切りは単一または二重のバックスラッシュ）だけを外し、中身に上記と同じ判定を適用する。中身に引用符・`$`・バッククォート・改行を含むもの、pwsh・他のオプション・追加引数を含むものは拒否する。ラッパー経由の登録テストは自動許可せず、今回だけの確認へ回す。要求の`environmentId`は、XHarness専用App Serverのthreadを`environments: []`で開始し、応答の`thread.environments`が空かnull（環境を選んでいない）で、IDが短い英数字の場合だけ通す。それ以外は拒否し、XHarnessは`environment/add`を呼ばない。承認は元のコマンド全文（ラッパー含む）・作業場所・対象に結び付ける（2026-10-06ユーザー承認）。任意shellやshell wrapperの一括承認は未対応。Codexの実装・fixのthreadには、承認経路へ回せるコマンド（計画済みファイルごとの `Get-Content -Raw <file>`。1回に1コマンド）を開発者指示で列挙し、登録テストは自分で実行せずXHarnessの独立テストとfixへの結果受け渡しに任せるよう伝え（2026-10-07ユーザー承認。実装役とXHarnessの役割分担の変更で、テストの実行はXHarnessだけが担う。Codexのsandbox内でnodeを解決できない件は未解決で、この変更で解消したとは扱わない）、複合コマンド・探索（rg・ls・Get-ChildItem・git等）・その他のコマンドは拒否されて再試行なしで停止すること、ファイル変更はファイル編集で行うことを伝える（2026-10-07ユーザー承認）。許可範囲と安全判定は変えない。ファイル変更には従来の計画scope検証を適用する。個別承認の期限は10分（2026-10-07ユーザー指示、以前は60秒）。承認を待つ間はphaseの制限時間を止め、決定後に残り時間から再開する。停止理由は拒否（`user-declined`）・期限切れ（`approval-expired`）・取消（`approval-cancelled`）を分けて記録する。期限後の許可は無効。
+
+操作承認はworkflow/request/session/turn/item/内容digestと固有nonceに結び付ける。期限（2026-10-07から10分。待機中はphaseの制限時間を止める）、取消、再起動、二重クリック、重複native要求、内容変更で再利用しない。許可後にもscope・内容・枠を照合し、拒否・期限切れ・禁止操作はphaseを停止する。pending許可は保存・復元しない。画面からの応答は厳格なIPC schemaと送信元検証を通す。
+
+Claudeのモデル証跡は指定alias/解決済みID、SDK初期化、parent=nullの主系列assistant、parentありの補助系列、parent欠測、resultモデル別使用量を分けて表示する。不一致を警告し、モデル名を読み替えない。同梱CLIの初期化時バージョン、PostModelSwitchおよびmodel_refusal_fallbackの変更元/変更先/種別を許可リストで保存する（通知本文や思考は保存しない）。通知欠測から変更なしと推定しない。
+
+公式phaseの診断はrequest IDに結び付け、送信モデル・phase・cwd・sandbox・承認設定・ツール名と状態・終了理由を保存する。ClaudeはSDK初期モデル、assistantモデルとparent_tool_use_id（欠測はunknown）、resultのモデル別トークン値を別々に保持する。モデル名の集合から主応答や補助処理の役割を推測しない。通常の最終返答は明示的な合成課題診断だけで最大8000文字を保存し、認証情報をマスクする。思考ブロック・rawイベント・ツール本文・認証応答は保存しない。一般のAgentRequestは本文保存を既定で無効にする。
+
+Codex実装/fixのnative exec用に公式code-mode hostを使用する。起動時の一律無効化を行わず、phase設定で実装/fixだけcode_mode/hostを有効にする。code_mode_onlyは無効にし、読み取りphaseには既存のツール無効設定を適用する。workspace-write、networkAccess:false、untrusted承認、既存のscope・テストコマンド照合は維持する。hostの起動失敗や権限拒否は停止対象で、sandboxを緩めない。
+
+Codexの残量と認証・課金経路は別に検証する。公式App Server 0.160.0のread応答にある`ordinaryUsageAllowed`を通常枠の許可根拠にし、未知を割合やreset時刻から補わない。`credits`残高だけで従量課金中と判定しない。現在の実験はChatGPT認証の個人向けPlus/Pro系plan、上書きのない公式openai接続先、標準速度、provider/model fallback無効に限定する。認証・plan・thread応答の経路が確認できない場合は具体的理由を表示し停止する。APIキー、追加credits利用への切替、購入や課金設定変更は行わない。workspaceの従量課金経路は未対応。
+
+`account/rateLimits/updated`は部分通知であり、read専用の許可項目の欠落を枠切れにしない。明示的な制限は即停止し、それ以外は`account/rateLimits/read`を最大10秒・同時1件で再取得する。再確認中は新たなモデル入力・ツール承認・完了結果の採用を待つ。実行中turnを再送せず、失敗・未知・拒否は理由を区別して停止する。遅れて届く成功応答で新しい停止を解除せず、認証状態変更も停止対象とする。根拠と実通信結果は[使用量再確認の検証](docs/official-workflow-quota-recheck-20261006.md)を参照。
+
+ユーザー承認済みの追加経路として、開発用の固定synthetic workflowを実装する。Claude SDKで読み取り専用のOpus計画、利用可能な公式model/effort/枠の検証、利用者の計画承認、SDKまたはCodex公式App Serverによるnative実装、実プロセスのテスト、実装と別providerによる固定base/head全diffレビュー、最大2修正を行う。Codexは公式App Server自身のChatGPT認証を使い、SIWC登録を条件にしない。Xが権限・取消・保存intent・commit・証跡・評価を管理する。既存routingやstage5の通常テキスト経路は変更しない。
+
+固定合成課題の単一タスクを通常UIの「公式workflow」パネルと開発CLIで扱う。UIで計画確認/承認/中断と安全なcheckpoint再開を実装し、保存したHEADと実行条件digestを照合する。不確定なquery/commit/testは自動再送せず、プロセス中断状態を明示して作業を保全する。新しい実通信は都度明示許可が必要。既存§8の通常テキスト接続のworkflow未対応はそのままとし、この独立パネル/CLIを例外とする。初期のSDK利用例外はこの経路に限定していた。2026-10-07の通常入力への拡張は本節末尾を参照。詳細と再実行・制約は[公式workflow単一タスク](docs/official-workflow-single-task.md)。
+
+公式経路のnative/testプロセスはWindows Jobへ停止状態で所属させてから開始する。非継承Job handleと固有の親leaseで取消・timeout・親終了時の子孫を停止し、breakawayは許可しない。包含できない環境では子を実行せず失敗する。再起動時に保存PIDを終了したり、不明な副作用を再送したりしない。Jobはfilesystemや外部サービスの隔離ではない。
+
+固定合成repositoryの模擬DAGを追加する。依存先・循環・scope・候補model/effortを検証し、同じfileを触る独立項目には計画承認前に直列依存を加える。最大並列数は2。子は管理領域内のdetached worktreeだけを使い、依存成果を取込済みの確定HEADから開始する。成果取込は管理checkoutへ直列cherry-pickし、intent・結果・取込HEADを保存して二重取込を防ぐ。統合後は全体テストと固定base/headの全差分レビューを行い、混在providerなら両者が横断レビューする。子ごと/全体それぞれ最大2修正。不明/不足quota・失敗・中断で新規起動を止め、保存済み安全境界だけ再開する。取消後もworktreeと証拠を残す。
+
+DAGのUI・runtime公開入口はfixture/modelの模擬実行に限定する。元checkoutや未コミット変更は対象にしない。一般プロジェクトの任意コード実行、実SDK/App Serverの複数worktree強制書込み隔離、native会話resumeは未対応で、模擬成功を実provider成功と呼ばない。詳細は[Jobと合成DAG](docs/official-workflow-dag.md)。
+
+一般projectにはproviderを起動しない非破壊preflight CLIを提供する。Git root/HEAD/dirty状態と計画scopeの実体・link・traversal・設定を検査し、未コミット変更や設定を修正しない。Git include/filterがある場合は追加Git検査を止め、HEAD/cleanを未知として報告する。inspectionPassedはnative実行許可やOS隔離の証明ではない。公式runtimeの権限ゲートとWindows shell/test隔離の限界、拒否テスト、再実行方法は[preflightと隔離境界](docs/official-workflow-preflight.md)を参照。
+
+修正経路の検証（障害注入、2026-10-07ユーザー承認）は、`--official-only`・`--verify-fix-cycle`・`XHARNESS_FAULT_INJECTION=fix-cycle-v1`・既定以外の絶対パスの`XHARNESS_HOME`がすべてそろうときだけ有効になり、通常利用では作成ボタンも処理も動かない。
+
+- **課題**：専用の合成課題`typed-add-v1`を使う。仕様（有限のnumber同士なら和、それ以外はTypeError）は最初から計画・実装役に伝える。登録テストは、左右両方のNaN・±Infinity・undefined、数値文字列、小数の正常例を含む。
+- **X1（実装品質）**：実装のコミットX1で独立テストを実行し、その結果を実装品質として記録する。X1はレビューしない。
+- **X2（障害注入）**：X1が合格した場合だけ、固定の不良内容（注入と明記したコメント付き）を作者`XHarness fault-injection`のコミットX2として作り、通常のテスト・レビュー対象にする。
+- **X3（修正）**：fixのコミットX3も、通常どおりテスト・レビューする。各段階のhead・テスト・レビューの対応は、記録の`injection.stages`に残し、baseは元のまま保つ。
+- **注入の条件**：注入は次がすべてそろうときだけ行う。
+  - workspaceとGitディレクトリの実体パスが、その課題用フォルダの中にある。
+  - baseが専用課題の内容と一致する。
+  - 注入の試行が0回である。
+- **再開・承認**：注入前に`pendingEffect: inject`と試行回数を保存する。注入中・注入失敗・効果なしの記録は再開しない。HEADがX1で注入コミットがない、という条件だけでは再開しない。注入の設定・内容digest・fixture初期ソースとテストのdigest・通信上限は実行ダイジェストに含め、そのダイジェストと計画を計画承認に結び付ける。同じspec名でも内容を変えて再開すると`execution-scope-changed`で止まる。保存済みの内容digestと現在の定義は再開時・注入条件確認時・書込み直前に照合する。通常の旧記録のダイジェスト形式は変えず、これらの結合情報がない古い障害注入記録の承認は流用しない。
+- **テスト結果の扱い**：専用fixtureだけはNodeのTAP reporterを指定し、既知の2テスト・集計・終了コードの整合を確認する。終了コード1だけでは想定内とせず、各不合格が`ERR_ASSERTION`のアサーション失敗と確認できたときだけ修正経路へ進める。読込エラー・予期しない例外・結果欠測や切り詰めなど分類できないものも基盤異常として停止する。次のものは基盤異常として停止する。
+  - 終了コードなし
+  - 負の終了コード
+  - 監督プロセスの起動・封じ込め失敗（125）
+- **テストとレビューの関係**：レビュー指摘0件でも、テスト失敗を合格にしない。それだけでレビューの見落としとも断定しない。
+- **通信上限**：phaseごとの上限（計画1・実装1・修正1・レビュー2）を、送信前に判定して記録に予約する。再起動後も引き継ぐ。
+
+### 配布版の公式専用プロファイル（2026-10-06）
+
+ユーザー承認済みの配布版検証・利用導線として、`--official-only` と絶対パスの `XHARNESS_HOME` を指定すると、単一起動ロック取得前にElectronのprofileをそのhomeへ分離する。公式SDK/App Server自身の正規認証を使用し、X側の旧資格情報reader・ログイン・自動更新・旧モデル送信を接続しない。このプロファイルは既存homeを移行・コピーしない。2026-10-07からdesktop通常入力の公式既定経路も使用する（本節末尾）。明示的な開発fixtureの接続経路は維持する。
+
+配布版の独立「公式workflow」パネル内にCodex実行ファイル（絶対exeパス）の設定保存と未設定/設定済み表示を置く。設定保存はモデル・認証通信を行わず、設定済みは認証済みを意味しない。未設定の実行は拒否する。同じパネルで、合成課題workspaceの保存先を任意に設定できる（2026-10-07ユーザー承認）。設定値は既存フォルダの絶対パスで、リンク・junctionを含まず、書き込めることを保存時と作成時の両方で確認する。使えない場合は理由を表示して停止し、既定やTempへ自動で切り替えない。未設定または空で保存した場合は、従来どおりworkflow保存領域内に作る。新しいworkspaceは `<保存先>\<workflow ID>\workspace-*` に作り、記録フォルダの `workspace.json` に親フォルダを残す。既存のworkspaceと記録は移動・書き換えしない。背景：Codexのelevated sandboxでは、ユーザープロファイル配下（Temp等）のworkspaceでPowerShellの現在位置が `C:\` になり、相対パスの読み取りが失敗する（[調査](docs/approval-denial-investigation-20261006.md)）。保存先の既定値は端末ごとに異なるため、特定のドライブを固定しない。計画モデルはClaude Opus固定ではなく、タスク開始時に利用者が選択中のメインモデル（`provider:alias` または完全ID）とeffortを使う（2026-10-07ユーザー承認）。カタログで完全IDに対応付け、そのモデルの公式接続（Claude SDK／Codex App Server）の一覧に同じIDがあり、通常枠とeffortが使えることを確認する。使えない場合は理由を表示して停止し、別モデルへ切り替えない。確定した計画モデルは記録に残し、再開時は記録したものを使う（実行中の選択変更は次のタスクから）。Claude・Codexのどちらが計画しても、同じ計画形式・検証・利用者承認を通す。空・無効な計画は1回で停止し、再試行しない。計画は課題ごとに、通常枠で使える公式モデル全体から実装担当とレビュー担当を選ぶ。レビュー担当は実装担当と別会社でなければ計画を拒否する。この項目より前の記録（計画モデル・レビュー担当の記録なし）は書き換えない。必要なモデルは、カタログの可変の別名ではなく、記録形式の版ごとの固定定義（`record-compat.ts`。v1：計画とClaude側レビューは `claude-opus-5-5` high、Codex側レビューは `gpt-6-luna` low）から、その情報が必要な旧記録の再開時だけ解決する。定義の無い版は推測せず停止し、新規タスクの開始はこの解決に依存しない。「質問だけ送信」は従来どおり計画を経由しない。単一課題のphase呼出は最大7回・各120秒、修正2回まで。SDK内部の往復数とは異なる。既存の開発用接続ピッカーは配布版には公開しない。
+
+公式パネルの「質問だけ送信」は通常の質問・追加質問・作業後の会話用。選択中のメインモデルの会社（模擬モードではパネルの選択）の質問用モデルへ。質問用モデルは完全IDで固定し（Claude `claude-haiku-4-5-20251001`、Codex `gpt-6-luna`、`QUESTION_MODELS`）、公式接続の一覧と一致するものだけを使い、一覧順に依存しない。一覧にない・利用できない場合は理由を表示して停止し、同じ会社の別モデルにも切り替えない。画面の質問先表示も同じ値を使う。質問はその会社の公式接続だけを確認し、もう一方の会社には接続しない（Claudeへの質問はCodex実行パス未設定でも可）。その会社が使えない場合は理由を表示して停止し、別の会社へ切り替えない（2026-10-07ユーザー承認）。計画・実装・別会社レビューのworkflowは従来どおり両社の接続を必須とする。、直近5件の質問・回答・workflow状態を含めた新しい読み取り専用queryを1回だけ送り、60秒で停止する。native会話のresumeではない。計画・実装・レビューには自動遷移せず、ツールを提供しない。回答・実行状態・取得済みusageを履歴とHTMLへ保存し、不確定な試行を再起動後に再送しない。認証と通常枠の確認はworkflowと同じ公式境界を使う。
+
+### Desktopの通常入力を公式経路へ（2026-10-07ユーザー指示）
+
+普通に起動したdesktopの通常入力を、Claude Agent SDK / Codex公式App Serverへ接続する。旧資格情報reader・ログイン・自動更新・HTTP Adapterは通常起動に接続せず、古い保存connection値から再有効化しない。home・セッションのmodel/effort・既存設定は移行や書換えをしない。未設定・利用不能・未知のモデルや通常枠は理由付きで停止し、HTTP・他モデル・別会社へfallbackしない。headlessと明示的なconnection-test/SIWC fixtureの開発経路は今回変更しない。
+
+通常入力は「質問／限定作業」の選択を不要とし、選択中のメインモデルと同じ会社の既存質問用モデル（Claude Haiku完全ID / Codex Luna完全ID）が自動判別する（2026-10-08ユーザー承認）。このセッションの直近10メッセージを参考データにして、ツールなしのqueryを1回・60秒まで行い、`intent: question | work` と日本語の `summary` を必須とする。質問なら同じqueryで回答して終了する。作業なら対象ファイルと既存Nodeテストの確認欄を表示し、利用者の対象確認後に初めて計画へ進む。判別は編集の許可ではなく、計画承認も従来どおり必要。無効・欠落した判別、取消、失敗は自動再試行せず停止し、質問へ読み替えない。旧通常チャットの選択メインモデルへの送信とは異なる。会話・判別・workflow記録・usage・レシートの参照を保存する。確認待ちはセッションごとで、新しい送信時に古い確認欄を閉じる。再起動後に未確認の作業を自動再送しない。独立した公式パネルの明示的な「質問だけ送信」は判別・作業開始を行わず、通常セッションの記録や模擬／実通信の異なる記録を参考履歴に混ぜない。
+
+限定作業は現在のセッションのcwdを使う。新たなプロジェクトコピーは作らない。通常セッションの既存worktreeがあればその場所で、なければ選択したフォルダーで作業する。既存worktreeの反映は従来のkeep/merge/remove操作を維持する。初期対応はcleanなGit作業場所、変更対象の相対パス1〜29件、変更対象から除外した既存Node .js/.mjs/.cjsテスト1件で検証できる単一課題に限定する。mainが保存セッションから供給した元repoとの相互参照を確認できるworktreeだけを許可する。汚れた作業場所、リンク、秘密scope、native/project設定、Git filter/include等は修正せず停止する。Gitの改行設定差等でcleanを確認できない場合も停止し、設定を勝手に変えない。
+
+選択メインモデル/effortで計画し、計画が利用可能な実装モデルと別会社のレビュー担当を選ぶ。利用者の計画承認前には編集・commit・テストを実行しない。計画は変更対象・現在の作業場所・テストコマンド・ローカルテストのOS隔離の限界を表示し、実行条件digestと結合する。承認後は同じcwdでscope内変更をcommitし、Xがnode --testを独立実行、固定base/head全差分レビュー、最大2修正を行う。phase呼出は最大7回・各120秒。テストファイルを変更せず、モデル自己申告やレビューをテスト合格に読み替えない。元repoへの別の自動コピー反映機能はない。
+
+既存のX権限ルール・フック・通信回数上限をnative経路に適用できない初期対応では、これらが設定されていれば無視せず明示停止する。自動モードでも今回の計画承認は省略しない。画像・旧slash機能・任意shell・依存install・実案件DAG・workerごとの追加worktree分離・native会話resume・実案件の自動再開は未対応。中断後の未確定な副作用は再送せず、保存記録と作業を保全する。ローカルNodeテストは任意コードの副作用をOSで完全隔離しないため、未知のrepoを選んだだけでは実行しない。実行の承認はそのテスト内容も利用者が確認して行う。画面上の模擬試験の成功は実providerや配布exeの成功を意味しない。
+
+実装・オフライン確認・残る制約は [通常入力の公式既定経路](docs/official-default-session-20261007.md)。

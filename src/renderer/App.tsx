@@ -3,11 +3,14 @@ import { DEFAULT_IMAGES } from "../shared/images.js";
 import { builtinCommands } from "../shared/commands.js";
 import { AgentsPanel } from "./components/AgentsPanel.js";
 import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
+import { OfficialWorkflowPanel } from "./components/OfficialWorkflowPanel.js";
 import { PhaseBar } from "./components/PhaseBar.js";
 import { ModelPicker } from "./components/ModelPicker.js";
+import { ConnectionPicker } from "./components/ConnectionPicker.js";
 import { PlanApproval } from "./components/PlanApproval.js";
 import { RewindApproval } from "./components/RewindApproval.js";
 import { useEffect, useState } from "react";
+import { setUiModelCatalog, uiSendsEffort } from "./state/model-catalog.js";
 import {
   Hero,
   LoopFlow,
@@ -31,15 +34,17 @@ import { providerOf } from "./state/steps.js";
 import { useStore } from "./state/store.js";
 import styles from "./App.module.css";
 
-/** effort は Haiku には送らないので表示もしない(§7.1) */
+/** effort を送らないモデル(カタログに efforts が無い)は表示もしない(§7.1) */
 function modelLabel(model: string, effort: string): string {
-  return model === "fake" || /^claude-haiku/.test(model)
-    ? model
-    : `${model} · ${effort}`;
+  return uiSendsEffort(model) ? `${model} · ${effort}` : model;
 }
 
 export function App() {
   const [modelOpen, setModelOpen] = useState(false);
+  const [officialFiles, setOfficialFiles] = useState("");
+  const [officialTest, setOfficialTest] = useState("");
+  const [officialError, setOfficialError] = useState("");
+  const [officialOpenSignal, setOfficialOpenSignal] = useState(0);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [improvementsOpen, setImprovementsOpen] = useState(false);
   const [skillDraft, setSkillDraft] = useState("");
@@ -54,8 +59,17 @@ export function App() {
   const s = useStore();
   const { app, views, prefs } = s;
   useEffect(() => s.start(), []);
+  // The UI follows the same catalog the main process resolved.
+  setUiModelCatalog(app?.models);
 
   const current = app?.currentSessionId ?? null;
+  const scopeRequest = current ? views[current]?.officialScopeText : undefined;
+  useEffect(() => {
+    // Scope fields belong to the current session only.
+    setOfficialFiles("");
+    setOfficialTest("");
+    setOfficialError("");
+  }, [current, scopeRequest]);
   useEffect(() => setSkillsOpen(false), [current]);
   useEffect(() => setImprovementsOpen(false), [current]);
   const view = current ? views[current] : undefined;
@@ -279,7 +293,7 @@ export function App() {
             onSort={(sort) => s.setPrefs({ sort })}
           />
         )}
-        <main className={styles.content}>
+        <main className={styles.content} data-session-id={current ?? ""}>
           {!app.fake && app.authentication && (
             <AuthenticationPanel
               views={app.authentication}
@@ -495,6 +509,55 @@ export function App() {
               }}
             />
           )}
+          {app.connections && current && (
+            <ConnectionPicker
+              key={current}
+              views={app.connections}
+              current={session?.connection ?? "legacy"}
+              modelCommand={(slug) =>
+                window.harness.command({
+                  type: "set_siwc_model",
+                  sessionId: current,
+                  model: slug,
+                })
+              }
+              disabled={session?.status !== "idle"}
+              accountCommand={(action, account) =>
+                window.harness.command({
+                  type: "siwc_account",
+                  sessionId: current,
+                  action,
+                  account,
+                })
+              }
+              command={(action, connection) =>
+                window.harness.command(
+                  action === "apply"
+                    ? { type: "set_connection", sessionId: current, connection }
+                    : {
+                        type: "check_connection",
+                        sessionId: current,
+                        cancel: action === "cancel",
+                      },
+                )
+              }
+            />
+          )}
+          {session?.connection === "openai-siwc" && (
+            <span>
+              Using ChatGPT plan
+              {session.siwcServerDefault
+                ? " · 推論設定: モデルの既定値"
+                : ""} ·{" "}
+              <a
+                href="https://chatgpt.com/#settings/Usage"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Manage usage
+              </a>
+            </span>
+          )}
           {modelOpen && current && (
             <ModelPicker
               models={app.models ?? []}
@@ -582,6 +645,86 @@ export function App() {
               onOpenChange={setImprovementsOpen}
             />
           )}
+          <OfficialWorkflowPanel
+            openSignal={officialOpenSignal}
+            mainModel={model}
+            mainEffort={effort}
+            mainProvider={
+              (app.models ?? []).find((m) => m.id === model)?.provider ??
+              (/^(claude|codex):/.exec(model ?? "")?.[1] as
+                "claude" | "codex" | undefined)
+            }
+          />
+          {app.officialDefault && (
+            <section aria-label="公式入力の自動判別">
+              {officialError && <p role="alert">{officialError}</p>}
+              <p>
+                公式Claude SDK / Codex App
+                Serverを使用します。旧HTTPへ自動切替しません。
+              </p>
+              <p>
+                質問・作業を同じ会社のHaiku /
+                Lunaで自動判別します。質問はその場で回答し、作業は対象確認と計画承認を待ちます。
+              </p>
+              {view?.officialScopeText && (
+                <>
+                  <p>作業依頼：{view.officialScopeText}</p>
+                  <p>
+                    現在のセッションの作業場所を使います。既存worktreeの有無や完了時の反映操作は従来どおりです。最初はcleanなGit作業場所と、既存Nodeテストで検証できる単一課題のみ対応します。
+                  </p>
+                  <label>
+                    変更対象（相対パス、1行1件）
+                    <textarea
+                      aria-label="公式作業の変更対象"
+                      value={officialFiles}
+                      onChange={(e) => setOfficialFiles(e.target.value)}
+                      disabled={!!view?.running}
+                    />
+                  </label>
+                  <label>
+                    独立テスト（既存の相対パス）
+                    <input
+                      aria-label="公式作業の独立テスト"
+                      placeholder="test/acceptance.test.mjs"
+                      value={officialTest}
+                      onChange={(e) => setOfficialTest(e.target.value)}
+                      disabled={!!view?.running}
+                    />
+                  </label>
+                  <p>
+                    依存インストール・任意shell・自動再開は行いません。ローカルNodeテストの副作用をOSで完全隔離する機能ではありません。計画で対象とテスト実行を確認してから承認します。
+                  </p>
+                  <button
+                    disabled={!!view.running || waiting}
+                    onClick={() => {
+                      const files = officialFiles
+                        .split(/\r?\n/)
+                        .map((f) => f.trim())
+                        .filter(Boolean);
+                      if (
+                        !files.length ||
+                        !officialTest.trim() ||
+                        !session?.workspaceId
+                      ) {
+                        setOfficialError(
+                          "プロジェクト、変更対象、既存の独立テストを指定してください。対象未確認のまま計画へ進みません。",
+                        );
+                        return;
+                      }
+                      setOfficialError("");
+                      setOfficialOpenSignal((n) => n + 1);
+                      void s.send(view.officialScopeText!, undefined, {
+                        files,
+                        testFile: officialTest.trim(),
+                      });
+                    }}
+                  >
+                    対象を確認して計画を作成
+                  </button>
+                </>
+              )}
+            </section>
+          )}
           <PromptLine
             onDraftChange={setSkillDraft}
             maxImages={app.images?.maxPerMessage}
@@ -619,7 +762,9 @@ export function App() {
             modelColor={
               providerOf(model) === "codex" ? "var(--codex)" : "var(--claude)"
             }
-            onSubmit={(text, images) => s.send(text, images)}
+            onSubmit={(text, images) => {
+              return s.send(text, images);
+            }}
           />
         </main>
       </div>

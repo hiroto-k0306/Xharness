@@ -1,5 +1,6 @@
 // main / preload / renderer が共有する契約。electron を import しない。
 import { parseRewindChoice } from "./rewind.js";
+import { parseOfficialTaskScope } from "./official-session.js";
 import {
   isConnectionChoice,
   type ConnectionChoice,
@@ -114,6 +115,8 @@ export interface WorkspaceSummary {
 }
 
 export interface AppState {
+  /** Ordinary submissions use native official agents; saved legacy choices do not enable HTTP. */
+  officialDefault?: boolean;
   connections?: ConnectionView[];
   images?: typeof import("./images.js").DEFAULT_IMAGES;
   commands?: import("./commands.js").CommandSuggestion[];
@@ -395,6 +398,7 @@ export type HarnessCommand =
   | { type: "abort_repository" }
   | {
       type: "send";
+      officialTask?: import("./official-session.js").OfficialTaskScope;
       sessionId: string;
       text: string;
       images?: import("./images.js").ImageAttachment[];
@@ -625,6 +629,11 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
     case "pick_folder":
       return { type: c.type };
     case "send": {
+      const officialTask =
+        c.officialTask === undefined
+          ? undefined
+          : parseOfficialTaskScope(c.officialTask);
+      if (c.officialTask !== undefined && !officialTask) return undefined;
       if (
         !str(c.sessionId) ||
         typeof c.text !== "string" ||
@@ -633,7 +642,12 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
         return undefined;
       if (c.images === undefined)
         return str(c.text, MAX_TEXT)
-          ? { type: "send", sessionId: c.sessionId, text: c.text }
+          ? {
+              type: "send",
+              sessionId: c.sessionId,
+              text: c.text,
+              ...(officialTask ? { officialTask } : {}),
+            }
           : undefined;
       if (!Array.isArray(c.images)) return undefined;
       if (!c.text && !c.images.length) return undefined;
@@ -642,7 +656,13 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
           attachmentInfo(i);
           return { mediaType: i.mediaType, data: i.data };
         });
-        return { type: "send", sessionId: c.sessionId, text: c.text, images };
+        return {
+          type: "send",
+          sessionId: c.sessionId,
+          text: c.text,
+          images,
+          ...(officialTask ? { officialTask } : {}),
+        };
       } catch {
         return undefined;
       }

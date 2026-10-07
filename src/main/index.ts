@@ -72,6 +72,9 @@ const siwcFixture = siwcFixtureProfile(
   process.env.XHARNESS_HOME,
   connectionTest,
 );
+// Ordinary startup now uses official native agents. Development fixtures retain their explicit paths.
+// Existing settings/history remain in the same home; legacy HTTP is never an implicit fallback.
+const officialDefault = !connectionTest && !siwcFixture;
 // 明示的なfakeのuserDataは単一起動ロックより前に分離する。実版は従来の保存先。
 const fakeUserData =
   officialUserData ??
@@ -186,31 +189,35 @@ async function start() {
     },
   });
   const providers =
-    fake || connectionTest
-      ? [
-          new FakeProvider({ fixturesDir: fixtures, quota: true }),
-          new FakeProvider({
-            provider: "codex",
-            quota: true,
-            fixturesDir: app.isPackaged
-              ? join(process.resourcesPath, "fixtures-codex")
-              : join(app.getAppPath(), "test/fixtures/codex"),
-          }),
-        ]
-      : [
-          new RefreshingProvider(new ClaudeAdapter(), autoRefresh),
-          new RefreshingProvider(
-            new CodexAdapter({
-              toolImageMode: async () =>
-                (await loadMainConfig(home)).providers.codex.toolImageMode,
+    officialOnly || officialDefault
+      ? [unavailableLegacy("claude"), unavailableLegacy("codex")]
+      : fake || connectionTest
+        ? [
+            new FakeProvider({ fixturesDir: fixtures, quota: true }),
+            new FakeProvider({
+              provider: "codex",
+              quota: true,
+              fixturesDir: app.isPackaged
+                ? join(process.resourcesPath, "fixtures-codex")
+                : join(app.getAppPath(), "test/fixtures/codex"),
             }),
-            autoRefresh,
-          ),
-        ];
+          ]
+        : [
+            new RefreshingProvider(new ClaudeAdapter(), autoRefresh),
+            new RefreshingProvider(
+              new CodexAdapter({
+                toolImageMode: async () =>
+                  (await loadMainConfig(home)).providers.codex.toolImageMode,
+              }),
+              autoRefresh,
+            ),
+          ];
   const secrets =
-    fake || connectionTest || officialOnly ? [] : await readLocalSecrets();
+    fake || connectionTest || officialOnly || officialDefault
+      ? []
+      : await readLocalSecrets();
   const authentication =
-    fake || connectionTest || officialOnly
+    fake || connectionTest || officialOnly || officialDefault
       ? undefined
       : new Authentication({
           autoRefreshEnabled: () => autoRefreshEnabled,
@@ -233,7 +240,10 @@ async function start() {
     windowsSiwcProtector(safeStorage),
   );
   const siwc =
-    !officialOnly && !app.isPackaged && (!fake || siwcFixture)
+    !officialOnly &&
+    !officialDefault &&
+    !app.isPackaged &&
+    (!fake || siwcFixture)
       ? siwcFixture
         ? fixtureSiwcManager(vault)
         : new SiwcManager(vault, (url) => shell.openExternal(url), {
@@ -244,7 +254,13 @@ async function start() {
           })
       : undefined;
   controller = new SessionController({
-    ...(!officialOnly && !app.isPackaged
+    ...(officialDefault
+      ? {
+          officialSession: (request, signal) =>
+            officialWorkflow!.submitSession(request, signal),
+        }
+      : {}),
+    ...(!officialOnly && !officialDefault && !app.isPackaged
       ? {
           connections: developmentUiConnections(
             home,
@@ -265,13 +281,9 @@ async function start() {
     cliEffort: (startup.effort ??
       (connectionTest ? connectionTestStartup().effort : undefined)) as
       "low" | "medium" | "high" | "xhigh" | "max" | undefined,
-    provider: officialOnly
-      ? unavailableLegacy(main.choice.provider)
-      : providers.find((p) => p.id === main.choice.provider)!,
-    providers: officialOnly
-      ? [unavailableLegacy("claude"), unavailableLegacy("codex")]
-      : providers,
-    fallback: officialOnly ? {} : main.fallback,
+    provider: providers.find((p) => p.id === main.choice.provider)!,
+    providers,
+    fallback: officialOnly || officialDefault ? {} : main.fallback,
     web: main.web,
     model: main.choice.model,
     effort: main.choice.effort,
@@ -289,6 +301,7 @@ async function start() {
     ...(!fake &&
     !connectionTest &&
     !officialOnly &&
+    !officialDefault &&
     safeStorage.isEncryptionAvailable()
       ? {
           mcpSecrets: fileSecretStore(join(home, "secrets"), {

@@ -59,7 +59,11 @@ import {
   type StoredSession,
 } from "./store.js";
 import { itemsFromMessages } from "./transcript.js";
-import { runMcpCommand, runSessionTurn } from "./turn.js";
+import {
+  runMcpCommand,
+  runSessionTurn,
+  runOfficialSessionTurn,
+} from "./turn.js";
 import { runRewind } from "./rewind-command.js";
 import { rewindTurns, parseRewindChoice } from "../../shared/rewind.js";
 import { FileCheckpointStore } from "../checkpoints/store.js";
@@ -299,6 +303,7 @@ export class SessionController {
     const workspaces = await this.workspaces.summaries();
     const branch = new Map(workspaces.map((w) => [w.id, w.branch]));
     return {
+      officialDefault: !!this.options.officialSession,
       commands: this.commands,
       ...(this.options.connections
         ? { connections: this.options.connections.views() }
@@ -1361,7 +1366,13 @@ export class SessionController {
           return { ok: true };
         }
         case "send":
-          return this.send(command.sessionId, command.text, command.images);
+          return this.send(
+            command.sessionId,
+            command.text,
+            command.images,
+            undefined,
+            command.officialTask,
+          );
         case "abort": {
           if (this.connectionCheck?.sessionId === command.sessionId)
             this.connectionCheck.abort.abort();
@@ -1525,6 +1536,7 @@ export class SessionController {
     text: string,
     images?: ImageAttachment[],
     scheduled?: AbortSignal,
+    officialTask?: import("../../shared/official-session.js").OfficialTaskScope,
   ): Promise<CommandResult> {
     // Stop must remain usable while preparation/compact is awaiting I/O.
     if (
@@ -1570,7 +1582,14 @@ export class SessionController {
     this.preparations.set(sessionId, preparation);
     try {
       await this.localBrowser.stop(sessionId);
-      return await this.sendPrepared(sessionId, text, images, scheduled, abort);
+      return await this.sendPrepared(
+        sessionId,
+        text,
+        images,
+        scheduled,
+        abort,
+        officialTask,
+      );
     } catch (error) {
       if (abort.signal.aborted)
         return { ok: false, error: "送信を中断しました。" };
@@ -1589,7 +1608,55 @@ export class SessionController {
     images: ImageAttachment[] | undefined,
     scheduled: AbortSignal | undefined,
     abort: AbortController,
+    officialTask?: import("../../shared/official-session.js").OfficialTaskScope,
   ): Promise<CommandResult> {
+    if (this.options.officialSession) {
+      const session = this.sessions.get(sessionId)!;
+      if (this.stopped) return { ok: false, error: "Shutting down" };
+      const previous = await this.sessions.evaluationTask(sessionId);
+      if (previous?.recoveryRequired)
+        return { ok: false, error: RECOVERY_NOTICE };
+      if (previous?.active)
+        return {
+          ok: false,
+          error:
+            "旧経路の未完了タスクを公式経路へ引き継ぐことはできません。記録と作業を保全し、新しいセッションを使用してください。",
+        };
+      if (images?.length || text.trim().startsWith("/"))
+        return {
+          ok: false,
+          error:
+            "公式経路はテキストの質問・作業依頼のみ対応しています。画像・旧slashコマンドには送信しません。モデルはモデル切替で選択してください。",
+        };
+      if (
+        officialTask &&
+        (session.readOnly ||
+          session.permissionMode === "plan" ||
+          !session.workspaceId)
+      )
+        return {
+          ok: false,
+          error:
+            "作業依頼は書込み可能なプロジェクトを選択し、対象ファイルと独立テストを指定してください。",
+        };
+      if (!text.trim() || text.length > 4000)
+        return { ok: false, error: "公式経路の入力は1〜4000文字です。" };
+      const rt = await this.load(sessionId);
+      if (rt.status !== "idle")
+        return { ok: false, error: "Turn already running" };
+      abort.signal.throwIfAborted();
+      rt.abort = abort;
+      rt.status = "running";
+      rt.done = runOfficialSessionTurn(
+        this.ctx,
+        session,
+        rt,
+        text,
+        abort,
+        officialTask,
+      ).catch(() => undefined);
+      return { ok: true, sessionId };
+    }
     if (this.connectionCheck)
       return { ok: false, error: "接続確認の完了後に送信してください。" };
     const selected = this.sessions.get(sessionId)?.connection ?? "legacy";

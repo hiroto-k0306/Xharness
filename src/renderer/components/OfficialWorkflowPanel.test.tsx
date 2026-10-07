@@ -1,15 +1,137 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { OfficialWorkflowPanel } from "./OfficialWorkflowPanel.js";
 import type {
   OfficialWorkflowCommand,
   OfficialWorkflowView,
 } from "../../shared/official-workflow.js";
+import type { WorkflowRecord } from "../../main/workflow/official/runtime.js";
 const QUESTION_MODELS = {
   claude: "claude-question-x",
   codex: "codex-question-y",
 };
 afterEach(() => vi.unstubAllGlobals());
+it.each([
+  "saved",
+  "saved-default",
+  "legacy-claude",
+  "legacy-codex",
+  "unknown-version",
+])(
+  "shows saved approval assignments independently of the current selection (%s)",
+  async (kind) => {
+    const provider = kind === "legacy-claude" ? "claude" : "codex";
+    const task = {
+      id: "add",
+      title: "Add numbers",
+      instructions: "Edit add.mjs",
+      files: ["add.mjs"],
+      dependsOn: [],
+      acceptance: ["typed-add"],
+      assignee: {
+        provider,
+        model:
+          provider === "claude" ? "claude-haiku-4-5-20251001" : "gpt-6.1-sol",
+        effort: "medium",
+        reason: "Saved implementation reason",
+      },
+      ...(kind.startsWith("saved")
+        ? {
+            reviewer: {
+              provider: "claude",
+              model: "claude-sonnet-5-5",
+              effort: kind === "saved-default" ? null : "low",
+              reason: "Saved review reason",
+            },
+          }
+        : {}),
+    } as NonNullable<WorkflowRecord["plan"]>["tasks"][number];
+    const record: WorkflowRecord = {
+      version: 1,
+      id: "approval-record",
+      simulated: true,
+      goal: "fixture",
+      cwd: "isolated",
+      startedAt: "2026-10-07T00:00:00Z",
+      status: "approval",
+      next: "approval",
+      base: "base",
+      head: "base",
+      correctionRounds: 0,
+      calls: [],
+      tools: [],
+      checks: [],
+      reviews: [],
+      commits: [],
+      plan: { summary: "Saved plan", tasks: [task] },
+    };
+    // Future/unknown records can arrive from disk; their missing roles cannot be guessed.
+    if (kind === "unknown-version") Object.assign(record, { version: 99 });
+    const before = JSON.stringify(record);
+    const view: OfficialWorkflowView = {
+      available: true,
+      simulated: true,
+      approval: { id: record.id, digest: "saved-approval-digest" },
+      records: [{ record, resumeBlocked: null, reportHref: "report.html" }],
+    };
+    const commands: OfficialWorkflowCommand[] = [];
+    vi.stubGlobal("harness", {
+      officialWorkflow: vi.fn(async (command: OfficialWorkflowCommand) => {
+        commands.push(command);
+        return view;
+      }),
+    });
+    const { rerender } = render(
+      <OfficialWorkflowPanel mainModel="claude-opus-5-5" mainEffort="max" />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "公式workflow" }));
+    const implementation = await screen.findByRole("region", {
+      name: "add 実装担当",
+    });
+    const review = screen.getByRole("region", { name: "add レビュー担当" });
+    expect(implementation).toHaveTextContent(task.assignee.provider);
+    expect(implementation).toHaveTextContent(task.assignee.model);
+    expect(implementation).toHaveTextContent("medium");
+    if (kind.startsWith("saved")) {
+      expect(review).toHaveTextContent("claude-sonnet-5-5");
+      expect(review).toHaveTextContent(
+        kind === "saved-default" ? "server default（指定なし）" : "low",
+      );
+      expect(review).toHaveTextContent("Saved review reason");
+      expect(review).toHaveTextContent("保存済み計画");
+    } else if (kind === "unknown-version") {
+      expect(within(review).getAllByText("未確定")).toHaveLength(3);
+      expect(review).toHaveTextContent("固定定義なし");
+    } else {
+      expect(review).toHaveTextContent(
+        provider === "claude" ? "gpt-6-luna" : "claude-opus-5-5",
+      );
+      expect(review).toHaveTextContent(provider === "claude" ? "low" : "high");
+      expect(review).toHaveTextContent("計画に記録なし：記録形式v1の固定設定");
+    }
+    const savedDisplay = review.textContent;
+    rerender(
+      <OfficialWorkflowPanel
+        mainModel="codex:changed-alias"
+        mainEffort="high"
+      />,
+    );
+    expect(review.textContent).toBe(savedDisplay);
+    expect(JSON.stringify(record)).toBe(before);
+    fireEvent.click(screen.getByRole("button", { name: "この計画を承認" }));
+    await waitFor(() =>
+      expect(commands.filter((c) => c.action === "approve")).toEqual([
+        { action: "approve", id: record.id, digest: "saved-approval-digest" },
+      ]),
+    );
+  },
+);
 it.each([true, false])(
   "shows concrete operation and sends one bound decision (%s)",
   async (allow) => {

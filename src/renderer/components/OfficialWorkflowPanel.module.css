@@ -47,3 +47,29 @@
   margin: 16px 0;
   overflow-wrap: anywhere;
 }
+.assignments {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.assignments section {
+  border: 1px solid #526181;
+  padding: 12px;
+  min-width: 0;
+}
+.assignments h5 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.assignments dl {
+  margin: 0 0 8px;
+}
+.assignments dt {
+  color: #a9b7cd;
+  font-size: 12px;
+}
+.assignments dd {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}

@@ -5,6 +5,7 @@ import type {
 } from "../../shared/official-workflow.js";
 import styles from "./OfficialWorkflowPanel.module.css";
 import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
+import { OfficialPlanAssignments } from "./OfficialPlanAssignments.js";
 export function OfficialWorkflowPanel({
   mainModel,
   mainEffort,
@@ -364,11 +365,7 @@ export function OfficialWorkflowPanel({
                         {t.acceptance.join(", ")} / 依存{" "}
                         {t.dependsOn.join(", ") || "なし"}
                       </p>
-                      <p>
-                        {t.assignee.provider} / {t.assignee.model} /{" "}
-                        {t.assignee.effort ?? "server default"}
-                      </p>
-                      <p>選択理由：{t.assignee.reason}</p>
+                      <OfficialPlanAssignments record={r} task={t} />
                     </div>
                   ))}
                 </>

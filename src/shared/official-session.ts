@@ -1,4 +1,4 @@
-/** Explicit work intent; plain text without this scope is a question, never an inferred write. */
+/** Confirmed scope is required before planning; inferred intent never grants write permission. */
 export interface OfficialTaskScope {
   files: string[];
   /** One existing, immutable Node test file. No shell, installation or generated tests. */
@@ -34,6 +34,7 @@ export interface OfficialSessionSubmission {
   history: { role: "user" | "assistant"; text: string }[];
 }
 export interface OfficialSessionResult {
+  taskRequired?: boolean;
   summary: string;
   workflowId: string;
   status: string;

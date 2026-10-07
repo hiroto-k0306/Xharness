@@ -74,7 +74,11 @@ export const reviewContract = z
   .strict();
 export type OfficialReview = z.infer<typeof reviewContract>;
 export const implementationContract = z.object({ summary: text }).strict();
+export const inputIntentContract = z
+  .object({ summary: text, intent: z.enum(["question", "work"]) })
+  .strict();
 export const schemas = {
+  inputIntent: z.toJSONSchema(inputIntentContract, { target: "draft-7" }),
   plan: z.toJSONSchema(planContract, { target: "draft-7" }),
   review: z.toJSONSchema(reviewContract, { target: "draft-7" }),
   implement: z.toJSONSchema(implementationContract, { target: "draft-7" }),

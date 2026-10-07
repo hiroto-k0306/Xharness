@@ -60,6 +60,7 @@ export const approvalDigest = (
     : digest(record.plan);
 export interface WorkflowRecord {
   sessionId?: string;
+  inputIntent?: "question" | "work";
   project?: {
     source: string;
     sourceHead: string;

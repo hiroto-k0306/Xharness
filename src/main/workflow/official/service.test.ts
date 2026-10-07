@@ -684,7 +684,12 @@ function listAgent(
       return {
         status: "completed",
         dispatched: true,
-        output: { summary: "ok" },
+        output: {
+          summary: "ok",
+          ...(JSON.stringify(request.outputSchema).includes('"intent"')
+            ? { intent: "question" }
+            : {}),
+        },
         observedModels: [request.model.model],
         usage: null,
         elapsedMs: 1,
@@ -915,3 +920,72 @@ it("ordinary questions explicitly stop on unavailable official connection withou
   expect(target.calls.run).toBe(0);
   expect(other.calls).toMatchObject({ discover: 0, run: 0 });
 });
+it.each([
+  [
+    { intent: "work", summary: "対象とテストを確認してください" },
+    "completed",
+    true,
+  ],
+  [{ intent: "question", summary: "説明です" }, "completed", false],
+  [{ summary: "missing intent" }, "failed", false],
+  [{ intent: "maybe", summary: "unknown" }, "failed", false],
+])(
+  "ordinary input uses one read-only classifier and never infers permission: %j",
+  async (output, status, taskRequired) => {
+    const target = listAgent("claude", claudeList),
+      requests: AgentRequest[] = [];
+    target.agent.run = async (request) => {
+      requests.push(request);
+      expect(
+        await request.approve(
+          "dummy",
+          {} as never,
+          new AbortController().signal,
+        ),
+      ).toBe(false);
+      return {
+        status: "completed",
+        dispatched: true,
+        output,
+        observedModels: [request.model.model],
+        usage: null,
+        elapsedMs: 1,
+      };
+    };
+    const path = await home();
+    const service = new OfficialWorkflowService({
+      home: path,
+      fake: false,
+      agents: { claude: target.agent },
+    });
+    services.push(service);
+    const result = await service.submitSession(
+      {
+        sessionId: "intent",
+        cwd: path,
+        model: "claude:opus",
+        effort: "high",
+        text: "合成依頼",
+        history: [],
+      },
+      new AbortController().signal,
+    );
+    expect(result).toMatchObject({ status, taskRequired });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      phase: "conversation",
+      files: [],
+      tests: [],
+      timeoutMs: 60000,
+      model: { model: QUESTION_MODELS.claude },
+    });
+    const record = service.view().records[0]!.record;
+    expect(record.plan).toBeUndefined();
+    expect(record.commits).toEqual([]);
+    expect(record.inputIntent).toBe(
+      status === "completed"
+        ? (output as { intent: string }).intent
+        : undefined,
+    );
+  },
+);

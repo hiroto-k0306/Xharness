@@ -1,7 +1,12 @@
 import { execFile } from "node:child_process";
 import { lstat, realpath, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { runtimeEnvironment, scopedPath } from "./workspace.js";
+import {
+  workflowGitEnvironment,
+  workflowGitPolicyArgs,
+  unsafeWorkflowGitConfig,
+  scopedPath,
+} from "./workspace.js";
 import { relativeFile, normalizeFile } from "./contracts.js";
 
 /** Read-only inspection, not a sandbox or permission to dispatch a native task. */
@@ -145,16 +150,7 @@ export async function projectPreflight(
     new Promise<string>((done, fail) =>
       execFile(
         "git",
-        [
-          "--no-pager",
-          "-c",
-          `safe.directory=${root}`,
-          "-c",
-          "core.fsmonitor=false",
-          "-c",
-          "core.hooksPath=/xharness-disabled-hooks",
-          ...args,
-        ],
+        [...workflowGitPolicyArgs(), "-c", `safe.directory=${root}`, ...args],
         {
           cwd: root,
           signal,
@@ -162,12 +158,8 @@ export async function projectPreflight(
           maxBuffer: 950000,
           encoding: "utf8",
           env: {
-            ...runtimeEnvironment(),
-            GIT_TERMINAL_PROMPT: "0",
+            ...workflowGitEnvironment(),
             GIT_OPTIONAL_LOCKS: "0",
-            GIT_CONFIG_NOSYSTEM: "1",
-            GIT_CONFIG_GLOBAL:
-              process.platform === "win32" ? "NUL" : "/dev/null",
           },
         },
         (error, stdout) => {
@@ -185,7 +177,7 @@ export async function projectPreflight(
         "--local",
         "--name-only",
         "--get-regexp",
-        "^(filter\\.|core\\.(hookspath|fsmonitor)|include\\.|includeif\\.)",
+        unsafeWorkflowGitConfig,
       ])
     ).trim()
   )

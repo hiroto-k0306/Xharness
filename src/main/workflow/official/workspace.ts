@@ -32,6 +32,32 @@ export function runtimeEnvironment(source = process.env): NodeJS.ProcessEnv {
     if (source[key] !== undefined) env[key] = source[key];
   return env;
 }
+/** Identical configuration boundary for preflight and every workflow Git command. */
+export function workflowGitEnvironment(
+  source = process.env,
+): NodeJS.ProcessEnv {
+  return {
+    ...runtimeEnvironment(source),
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
+    GIT_ATTR_NOSYSTEM: "1",
+  };
+}
+export const workflowGitPolicyArgs = () => [
+  "--no-pager",
+  "--no-replace-objects",
+  "-c",
+  "core.fsmonitor=false",
+  "-c",
+  "core.hooksPath=/xharness-disabled-hooks",
+  "-c",
+  "commit.gpgsign=false",
+  "-c",
+  `core.attributesFile=${process.platform === "win32" ? "NUL" : "/dev/null"}`,
+];
+export const unsafeWorkflowGitConfig =
+  "^(filter\\.|core\\.(hookspath|fsmonitor|attributesfile)|include\\.|includeif\\.|extensions\\.worktreeconfig)";
 export async function scopedPath(cwd: string, path: string) {
   const root = await realpath(cwd),
     target = resolve(cwd, path),
@@ -61,36 +87,48 @@ export function gitWorkspace(
   cwd: string,
   redact: (s: string) => string,
 ): WorkspacePort {
-  const git = (args: string[], signal: AbortSignal) =>
+  const execute = (
+    args: string[],
+    signal: AbortSignal,
+    configuration = false,
+  ) =>
     new Promise<string>((done, fail) => {
       execFile(
         "git",
-        [
-          "--no-pager",
-          "-c",
-          `safe.directory=${cwd}`,
-          "-c",
-          "core.fsmonitor=false",
-          "-c",
-          "core.hooksPath=/xharness-disabled-hooks",
-          "-c",
-          "commit.gpgsign=false",
-          ...args,
-        ],
+        [...workflowGitPolicyArgs(), "-c", `safe.directory=${cwd}`, ...args],
         {
           cwd,
           signal,
           windowsHide: true,
           maxBuffer: 950000,
           encoding: "utf8",
-          env: { ...runtimeEnvironment(), GIT_TERMINAL_PROMPT: "0" },
+          env: workflowGitEnvironment(),
         },
         (error, stdout) =>
-          error
+          error && !(configuration && error.code === 1)
             ? fail(new WorkflowFailure("git-unavailable-or-limit"))
             : done(stdout),
       );
     });
+  const git = async (args: string[], signal: AbortSignal) => {
+    // Recheck before each read/write; a native task must not introduce an
+    // include/filter after preflight and activate it in the next Git command.
+    const unsafe = await execute(
+      [
+        "config",
+        "--no-includes",
+        "--local",
+        "--name-only",
+        "--get-regexp",
+        unsafeWorkflowGitConfig,
+      ],
+      signal,
+      true,
+    );
+    if (unsafe.trim())
+      throw new WorkflowFailure("local-git-execution-configuration");
+    return execute(args, signal);
+  };
   const changes = async (signal: AbortSignal) => {
     const tokens = (
       await git(

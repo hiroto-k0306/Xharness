@@ -75,7 +75,12 @@ export const reviewContract = z
 export type OfficialReview = z.infer<typeof reviewContract>;
 export const implementationContract = z.object({ summary: text }).strict();
 export const inputIntentContract = z
-  .object({ summary: text, intent: z.enum(["question", "work"]) })
+  .object({
+    summary: text.describe(
+      "For question: the direct answer shown verbatim to the user, not a description of the question. Follow the user's requested language and answer format. For work: ask for target files and an existing Node test; do not claim execution.",
+    ),
+    intent: z.enum(["question", "work"]),
+  })
   .strict();
 export const schemas = {
   inputIntent: z.toJSONSchema(inputIntentContract, { target: "draft-7" }),

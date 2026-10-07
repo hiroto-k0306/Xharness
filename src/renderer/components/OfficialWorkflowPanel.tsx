@@ -10,9 +10,11 @@ export function OfficialWorkflowPanel({
   mainModel,
   mainEffort,
   mainProvider,
+  openSignal,
 }: {
   /** Company of the main model; questions use only this connection. */
   mainProvider?: "claude" | "codex";
+  openSignal?: number;
   /** The main model selected now; sent once and fixed for the new task. */
   mainModel?: string;
   mainEffort?: "low" | "medium" | "high" | "xhigh" | "max";
@@ -27,6 +29,9 @@ export function OfficialWorkflowPanel({
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [question, setQuestion] = useState("");
   const sending = useRef(false);
+  useEffect(() => {
+    if (openSignal) setOpen(true);
+  }, [openSignal]);
   // Simulated mode has no real company; keep its existing provider selection.
   const questionProvider =
     mainProvider ?? (view?.simulated ? provider : undefined);
@@ -81,8 +86,8 @@ export function OfficialWorkflowPanel({
             </button>
           </header>
           <p>
-            固定合成課題で、計画 → 実装 → 実テスト →
-            別provider全差分レビューを確認します。元のプロジェクトは変更しません。
+            通常入力の限定作業の計画・結果と、固定合成課題を確認します。 計画 →
+            実装 → 独立テスト → 別会社全差分レビューを行います。
           </p>
           <p>
             {view?.simulated
@@ -147,7 +152,7 @@ export function OfficialWorkflowPanel({
             >
               <h3>操作の許可が必要です</h3>
               <p>
-                今回の読み取り操作だけを許可します。60秒以内に回答がなければ拒否します。
+                今回の読み取り操作だけを許可します。10分以内に回答がなければ拒否します。承認待ちの間はphaseの制限時間を止めます。
               </p>
               <p>操作：{view.operationApproval.command}</p>
               <p>対象：{view.operationApproval.targets.join(", ")}</p>
@@ -183,8 +188,7 @@ export function OfficialWorkflowPanel({
             </section>
           )}
           <p>
-            計画はOpus、実装候補はHaiku / Codex
-            Luna。最大7回のphase呼出・各120秒・修正2回で終了します。SDK内部のモデル往復数は別です。
+            計画は作成時に選択中のメインモデルとeffortを使います。計画が実装担当と別会社のレビュー担当を選び、承認前に表示します。通常の単一課題は最大7回のphase呼出・各120秒・修正2回で終了します。SDK内部のモデル往復数は別です。
           </p>
           <label>
             実行方式{" "}
@@ -356,6 +360,30 @@ export function OfficialWorkflowPanel({
                 <>
                   <h4>確認する計画</h4>
                   <p>{r.plan.summary}</p>
+                  {r.project && (
+                    <section aria-label="実案件の承認範囲">
+                      <p>
+                        セッションの作業場所：{r.project.source} / 開始HEAD：
+                        {r.project.sourceHead}
+                      </p>
+                      <p>
+                        変更対象：{r.project.files.join(", ")}
+                        。この作業場所で変更とコミットを行います。既存worktreeの反映は従来の完了操作を使います。
+                      </p>
+                      <p>
+                        独立テスト：node --test {r.project.testFile}
+                        （既存テストは変更しません）。
+                      </p>
+                      <p>
+                        承認すると現在の作業場所で実装・ローカルNodeテスト・別会社レビューを行います。テストコードのworkspace外の副作用をOSで完全隔離する機能ではありません。依存のインストールや任意shellは実行しません。
+                      </p>
+                      <p>
+                        実行するNodeの実体：
+                        {r.project.testProgram ?? "記録なし"}
+                        。Xが実行し、モデルにはテストコマンド実行を許可しません。
+                      </p>
+                    </section>
+                  )}
                   {r.plan.tasks.map((t) => (
                     <div key={t.id}>
                       <strong>{t.title}</strong>

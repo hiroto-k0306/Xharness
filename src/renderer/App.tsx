@@ -41,6 +41,11 @@ function modelLabel(model: string, effort: string): string {
 
 export function App() {
   const [modelOpen, setModelOpen] = useState(false);
+  const [officialWork, setOfficialWork] = useState(false);
+  const [officialFiles, setOfficialFiles] = useState("");
+  const [officialTest, setOfficialTest] = useState("");
+  const [officialError, setOfficialError] = useState("");
+  const [officialOpenSignal, setOfficialOpenSignal] = useState(0);
   const [skillsOpen, setSkillsOpen] = useState(false);
   const [improvementsOpen, setImprovementsOpen] = useState(false);
   const [skillDraft, setSkillDraft] = useState("");
@@ -59,6 +64,13 @@ export function App() {
   setUiModelCatalog(app?.models);
 
   const current = app?.currentSessionId ?? null;
+  useEffect(() => {
+    // Keep the user's explicit intent; only scope belongs to the prior session.
+    // A late session-created event must never turn a work request into a question.
+    setOfficialFiles("");
+    setOfficialTest("");
+    setOfficialError("");
+  }, [current]);
   useEffect(() => setSkillsOpen(false), [current]);
   useEffect(() => setImprovementsOpen(false), [current]);
   const view = current ? views[current] : undefined;
@@ -635,6 +647,7 @@ export function App() {
             />
           )}
           <OfficialWorkflowPanel
+            openSignal={officialOpenSignal}
             mainModel={model}
             mainEffort={effort}
             mainProvider={
@@ -643,6 +656,58 @@ export function App() {
                 "claude" | "codex" | undefined)
             }
           />
+          {app.officialDefault && (
+            <section aria-label="公式入力の種類">
+              {officialError && <p role="alert">{officialError}</p>}
+              <p>
+                公式Claude SDK / Codex App
+                Serverを使用します。旧HTTPへ自動切替しません。
+              </p>
+              <label>
+                入力の種類{" "}
+                <select
+                  aria-label="公式入力の種類"
+                  value={officialWork ? "work" : "question"}
+                  disabled={!!view?.running}
+                  onChange={(e) => setOfficialWork(e.target.value === "work")}
+                >
+                  <option value="question">質問（計画・実装なし）</option>
+                  <option value="work">
+                    限定作業（既存Nodeテスト・単一課題）
+                  </option>
+                </select>
+              </label>
+              {officialWork && (
+                <>
+                  <p>
+                    現在のセッションの作業場所を使います。既存worktreeの有無や完了時の反映操作は従来どおりです。最初はcleanなGit作業場所と、既存Nodeテストで検証できる単一課題のみ対応します。
+                  </p>
+                  <label>
+                    変更対象（相対パス、1行1件）
+                    <textarea
+                      aria-label="公式作業の変更対象"
+                      value={officialFiles}
+                      onChange={(e) => setOfficialFiles(e.target.value)}
+                      disabled={!!view?.running}
+                    />
+                  </label>
+                  <label>
+                    独立テスト（既存の相対パス）
+                    <input
+                      aria-label="公式作業の独立テスト"
+                      placeholder="test/acceptance.test.mjs"
+                      value={officialTest}
+                      onChange={(e) => setOfficialTest(e.target.value)}
+                      disabled={!!view?.running}
+                    />
+                  </label>
+                  <p>
+                    依存インストール・任意shell・自動再開は行いません。ローカルNodeテストの副作用をOSで完全隔離する機能ではありません。計画で対象とテスト実行を確認してから承認します。
+                  </p>
+                </>
+              )}
+            </section>
+          )}
           <PromptLine
             onDraftChange={setSkillDraft}
             maxImages={app.images?.maxPerMessage}
@@ -680,7 +745,31 @@ export function App() {
             modelColor={
               providerOf(model) === "codex" ? "var(--codex)" : "var(--claude)"
             }
-            onSubmit={(text, images) => s.send(text, images)}
+            onSubmit={(text, images) => {
+              if (app.officialDefault && officialWork) {
+                const files = officialFiles
+                  .split(/\r?\n/)
+                  .map((f) => f.trim())
+                  .filter(Boolean);
+                if (
+                  !files.length ||
+                  !officialTest.trim() ||
+                  !session?.workspaceId
+                ) {
+                  setOfficialError(
+                    "プロジェクト、変更対象、既存の独立テストを指定してください。質問には切り替えて送信しません。",
+                  );
+                  return Promise.resolve(false);
+                }
+                setOfficialError("");
+                setOfficialOpenSignal((n) => n + 1);
+                return s.send(text, images, {
+                  files,
+                  testFile: officialTest.trim(),
+                });
+              }
+              return s.send(text, images);
+            }}
           />
         </main>
       </div>

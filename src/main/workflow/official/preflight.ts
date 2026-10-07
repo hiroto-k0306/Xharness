@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { lstat, realpath } from "node:fs/promises";
+import { lstat, realpath, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { runtimeEnvironment, scopedPath } from "./workspace.js";
 import { relativeFile, normalizeFile } from "./contracts.js";
@@ -9,6 +9,8 @@ export async function projectPreflight(
   cwd: string,
   files: string[],
   signal: AbortSignal,
+  /** Only a worktree already associated with this source by the session controller. */
+  worktreeSource?: string,
 ) {
   const root = resolve(cwd),
     blockers = new Set<string>();
@@ -16,15 +18,103 @@ export async function projectPreflight(
     try {
       return await lstat(path);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined;
+      if (
+        ["ENOENT", "ENOTDIR"].includes(
+          (error as NodeJS.ErrnoException).code ?? "",
+        )
+      )
+        return undefined;
       throw error;
     }
   };
   if (normalizeFile(await realpath(root)) !== normalizeFile(root))
     blockers.add("linked-project-root");
   const gitDirectory = await exists(join(root, ".git"));
-  if (!gitDirectory?.isDirectory() || gitDirectory.isSymbolicLink())
-    blockers.add("shared-or-linked-git-directory");
+  let configDirectory = join(root, ".git");
+  if (!gitDirectory?.isDirectory() || gitDirectory.isSymbolicLink()) {
+    try {
+      if (
+        !worktreeSource ||
+        !gitDirectory?.isFile() ||
+        gitDirectory.isSymbolicLink() ||
+        gitDirectory.nlink !== 1 ||
+        gitDirectory.size > 4096
+      )
+        throw new Error();
+      const origin = resolve(worktreeSource),
+        common = join(origin, ".git");
+      if (
+        normalizeFile(await realpath(origin)) !== normalizeFile(origin) ||
+        !(await lstat(common)).isDirectory() ||
+        normalizeFile(await realpath(common)) !== normalizeFile(common)
+      )
+        throw new Error();
+      const pointer = /^gitdir: (.+)\r?\n?$/.exec(
+        await readFile(join(root, ".git"), "utf8"),
+      );
+      const metadata = pointer ? resolve(root, pointer[1]!) : "";
+      const expectedParent = join(common, "worktrees");
+      if (
+        !metadata ||
+        normalizeFile(await realpath(metadata)) !== normalizeFile(metadata) ||
+        normalizeFile(resolve(metadata, "..")) !== normalizeFile(expectedParent)
+      )
+        throw new Error();
+      for (const name of ["commondir", "gitdir"]) {
+        const stat = await lstat(join(metadata, name));
+        if (
+          !stat.isFile() ||
+          stat.isSymbolicLink() ||
+          stat.nlink !== 1 ||
+          stat.size > 4096
+        )
+          throw new Error();
+      }
+      if (
+        normalizeFile(
+          await realpath(
+            resolve(
+              metadata,
+              (await readFile(join(metadata, "commondir"), "utf8")).trim(),
+            ),
+          ),
+        ) !== normalizeFile(common) ||
+        normalizeFile(
+          resolve((await readFile(join(metadata, "gitdir"), "utf8")).trim()),
+        ) !== normalizeFile(join(root, ".git"))
+      )
+        throw new Error();
+      if (await exists(join(metadata, "config.worktree"))) throw new Error();
+      configDirectory = common;
+    } catch {
+      blockers.add("shared-or-linked-git-directory");
+    }
+  }
+  const gitConfig = await exists(join(configDirectory, "config"));
+  if (
+    !gitConfig?.isFile() ||
+    gitConfig.isSymbolicLink() ||
+    gitConfig.nlink !== 1 ||
+    normalizeFile(await realpath(join(configDirectory, "config"))) !==
+      normalizeFile(join(configDirectory, "config"))
+  )
+    blockers.add("unsafe-git-configuration");
+  if (
+    blockers.has("shared-or-linked-git-directory") ||
+    blockers.has("unsafe-git-configuration")
+  )
+    return {
+      version: 1,
+      cwd: root,
+      head: null,
+      clean: null,
+      files,
+      blockers: [...blockers].sort(),
+      inspectionPassed: false,
+      nativeDagEnabled: false,
+      filesystemIsolationVerified: false,
+      note: "Git metadata was rejected; no provider, test or mutation was started.",
+    };
   if (!files.length || files.length > 30) blockers.add("invalid-file-count");
   if (new Set(files.map(normalizeFile)).size !== files.length)
     blockers.add("duplicate-files");
@@ -110,6 +200,13 @@ export async function projectPreflight(
     /(^|\0)(120000|160000) /.test(await git(["ls-files", "--stage", "-z"]))
   )
     blockers.add("tracked-link-or-submodule");
+  if (
+    !unsafeGit &&
+    (await git(["ls-files", "-z"]))
+      .split("\0")
+      .some((file) => /(^|[\\/])\.gitattributes$/i.test(file))
+  )
+    blockers.add("project-configuration:.gitattributes");
   if (
     !unsafeGit &&
     normalizeFile((await git(["rev-parse", "--show-toplevel"])).trim()) !==

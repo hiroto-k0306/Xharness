@@ -50,12 +50,23 @@ export const digest = (v: unknown) =>
     .update(JSON.stringify(v) ?? "null")
     .digest("hex");
 export const approvalDigest = (
-  record: Pick<WorkflowRecord, "plan" | "injection" | "executionDigest">,
+  record: Pick<
+    WorkflowRecord,
+    "plan" | "injection" | "executionDigest" | "project"
+  >,
 ) =>
-  record.injection
+  record.injection || record.project
     ? digest({ plan: record.plan, executionDigest: record.executionDigest })
     : digest(record.plan);
 export interface WorkflowRecord {
+  sessionId?: string;
+  project?: {
+    source: string;
+    sourceHead: string;
+    files: string[];
+    testFile: string;
+    testProgram?: string;
+  };
   version: 1;
   simulated: boolean;
   id: string;
@@ -128,6 +139,8 @@ export interface WorkflowRecord {
   error?: string;
 }
 export interface WorkflowOptions {
+  sessionId?: string;
+  project?: WorkflowRecord["project"];
   diagnosticText?: boolean;
   startedAt?: string;
   resume?: WorkflowRecord;
@@ -182,11 +195,14 @@ export async function runOfficialSingleTask(
   signal: AbortSignal,
 ): Promise<WorkflowRecord> {
   const initial = await options.workspace.inspect(signal);
+  if (options.project && initial.head !== options.project.sourceHead)
+    throw new WorkflowFailure("session-head-changed-after-preflight");
   const executionDigest = digest({
     goal: options.goal,
     files: options.files,
     tests: options.tests,
     integrationTests: options.integrationTests,
+    project: options.project,
     // Undefined keys are omitted, so records without these keep their digest.
     faultInjection: options.faultInjection
       ? { ...options.faultInjection, ...injectionDefinition() }
@@ -226,6 +242,8 @@ export async function runOfficialSingleTask(
         checks: [],
         reviews: [],
         commits: [],
+        ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+        ...(options.project ? { project: options.project } : {}),
         ...(options.faultInjection
           ? { injection: newInjectionRecord(options.faultInjection) }
           : {}),
@@ -422,7 +440,11 @@ export async function runOfficialSingleTask(
             effort,
             prompt: JSON.stringify(prompt),
             files,
-            tests: options.tests,
+            // General-project tests run only on X's host, after plan approval.
+            // Keep args for read-only test-file scope; disable native command auto-approval.
+            tests: options.project
+              ? options.tests.map((test) => ({ ...test, command: "" }))
+              : options.tests,
             outputSchema:
               phase === "plan"
                 ? planOutputSchema(options.tests)

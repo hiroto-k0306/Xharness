@@ -45,8 +45,14 @@ export interface ImpliedModels {
 export function impliedRecordModels(record: WorkflowRecord): ImpliedModels {
   // A record that already has its plan never needs a planner again.
   const needsPlanner = !record.planner && !record.plan;
-  const needsReviewer = (record.plan?.tasks ?? []).some((t) => !t.reviewer);
-  if (!needsPlanner && !needsReviewer) return { reviewers: {} };
+  // Only the reviewer company each unreviewed task needs: the other company
+  // than its implementer. The unused company's former model is never required.
+  const reviewerProviders = new Set(
+    (record.plan?.tasks ?? [])
+      .filter((t) => !t.reviewer)
+      .map((t) => (t.assignee.provider === "claude" ? "codex" : "claude")),
+  );
+  if (!needsPlanner && !reviewerProviders.size) return { reviewers: {} };
   const compat = RECORD_COMPAT[record.version];
   if (!compat)
     throw new Error(
@@ -54,17 +60,14 @@ export function impliedRecordModels(record: WorkflowRecord): ImpliedModels {
     );
   return {
     ...(needsPlanner ? { planner: { ...compat.planner } } : {}),
-    reviewers: needsReviewer
-      ? {
-          claude: {
-            model: compat.reviewers.claude.model,
-            effort: compat.reviewers.claude.effort,
-          },
-          codex: {
-            model: compat.reviewers.codex.model,
-            effort: compat.reviewers.codex.effort,
-          },
-        }
-      : {},
+    reviewers: Object.fromEntries(
+      [...reviewerProviders].map((p) => [
+        p,
+        {
+          model: compat.reviewers[p].model,
+          effort: compat.reviewers[p].effort,
+        },
+      ]),
+    ),
   };
 }

@@ -846,7 +846,10 @@ export class OfficialWorkflowService {
         if (!this.settings.fake) {
           const implied = impliedRecordModels(record);
           for (const id of [
-            record.planner?.model ?? implied.planner?.model,
+            // A planned record never calls its planner again.
+            record.plan
+              ? undefined
+              : (record.planner?.model ?? implied.planner?.model),
             ...(record.plan?.tasks ?? []).flatMap((t) => [
               t.assignee.model,
               t.reviewer?.model,

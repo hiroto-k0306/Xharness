@@ -269,3 +269,12 @@ export function catalogVersion(
     digest: catalog.digest,
   };
 }
+
+/**
+ * Startup arguments for the connection-test profile: the role's model key and
+ * its effort (the role's, else the model's default; none for a model without efforts).
+ */
+export function connectionTestStartup(catalog: Catalog = loadCatalog()) {
+  const role = resolveRole("connectionTest", undefined, catalog);
+  return { model: role.key, effort: roleEffort(role) };
+}

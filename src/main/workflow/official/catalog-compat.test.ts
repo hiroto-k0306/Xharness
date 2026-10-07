@@ -181,11 +181,9 @@ it("keeps a legacy record's implied models after an alias generation update", as
   useCatalog(newAliasGeneration);
   const record = JSON.parse(before) as WorkflowRecord;
   // Fixed per record format, not the current aliases (opus/luna now point elsewhere).
+  // Only the reviewer company the Claude implementer needs (Codex).
   expect(impliedRecordModels(record)).toEqual({
-    reviewers: {
-      claude: { model: "claude-opus-5-5", effort: "high" },
-      codex: { model: "gpt-6-luna", effort: "low" },
-    },
+    reviewers: { codex: { model: "gpt-6-luna", effort: "low" } },
   });
   // Loading never rewrites the stored record.
   const claude = agent("claude", [
@@ -368,3 +366,105 @@ async function finished(instance: OfficialWorkflowService, id: string) {
   }
   throw new Error("resume did not finish");
 }
+
+/** Resumes through the product's service entry with mock agents (no network). */
+async function resumeWith(
+  shape: (record: WorkflowRecord) => void,
+  retire: string[],
+  claudeIds: string[],
+  codexIds: string[],
+) {
+  const { instance, home } = await service([], []);
+  await instance.close();
+  const { id } = await savedRecord(home, shape);
+  useCatalog((doc) => {
+    for (const model of retire)
+      doc.models.find((m) => m.id === model)!.retiresAt = "2026-01-01";
+  });
+  const claude = agent("claude", claudeIds),
+    codex = agent("codex", codexIds);
+  const restarted = new OfficialWorkflowService({
+    home,
+    fake: false,
+    codexPath: "C:/configured/codex.exe",
+    agents: { claude: claude.agent, codex: codex.agent },
+  });
+  services.push(restarted);
+  const view = await restarted.command({ action: "resume", id });
+  return { view, id, restarted, claude, codex };
+}
+
+it("resumes a planned record whose recorded planner is retired, through implementation and review", async () => {
+  const { view, id, restarted, claude, codex } = await resumeWith(
+    (r) => {
+      r.planner = {
+        provider: "claude",
+        model: "claude-opus-5-5",
+        effort: "high",
+        selectedAs: "claude:opus",
+      };
+      r.plan!.tasks[0]!.reviewer = {
+        provider: "codex",
+        model: "gpt-6.1-sol",
+        effort: "high",
+        reason: "other company",
+      };
+    },
+    ["claude-opus-5-5"], // the planner is no longer offered
+    ["claude-haiku-4-5-20251001"],
+    ["gpt-6.1-sol"],
+  );
+  expect(view.error).toBeUndefined();
+  const done = await finished(restarted, id);
+  expect(done.status).toBe("completed");
+  expect(claude.requests.map((r) => [r.phase, r.model.model])).toEqual([
+    ["implement", "claude-haiku-4-5-20251001"],
+  ]);
+  expect(codex.requests.map((r) => [r.phase, r.model.model])).toEqual([
+    ["review", "gpt-6.1-sol"],
+  ]);
+});
+
+it("resumes a legacy record needing only its implementer's reviewer company while the other company's former models are retired", async () => {
+  const { view, id, restarted, claude, codex } = await resumeWith(
+    (r) => {
+      delete r.plan!.tasks[0]!.reviewer; // legacy: no planner or reviewer recorded
+    },
+    // Former Claude-side reviewer and planner (Opus 5.5), unused by this Claude-implemented plan.
+    ["claude-opus-5-5"],
+    ["claude-haiku-4-5-20251001"],
+    ["gpt-6-luna"],
+  );
+  expect(view.error).toBeUndefined();
+  const done = await finished(restarted, id);
+  expect(done.status).toBe("completed");
+  expect(claude.requests.map((r) => [r.phase, r.model.model])).toEqual([
+    ["implement", "claude-haiku-4-5-20251001"],
+  ]);
+  expect(codex.requests.map((r) => [r.phase, r.model.model, r.effort])).toEqual(
+    [["review", "gpt-6-luna", "low"]],
+  );
+});
+
+it.each([
+  ["the legacy reviewer it needs", "gpt-6-luna"],
+  ["its implementer", "claude-haiku-4-5-20251001"],
+] as const)(
+  "still stops a resume when %s is retired",
+  async (_label, retired) => {
+    const { view, claude, codex } = await resumeWith(
+      (r) => {
+        delete r.plan!.tasks[0]!.reviewer;
+      },
+      [retired],
+      ["claude-haiku-4-5-20251001"],
+      ["gpt-6-luna"],
+    );
+    expect(view.error).toMatch(
+      new RegExp(
+        `^再開できません：モデル「${retired.replaceAll(".", "\.")}」は提供終了`,
+      ),
+    );
+    expect(claude.requests.length + codex.requests.length).toBe(0);
+  },
+);

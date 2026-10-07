@@ -92,3 +92,35 @@ it("routes helper processes to the catalog roles", async () => {
   const config = await loadAgentConfig(tmpdir());
   expect(config.agents.explorer?.model).toBe("codex:sol");
 });
+it("passes the connection-test role's model and effort as startup arguments", async () => {
+  const { connectionTestStartup } = await import("./catalog.js");
+  const { resolveStartup } = await import("./config.js");
+  // Shipped: Haiku has no efforts, so no effort argument is passed.
+  expect(connectionTestStartup()).toEqual({
+    model: "claude:haiku",
+    effort: undefined,
+  });
+  // Changing only the role changes both arguments, and startup applies them.
+  useCatalog((doc) => {
+    doc.roles.connectionTest = { model: "claude:sonnet", effort: "low" };
+  });
+  const args = connectionTestStartup();
+  expect(args).toEqual({ model: "claude:sonnet", effort: "low" });
+  const started = await resolveStartup({
+    home: tmpdir(),
+    cliModel: args.model,
+    cliEffort: args.effort,
+    supported: ["claude", "codex"],
+    read: async () => "",
+  });
+  expect(started.choice).toMatchObject({
+    provider: "claude",
+    model: "claude-sonnet-5-5",
+    effort: "low",
+  });
+  // A role without effort falls back to the model's catalog default.
+  useCatalog((doc) => {
+    doc.roles.connectionTest = "claude:sonnet";
+  });
+  expect(connectionTestStartup().effort).toBe("high");
+});

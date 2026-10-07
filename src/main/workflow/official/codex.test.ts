@@ -3,7 +3,12 @@ import { readFileSync } from "node:fs";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { CodexWorkflowAgent, codexQuota } from "./codex.js";
+import {
+  CodexWorkflowAgent,
+  codexDeveloperInstructions,
+  codexQuota,
+} from "./codex.js";
+import { commandApproval } from "./command-approval.js";
 import type { AppServerPort } from "./app-server-rpc.js";
 import { fixtureModels, fixtureTest } from "./fixtures.js";
 import { schemas, type AgentRequest } from "./contracts.js";
@@ -1063,4 +1068,53 @@ it("keeps unreported command values null instead of inferring them", async () =>
       outputTruncated: false,
     },
   ]);
+});
+it("tells implementation threads exactly the commands XHarness can route to approval", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "xh-codex-instructions-"));
+  try {
+    await writeFile(join(cwd, "add.mjs"), "synthetic");
+    const r = { ...request("implement"), cwd };
+    const text = codexDeveloperInstructions(r, false);
+    expect(text).toContain('"Get-Content -Raw add.mjs"');
+    expect(text).toContain(JSON.stringify(fixtureTest().command));
+    expect(text).toMatch(/Never combine commands/);
+    expect(text).toMatch(/rg, ls, dir, Get-ChildItem, git/);
+    // Each allowed command is one the classifier accepts (approval or registered test).
+    const params = (command: string) => ({
+      command,
+      cwd,
+      threadId: "t",
+      turnId: "u",
+      itemId: "i",
+    });
+    expect(
+      await commandApproval(r, params("Get-Content -Raw add.mjs")),
+    ).toMatchObject({ targets: ["add.mjs"] });
+    expect(await commandApproval(r, params(fixtureTest().command))).toBe(
+      "test",
+    );
+    // Read-only phases get no command list.
+    expect(codexDeveloperInstructions(r, true)).not.toMatch(
+      /Allowed shell commands/,
+    );
+    // The implement thread receives it; a review thread does not.
+    for (const [phase, listed] of [
+      ["implement", true],
+      ["review", false],
+    ] as const) {
+      const mock = fakeServer();
+      await new CodexWorkflowAgent(() => mock.server).run(
+        { ...request(phase), cwd },
+        new AbortController().signal,
+      );
+      const started = mock.calls.find(([m]) => m === "thread/start")![1];
+      expect(
+        String(started.developerInstructions).includes(
+          "Allowed shell commands",
+        ),
+      ).toBe(listed);
+    }
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
 });

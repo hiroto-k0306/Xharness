@@ -3,7 +3,11 @@ import { promisify } from "node:util";
 import { mkdir, lstat, realpath } from "node:fs/promises";
 import { join, resolve, dirname, basename } from "node:path";
 import { randomUUID } from "node:crypto";
-import { gitWorkspace, runtimeEnvironment } from "./workspace.js";
+import {
+  gitWorkspace,
+  workflowGitEnvironment,
+  workflowGitPolicyArgs,
+} from "./workspace.js";
 import { WorkflowFailure, type WorkspacePort } from "./contracts.js";
 const exec = promisify(execFile);
 const hash = (s: string) => /^[a-f0-9]{40,64}$/.test(s);
@@ -32,26 +36,17 @@ export class OfficialWorktrees {
   }
   private async git(args: string[], signal: AbortSignal) {
     await this.boundary();
+    // Apply the same local configuration guard before managed Git mutations.
+    await gitWorkspace(this.cwd, this.redact).inspect(signal);
     const result = await exec(
       "git",
-      [
-        "--no-pager",
-        "-c",
-        `safe.directory=${this.cwd}`,
-        "-c",
-        "core.fsmonitor=false",
-        "-c",
-        "core.hooksPath=/xharness-disabled-hooks",
-        "-c",
-        "commit.gpgsign=false",
-        ...args,
-      ],
+      [...workflowGitPolicyArgs(), "-c", `safe.directory=${this.cwd}`, ...args],
       {
         cwd: this.cwd,
         signal,
         windowsHide: true,
         maxBuffer: 950000,
-        env: { ...runtimeEnvironment(), GIT_TERMINAL_PROMPT: "0" },
+        env: workflowGitEnvironment(),
       },
     );
     return result.stdout.trim();
@@ -95,13 +90,14 @@ export class OfficialWorktrees {
       await exec(
         "git",
         [
+          ...workflowGitPolicyArgs(),
           "-c",
           `safe.directory=${path}`,
           "rev-parse",
           "--path-format=absolute",
           "--git-common-dir",
         ],
-        { cwd: path, signal, windowsHide: true, env: runtimeEnvironment() },
+        { cwd: path, signal, windowsHide: true, env: workflowGitEnvironment() },
       )
     ).stdout.trim();
     if (

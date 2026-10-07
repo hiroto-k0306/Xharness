@@ -13,7 +13,11 @@ import type {
   ModelCandidate,
   TestSpec,
 } from "./contracts.js";
-import { gitWorkspace } from "./workspace.js";
+import {
+  gitWorkspace,
+  workflowGitEnvironment,
+  workflowGitPolicyArgs,
+} from "./workspace.js";
 import {
   TYPED_ADD_SOURCE,
   TYPED_ADD_TASK,
@@ -103,16 +107,8 @@ export async function createSyntheticWorkspace(
     try {
       await exec(
         "git",
-        [
-          "-c",
-          `safe.directory=${cwd}`,
-          "-c",
-          "core.hooksPath=/xharness-disabled-hooks",
-          "-c",
-          "commit.gpgsign=false",
-          ...args,
-        ],
-        { cwd, windowsHide: true },
+        [...workflowGitPolicyArgs(), "-c", `safe.directory=${cwd}`, ...args],
+        { cwd, windowsHide: true, env: workflowGitEnvironment() },
       );
     } catch (error) {
       // Native messages/output can contain configuration or secrets. Expose

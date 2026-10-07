@@ -99,23 +99,40 @@ export async function createSyntheticWorkspace(
       ? TYPED_ADD_TEST
       : 'import {test} from "node:test";\nimport assert from "node:assert/strict";\nimport {add} from "./add.mjs";\ntest("add is addition",()=>{assert.equal(add(2,3),5);assert.equal(add(-1,1),0);});\n',
   );
-  const run = (args: string[]) =>
-    exec(
-      "git",
-      [
-        "-c",
-        `safe.directory=${cwd}`,
-        "-c",
-        "core.hooksPath=/xharness-disabled-hooks",
-        "-c",
-        "commit.gpgsign=false",
-        ...args,
-      ],
-      { cwd, windowsHide: true },
-    );
-  await run(["init", "-q"]);
-  await run(["add", "--", "add.mjs", "acceptance.test.mjs"]);
-  await run([
+  const run = async (step: "init" | "add" | "commit", args: string[]) => {
+    try {
+      await exec(
+        "git",
+        [
+          "-c",
+          `safe.directory=${cwd}`,
+          "-c",
+          "core.hooksPath=/xharness-disabled-hooks",
+          "-c",
+          "commit.gpgsign=false",
+          ...args,
+        ],
+        { cwd, windowsHide: true },
+      );
+    } catch (error) {
+      // Native messages/output can contain configuration or secrets. Expose
+      // only the fixed preparation step and a bounded process failure code.
+      const code = (error as NodeJS.ErrnoException | null)?.code;
+      const exit =
+        typeof code === "number" && Number.isSafeInteger(code) ? code : "不明";
+      const nativeCode =
+        typeof code === "string" &&
+        /^(ENOENT|EACCES|EPERM|ETIMEDOUT|ENOSPC|EBUSY|EIO)$/.test(code)
+          ? code
+          : "unknown";
+      throw new Error(
+        `合成課題のGit準備に失敗しました（${step}: code ${nativeCode}, exit ${exit}）。再送していません。`,
+      );
+    }
+  };
+  await run("init", ["init", "-q"]);
+  await run("add", ["add", "--", "add.mjs", "acceptance.test.mjs"]);
+  await run("commit", [
     "-c",
     "user.name=XHarness",
     "-c",

@@ -197,7 +197,6 @@ Playwrightから今回のexeだけを起動した。5回とも固有のTemp home
 
 新しいモデル通信・Codex sandbox診断・ACL/trusted操作は0回。全GUI・全回帰は行っていない。この配布確認のdocs変更は未コミット（前回の作者承認は前回1コミットだけ）。
 
-
 ## PC代理操作による限定実通信試行（2026-10-07、ソース54a6e92）
 
 ユーザーの「PC操作も許可します。操作できないなら他先に進めて」により、許可済みの単一試行を実画面から進めた。承認者は人間のクリックと偽らず `assistant-on-behalf` と記録する方針とした。製品コードや既存設定を広げず、上節と同じexe/asarを使用。既存の本書の未コミット追記も保持した。
@@ -231,7 +230,6 @@ Playwrightから今回のexeだけを起動した。5回とも固有のTemp home
 - 操作用補助スクリプトはignoredの `.out/fixcycle-live-driver.mjs`。製品へのmock注入はせず、モデル操作は製品UIを通した。
 
 今回の変更はこの結果追記のみ、未コミット。前節までの関連90件・typecheck・lint・package成功は以前の検証結果であり、今回はそれらを再実行していない。残課題は配布版のfixture準備失敗の原因特定と、実モデルでの修正経路の通し確認。再試行は新たな指示があるまで行わない。
-
 
 ## 準備失敗のオフライン診断と限定修正（2026-10-07、HEAD 54a6e92）
 
@@ -270,7 +268,6 @@ Electron診断のTemp `C:/Users/ahwri/AppData/Local/Temp/xh-preparation-offline-
 
 最終境界確認：offline-boundaries.jsonで既存ACL・Codex configの前後一致を確認。最終ESLintも成功（.out/codex-preparation-lint-final.log）。
 
-
 ## 限定後片付けとコミット承認（2026-10-07）
 
 ユーザーは今回の診断プロセスだけの通常終了・専用Temp片付けと、今回の診断修正/報告を `Codex <codex@local>` author/committerでローカルコミットすることを承認した（Sentinel_b7110b85101881919f7291c90652ecc2）。
@@ -280,7 +277,6 @@ PID 47760を再照合し、exe `dist/win-unpacked/XHarness.exe` と開始時刻 
 製品コードは前節の42件/typecheck/最終lint/format成功後に追加変更なし。既存の報告追記を保ち、この結果のみ追加した。今回もモデル通信・ACL/trusted変更・build/package・push/mergeは行わない。作者指定は今回のGit呼出だけに限定し、永続設定・旧コミット作者は変更しない。
 
 コミット前の再確認：42件ログ終了直後にテストのnon-null型注釈だけ更新されていたため、現行fixtures.test.tsの7件を再実行して成功（.out/codex-preparation-precommit-focused.log）。件数を42件と合算しない。
-
 
 ## 診断表示の配布反映準備（2026-10-07、ソース4644f39）
 
@@ -293,7 +289,6 @@ PID 47760を再照合し、exe `dist/win-unpacked/XHarness.exe` と開始時刻 
 build/packageへ到達せず、診断表示入りのcompiled artifactは今回生成・静的確認できていない。新しい `dist/` も未生成。権限を変えた再試行・別経路での実行・再起動・ACL修正は行わず停止した。ソースコードも変更していない。
 
 証跡：`.out/codex-preparation-package-dir.log`、`.out/codex-preparation-package-source.json`（ソース・退避hash・実行段階・結果）。本追記は未コミット。今回の権限範囲でのビルド失敗の切り分けと配布反映は残課題で、先のGit準備失敗やElectron起動FATALと同根因だとは扱わない。
-
 
 ### tsx失敗の既存記録・ソース比較（同日、追加ビルドなし）
 
@@ -315,7 +310,6 @@ pnpm.ps1は既存のローカルbinをprocess PATHの先頭に足し、同梱pnp
 
 旧配布物は引き続き `.out/pre-4644f39-dist/` に保全。新しい配布物は未生成。この追記も未コミット。
 
-
 ### ユーザーによる手動package後の静的確認（2026-10-07）
 
 ユーザーが通常のPowerShellで上記packageフローを実行し「終わったよ」と報告した。assistantによる再試行ではない。`.out/manual-package-4644f39.log` は08:08:49 UTCに更新され、icon生成・electron-viteのmain/preload/renderer build・Electron 44.5.1 x64 package・asar integrity更新まで記録されている。明示的な終了コードは保存されていないのでexit 0とは記録しない。`dist/win-unpacked` の新しい生成物を確認した。
@@ -331,7 +325,6 @@ HEADは4644f39、tracked code・scripts・package/lock/build設定の差分な�
 手動専用helperを .out/Start-PreparationProbe-4644f39.ps1 に保存。exe/ログ親存在とHOME/ログ3件の不存在を検査し、固定 --fake --official-only で終了を待ち、XHARNESS_HOMEをfinallyで復元する。構文と固定条件だけ静的照合し、assistantから実行していない。専用HOMEは自動削除しない。本追記も未コミット。
 
 ユーザーの明示live範囲承認（Sentinel_94736de8590c8191b276f3c80827713f）に基づき、手動専用 .out/Start-FixCycleLive-4644f39.ps1 を保存。4644f39配布hashを照合し、既存root/evidenceを拒否。新規c root内home/workspacesのみ作成、固定4条件とLuna lowで起動し、終了後に2つの環境変数をfinally復元する。モデル送信・計画/操作承認・ACL/trusted変更・片付けはhelperが直接行わない。構文/固定条件だけ静的確認し、assistantから実行していない。証跡は.out/fixcycle-manual-4644f39-cに保存する設計。旧fakeのPID24868は今回確認時不在だがresultログ未生成で終了コードは未確認。追記は未コミット。
-
 
 ### ユーザー操作による実修正サイクル成功と限定cleanup（2026-10-07）
 

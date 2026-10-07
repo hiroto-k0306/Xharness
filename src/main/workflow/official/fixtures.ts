@@ -14,6 +14,11 @@ import type {
   TestSpec,
 } from "./contracts.js";
 import { gitWorkspace } from "./workspace.js";
+import {
+  TYPED_ADD_SOURCE,
+  TYPED_ADD_TASK,
+  TYPED_ADD_TEST,
+} from "./fault-injection.js";
 const exec = promisify(execFile);
 export const fixtureModels: ModelCandidate[] = [
   {
@@ -80,15 +85,19 @@ export const fixturePlan = (
 export async function createSyntheticWorkspace(
   prefix = "xh-official-workflow-",
   parent = tmpdir(),
+  /** The verification-only typed-add task; omitted keeps the default task. */
+  task?: typeof TYPED_ADD_TASK,
 ) {
   const cwd = await mkdtemp(join(parent, prefix));
   await writeFile(
     join(cwd, "add.mjs"),
-    "export const add = (a, b) => a - b;\n",
+    task ? TYPED_ADD_SOURCE : "export const add = (a, b) => a - b;\n",
   );
   await writeFile(
     join(cwd, "acceptance.test.mjs"),
-    'import {test} from "node:test";\nimport assert from "node:assert/strict";\nimport {add} from "./add.mjs";\ntest("add is addition",()=>{assert.equal(add(2,3),5);assert.equal(add(-1,1),0);});\n',
+    task
+      ? TYPED_ADD_TEST
+      : 'import {test} from "node:test";\nimport assert from "node:assert/strict";\nimport {add} from "./add.mjs";\ntest("add is addition",()=>{assert.equal(add(2,3),5);assert.equal(add(-1,1),0);});\n',
   );
   const run = (args: string[]) =>
     exec(
@@ -113,7 +122,7 @@ export async function createSyntheticWorkspace(
     "user.email=xharness@local",
     "commit",
     "-qm",
-    "fixture: seeded arithmetic defect",
+    task ? `fixture: ${task}` : "fixture: seeded arithmetic defect",
   ]);
   return cwd;
 }

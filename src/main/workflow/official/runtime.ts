@@ -24,6 +24,24 @@ import {
   type ToolEvidence,
   type WorkspacePort,
 } from "./contracts.js";
+import {
+  assertInjectable,
+  infrastructureFailure,
+  INJECTED_FILE,
+  INJECTED_SOURCE,
+  INJECTION_AUTHOR,
+  newInjectionRecord,
+  type FaultInjectionOptions,
+  type InjectionRecord,
+} from "./fault-injection.js";
+import { scopedPath } from "./workspace.js";
+import { writeFile } from "node:fs/promises";
+
+/** Model calls per phase, reserved (saved) before each call is sent. */
+export interface CallBudget {
+  limits: Partial<Record<AgentRequest["phase"], number>>;
+  reserved: Partial<Record<AgentRequest["phase"], number>>;
+}
 
 export const digest = (v: unknown) =>
   createHash("sha256")
@@ -61,12 +79,16 @@ export interface WorkflowRecord {
     | "fix"
     | "complete";
   pendingEffect?: {
-    kind: "commit" | "test" | "worktree" | "integrate";
+    kind: "commit" | "test" | "worktree" | "integrate" | "inject";
     id: string;
   };
   dag?: import("./dag.js").DagState;
   resumed?: number;
   executionDigest?: string;
+  /** Verification-only fix-cycle fault injection; absent in normal use. */
+  injection?: InjectionRecord;
+  /** Present only when the run was started with a per-phase call budget. */
+  callBudget?: CallBudget;
   base: string;
   head: string;
   plan?: OfficialPlan;
@@ -131,6 +153,10 @@ export interface WorkflowOptions {
   ): Promise<boolean>;
   approveTool: AgentRequest["approve"];
   timeoutMs?: number;
+  /** Verification-only: inject the fixed defect after X1 (see fault-injection.ts). */
+  faultInjection?: FaultInjectionOptions;
+  /** Per-phase model call limits; fixed in the record at start. */
+  callBudget?: CallBudget["limits"];
 }
 
 export interface PlannerChoice {
@@ -153,6 +179,9 @@ export async function runOfficialSingleTask(
     files: options.files,
     tests: options.tests,
     integrationTests: options.integrationTests,
+    // Undefined keys are omitted, so records without these keep their digest.
+    faultInjection: options.faultInjection,
+    callBudget: options.callBudget,
   });
   if (!initial.clean) throw new WorkflowFailure("dirty-workspace");
   if (options.resume) {
@@ -185,6 +214,12 @@ export async function runOfficialSingleTask(
         checks: [],
         reviews: [],
         commits: [],
+        ...(options.faultInjection
+          ? { injection: newInjectionRecord(options.faultInjection) }
+          : {}),
+        ...(options.callBudget
+          ? { callBudget: { limits: { ...options.callBudget }, reserved: {} } }
+          : {}),
       };
   // The planner is fixed when the task starts; a resume keeps the recorded one.
   const startPlanner = options.planner;
@@ -234,6 +269,91 @@ export async function runOfficialSingleTask(
     if (!current.clean || current.head !== record.head)
       throw new WorkflowFailure("workspace-changed");
   };
+  /**
+   * Verification-only. X1's check is the implementation-quality result and is
+   * never reviewed; a passing X1 is followed by the fixed defect commit X2,
+   * which is then tested and reviewed as usual; the fix becomes X3.
+   */
+  const injectionAfterCheck = async (
+    tests: TestEvidence[],
+  ): Promise<"verify" | "review"> => {
+    const injection = record.injection!,
+      check = record.checks.length - 1,
+      passed = tests.every((t) => t.passed);
+    // An expected failure has an exit code; no exit code is infrastructure.
+    if (infrastructureFailure(tests))
+      throw new WorkflowFailure("verification-infrastructure");
+    if (injection.state === "pending-quality") {
+      injection.stages.push({ stage: "quality", head: record.head, check });
+      if (!passed) {
+        injection.state = "skipped-quality-failed";
+        return "review";
+      }
+      try {
+        if (
+          injection.attempts > 0 ||
+          record.commits.length !== 1 ||
+          record.head !== record.commits[0]
+        )
+          throw new WorkflowFailure("fault-injection-not-allowed");
+        await assertInjectable(options.workspace, record, options.cwd, signal);
+      } catch (error) {
+        injection.state = "failed";
+        injection.error =
+          error instanceof WorkflowFailure ? error.code : "check-failed";
+        throw error;
+      }
+      // Saved before writing: an interruption from here is uncertain and is
+      // never injected again automatically.
+      injection.attempts++;
+      injection.state = "injecting";
+      const effect = { kind: "inject" as const, id: randomUUID() };
+      record.pendingEffect = effect;
+      await save();
+      try {
+        await writeFile(
+          await scopedPath(options.cwd, INJECTED_FILE),
+          INJECTED_SOURCE,
+        );
+        record.head = await options.workspace.commit([INJECTED_FILE], signal, {
+          ...INJECTION_AUTHOR,
+          message: `fault-injection: ${injection.spec} ${effect.id}`,
+        });
+      } catch (error) {
+        injection.error =
+          error instanceof WorkflowFailure
+            ? error.code
+            : "write-or-commit-failed";
+        throw new WorkflowFailure("fault-injection-failed");
+      }
+      record.commits.push(record.head);
+      injection.state = "injected";
+      injection.injectedAt = new Date().toISOString();
+      injection.stages.push({ stage: "injected", head: record.head });
+      delete record.pendingEffect;
+      record.next = "verify";
+      record.status = "verifying";
+      await save();
+      return "verify";
+    }
+    if (injection.state === "injected") {
+      const injected = injection.stages.find((s) => s.stage === "injected");
+      if (injected?.head === record.head) {
+        injected.check = check;
+        if (passed) {
+          injection.state = "ineffective";
+          throw new WorkflowFailure("fault-injection-ineffective");
+        }
+        return "review";
+      }
+      const fix = injection.stages.find(
+        (s) => s.stage === "fix" && s.head === record.head,
+      );
+      if (fix) fix.check = check;
+      else injection.stages.push({ stage: "fix", head: record.head, check });
+    }
+    return "review";
+  };
   const invoke = async (
     phase: AgentRequest["phase"],
     model: ModelCandidate,
@@ -251,6 +371,14 @@ export async function runOfficialSingleTask(
       effort,
       status: "running" as const,
     };
+    // The reservation is saved with the running entry before anything is sent;
+    // a restart keeps it, so a lost or uncertain call is never sent again.
+    if (record.callBudget) {
+      const used = record.callBudget.reserved[phase] ?? 0;
+      if (used >= (record.callBudget.limits[phase] ?? 0))
+        throw new WorkflowFailure("call-budget-exceeded");
+      record.callBudget.reserved[phase] = used + 1;
+    }
     record.calls.push(entry);
     await save(); // Crash after this point is uncertain; never automatically replay it.
     const span = beginTrace(
@@ -496,6 +624,11 @@ export async function runOfficialSingleTask(
         await stable();
         record.checks.push({ head: record.head, tests: checks });
         delete record.pendingEffect;
+        if (
+          record.injection &&
+          (await injectionAfterCheck(checks)) === "verify"
+        )
+          continue;
         record.next = "review";
         record.status = "reviewing";
         await save();
@@ -546,6 +679,13 @@ export async function runOfficialSingleTask(
       )
         throw new WorkflowFailure("review-snapshot-mismatch");
       record.reviews.push(review);
+      if (record.injection) {
+        const stage = record.injection.stages.findLast(
+          (s) => s.stage !== "quality" && s.head === review.head,
+        );
+        if (stage) stage.review = record.reviews.length - 1;
+      }
+      // Zero findings never pass a failed test.
       const blocking =
         checks.some((t) => !t.passed) ||
         review.findings.some((f) => f.severity !== "nit");
@@ -599,6 +739,11 @@ export async function runOfficialSingleTask(
 export function resumeBlockReason(record: WorkflowRecord): string | null {
   if (record.dag) return dagResumeBlockReason(record);
   if (!record.executionDigest) return "execution-scope-not-checkpointed";
+  if (
+    record.injection &&
+    ["injecting", "failed", "ineffective"].includes(record.injection.state)
+  )
+    return "uncertain-injection";
   if (
     record.status === "completed" ||
     record.status === "attention" ||

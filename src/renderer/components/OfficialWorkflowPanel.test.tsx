@@ -120,3 +120,41 @@ it.each(["claude", "codex"] as const)(
     );
   },
 );
+it.each([undefined, "fix-cycle-v1"] as const)(
+  "offers the fix-cycle verification task only in its mode (%s)",
+  async (verification) => {
+    const view: OfficialWorkflowView = {
+      available: true,
+      simulated: false,
+      ...(verification ? { verification } : {}),
+      records: [],
+    };
+    const commands: OfficialWorkflowCommand[] = [];
+    const officialWorkflow = vi.fn(async (command: OfficialWorkflowCommand) => {
+      commands.push(command);
+      return view;
+    });
+    vi.stubGlobal("harness", { officialWorkflow });
+    render(<OfficialWorkflowPanel mainModel="gpt-6-luna" mainEffort="low" />);
+    fireEvent.click(screen.getByRole("button", { name: "公式workflow" }));
+    await screen.findByRole("button", { name: "合成課題の計画を作成" });
+    const button = screen.queryByRole("button", {
+      name: "修正経路の検証課題を作成",
+    });
+    if (!verification) {
+      expect(button).toBeNull();
+      expect(screen.queryByText(/障害注入あり/)).toBeNull();
+      return;
+    }
+    expect(screen.getByText(/検証モード：障害注入あり/)).toBeInTheDocument();
+    fireEvent.click(button!);
+    await waitFor(() =>
+      expect(commands.find((c) => c.action === "create")).toMatchObject({
+        action: "create",
+        mode: "single",
+        task: "typed-add-v1",
+        planner: { model: "gpt-6-luna", effort: "low" },
+      }),
+    );
+  },
+);

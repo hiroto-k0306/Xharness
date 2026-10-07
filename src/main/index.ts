@@ -35,6 +35,7 @@ import {
 } from "./connections/test-profile.js";
 import { createLocalBrowser } from "./local-browser-electron.js";
 import { OfficialWorkflowService } from "./workflow/official/service.js";
+import { verificationMode } from "./workflow/official/fault-injection.js";
 import { registerOfficialWorkflowIpc } from "./official-workflow-ipc.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
 import {
@@ -315,6 +316,8 @@ async function start() {
     home,
     fake,
     codexPath: main.auth.codexCliPath,
+    // Explicit flag + environment value + isolated home only; off otherwise.
+    verification: verificationMode(process.argv.slice(1), process.env),
   });
   registerOfficialWorkflowIpc(() => window, officialWorkflow);
   createWindow();

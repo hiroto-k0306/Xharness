@@ -236,6 +236,40 @@ export function OfficialWorkflowPanel({
           >
             合成課題の計画を作成
           </button>
+          {view?.verification === "fix-cycle-v1" && (
+            <section aria-label="修正経路の検証モード">
+              <p>
+                検証モード：障害注入あり。専用の検証課題でだけ、実装（X1）の品質テストが合格した後に、既知の不良コミット（X2）を注入して修正経路を確認します。
+              </p>
+              <button
+                disabled={
+                  !view.available ||
+                  !!view.activeId ||
+                  pending ||
+                  !mainModel ||
+                  mode === "dag"
+                }
+                onClick={() =>
+                  void send({
+                    action: "create",
+                    provider,
+                    mode: "single",
+                    task: "typed-add-v1",
+                    ...(mainModel
+                      ? {
+                          planner: {
+                            model: mainModel,
+                            effort: mainEffort ?? null,
+                          },
+                        }
+                      : {}),
+                  })
+                }
+              >
+                修正経路の検証課題を作成
+              </button>
+            </section>
+          )}
           <label>
             質問・追加質問（計画を作らない）
             <textarea
@@ -341,6 +375,11 @@ export function OfficialWorkflowPanel({
               )}
               {view.approval?.id === r.id && (
                 <>
+                  {r.injection && (
+                    <p>
+                      この課題は検証用です。実装（X1）の品質テストが合格した後に、既知の不良コミット（X2）を注入し、テスト・レビュー・修正（X3）を確認します。
+                    </p>
+                  )}
                   <p>承認digest：{view.approval.digest}</p>
                   <button
                     disabled={pending}

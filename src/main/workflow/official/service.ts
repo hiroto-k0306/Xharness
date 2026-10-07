@@ -57,9 +57,27 @@ import {
   type ResolvedModel,
 } from "../../config/catalog.js";
 import { impliedRecordModels } from "./record-compat.js";
+import {
+  FIX_CYCLE_BUDGET,
+  FIX_CYCLE_SPEC,
+  TYPED_ADD_GOAL,
+  typedAddTest,
+  type VerificationMode,
+} from "./fault-injection.js";
 
 const uuid = (id: unknown): id is string =>
   typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id);
+/** Verification-only typed-add task: its test, goal, injection and call budget. */
+function verificationOptions(
+  options: WorkflowOptions,
+  provider: "claude" | "codex",
+  allowedRoot: string,
+) {
+  options.tests = [typedAddTest()];
+  options.goal = `${TYPED_ADD_GOAL} Assign the one implementation task to ${provider}.`;
+  options.faultInjection = { spec: FIX_CYCLE_SPEC, allowedRoot };
+  options.callBudget = { ...FIX_CYCLE_BUDGET };
+}
 export class OfficialWorkflowService {
   private operationApprovals = new OperationApprovals();
   private root: string;
@@ -84,6 +102,8 @@ export class OfficialWorkflowService {
       home: string;
       fake: boolean;
       codexPath?: string;
+      /** Explicit fix-cycle verification mode (fault-injection.ts); off in normal use. */
+      verification?: VerificationMode;
       /** Parent folder for new synthetic workspaces; unset keeps the record folder. */
       workspaceRoot?: string;
       /** Test seam: official agents to use instead of the real SDK / App Server. */
@@ -248,6 +268,9 @@ export class OfficialWorkflowService {
         codex: questionModel("codex"),
       },
       simulated: this.settings.fake,
+      ...(this.settings.verification
+        ? { verification: this.settings.verification }
+        : {}),
       connection: {
         codexPath: this.settings.codexPath ?? "",
         workspaceRoot: this.settings.workspaceRoot ?? "",
@@ -755,6 +778,11 @@ export class OfficialWorkflowService {
         );
       if (command.action === "create" || command.action === "chat") {
         const mode = command.action === "create" ? command.mode : "single";
+        const task = command.action === "create" ? command.task : undefined;
+        if (task && (!this.settings.verification || mode === "dag"))
+          throw new Error(
+            "修正経路の検証課題は、検証モード（--verify-fix-cycle）でだけ作成できます。",
+          );
         if (mode === "dag" && !this.settings.fake)
           throw new Error("Native DAG is not enabled");
         // Checked again at use time; an unusable folder stops with its reason.
@@ -778,7 +806,7 @@ export class OfficialWorkflowService {
         const cwd =
           mode === "dag"
             ? (await createDagWorkspace(directory, directory)).cwd
-            : await createSyntheticWorkspace("workspace-", parent);
+            : await createSyntheticWorkspace("workspace-", parent, task);
         this.preparing = { id, controller: new AbortController() };
         const state = await gitWorkspace(cwd, redact).inspect(
           this.preparing.controller.signal,
@@ -791,7 +819,9 @@ export class OfficialWorkflowService {
           goal:
             command.action === "chat"
               ? command.text
-              : "Correct addition without modifying the test.",
+              : task
+                ? TYPED_ADD_GOAL
+                : "Correct addition without modifying the test.",
           startedAt: new Date().toISOString(),
           status: "planning",
           next: "plan",
@@ -834,6 +864,7 @@ export class OfficialWorkflowService {
               : undefined,
           );
           options.startedAt = prepared.startedAt;
+          if (task) verificationOptions(options, command.provider, parent);
           this.preparing.controller.signal.throwIfAborted();
           this.launch(id, options);
         }
@@ -876,13 +907,25 @@ export class OfficialWorkflowService {
           { kind: "resume", record }, // never the current selection
         );
         this.preparing.controller.signal.throwIfAborted();
+        if (record.injection) {
+          // The same task, budget and boundary; the run digest rejects any change.
+          if (this.settings.verification !== record.injection.spec)
+            throw new Error(
+              "再開できません：修正経路の検証課題は検証モードでだけ再開できます。",
+            );
+          verificationOptions(
+            options,
+            record.plan!.tasks[0]!.assignee.provider,
+            record.injection.allowedRoot,
+          );
+        }
         options.goal = record.goal;
         this.launch(record.id, options, record);
       }
     } catch (error) {
       this.error =
         error instanceof Error &&
-        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先|再開できません)/.test(
+        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先|再開できません|修正経路の検証課題)/.test(
           error.message,
         )
           ? error.message

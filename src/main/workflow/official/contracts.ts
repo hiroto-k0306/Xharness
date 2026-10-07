@@ -204,7 +204,18 @@ export interface Snapshot {
 }
 export interface WorkspacePort {
   inspect(signal: AbortSignal): Promise<{ head: string; clean: boolean }>;
-  commit(files: string[], signal: AbortSignal): Promise<string>;
+  /** `as` is only for the verification-only fault-injection commit. */
+  commit(
+    files: string[],
+    signal: AbortSignal,
+    as?: { name: string; email: string; message: string },
+  ): Promise<string>;
+  /** Real repository root, Git directory and file digests at `rev` (fault injection only). */
+  identity?(
+    rev: string,
+    files: string[],
+    signal: AbortSignal,
+  ): Promise<{ root: string; gitDir: string; digests: Record<string, string> }>;
   snapshot(base: string, head: string, signal: AbortSignal): Promise<Snapshot>;
   test(spec: TestSpec, signal: AbortSignal): Promise<TestEvidence>;
 }

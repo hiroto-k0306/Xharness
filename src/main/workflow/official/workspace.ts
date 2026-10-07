@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { spawnOwnedProcess } from "./owned-process.js";
 import { lstat, realpath, readFile } from "node:fs/promises";
 import { resolve, relative, isAbsolute, dirname } from "node:path";
@@ -124,7 +125,7 @@ export function gitWorkspace(
         clean: !(await changes(signal)).length,
       };
     },
-    async commit(allowed, signal) {
+    async commit(allowed, signal, as) {
       const files = await changes(signal);
       if (
         !files.length ||
@@ -169,16 +170,34 @@ export function gitWorkspace(
       await git(
         [
           "-c",
-          "user.name=XHarness",
+          `user.name=${as?.name ?? "XHarness"}`,
           "-c",
-          "user.email=xharness@local",
+          `user.email=${as?.email ?? "xharness@local"}`,
           "commit",
           "-m",
-          "workflow: approved single-task change",
+          as?.message ?? "workflow: approved single-task change",
         ],
         signal,
       );
       return hash(signal);
+    },
+    async identity(rev, files, signal) {
+      if (!/^[a-f0-9]{40,64}$/.test(rev))
+        throw new WorkflowFailure("invalid-git-head");
+      const root = await realpath(
+        (await git(["rev-parse", "--show-toplevel"], signal)).trim(),
+      );
+      const gitDir = await realpath(
+        (await git(["rev-parse", "--absolute-git-dir"], signal)).trim(),
+      );
+      const digests: Record<string, string> = {};
+      for (const f of files) {
+        relativeFile.parse(f);
+        digests[f] = createHash("sha256")
+          .update(await git(["show", `${rev}:${f}`], signal))
+          .digest("hex");
+      }
+      return { root, gitDir, digests };
     },
     async snapshot(base, head, signal) {
       if (

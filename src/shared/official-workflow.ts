@@ -14,6 +14,8 @@ export type OfficialWorkflowCommand =
       action: "create";
       provider: "claude" | "codex";
       mode?: "single" | "dag";
+      /** Verification-only fix-cycle task; refused unless the mode is on. */
+      task?: "typed-add-v1";
       /** The main model selected when the task is started; fixed for this task. */
       planner?: {
         model: string;
@@ -37,6 +39,8 @@ export interface OfficialWorkflowView {
   /** The same catalog resolution the service uses when sending a question. */
   questionModels?: Record<"claude" | "codex", QuestionModel>;
   simulated: boolean;
+  /** Set only in the explicit fix-cycle verification mode (fault injection). */
+  verification?: "fix-cycle-v1";
   connection?: {
     codexPath: string;
     /** Empty means the default location under the workflow storage. */

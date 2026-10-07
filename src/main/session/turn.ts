@@ -261,7 +261,7 @@ async function prepareRuntime(
   return { web };
 }
 
-/** One native submission. Never enters the legacy agent loop or infers work from a question. */
+/** One native submission; inferred work waits for scope and plan approval. */
 export async function runOfficialSessionTurn(
   ctx: ControllerContext,
   session: StoredSession,
@@ -273,6 +273,7 @@ export async function runOfficialSessionTurn(
   const events = new TurnEvents(ctx, session, rt);
   const startedAt = performance.now();
   let stopCause = "step_failed";
+  ctx.options.emit({ type: "official_scope_required", sessionId: session.id });
   try {
     const history = rt.messages.slice(-10).flatMap((m) => {
       const text = m.content
@@ -345,7 +346,7 @@ export async function runOfficialSessionTurn(
       durationMs: Math.round(performance.now() - startedAt),
       input: {
         workflowId: result.workflowId,
-        intent: task ? "work" : "question",
+        intent: task || result.taskRequired ? "work" : "question",
       },
       summary: `公式workflow ${result.workflowId} / ${result.status}。詳細のusage・テスト・レビューは公式workflowの保存記録を参照。`,
     });
@@ -364,14 +365,27 @@ export async function runOfficialSessionTurn(
       tone: "dim",
       message: `公式workflow ${result.workflowId} / ${result.status}。計画承認・テスト・レビュー・使用量は公式workflowで確認できます。`,
     });
-    stopCause =
-      result.status === "completed"
-        ? task
-          ? "workflow_complete"
-          : "end_turn"
+    stopCause = abort.signal.aborted
+      ? "aborted"
+      : result.status === "completed"
+        ? result.taskRequired
+          ? "awaiting_user"
+          : task
+            ? "workflow_complete"
+            : "end_turn"
         : result.status === "cancelled" || abort.signal.aborted
           ? "aborted"
           : "review_attention";
+    ctx.options.emit({
+      type: "official_scope_required",
+      sessionId: session.id,
+      text:
+        result.taskRequired &&
+        result.status === "completed" &&
+        !abort.signal.aborted
+          ? ctx.clean(text)
+          : undefined,
+    });
   } catch (error) {
     stopCause = abort.signal.aborted ? "aborted" : "step_failed";
     if (!abort.signal.aborted)

@@ -22,6 +22,7 @@ async function setup() {
     summary: "公式の有限回答",
     workflowId: `ui-native-${request.sessionId}`,
     status: "completed",
+    taskRequired: !request.task && /変更|修正/.test(request.text),
   }));
   const legacy = new FakeProvider(),
     oldStream = vi.spyOn(legacy, "stream");
@@ -82,9 +83,7 @@ it("ordinary UI questions use the official bridge and return to idle without a p
   const { native, oldStream } = await setup();
   render(<App />);
   await screen.findByText("+ new session");
-  expect(screen.getByRole("combobox", { name: "公式入力の種類" })).toHaveValue(
-    "question",
-  );
+  expect(screen.queryByRole("combobox", { name: "公式入力の種類" })).toBeNull();
   await userEvent.type(screen.getByLabelText("prompt"), "質問です{Enter}");
   await screen.findByText("公式の有限回答");
   await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
@@ -92,38 +91,34 @@ it("ordinary UI questions use the official bridge and return to idle without a p
   expect(native.mock.calls[0]![0].task).toBeUndefined();
   expect(oldStream).not.toHaveBeenCalled();
 });
-it("UI keeps incomplete work requests as drafts and never converts them into questions", async () => {
+it("inferred work waits for scope confirmation without another model call", async () => {
   const { native, oldStream } = await setup();
   render(<App />);
   await screen.findByText("+ new session");
-  await userEvent.selectOptions(
-    screen.getByRole("combobox", { name: "公式入力の種類" }),
-    "work",
-  );
-  expect(
-    screen.getByText(/既存worktreeの有無や完了時の反映操作は従来どおり/),
-  ).toBeInTheDocument();
-  expect(screen.queryByText(/独立コピー/)).toBeNull();
   await userEvent.type(screen.getByLabelText("prompt"), "変更して{Enter}");
+  const confirm = await screen.findByRole("button", {
+    name: "対象を確認して計画を作成",
+  });
+  await waitFor(() => expect(confirm).toBeEnabled());
+  await userEvent.click(confirm);
   await screen.findByText(
     /プロジェクト、変更対象、既存の独立テストを指定してください/,
   );
-  expect(screen.getByLabelText("prompt")).toHaveValue("変更して");
-  expect(native).not.toHaveBeenCalled();
+  expect(native).toHaveBeenCalledTimes(1);
+  expect(native.mock.calls[0]![0].task).toBeUndefined();
   expect(oldStream).not.toHaveBeenCalled();
+  await userEvent.type(screen.getByLabelText("prompt"), "質問です{Enter}");
+  await waitFor(() => expect(native).toHaveBeenCalledTimes(2));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "対象を確認して計画を作成" }),
+    ).toBeNull(),
+  );
 });
-it("UI submits explicit scope using the selected session directory and opens the approval panel", async () => {
+it("confirmed inferred work uses the original request, selected directory and approval panel", async () => {
   const { cwd, native, oldStream } = await setup();
   render(<App />);
   await screen.findByText("+ new session");
-  await userEvent.selectOptions(
-    screen.getByRole("combobox", { name: "公式入力の種類" }),
-    "work",
-  );
-  await userEvent.type(
-    screen.getByLabelText("公式作業の変更対象"),
-    "prior-session.mjs",
-  );
   await userEvent.click(screen.getByRole("button", { name: /no workspace/ }));
   await userEvent.click(
     await screen.findByRole("button", { name: /open folder/ }),
@@ -140,24 +135,19 @@ it("UI submits explicit scope using the selected session directory and opens the
         )?.cwd,
     ).toBe(cwd),
   );
-  expect(screen.getByRole("combobox", { name: "公式入力の種類" })).toHaveValue(
-    "work",
-  );
-  expect(screen.getByLabelText("公式作業の変更対象")).toHaveValue("");
-  await userEvent.selectOptions(
-    screen.getByRole("combobox", { name: "公式入力の種類" }),
-    "work",
-  );
+  await userEvent.type(screen.getByLabelText("prompt"), "加算を修正{Enter}");
+  const confirm = await screen.findByRole("button", {
+    name: "対象を確認して計画を作成",
+  });
+  await waitFor(() => expect(confirm).toBeEnabled());
   await userEvent.type(screen.getByLabelText("公式作業の変更対象"), "add.mjs");
   await userEvent.type(
     screen.getByLabelText("公式作業の独立テスト"),
     "acceptance.test.mjs",
   );
-  await userEvent.type(screen.getByLabelText("prompt"), "加算を修正{Enter}");
-  await waitFor(() => expect(native).toHaveBeenCalledTimes(1));
-  await screen.findByText("公式の有限回答");
-  expect(native).toHaveBeenCalledTimes(1);
-  expect(native.mock.calls[0]![0]).toMatchObject({
+  await userEvent.click(confirm);
+  await waitFor(() => expect(native).toHaveBeenCalledTimes(2));
+  expect(native.mock.calls[1]![0]).toMatchObject({
     cwd,
     text: "加算を修正",
     task: { files: ["add.mjs"], testFile: "acceptance.test.mjs" },

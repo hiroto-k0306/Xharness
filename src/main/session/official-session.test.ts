@@ -216,3 +216,32 @@ it("IPC keeps explicit work intent and rejects malformed scope instead of a ques
   ])
     expect(parseCommand({ ...command, officialTask: scope })).toBeUndefined();
 });
+it("inferred work waits for user scope, then new questions clear the pending request", async () => {
+  let n = 0;
+  const { c, id, official, oldStream, events } = await setup(async () => ({
+    ...result,
+    taskRequired: ++n === 1,
+  }));
+  await c.handle({ type: "send", sessionId: id, text: "変更して" });
+  await idle(c, id);
+  expect(official).toHaveBeenCalledTimes(1);
+  expect(events).toContainEqual({
+    type: "official_scope_required",
+    sessionId: id,
+    text: "変更して",
+  });
+  expect(
+    events.some((e) => e.type === "turn" && e.stopCause === "awaiting_user"),
+  ).toBe(true);
+  await c.handle({ type: "send", sessionId: id, text: "説明して" });
+  await idle(c, id);
+  expect(official).toHaveBeenCalledTimes(2);
+  expect(
+    events.filter((e) => e.type === "official_scope_required").at(-1),
+  ).toEqual({
+    type: "official_scope_required",
+    sessionId: id,
+    text: undefined,
+  });
+  expect(oldStream).not.toHaveBeenCalled();
+});

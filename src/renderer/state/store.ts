@@ -23,6 +23,7 @@ export interface PendingPermission {
   summary: string;
 }
 export interface SessionView {
+  officialScopeText?: string;
   rewind?: Extract<UiEvent, { type: "rewind_request" }>;
   agents?: Record<
     string,
@@ -84,6 +85,11 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
   if (e.type === "rewind_request")
     return put(s, e.sessionId, { ...view(s, e.sessionId), rewind: e });
   switch (e.type) {
+    case "official_scope_required":
+      return put(s, e.sessionId, {
+        ...view(s, e.sessionId),
+        officialScopeText: e.text,
+      });
     case "memory_changed":
       return s;
     case "workflow":

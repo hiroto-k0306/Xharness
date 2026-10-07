@@ -196,6 +196,7 @@ export type TranscriptItem =
  * "state" / "transcript" / "user_message" / "turn" / "tool_result" / "permission_resolved" も追加分。
  */
 export type UiEvent =
+  | { type: "official_scope_required"; sessionId: string; text?: string }
   | { type: "memory_changed"; sessionId: string }
   | {
       type: "rewind_request";

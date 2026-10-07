@@ -41,7 +41,6 @@ function modelLabel(model: string, effort: string): string {
 
 export function App() {
   const [modelOpen, setModelOpen] = useState(false);
-  const [officialWork, setOfficialWork] = useState(false);
   const [officialFiles, setOfficialFiles] = useState("");
   const [officialTest, setOfficialTest] = useState("");
   const [officialError, setOfficialError] = useState("");
@@ -64,13 +63,13 @@ export function App() {
   setUiModelCatalog(app?.models);
 
   const current = app?.currentSessionId ?? null;
+  const scopeRequest = current ? views[current]?.officialScopeText : undefined;
   useEffect(() => {
-    // Keep the user's explicit intent; only scope belongs to the prior session.
-    // A late session-created event must never turn a work request into a question.
+    // Scope fields belong to the current session only.
     setOfficialFiles("");
     setOfficialTest("");
     setOfficialError("");
-  }, [current]);
+  }, [current, scopeRequest]);
   useEffect(() => setSkillsOpen(false), [current]);
   useEffect(() => setImprovementsOpen(false), [current]);
   const view = current ? views[current] : undefined;
@@ -657,28 +656,19 @@ export function App() {
             }
           />
           {app.officialDefault && (
-            <section aria-label="公式入力の種類">
+            <section aria-label="公式入力の自動判別">
               {officialError && <p role="alert">{officialError}</p>}
               <p>
                 公式Claude SDK / Codex App
                 Serverを使用します。旧HTTPへ自動切替しません。
               </p>
-              <label>
-                入力の種類{" "}
-                <select
-                  aria-label="公式入力の種類"
-                  value={officialWork ? "work" : "question"}
-                  disabled={!!view?.running}
-                  onChange={(e) => setOfficialWork(e.target.value === "work")}
-                >
-                  <option value="question">質問（計画・実装なし）</option>
-                  <option value="work">
-                    限定作業（既存Nodeテスト・単一課題）
-                  </option>
-                </select>
-              </label>
-              {officialWork && (
+              <p>
+                質問・作業を同じ会社のHaiku /
+                Lunaで自動判別します。質問はその場で回答し、作業は対象確認と計画承認を待ちます。
+              </p>
+              {view?.officialScopeText && (
                 <>
+                  <p>作業依頼：{view.officialScopeText}</p>
                   <p>
                     現在のセッションの作業場所を使います。既存worktreeの有無や完了時の反映操作は従来どおりです。最初はcleanなGit作業場所と、既存Nodeテストで検証できる単一課題のみ対応します。
                   </p>
@@ -704,6 +694,33 @@ export function App() {
                   <p>
                     依存インストール・任意shell・自動再開は行いません。ローカルNodeテストの副作用をOSで完全隔離する機能ではありません。計画で対象とテスト実行を確認してから承認します。
                   </p>
+                  <button
+                    disabled={!!view.running || waiting}
+                    onClick={() => {
+                      const files = officialFiles
+                        .split(/\r?\n/)
+                        .map((f) => f.trim())
+                        .filter(Boolean);
+                      if (
+                        !files.length ||
+                        !officialTest.trim() ||
+                        !session?.workspaceId
+                      ) {
+                        setOfficialError(
+                          "プロジェクト、変更対象、既存の独立テストを指定してください。対象未確認のまま計画へ進みません。",
+                        );
+                        return;
+                      }
+                      setOfficialError("");
+                      setOfficialOpenSignal((n) => n + 1);
+                      void s.send(view.officialScopeText!, undefined, {
+                        files,
+                        testFile: officialTest.trim(),
+                      });
+                    }}
+                  >
+                    対象を確認して計画を作成
+                  </button>
                 </>
               )}
             </section>
@@ -746,28 +763,6 @@ export function App() {
               providerOf(model) === "codex" ? "var(--codex)" : "var(--claude)"
             }
             onSubmit={(text, images) => {
-              if (app.officialDefault && officialWork) {
-                const files = officialFiles
-                  .split(/\r?\n/)
-                  .map((f) => f.trim())
-                  .filter(Boolean);
-                if (
-                  !files.length ||
-                  !officialTest.trim() ||
-                  !session?.workspaceId
-                ) {
-                  setOfficialError(
-                    "プロジェクト、変更対象、既存の独立テストを指定してください。質問には切り替えて送信しません。",
-                  );
-                  return Promise.resolve(false);
-                }
-                setOfficialError("");
-                setOfficialOpenSignal((n) => n + 1);
-                return s.send(text, images, {
-                  files,
-                  testFile: officialTest.trim(),
-                });
-              }
               return s.send(text, images);
             }}
           />

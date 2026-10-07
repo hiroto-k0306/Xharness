@@ -68,3 +68,27 @@ FakeProvider、mock OfficialAgent、Temp内の専用Git fixture、jsdomで検証
 scripts/pnpm.ps1 typecheck、変更18 TS/TSXファイルのESLint、変更20ファイルのPrettier --check、git diff --check成功（終了コード0）。ログは.out/official-default-20261008-{related,boundaries,typecheck,eslint,prettier}.log。Windows、Codex同梱PowerShell7.6.5、ローカルpnpm/Node22.23.3を使用。Store版pwshや配布GUIは今回確認していない。テストはfake/mock、一時Git fixture、jsdomだけで、アプリ起動・実通信・認証更新なし。
 
 人間の今回の指示に従い、作者/コミッターを各commitコマンドだけCodex <codex@local>に指定し、永続Git設定を変えていない。作業場所の事前検査、公式service、desktop/session、UI、回帰テストを目的別かつ各400行以内に分けて保存した。配布は後続の記録に作成元commit・終了コード・ハッシュを残す。
+
+## 配布物の作成（2026-10-08）
+
+作成元はb94c91e939ca0f7d802b6218b39e0d18a9dc2d63。以後のcommitは本報告の配布結果追記だけで、実装コードは同じ。開始時に保護した18 TS/TSXファイルのSHA256と比較し、コード内容の変更なしを確認した。
+
+```powershell
+.\scripts\pnpm.ps1 build
+.\scripts\pnpm.ps1 exec electron-builder --win -c.directories.output=.out/official-default-b94c91e-dist --publish never
+```
+
+通常buildとelectron-builderはいずれも終了コード0。既存resources/icon.icoを使用し、icon生成/installの追加コマンドは実行していない。出力先が存在しないことを確認してから指定した。既存.out/plan-assignments-dist/win-unpacked/XHarness.exe（a418dcd）は残して上書きしていない。Electron44.5.1、builder26.15.3。package author未設定、重複依存参照、非対象OS/arm64のoptional SDK依存の非同梱警告はあるが、エラー終了ではない。win32-x64 SDKのclaude.exeは同梱処理ログで確認した。依存・lockfile・永続設定は変更していない。
+
+配布フォルダーは `.out/official-default-b94c91e-dist/`。source-and-hashes.jsonに作成元commit、コマンド、終了コード、バイト数、SHA256を保存。SHA256SUMS.txtも併置した。成果物は起動していない。
+
+| 成果物                          | SHA256                                                           |
+| ------------------------------- | ---------------------------------------------------------------- |
+| XHarness-Setup-0.0.0.exe        | 09d2087bf3443c4ac6cc3d19ffb7eb6da2329303542a548f91e77a8ccc5597e8 |
+| XHarness-0.0.0-portable.exe     | 91535364c27e180ca8ce34cee01eb63ec2802230c2bbaba1708a0c18ef3a559c |
+| win-unpacked/XHarness.exe       | 23b597e5ba3d4ef748a39fe43314254d9938ef7d5673addbd3b0eec7b4b978fb |
+| win-unpacked/resources/app.asar | b3804ae5114b210c46510ecf2f1d6f7ed50dc2a466c1979b2ef7aafb10c0961a |
+
+静的archive検査でmain/index.js・preload/index.cjs・renderer/index.htmlが直前のbuild出力とバイト単位で一致（終了コード0）。補助検査の初回はWindowsのnode -e引用符、続いてasar内パス区切りの指定で失敗した。ファイル経由とpath.normalizeへ修正してオフライン再検査し成功した。アプリ/モデル通信は実行せず、製品コードや権限設定も変更していない。
+
+ログは.out/official-default-20261008-build.log、package.log、asar.log（すべて同じprefix）、終了コードJSONはbuild-result.json/package-result.json。今回は既知のtsx uv_os_get_passwd/ENOMEM、esbuildアクセス拒否を再現せず、ACL/サンドボックスを変更する必要もなかった。Electron起動の既知FATALは試していない。起動・配布GUI・通常入力の実通信・実サブスク利用・新モデルの挙動は未確認、全回帰も依頼どおり未実施。push/merge/インストール更新なし。

@@ -14,6 +14,10 @@ export const operationSchema = z
   })
   .strict();
 export type Operation = z.infer<typeof operationSchema>;
+/** Why an operation request ended without a grant, recorded as the stop reason. */
+export type OperationOutcome = true | "declined" | "expired" | "cancelled";
+/** Long enough for a person to read the request; the phase timer pauses meanwhile. */
+export const OPERATION_APPROVAL_MS = 600000;
 export interface PendingOperation extends Operation {
   workflowId: string;
   approvalId: string;
@@ -22,8 +26,11 @@ export interface PendingOperation extends Operation {
 }
 /** Ephemeral grants: never loaded from disk and consumed exactly once. */
 export class OperationApprovals {
-  private waiting?: { view: PendingOperation; finish: (yes: boolean) => void };
-  constructor(private durationMs = 60000) {}
+  private waiting?: {
+    view: PendingOperation;
+    finish: (outcome: OperationOutcome) => void;
+  };
+  constructor(private durationMs = OPERATION_APPROVAL_MS) {}
   view() {
     return this.waiting ? structuredClone(this.waiting.view) : undefined;
   }
@@ -31,26 +38,26 @@ export class OperationApprovals {
     workflowId: string,
     input: unknown,
     signal: AbortSignal,
-  ): Promise<boolean> {
+  ): Promise<OperationOutcome> {
     const parsed = operationSchema.safeParse(input);
     if (!parsed.success || signal.aborted || this.waiting)
-      return Promise.resolve(false);
+      return Promise.resolve("cancelled");
     const operation = structuredClone(parsed.data);
     const digest = createHash("sha256")
       .update(JSON.stringify([workflowId, operation]))
       .digest("hex");
     return new Promise((accept) => {
       let settled = false;
-      const finish = (yes: boolean) => {
+      const finish = (outcome: OperationOutcome) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
         signal.removeEventListener("abort", cancel);
         this.waiting = undefined;
-        accept(yes && !signal.aborted);
+        accept(signal.aborted ? "cancelled" : outcome);
       };
-      const cancel = () => finish(false);
-      const timer = setTimeout(cancel, this.durationMs);
+      const cancel = () => finish("cancelled");
+      const timer = setTimeout(() => finish("expired"), this.durationMs);
       this.waiting = {
         view: {
           ...operation,
@@ -79,9 +86,11 @@ export class OperationApprovals {
       pending.view.digest !== digest
     )
       return;
-    pending.finish(allow && Date.now() < pending.view.expiresAt);
+    pending.finish(
+      Date.now() >= pending.view.expiresAt ? "expired" : allow || "declined",
+    );
   }
   cancel() {
-    this.waiting?.finish(false);
+    this.waiting?.finish("cancelled");
   }
 }

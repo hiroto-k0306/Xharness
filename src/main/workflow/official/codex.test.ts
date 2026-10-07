@@ -219,6 +219,74 @@ it.each(["allow", "deny", "changed", "duplicate"])(
     }
   },
 );
+it.each([
+  [true, "accept", undefined],
+  ["declined", "decline", "user-declined"],
+  ["expired", "decline", "approval-expired"],
+  ["cancelled", "decline", "approval-cancelled"],
+] as const)(
+  "pauses the phase limit while a person decides and records why: %s",
+  async (outcome, expected, reason) => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-codex-approval-wait-"));
+    try {
+      await writeFile(join(cwd, "add.mjs"), "synthetic");
+      const mock = fakeServer(),
+        original = mock.server.request;
+      let decision: unknown;
+      const params = {
+        threadId: "thread-fixture",
+        turnId: "turn-fixture",
+        itemId: "read-fixture",
+        cwd,
+        command: "Get-Content add.mjs",
+      };
+      // The person takes longer than the whole 1s phase limit.
+      const r = {
+        ...request("implement"),
+        cwd,
+        requestId: "11111111-1111-4111-8111-111111111111",
+        approve: vi.fn(async () => {
+          await new Promise((done) => setTimeout(done, 1300));
+          return outcome;
+        }),
+      };
+      mock.server.request = async (method, raw, signal) => {
+        if (method !== "turn/start") return original(method, raw, signal);
+        queueMicrotask(() => {
+          void (async () => {
+            mock.emit("turn/started", {
+              threadId: params.threadId,
+              turn: { id: params.turnId },
+            });
+            decision = await mock.approval()(
+              "item/commandExecution/requestApproval",
+              params,
+            );
+            mock.emit("turn/completed", {
+              threadId: params.threadId,
+              turn: { id: params.turnId, status: "completed" },
+            });
+          })();
+        });
+        return { turn: { id: params.turnId } };
+      };
+      const result = await new CodexWorkflowAgent(() => mock.server).run(
+        r,
+        new AbortController().signal,
+      );
+      expect(decision).toEqual({ decision: expected });
+      expect(result.status).not.toBe("timeout");
+      const approval = result.diagnostics?.approvals?.at(-1);
+      expect(approval).toMatchObject({
+        decision: outcome === true ? "allowed" : "denied",
+      });
+      expect(approval?.reason).toBe(reason);
+      if (reason) expect(result.error).toContain(`binding: ${reason}`);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+);
 it("uses official account/model APIs and does not copy or retain auth/account/config values", async () => {
   const mock = fakeServer(),
     agent = new CodexWorkflowAgent(() => mock.server);

@@ -163,7 +163,12 @@ export interface AgentRequest {
   outputSchema: Record<string, unknown>;
   timeoutMs: number;
   tool(evidence: ToolEvidence): Promise<void>;
-  approve(name: string, input: unknown, signal: AbortSignal): Promise<boolean>;
+  /** true grants; any other value is the reason the person's grant is missing. */
+  approve(
+    name: string,
+    input: unknown,
+    signal: AbortSignal,
+  ): Promise<boolean | "declined" | "expired" | "cancelled">;
 }
 export interface AgentResult {
   diagnostics?: import("./diagnostics.js").AgentDiagnostics;

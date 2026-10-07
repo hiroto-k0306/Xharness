@@ -203,8 +203,20 @@ export class CodexWorkflowAgent implements OfficialAgent {
       cancel = () => controller.abort();
     signal.addEventListener("abort", cancel, { once: true });
     if (signal.aborted) cancel();
-    const timer = setTimeout(cancel, request.timeoutMs),
-      server = this.start(request.cwd),
+    // The phase limit measures agent time: waiting for a person's operation
+    // decision pauses it and the remaining time resumes afterwards.
+    let remaining = request.timeoutMs,
+      resumedAt = Date.now(),
+      timer = setTimeout(cancel, remaining);
+    const pauseTimer = () => {
+        clearTimeout(timer);
+        remaining -= Date.now() - resumedAt;
+      },
+      resumeTimer = () => {
+        resumedAt = Date.now();
+        timer = setTimeout(cancel, Math.max(0, remaining));
+      };
+    const server = this.start(request.cwd),
       readonly = ["plan", "review", "conversation"].includes(request.phase);
     const diagnostic = diagnostics(
       request,
@@ -477,11 +489,18 @@ export class CodexWorkflowAgent implements OfficialAgent {
           rejection = { stage: decision.stage, reason: decision.reason };
         if (decision.kind === "operation") {
           explicit = true;
-          allowed = await request.approve(
-            method,
-            decision.operation,
-            controller.signal,
-          );
+          pauseTimer();
+          let outcome: Awaited<ReturnType<AgentRequest["approve"]>>;
+          try {
+            outcome = await request.approve(
+              method,
+              decision.operation,
+              controller.signal,
+            );
+          } finally {
+            resumeTimer();
+          }
+          allowed = outcome === true;
           // A grant belongs to this immutable request, never a later changed command.
           if (allowed)
             allowed =
@@ -490,7 +509,16 @@ export class CodexWorkflowAgent implements OfficialAgent {
           if (!allowed)
             rejection = {
               stage: "binding",
-              reason: "user-declined-or-expired",
+              reason:
+                outcome === true
+                  ? "request-changed"
+                  : outcome === "declined"
+                    ? "user-declined"
+                    : outcome === "expired"
+                      ? "approval-expired"
+                      : outcome === "cancelled"
+                        ? "approval-cancelled"
+                        : "user-declined-or-expired",
             };
         }
       } else if (method === "item/fileChange/requestApproval") {
@@ -568,8 +596,16 @@ export class CodexWorkflowAgent implements OfficialAgent {
         const code = rejection
           ? `（${rejection.stage}: ${rejection.reason}）`
           : "";
+        const ended =
+          rejection?.reason === "user-declined"
+            ? "拒否されました"
+            : rejection?.reason === "approval-expired"
+              ? "承認期限を過ぎました"
+              : rejection?.reason === "approval-cancelled"
+                ? "取消されました"
+                : "拒否・取消・期限切れになりました";
         stopReason = explicit
-          ? `今回の操作が拒否・取消・期限切れになりました${code}。自動再試行はしません。`
+          ? `今回の操作が${ended}${code}。自動再試行はしません。`
           : `許可範囲外または安全に解釈できない操作のため停止しました${code}。`;
         stopped = "failed";
         controller.abort();

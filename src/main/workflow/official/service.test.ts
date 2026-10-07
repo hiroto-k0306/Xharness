@@ -15,6 +15,7 @@ import {
   WorkflowFailure,
   type ModelCandidate,
   type OfficialAgent,
+  type AgentRequest,
 } from "./contracts.js";
 import { fixtureWorkflowOptions, fixtureAgents } from "./fixtures.js";
 import { resolveRole } from "../../config/catalog.js";
@@ -86,7 +87,7 @@ it.each([true, false])(
   "exposes per-operation approval and consumes only a matching UI decision (%s)",
   async (allow) => {
     const path = await home();
-    let approved: boolean | undefined;
+    let approved: Awaited<ReturnType<AgentRequest["approve"]>> | undefined;
     const instance = service(path, async (cwd) => {
       const fake = fixtureAgents("codex"),
         original = fake.agents.codex.run;
@@ -106,7 +107,7 @@ it.each([true, false])(
             },
             signal,
           );
-          if (!approved)
+          if (approved !== true)
             return {
               status: "cancelled",
               dispatched: true,
@@ -142,7 +143,7 @@ it.each([true, false])(
     await instance.command(decision);
     await instance.command({ ...decision, allow: !allow });
     await wait(instance, (v) => !v.activeId);
-    expect(approved).toBe(allow);
+    expect(approved).toBe(allow || "declined");
     expect(instance.view().operationApproval).toBeUndefined();
     expect(
       JSON.stringify(

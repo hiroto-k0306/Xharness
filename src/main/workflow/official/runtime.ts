@@ -129,11 +129,7 @@ export interface WorkflowOptions {
     digest: string,
     signal: AbortSignal,
   ): Promise<boolean>;
-  approveTool(
-    name: string,
-    input: unknown,
-    signal: AbortSignal,
-  ): Promise<boolean>;
+  approveTool: AgentRequest["approve"];
   timeoutMs?: number;
 }
 

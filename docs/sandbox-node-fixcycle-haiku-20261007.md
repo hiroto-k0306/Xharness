@@ -59,6 +59,41 @@ $env:PATH -split ';'; (Get-Command node -ErrorAction SilentlyContinue).Source; T
   - 実行ファイルと承認対象の両方が変わる。空白を含むパスを引用して許可するため、ラッパーの完全一致形を広げる必要がある。
   - 原因が(b)なら効果がない。推奨しない。
 
+### 診断の結果（2026-10-07 10:58、ユーザー承認、モデル通信0回）
+
+`codex sandbox`（elevated・workspace-write）で、上記のコマンドを1回だけ実行した。環境変数は `runtimeEnvironment()` と同じキーに絞った。
+
+| 項目                                                  | 結果               |
+| ----------------------------------------------------- | ------------------ |
+| PATH                                                  | `C:Program Files   |
+| odejs`を含む（Codexが先頭に`~.codex mparg0…` を足す） |
+| `Get-Command node`                                    | `C:Program Files   |
+| odejs                                                 |
+| ode.exe`                                              |
+| `Test-Path`                                           | True               |
+| `node -v`                                             | `v24.16.0`、exit 0 |
+
+- CLIの `codex sandbox` では、PATHも実行権限も問題ない。(a)・(b)のどちらも、この経路では再現しない。
+- 差は、App Server（unified exec、`source: unifiedExecStartup`）の経路にあるとみられる。
+  - 補助スクリプトがXHarnessに渡したPATHも確かめた。`C:Program Files
+odejs` を含んでいた。
+- App Server側で、シェルにどの環境変数を渡しているかは未確認。**原因は未確定**のまま。
+- 確定させるには、App Serverの `command/exec`（threadもモデルも使わないsandbox実行）で同じコマンドを1回実行する方法がある。追加の承認が必要。
+
+後片付け：
+
+- 使い捨てフォルダ（書き込みACEが付いていた）は削除した。
+- trusted登録は増えていない。
+- `.claude.json` には、既存の読み取りACE（CodexSandboxUsers:RX）が付いている。
+
+### 案1の実施（2026-10-07、ユーザー承認）
+
+- `codexDeveloperInstructions` の変更：
+  - 実装・fixのthreadへの列挙を、計画済みファイルごとの `Get-Content -Raw <file>` だけにした。
+  - 「テストは自分で実行しない。XHarnessが独立に実行し、失敗はfixのphaseに渡す」と伝える。
+- 安全判定（`classifyCommand`）は変えていない。モデルがテストを要求すれば、従来どおり登録テストとして扱う。ラッパー経由なら個別承認に回る。
+- 実行ファイル・登録テストの定義・独立テストの起動方法も、変えていない。
+
 ## 2. レビュー指摘後の修正サイクル
 
 ### 既存のモックテストが確認していたこと

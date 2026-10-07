@@ -1137,17 +1137,20 @@ it("keeps unreported command values null instead of inferring them", async () =>
     },
   ]);
 });
-it("tells implementation threads exactly the commands XHarness can route to approval", async () => {
+it("tells implementation threads exactly the reads XHarness can route to approval and leaves tests to XHarness", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "xh-codex-instructions-"));
   try {
     await writeFile(join(cwd, "add.mjs"), "synthetic");
     const r = { ...request("implement"), cwd };
     const text = codexDeveloperInstructions(r, false);
     expect(text).toContain('"Get-Content -Raw add.mjs"');
-    expect(text).toContain(JSON.stringify(fixtureTest().command));
+    // Registered tests are run by XHarness, not listed for the model.
+    expect(text).not.toContain(fixtureTest().command);
+    expect(text).toMatch(/Do not run the tests yourself/);
     expect(text).toMatch(/Never combine commands/);
     expect(text).toMatch(/rg, ls, dir, Get-ChildItem, git/);
-    // Each allowed command is one the classifier accepts (approval or registered test).
+    // Each listed command is one the classifier routes to approval; a test the
+    // model runs anyway is still classified as before.
     const params = (command: string) => ({
       command,
       cwd,

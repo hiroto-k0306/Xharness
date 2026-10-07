@@ -1,4 +1,4 @@
-# 実アプリの実通信検証（2026-10-08・途中）
+# 実アプリの実通信検証（2026-10-08）
 
 ユーザーが実通信と、各検証5回まで、不具合の修正を承認した。検証候補は通常質問/追加質問、Claude実装→Codexレビュー、Codex実装→Claudeレビュー、指摘→修正→再レビュー。予算はXHarnessのphase/query呼出で数える前提を質問し、まず単純な質問を開始した。SDK内部のHTTP回数は観測できないため、5 HTTPリクエスト以内という保証ではない。新しい認可・追加課金・有料API切替・資格情報の抽出/コピーを行わない。
 
@@ -67,16 +67,41 @@ Codex実装は終了completed、In45750/Out235/cacheRead33024/reasoning0、threa
 
 独立arithmeticテストはsource=process、1718ms、exit0/pass。Claude Sonnet5.5レビューは11858ms、Sonnet In2/Out234/cacheCreate8052、Haiku In1817/Out10/cache0。指定/SDK初期/parent=nullの主系列assistantはSonnet。固定base/headレビューは指摘0件、completed・修正0回。画面と保存JSONの終了・テスト・レビューの一致を確認した。
 
-## 検証4：指摘→修正→再テスト→再レビュー（1/5回・計画承認待ち）
+## 検証4：指摘→修正→再テスト→再レビュー（5/5回・成功）
 
-同じc998a30配布物を通常終了後、別の空の絶対home `.out/app-live-20261008-fix-cycle-home` と `--official-only --verify-fix-cycle`、`XHARNESS_FAULT_INJECTION=fix-cycle-v1` で起動した。元のprofileは保護した。専用typed-add-v1課題だけに注入する既存機能で、品質テスト合格後にX2の明示的な不良コミットを書き、独立テスト失敗・全差分レビュー・X3修正・再テスト・再レビューを確認する。plan1/implement1/fix1/review2の5回上限は送信前に保存・確認される。
+同じc998a30配布物を通常終了後、別の空の絶対home `.out/app-live-20261008-fix-cycle-home` と `--official-only --verify-fix-cycle`、`XHARNESS_FAULT_INJECTION=fix-cycle-v1` で起動した。元のprofileは保護した。専用typed-add-v1課題だけに注入する既存機能で、plan1/implement1/fix1/review2の5回上限を送信前に保存・確認する。
 
-workflow 0a10154e-50fb-4d3c-94ea-55f1683a7945、workspace-6k6h5c。計画はOpus5.5 high。対象add.mjsだけ、有限数の加算、それ以外（NaN・±Infinity・undefined・数値文字列を両側）でTypeError。固定typed-addテストは変更不可。計画が選んだ実装/修正はClaude Sonnet5.5 low、レビューCodex gpt-6.1-sol low。画面の計画digest2ca23430701f958097d521d7e094f4a1417d673c11c656dd795db58bf77d512eを利用者へ提示し、具体的な計画と承認ボタン操作の確認待ち。最初の依頼では内部executionDigest08d094…を誤記したため、画面を再照合して訂正した。課題・担当モデルは同じで、未承認のまま実装を開始していない。まだ実装/注入/修正は実行していない。
+workflow 0a10154e-50fb-4d3c-94ea-55f1683a7945、workspace-6k6h5c。対象add.mjsだけ、有限数の加算、それ以外（NaN・±Infinity・undefined・数値文字列を両側）でTypeError。固定typed-addテストは変更不可。計画が選んだ実装/修正はClaude Sonnet5.5 low、レビューCodex gpt-6.1-sol low。計画はOpus5.5 high。
 
-## 残作業
+画面の計画digest2ca23430701f958097d521d7e094f4a1417d673c11c656dd795db58bf77d512eを提示した。最初の依頼では内部executionDigest08d094…を誤記したため、画面を再照合して訂正した。利用者の「再度操作して許可してください」を受け、同じ課題・担当・digestを再確認して実アプリの「この計画を承認」を1回操作した。approvedDigestは画面の値と一致した。テスト側の無条件承認は使わない。
 
-専用障害注入課題の承認後の実装・テスト・指摘→修正→再テスト/レビューは未実施。各検証5回を超えて続行しない。ここまでのモデルquery/phaseは合計10回（質問3、正方向3、逆方向3、修正サイクルの計画1）。公式の接続情報確認はモデル推論callと区別する。
+| 段階               | 固定head                                 | 独立テスト               | レビュー                                |
+| ------------------ | ---------------------------------------- | ------------------------ | --------------------------------------- |
+| 品質実装X1         | ba220e1db2a2d615080964dc5fd3cf6da8ca23a6 | 2件合格、exit0、1543ms   | 注入前の品質確認                        |
+| 明示的障害注入X2   | 44e75ec211d20d83dabf10f57c1fe5790593cd51 | 2件不合格、exit1、1276ms | must3件：減算、入力検証欠如、export形式 |
+| モデルによる修正X3 | 7d077a0f180987c32a702a1de4a1ebf751be1393 | 2件合格、exit0、1305ms   | 指摘0件                                 |
 
-隔離検証アプリは検証4の計画承認待ちで起動したまま。元のアプリや無関係なプロセスは終了していない。push・merge・ACL変更・新しいログイン/OAuth認可・有料APIへの切替・上書きインストールは行っていない。
+全テストはXHarnessによるsource=processの独立実行。レビューはbase c69a38bafe5dcfc9c7f7ed930a812c6f64913fb6から各headの全差分に固定される。障害注入は1回だけで、X2の不合格は検証で期待した結果。X3はモデルのWriteで生成し、検証側が正解を書いて合格させたものではない。最終差分はadd.mjsだけで、Number.isFiniteを両側に適用、TypeError、a+b、named arrow exportを確認し、テストファイル不変・作業ツリーcleanも確認した。
+
+| phase/query         | 指定モデル      |    In |  Out | cache read | cache create | elapsed ms |
+| ------------------- | --------------- | ----: | ---: | ---------: | -----------: | ---------: |
+| plan                | Opus5.5 high    |     4 | 1305 |       9141 |         9963 |      13982 |
+| 同queryのmodelUsage | Haiku           |  2103 |   16 |          0 |            0 |       同上 |
+| implement           | Sonnet5.5 low   |    10 |  916 |      24704 |         8850 |      53084 |
+| 同queryのmodelUsage | Haiku           |  1543 |   14 |          0 |            0 |       同上 |
+| review1             | gpt-6.1-sol low | 12678 |  337 |          0 |     提供なし |      12773 |
+| fix                 | Sonnet5.5 low   |     8 |  774 |      26531 |         4652 |       9285 |
+| 同queryのmodelUsage | Haiku           |  3056 |   15 |          0 |            0 |       同上 |
+| review2             | gpt-6.1-sol low | 12024 |  104 |          0 |     提供なし |       7369 |
+
+Claudeの指定・SDK初期・parent=nullの主系列assistantは各queryでOpus/Sonnetと一致した。HaikuのmodelUsageも別に記録し、役割をモデル名だけから推測しない。Codexはthread-cumulative・complete=true、モデル別配賦なし、reasoningOutput33/32（Outへ加算しない）。全5 callsはcompleted、correctionRounds1、injection state=injected。画面でcompleted/修正1回、合格→不合格→合格、指摘3件→なしと保存JSONの一致を確認した。
+
+## 完了範囲と制限
+
+今回のモデルquery/phaseは合計14回（質問3、正方向3、逆方向3、修正サイクル5）。各検証5回以内。SDK内部のHTTP・モデル往復回数は欠測であり、HTTP5回以内という保証ではない。追加の推論試行は行わない。公式の接続情報確認はモデル推論callと区別する。
+
+通常質問の回答形式の不具合はc998a30で修正し、関連52テスト・型・変更ファイルのlint/整形・通常/headless build・別出力win-unpacked作成は成功。今回の修正後ソースの全回帰、portable/recoveryの再実行は未実施。作業workflow3件は固定の小さな合成課題を公式パネルで開始した検証であり、任意の通常プロジェクトやnative DAG、全権限・全モデルの動作を保証しない。旧Sonnet/Haiku不一致の原因も今回の一致だけで解決済みとはしない。Store版pwshの確認、初回hidden起動での表示遅延の原因特定は未実施。
+
+隔離検証アプリは検証4完了の画面で起動したまま。実行中のworkflow・承認待ちはない。元のアプリや無関係なプロセスは終了していない。push・merge・ACL変更・新しいログイン/OAuth認可・有料APIへの切替・上書きインストールは行っていない。配布ソースは引き続きc998a30で、その後は報告書のみのコミット。
 
 診断の保存場所は.out/app-live-20261008-safe-summary.json、-launch.json、-fixed-launch.json、-cycle-launch.json、-question-tests.log、-typecheck.log、-lint.log、-format.log、-headless-build.log、build/package各ログ。本文は合成課題のみで、認証情報・思考本文を報告書やfixtureへ保存しない。

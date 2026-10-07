@@ -280,3 +280,67 @@ PID 47760を再照合し、exe `dist/win-unpacked/XHarness.exe` と開始時刻 
 製品コードは前節の42件/typecheck/最終lint/format成功後に追加変更なし。既存の報告追記を保ち、この結果のみ追加した。今回もモデル通信・ACL/trusted変更・build/package・push/mergeは行わない。作者指定は今回のGit呼出だけに限定し、永続設定・旧コミット作者は変更しない。
 
 コミット前の再確認：42件ログ終了直後にテストのnon-null型注釈だけ更新されていたため、現行fixtures.test.tsの7件を再実行して成功（.out/codex-preparation-precommit-focused.log）。件数を42件と合算しない。
+
+
+## 診断表示の配布反映準備（2026-10-07、ソース4644f39）
+
+ユーザー承認の範囲で、cleanな `4644f395dfeb4e710051cbb059e044e53ef63195` から同じ既定の隔離実行環境で `scripts/pnpm.ps1 package:dir` を1回実行した。配布起動・モデル通信・Codex sandbox・ACL/trusted変更は行わない。
+
+既存の54a6e92配布物をworkspace内の `.out/pre-4644f39-dist/` に退避し、exe/asar/ICUのSHA256を記録した。退避後もhash一致を確認した。旧退避物 `.out/pre-54a6e92-dist/` は変更していない。
+
+結果はexit 1。最初の `icon`（`tsx scripts/make-icon.ts`）が `node:os:306` の `os.userInfo()` で失敗した。`uv_os_get_passwd` / `ENOMEM` / errno -4057、Node 22.23.3。スタックはtsx 4.23.15の `temporary-directory-Du7LpLp9.mjs:1:659`。OSエラーの文字列はnot enough memoryだが、実際のメモリ不足やACL拒否のどちらかと断定できる根拠はない。
+
+build/packageへ到達せず、診断表示入りのcompiled artifactは今回生成・静的確認できていない。新しい `dist/` も未生成。権限を変えた再試行・別経路での実行・再起動・ACL修正は行わず停止した。ソースコードも変更していない。
+
+証跡：`.out/codex-preparation-package-dir.log`、`.out/codex-preparation-package-source.json`（ソース・退避hash・実行段階・結果）。本追記は未コミット。今回の権限範囲でのビルド失敗の切り分けと配布反映は残課題で、先のGit準備失敗やElectron起動FATALと同根因だとは扱わない。
+
+
+### tsx失敗の既存記録・ソース比較（同日、追加ビルドなし）
+
+今回と前回54a6e92の初回失敗は、同じ `scripts/pnpm.ps1 package:dir` / Node 22.23.3 / tsx 4.23.15で、`temporary-directory-Du7LpLp9.mjs:1:659` → `os.userInfo()` → `uv_os_get_passwd` / ENOMEM / errno -4057まで一致した。
+
+tsxの該当モジュールは、`process.geteuid` がないWindowsでは `os.userInfo().username` を取得して `<tmpdir>/tsx-<username>` を決める。これはモジュール評価時の処理で、make-icon.tsのmainに入る前に失敗する。依存をpatchしたりOS identityを偽装したりしていない。
+
+pnpm.ps1は既存のローカルbinをprocess PATHの先頭に足し、同梱pnpmへ引数を渡し、finallyで元のPATHへ戻す。package scriptもicon→build→builderの既存順序。引数・cwd・Node選択の誤りを修正すれば解決する、という根拠は見つからなかった。
+
+過去の成功ログではicon/build/builderが通っているが、当時のtool呼出は初回 `use_default` に対し再試行 `require_escalated`（隔離外の通常ユーザー環境）だった。今回も失敗は `use_default`。この実行context差が既知の違いで、同一ログだけから権限拒否や実メモリ不足を確定しない。今回は実行環境変更が禁止されており、安全な呼出修正の根拠もないため、許可された条件付きの再試行は実施しなかった。追加の代替経路も試さない。
+
+比較記録：`.out/codex-preparation-package-comparison.json`。新しいモデル通信・ACL操作・アプリ起動・依存変更はなし。
+
+利用者が通常のPowerShellで同じフローを再現する場合の手順（この診断では未実行、管理者起動やACL変更は不要）：
+
+1. リポジトリ `C:/Users/ahwri/Documents/Codex/2026-10-05/task/Xharness-connections` を作業場所にする。
+2. `.\scripts\pnpm.ps1 package:dir *> .out\manual-package-4644f39.log` を実行する（ローカルpnpm/Nodeを使う同一フロー）。
+3. 完了後に `$LASTEXITCODE` とそのログを確認する。失敗した場合は起動・install・権限変更を続けず、そのままのログで切り分ける。
+
+旧配布物は引き続き `.out/pre-4644f39-dist/` に保全。新しい配布物は未生成。この追記も未コミット。
+
+
+### ユーザーによる手動package後の静的確認（2026-10-07）
+
+ユーザーが通常のPowerShellで上記packageフローを実行し「終わったよ」と報告した。assistantによる再試行ではない。`.out/manual-package-4644f39.log` は08:08:49 UTCに更新され、icon生成・electron-viteのmain/preload/renderer build・Electron 44.5.1 x64 package・asar integrity更新まで記録されている。明示的な終了コードは保存されていないのでexit 0とは記録しない。`dist/win-unpacked` の新しい生成物を確認した。
+
+- exe SHA256：`0c6a9ee66f9803e5e5bd8e14ca0be67e3372a4db2ea158b533b90345176d7e79`（08:08:49 UTC）。
+- asar SHA256：`b2c21ba936fd59dd2f2ba2988267254bc3e41e8bd31ff60796e055dbf6fd1189`（08:08:48 UTC）。
+- ICU SHA256：`9f48c7f9c7c94d516a14870707e910ab94d75ae640ff6842c4af53276cd26ebe`（旧配布物と一致）。
+
+HEADは4644f39、tracked code・scripts・package/lock/build設定の差分なし、dirtyは既存の本書追記だけ。asarを起動せずに読み取り、packaged `out/main/index.js` が現在のbuild出力とbytes一致することと、Git準備のstep/code/exit表示を静的確認した。asarライブラリのWindowsパス区切りに合わせて読み取り、製品ファイルを変更していない。
+
+証跡：`.out/manual-package-4644f39-evidence.json`。実アプリ起動・モデル通信・ACL変更・コミットは行っていない。次のoffline準備診断の提案は、ユーザーの通常環境で、新規の絶対HOMEと隔離workspaceを使い、`--fake --official-only` で計画作成まで（承認せず）確認すること。元のGit準備エラーが出れば新しい診断表示で段階/code/exitを確認する。制限環境の起動FATALを迂回する起動や、ACL変更・live通信は提案に含めない。起動診断自体はまだ未実施。
+
+手動専用helperを .out/Start-PreparationProbe-4644f39.ps1 に保存。exe/ログ親存在とHOME/ログ3件の不存在を検査し、固定 --fake --official-only で終了を待ち、XHARNESS_HOMEをfinallyで復元する。構文と固定条件だけ静的照合し、assistantから実行していない。専用HOMEは自動削除しない。本追記も未コミット。
+
+ユーザーの明示live範囲承認（Sentinel_94736de8590c8191b276f3c80827713f）に基づき、手動専用 .out/Start-FixCycleLive-4644f39.ps1 を保存。4644f39配布hashを照合し、既存root/evidenceを拒否。新規c root内home/workspacesのみ作成、固定4条件とLuna lowで起動し、終了後に2つの環境変数をfinally復元する。モデル送信・計画/操作承認・ACL/trusted変更・片付けはhelperが直接行わない。構文/固定条件だけ静的確認し、assistantから実行していない。証跡は.out/fixcycle-manual-4644f39-cに保存する設計。旧fakeのPID24868は今回確認時不在だがresultログ未生成で終了コードは未確認。追記は未コミット。
+
+
+### ユーザー操作による実修正サイクル成功と限定cleanup（2026-10-07）
+
+4644f39配布物でtask a6aa3e63-2fd8-484c-990d-4c05ae1f38e2がsimulated=false、completedとなった（08:47:24.043〜09:06:05.785 UTC、18分41.742秒）。計画承認待ちを一度中断後、同じ計画を安全に再開。Sonnet lowはユーザーが追加明示承認。実行/承認digestは一致し、phase予約はplan1/implement1/fix1/review2、修正1回、注入1回。
+
+X1 b7daa974a9c9eca37ac3a3d8bd64409eaf667864: 実プロセステスト2/2合格。X2 f9a939ba9e7c9dc0740dd2ce51fbe5efa4f4efd1: 固定故障注入後0/2、ERR_ASSERTIONの実装不具合、Sonnetレビューmust2。X3 2c10d391a9bfcca4e3043025bea5512186446658: 修正後2/2、同一HEADへの最終Sonnet実レビュー指摘0。テストSHA256は承認fixtureと一致。成功判定は製品recordに基づき、sandboxのGit直接監査は所有者差で拒否されたため独立Git確認済みとは扱わない。safe.directory変更や迂回はしていない。
+
+5/5 phaseのusage complete。Codex合計input114451/output833/total115284、cached76288はinput内数。Claude Sonnet合計input4/output846/cache-read4464/cache-write12414、thinking177はoutput内数。SDK補助Haiku合計input4143/output29、cache0。モデル別rawとquery-pipelineを重複加算しない。quota表示のCodex4%、Claude週次41→42%は確定タスク枠消費/API費用とは扱わない。
+
+ユーザーが窓を閉じ、helperは09:11:52.502948 UTC exit0。assistantはXHarnessプロセス不在確認後、承認済み範囲でnewroot D:/AIwork/xh-fixcycle-manual-4644f39-20261007-cのみ削除、そのworkspaceのexact trusted1entryのみ削除。既存6project sectionsは一致、AppData/.claude.json SDDLはcleanup前後一致。ACL変更・force kill・追加モデル通信なし。writerlock解放の削除前独立snapshotはなく、helper終了とプロセス不在を確認した。oldfake HOMEは保持。
+
+削除前にrecord/report/tracesと合成workspace（Git objectsを含む）43ファイルを移動せずコピーし、各SHA256を照合。保全先 .out/fixcycle-manual-4644f39-c/preserved、copy-manifest.json、X1〜X3-test-output.txt、usage-phases.json、ACL metadata、root-inventory.json、trusted-before-cleanup.json。cleanup-result.jsonとcleanup-verification.jsonを保存。Git objectsのコピーは履歴解析/差分独立検証を意味しない。製品証跡の既存trace内input/output以上のX1/X2/X3差分は新規生成していない。本追記は未コミット。

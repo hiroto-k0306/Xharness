@@ -481,7 +481,7 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 Codexのcommand承認は登録済みテストの単一コマンド照合を維持し、それ以外の安全に解釈できる操作を「今回の操作だけ許可／拒否」の画面へ渡す。現在の追加対象は、計画で承認した通常ファイル1件へのGet-Content（Path/LiteralPath、Rawのみ）。作業場所、対象、要求理由、native session/turn、request IDを表示する。複合式・不明な構文・リンク・範囲外・秘密のパス・network/追加permissionは確認前に拒否する。Codexが付ける永続policy変更の提案（proposedExecpolicyAmendment）は、提案があるだけでは拒否しない。応答は常に今回だけの`accept`か`decline`で、`acceptWithExecpolicyAmendment`/`acceptForSession`は返さず、選択肢に`accept`がなければ拒否する。Windows上のCodexが使う`"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Command '<中身>'`と、`-Command`の前に`-NoProfile`だけが付いた形（2026-10-07ユーザー承認）の完全一致形（パス区切りは単一または二重のバックスラッシュ）だけを外し、中身に上記と同じ判定を適用する。中身に引用符・`$`・バッククォート・改行を含むもの、pwsh・他のオプション・追加引数を含むものは拒否する。ラッパー経由の登録テストは自動許可せず、今回だけの確認へ回す。要求の`environmentId`は、XHarness専用App Serverのthreadを`environments: []`で開始し、応答の`thread.environments`が空かnull（環境を選んでいない）で、IDが短い英数字の場合だけ通す。それ以外は拒否し、XHarnessは`environment/add`を呼ばない。承認は元のコマンド全文（ラッパー含む）・作業場所・対象に結び付ける（2026-10-06ユーザー承認）。任意shellやshell wrapperの一括承認は未対応。Codexの実装・fixのthreadには、承認経路へ回せるコマンド（計画済みファイルごとの `Get-Content -Raw <file>`。1回に1コマンド）を開発者指示で列挙し、登録テストは自分で実行せずXHarnessの独立テストとfixへの結果受け渡しに任せるよう伝え（2026-10-07ユーザー承認。実装役とXHarnessの役割分担の変更で、テストの実行はXHarnessだけが担う。Codexのsandbox内でnodeを解決できない件は未解決で、この変更で解消したとは扱わない）、複合コマンド・探索（rg・ls・Get-ChildItem・git等）・その他のコマンドは拒否されて再試行なしで停止すること、ファイル変更はファイル編集で行うことを伝える（2026-10-07ユーザー承認）。許可範囲と安全判定は変えない。ファイル変更には従来の計画scope検証を適用する。個別承認の期限は10分（2026-10-07ユーザー指示、以前は60秒）。承認を待つ間はphaseの制限時間を止め、決定後に残り時間から再開する。停止理由は拒否（`user-declined`）・期限切れ（`approval-expired`）・取消（`approval-cancelled`）を分けて記録する。期限後の許可は無効。
 
-操作承認はworkflow/request/session/turn/item/内容digestと固有nonceに結び付ける。60秒の期限、取消、再起動、二重クリック、重複native要求、内容変更で再利用しない。許可後にもscope・内容・枠を照合し、拒否・期限切れ・禁止操作はphaseを停止する。pending許可は保存・復元しない。画面からの応答は厳格なIPC schemaと送信元検証を通す。
+操作承認はworkflow/request/session/turn/item/内容digestと固有nonceに結び付ける。期限（2026-10-07から10分。待機中はphaseの制限時間を止める）、取消、再起動、二重クリック、重複native要求、内容変更で再利用しない。許可後にもscope・内容・枠を照合し、拒否・期限切れ・禁止操作はphaseを停止する。pending許可は保存・復元しない。画面からの応答は厳格なIPC schemaと送信元検証を通す。
 
 Claudeのモデル証跡は指定alias/解決済みID、SDK初期化、parent=nullの主系列assistant、parentありの補助系列、parent欠測、resultモデル別使用量を分けて表示する。不一致を警告し、モデル名を読み替えない。同梱CLIの初期化時バージョン、PostModelSwitchおよびmodel_refusal_fallbackの変更元/変更先/種別を許可リストで保存する（通知本文や思考は保存しない）。通知欠測から変更なしと推定しない。
 
@@ -504,6 +504,24 @@ Codexの残量と認証・課金経路は別に検証する。公式App Server 0
 DAGのUI・runtime公開入口はfixture/modelの模擬実行に限定する。元checkoutや未コミット変更は対象にしない。一般プロジェクトの任意コード実行、実SDK/App Serverの複数worktree強制書込み隔離、native会話resumeは未対応で、模擬成功を実provider成功と呼ばない。詳細は[Jobと合成DAG](docs/official-workflow-dag.md)。
 
 一般projectにはproviderを起動しない非破壊preflight CLIを提供する。Git root/HEAD/dirty状態と計画scopeの実体・link・traversal・設定を検査し、未コミット変更や設定を修正しない。Git include/filterがある場合は追加Git検査を止め、HEAD/cleanを未知として報告する。inspectionPassedはnative実行許可やOS隔離の証明ではない。公式runtimeの権限ゲートとWindows shell/test隔離の限界、拒否テスト、再実行方法は[preflightと隔離境界](docs/official-workflow-preflight.md)を参照。
+
+修正経路の検証（障害注入、2026-10-07ユーザー承認）は、`--official-only`・`--verify-fix-cycle`・`XHARNESS_FAULT_INJECTION=fix-cycle-v1`・既定以外の絶対パスの`XHARNESS_HOME`がすべてそろうときだけ有効になり、通常利用では作成ボタンも処理も動かない。
+
+- **課題**：専用の合成課題`typed-add-v1`を使う。仕様（有限のnumber同士なら和、それ以外はTypeError）は最初から計画・実装役に伝える。登録テストは、左右両方のNaN・±Infinity・undefined、数値文字列、小数の正常例を含む。
+- **X1（実装品質）**：実装のコミットX1で独立テストを実行し、その結果を実装品質として記録する。X1はレビューしない。
+- **X2（障害注入）**：X1が合格した場合だけ、固定の不良内容（注入と明記したコメント付き）を作者`XHarness fault-injection`のコミットX2として作り、通常のテスト・レビュー対象にする。
+- **X3（修正）**：fixのコミットX3も、通常どおりテスト・レビューする。各段階のhead・テスト・レビューの対応は、記録の`injection.stages`に残し、baseは元のまま保つ。
+- **注入の条件**：注入は次がすべてそろうときだけ行う。
+  - workspaceとGitディレクトリの実体パスが、その課題用フォルダの中にある。
+  - baseが専用課題の内容と一致する。
+  - 注入の試行が0回である。
+- **再開**：注入前に`pendingEffect: inject`と試行回数を保存する。注入中・注入失敗・効果なしの記録は再開しない。HEADがX1で注入コミットがない、という条件だけでは再開しない。注入の設定と通信上限は実行ダイジェストに含め、変えて再開すると`execution-scope-changed`で止まる。
+- **テスト結果の扱い**：終了コードのある想定内のテスト失敗は、修正経路へ進める。次のものは基盤異常として停止する。
+  - 終了コードなし
+  - 負の終了コード
+  - 監督プロセスの起動・封じ込め失敗（125）
+- **テストとレビューの関係**：レビュー指摘0件でも、テスト失敗を合格にしない。それだけでレビューの見落としとも断定しない。
+- **通信上限**：phaseごとの上限（計画1・実装1・修正1・レビュー2）を、送信前に判定して記録に予約する。再起動後も引き継ぐ。
 
 ### 配布版の公式専用プロファイル（2026-10-06）
 

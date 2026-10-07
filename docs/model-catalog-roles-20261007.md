@@ -99,3 +99,54 @@
 型チェック・ESLint・Prettier・通常ビルドも成功した。
 
 全回帰・全GUI・実通信・配布物の作成は実施していない。
+
+## 追加修正（2026-10-07）
+
+ユーザーの依頼による3点の修正。実通信なし。
+
+### 1. 旧記録の暗黙モデル
+
+カタログの可変の別名（`officialLegacyPlanner/Reviewer` 役割）を廃止した。代わりに、記録形式の版ごとの固定定義（`src/main/workflow/official/record-compat.ts`、完全IDのみ）から解決する。
+
+- v1の固定定義
+  - 計画：`claude-opus-5-5` high
+  - Claude側レビュー：`claude-opus-5-5` high
+  - Codex側レビュー：`gpt-6-luna` low
+- 定義の無い版は「推測では置き換えません」で停止する。
+- 固定定義のモデルが、公式接続に無い、またはeffortに対応しない場合も、停止する。
+
+### 2. 旧記録の解決は、必要な再開時だけ
+
+`options()` は、新規タスク（メインモデルの選択）か、再開（記録）かで分岐する。旧記録用の解決は、記録に計画モデルが無い場合、または計画にレビュー担当が無い場合だけ行う。
+
+- 計画済みの記録を再開するときは、計画モデルを必要としない。runtimeも、計画が未作成のときだけ計画モデルの可否を確認する（`WorkflowOptions.planner` は任意。模擬DAGは必須のまま）。
+- 新規タスクの開始は、旧記録用のモデルが廃止されていても妨げられない。
+
+### 3. 残っていた固定effort
+
+役割の値（無ければ `defaultEffort`）を、送信と表示に使う。
+
+| 対象               | 修正前             | 修正後                                                                        |
+| ------------------ | ------------------ | ----------------------------------------------------------------------------- |
+| 質問               | Lunaなら固定でlow  | `roles.question` のeffort。画面にも同じ値を表示。公式一覧が対応しなければ停止 |
+| Web要約            | Codexなら固定でlow | `roles.utility`                                                               |
+| Web検索            | 固定でlow          | `roles.utility`                                                               |
+| 接続テスト         | 固定でlow          | `roles.connectionTest`（Haikuはeffortなし）                                   |
+| Claude変換の省略時 | 固定でhigh         | モデルの `defaultEffort`                                                      |
+
+カタログには `question.codex` のeffort lowを明記し、従来と同じ値を送る。
+
+### 検証
+
+`official/catalog-compat.test.ts` に4件を追加した。いずれもモックのagentと合成Git workspaceを使い、通信はしない。
+
+- 別名の世代更新後の旧記録保持
+  - `opus`・`luna`・`sol` の別名が新しいIDを指すカタログに差し替えた。
+  - 旧記録は読み込みで書き換わらない。
+  - 再開は完了まで進み、記録された実装担当（Haiku）と、固定v1のCodex側レビュー（`gpt-6-luna` low）で動く。新しい `luna` の指す先は使わない。
+  - 未知の版は停止する。
+- 旧モデル廃止時の新規開始：`claude-opus-5-5` と `gpt-6-luna` を提供終了にしても、新規タスクの計画がメインモデル（`gpt-6.1-sol` high）で始まる。
+- 役割effortの変更が実際の送信引数に反映される：Web要約・Web検索（偽provider）・Claude変換の省略時・質問（送信と表示）。認証更新の引数は既存テストで確認済み。
+- 新記録の再開時のモデル保持：別名の世代更新後も、記録の計画モデルと計画のレビュー担当（`gpt-6.1-sol` high）で再開し、完了する。
+
+既存の影響範囲（official workflow・config・Claude provider・Webツール・IPC・パネル・workflow UI）の33ファイル・374件が成功した。型チェック・ESLint・Prettier・ビルドも成功した。

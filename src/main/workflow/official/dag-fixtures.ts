@@ -6,7 +6,11 @@ import { promisify } from "node:util";
 import { fixtureModels, fixtureWorkflowOptions } from "./fixtures.js";
 import { sdkUsage, codexUsage } from "./usage.js";
 import { OfficialWorktrees } from "./worktrees.js";
-import { scopedPath } from "./workspace.js";
+import {
+  scopedPath,
+  workflowGitEnvironment,
+  workflowGitPolicyArgs,
+} from "./workspace.js";
 import type { DagOptions } from "./dag.js";
 import type {
   OfficialPlan,
@@ -106,16 +110,8 @@ export async function createDagWorkspace(
   const git = (args: string[]) =>
     exec(
       "git",
-      [
-        "-c",
-        `safe.directory=${cwd}`,
-        "-c",
-        "core.hooksPath=/xharness-disabled-hooks",
-        "-c",
-        "commit.gpgsign=false",
-        ...args,
-      ],
-      { cwd, windowsHide: true },
+      [...workflowGitPolicyArgs(), "-c", `safe.directory=${cwd}`, ...args],
+      { cwd, windowsHide: true, env: workflowGitEnvironment() },
     );
   await git(["init", "-q"]);
   await git(["add", "--", "."]);

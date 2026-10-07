@@ -8,6 +8,7 @@ vi.mock("node:child_process", () => ({ execFile }));
 import { createSyntheticWorkspace } from "./fixtures.js";
 import { OfficialWorkflowService } from "./service.js";
 import { TYPED_ADD_SOURCE, TYPED_ADD_TEST } from "./fault-injection.js";
+import { workflowGitEnvironment, workflowGitPolicyArgs } from "./workspace.js";
 
 let parent: string;
 beforeEach(async () => {
@@ -101,17 +102,15 @@ it("keeps fixture, cwd, Git identity and command scope unchanged", async () => {
   expect(calls).toHaveLength(3);
   for (const [program, args, options] of calls) {
     expect(program).toBe("git");
-    expect(args.slice(0, 6)).toEqual([
-      "-c",
-      `safe.directory=${cwd}`,
-      "-c",
-      "core.hooksPath=/xharness-disabled-hooks",
-      "-c",
-      "commit.gpgsign=false",
-    ]);
-    expect(options).toEqual({ cwd, windowsHide: true });
+    const prefix = [...workflowGitPolicyArgs(), "-c", `safe.directory=${cwd}`];
+    expect(args.slice(0, prefix.length)).toEqual(prefix);
+    expect(options).toEqual({
+      cwd,
+      windowsHide: true,
+      env: workflowGitEnvironment(),
+    });
   }
-  expect(calls[2]![1].slice(6)).toEqual([
+  expect(calls[2]![1].slice(workflowGitPolicyArgs().length + 2)).toEqual([
     "-c",
     "user.name=XHarness",
     "-c",

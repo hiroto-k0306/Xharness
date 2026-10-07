@@ -6,6 +6,7 @@ export default tseslint.config(
       "node_modules/**",
       ".tools/**",
       "spike/.out/**",
+      ".out/**",
       "dist/**",
       "out/**",
     ],

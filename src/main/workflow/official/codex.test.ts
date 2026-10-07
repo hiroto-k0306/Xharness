@@ -1165,9 +1165,10 @@ it("tells implementation threads exactly the commands XHarness can route to appr
     expect(codexDeveloperInstructions(r, true)).not.toMatch(
       /Allowed shell commands/,
     );
-    // The implement thread receives it; a review thread does not.
+    // Implement and fix threads receive it; a review thread does not.
     for (const [phase, listed] of [
       ["implement", true],
+      ["fix", true],
       ["review", false],
     ] as const) {
       const mock = fakeServer();

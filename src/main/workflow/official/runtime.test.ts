@@ -309,6 +309,103 @@ it("stops before any model call for dirty workspace or an unavailable cross-prov
     runOfficialSingleTask(fixtureWorkflowOptions(cwd), signal()),
   ).rejects.toMatchObject({ code: "dirty-workspace" });
 });
+it.each(["claude", "codex"] as const)(
+  "hands the %s fix the review, failed test and diff, then re-reviews the fixed head",
+  async (implementation) => {
+    const cwd = await workspace(),
+      fake = fixtureAgents(implementation);
+    const result = await runOfficialSingleTask(
+      fixtureWorkflowOptions(cwd, { agents: fake.agents }),
+      signal(),
+    );
+    expect(result.status).toBe("completed");
+    const [, implement, firstReview, fix, secondReview] = fake.requests;
+    const assignee = result.plan!.tasks[0]!.assignee;
+    // The fix keeps the planned implementer, model and effort.
+    for (const r of [implement!, fix!]) {
+      expect(r.model.provider).toBe(assignee.provider);
+      expect(r.model.model).toBe(assignee.model);
+      expect(r.effort).toBe(assignee.effort);
+    }
+    expect(fix!.phase).toBe("fix");
+    expect(fix!.files).toEqual(["add.mjs"]);
+    const fixInput = JSON.parse(fix!.prompt);
+    // The blocking review and the failed independent test reach the fix.
+    expect(fixInput.review).toEqual(result.reviews[0]);
+    expect(fixInput.review.findings[0]).toMatchObject({ severity: "must" });
+    expect(fixInput.checks).toEqual(result.checks[0]);
+    expect(fixInput.checks.tests[0].passed).toBe(false);
+    expect(fixInput.previousDiff).toContain("intentionally incorrect");
+    // Both reviews use the same reviewer; the second sees base..fixed head.
+    expect(secondReview!.model).toEqual(firstReview!.model);
+    expect(secondReview!.effort).toBe(firstReview!.effort);
+    const second = JSON.parse(secondReview!.prompt);
+    expect(second.base).toBe(result.base);
+    expect(second.head).toBe(result.commits[1]);
+    expect(second.head).toBe(result.head);
+    expect(second.completeDiff).toContain("a+b");
+    expect(second.completeDiff).not.toContain("intentionally incorrect");
+    expect(second.testEvidence).toEqual(result.checks[1]!.tests);
+    expect(result.checks.map((c) => c.head)).toEqual(result.commits);
+  },
+);
+it("fixes a failed independent test even when the review has no findings", async () => {
+  const cwd = await workspace(),
+    fake = fixtureAgents("codex");
+  const run = fake.agents.claude.run;
+  fake.agents.claude.run = async (request, s) => {
+    const result = await run(request, s);
+    if (request.phase === "review")
+      result.output = { ...(result.output as object), findings: [] };
+    return result;
+  };
+  const result = await runOfficialSingleTask(
+    fixtureWorkflowOptions(cwd, { agents: fake.agents }),
+    signal(),
+  );
+  expect(result.status).toBe("completed");
+  expect(result.correctionRounds).toBe(1);
+  expect(fake.requests.map((r) => r.phase)).toEqual([
+    "plan",
+    "implement",
+    "review",
+    "fix",
+    "review",
+  ]);
+});
+it("completes on nit-only findings with passing tests and does not start a fix", async () => {
+  const cwd = await workspace(),
+    fake = fixtureAgents("codex", false);
+  const run = fake.agents.claude.run;
+  fake.agents.claude.run = async (request, s) => {
+    const result = await run(request, s);
+    if (request.phase === "review")
+      result.output = {
+        ...(result.output as object),
+        findings: [
+          {
+            severity: "nit",
+            file: "add.mjs",
+            line: 1,
+            message: "Spacing",
+            evidence: "Style only; the arithmetic test passes.",
+          },
+        ],
+      };
+    return result;
+  };
+  const result = await runOfficialSingleTask(
+    fixtureWorkflowOptions(cwd, { agents: fake.agents }),
+    signal(),
+  );
+  expect(result.status).toBe("completed");
+  expect(result.correctionRounds).toBe(0);
+  expect(fake.requests.map((r) => r.phase)).toEqual([
+    "plan",
+    "implement",
+    "review",
+  ]);
+});
 it("caps correction cycles at two and does not accept model claims as test evidence", async () => {
   const cwd = await workspace(),
     fake = fixtureAgents("claude", false);

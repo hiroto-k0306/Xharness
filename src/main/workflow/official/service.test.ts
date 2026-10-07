@@ -773,3 +773,85 @@ it("uses question models that exist and are enabled in the shipped catalog", () 
       catalog.find((m) => m.id === QUESTION_MODELS[provider]),
     ).toMatchObject({ provider, enabled: true });
 });
+
+it.each(["claude", "codex"] as const)(
+  "ordinary %s questions query once with their session's history, never planning or consulting the other company",
+  async (provider) => {
+    const target = listAgent(
+        provider,
+        provider === "claude" ? claudeList : codexList,
+      ),
+      other = listAgent(provider === "claude" ? "codex" : "claude", []);
+    const prompts: AgentRequest[] = [],
+      original = target.agent.run;
+    target.agent.run = async (request, signal) => {
+      prompts.push(request);
+      return original(request, signal);
+    };
+    const path = await home(),
+      instance = new OfficialWorkflowService({
+        home: path,
+        fake: false,
+        codexPath: "C:/configured/codex.exe",
+        agents: {
+          [provider]: target.agent,
+          [other.agent.provider]: other.agent,
+        },
+      });
+    services.push(instance);
+    const result = await instance.submitSession(
+      {
+        sessionId: "ordinary-session",
+        cwd: path,
+        model: provider === "claude" ? "claude:opus" : "codex:sol",
+        effort: "high",
+        text: "普通の質問",
+        history: [{ role: "assistant", text: "この会話だけの文脈" }],
+      },
+      new AbortController().signal,
+    );
+    expect(result).toMatchObject({ summary: "ok", status: "completed" });
+    expect(target.calls.ran).toEqual([QUESTION_MODELS[provider]]);
+    expect(other.calls).toMatchObject({ discover: 0, run: 0 });
+    expect(prompts[0]).toMatchObject({
+      phase: "conversation",
+      files: [],
+      tests: [],
+    });
+    expect(JSON.parse(prompts[0]!.prompt).history).toEqual([
+      { role: "assistant", text: "この会話だけの文脈" },
+    ]);
+    expect(instance.view().records[0]!.record).toMatchObject({
+      sessionId: "ordinary-session",
+      next: "complete",
+    });
+    expect(instance.view().records[0]!.record.calls).toHaveLength(1);
+  },
+);
+it("ordinary questions explicitly stop on unavailable official connection without switching company or another model", async () => {
+  const target = listAgent("codex", [{ model: "gpt-6.1-sol" }]),
+    other = listAgent("claude", claudeList),
+    path = await home();
+  const instance = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    codexPath: "C:/configured/codex.exe",
+    agents: { codex: target.agent, claude: other.agent },
+  });
+  services.push(instance);
+  await expect(
+    instance.submitSession(
+      {
+        sessionId: "ordinary-session",
+        cwd: path,
+        model: "codex:sol",
+        effort: "high",
+        text: "質問",
+        history: [],
+      },
+      new AbortController().signal,
+    ),
+  ).rejects.toThrow("一覧にありません");
+  expect(target.calls.run).toBe(0);
+  expect(other.calls).toMatchObject({ discover: 0, run: 0 });
+});

@@ -90,3 +90,58 @@ official workflowの17ファイル・230件が成功した。型チェック・l
 ### 未確認
 
 この指示でCodexが実際に操作を絞るかは、実通信で未確認。モデルが指示に従わず別の操作を要求すれば、従来どおり拒否して停止する。
+
+## 再検証（2回目、2026-10-07 10:19〜10:21、ユーザー承認）
+
+### 配布物と条件
+
+- 配布物は `f3e3dfd7d1911df731701ea85676f1f5e0d89e53` から作り直した（`dist/win-unpacked`）。
+  - `XHarness.exe`：SHA256 `625DA01E…C06F`
+  - `app.asar`：SHA256 `FC723358…3406`
+  - 列挙指示が `app.asar` に入っていることを確認した。
+- 隔離プロファイル：`%TEMP%\xh-reverse-home-74109e`
+- workspace：`D:\AIwork\xh-reverse-74109e\996158f9-9362-49f6-bd7d-a1e46e2a760d\workspace-qskrP6`
+- 通信上限・停止条件・承認の扱いは1回目と同じ（補助スクリプト `.out/reverse-live-2.mjs`、未コミット）。
+
+### 結果
+
+| 段階               | モデル・effort                                                    | 結果                                                                                                                     | In / Out                                 |
+| ------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| 計画（Codex）      | `gpt-6-luna` / low（メインモデル。カタログv1 digest `874e3595…`） | 完了                                                                                                                     | 11,337（cached 0）/ 172                  |
+| 計画承認           | —                                                                 | 10:20:09に利用者が画面で承認。digest `3618014e…9191`                                                                     | —                                        |
+| 実装（Codex）      | `gpt-6.1-sol` / medium（計画が選択。観測モデルも同じ）            | **失敗**。88.2秒。2件目の個別操作が `binding: user-declined-or-expired` で終わった                                       | 24,822（cached 12,160）/ 172。thread累計 |
+| 独立テスト         | —                                                                 | 未実施                                                                                                                   | —                                        |
+| レビュー（Claude） | `claude-sonnet-5-5` / medium（計画が選択）                        | 未実施。通信0回                                                                                                          | —                                        |
+
+通信回数は、Codex 2回（計画1・実装1）、Claude 0回。SDK・App Server内部のHTTP往復数は欠測。
+
+### 実装中の操作
+
+1. `"…powershell.exe" -Command 'Get-Content -Raw add.mjs'`：指示の列挙どおり。安全判定を通って個別承認に回り、利用者が許可した。終了コード0、226ms、出力は修正前の `add.mjs`。前回の失敗原因（Temp配下のcwd）はD:配下で再発していない。
+2. ファイル編集（apply_patch）：計画の許可範囲で許可。`add.mjs` を `a - b` → `a + b` に変更した。
+3. `"…powershell.exe" -Command 'node --test acceptance.test.mjs'`：登録テストのラッパー形で、個別承認に回った。10:20:38に要求され、承認期限の60秒後（10:21:38）に `user-declined-or-expired` で終了した。時刻からは期限切れと見られるが、記録上は拒否と期限切れを区別できない。
+
+前回止まった探索・複合コマンドは出ていない。指示による絞り込みは今回の実装で機能した。
+
+- 変更差分：`add.mjs` の1行だけ（未コミット）。コミットは0件で、HEAD=base `3f9e6c5`。
+- テスト対象・レビュー対象のコミットはない。
+
+### 権限・設定・後片付け
+
+- trusted登録：1件追加（16件→17件）。`[projects.'d:\aiwork\xh-reverse-74109e\996158f9-9362-49f6-bd7d-a1e46e2a760d\workspace-qskrp6']`。1回目の `…xh-reverse-b5f8e9…workspace-sba1al` も残っている。どちらも削除は未実施で、ユーザーの指示待ち。
+- ACL（sandboxログ）：
+  - workspaceにsandboxグループとcapability SIDの書き込みACE、`.git` に拒否ACEが付与された。workspaceの削除とともに消えた。
+  - `C:\Users\ahwri\.claude.json` への読み取りACE（CodexSandboxUsers:RX）が再付与された。この付与は2026-09-17から繰り返し記録されている既存のもので、今回新しく加わった権限ではない。ただし開始前の説明（AppDataの読み取り）には含めていなかった。
+  - `D:\AIwork` のACLは変わっていない。
+- 削除したもの：workspaceとその親フォルダ、隔離プロファイル。
+- 保持した証跡：`D:\AIwork\xh-reverse-74109e\evidence\`
+  - `trial.json`
+  - 製品の `workflow.json`・`report.html`・`workspace.json`
+  - `workspace-diff.txt`・`workspace-acl.txt`
+  - `sandbox-log-excerpt.txt`・`claude-json-acl.txt`
+
+### 未確認・残る課題
+
+- 独立テストとClaudeレビューまでの通しは、まだ未確認。
+- 実装中の個別承認の期限は60秒で、2件目の承認に間に合わないことがある。
+- 診断の理由コードは、拒否と期限切れを分けていない。

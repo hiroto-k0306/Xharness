@@ -12,6 +12,8 @@ import {
   TYPED_ADD_TASK,
   typedAddTest,
   verificationMode,
+  assertInjectable,
+  typedAddInfrastructureFailure,
 } from "./fault-injection.js";
 import {
   createSyntheticWorkspace,
@@ -21,6 +23,7 @@ import {
 } from "./fixtures.js";
 import {
   resumeBlockReason,
+  approvalDigest,
   runOfficialSingleTask,
   type WorkflowOptions,
   type WorkflowRecord,
@@ -184,6 +187,7 @@ it("ships a task whose test fails the seed and the injected defect and passes th
   expect(passed.passed).toBe(true);
   expect(passed.exitCode).toBe(0);
   const text = await readFile(join(cwd, "acceptance.test.mjs"), "utf8");
+  expect(typedAddInfrastructureFailure([passed])).toBe(false);
   for (const c of [
     "[NaN, 1]",
     "[1, NaN]",
@@ -242,6 +246,7 @@ it("separates X1 quality, X2 injection and X3 fix with fresh tests and reviews a
     limits: FIX_CYCLE_BUDGET,
     reserved: { plan: 1, implement: 1, review: 2, fix: 1 },
   });
+  expect(result.approvedDigest).toBe(approvalDigest(result));
   expect((await log(cwd)).split("\n")).toEqual([
     "XHarness|workflow: approved single-task change",
     expect.stringMatching(
@@ -311,6 +316,17 @@ it.each([
       { cwd },
     );
     options.workspace = gitWorkspace(cwd, (s) => s);
+    // Supply a real successful typed-fixture report so the boundary gate is
+    // reached; an empty test's output is intentionally no longer accepted.
+    const valid = await setup();
+    await writeFile(join(valid.cwd, "add.mjs"), CORRECT);
+    const evidence = await runAcceptance(
+      valid.cwd,
+      typedAddTest(),
+      signal(),
+      (s) => s,
+    );
+    options.workspace.test = async () => evidence;
   }
   const result = await runOfficialSingleTask(options, signal());
   expect(result.status).toBe("failed");
@@ -322,16 +338,93 @@ it.each([
 });
 
 it("stops before review when the injection is ineffective", async () => {
-  const always: TestSpec = {
-    ...typedAddTest(),
-    program: process.execPath,
-    args: ["-e", ""],
-  };
-  const { options, fake } = await setup({ tests: [always] });
+  const { options, fake } = await setup();
+  const test = options.workspace.test;
+  let passing: Awaited<ReturnType<typeof test>>;
+  options.workspace.test = async (...args) => (passing ??= await test(...args));
   const result = await runOfficialSingleTask(options, signal());
   expect(result.error).toBe("fault-injection-ineffective");
   expect(result.injection!.state).toBe("ineffective");
   expect(fake.requests.map((r) => r.phase)).toEqual(["plan", "implement"]);
+});
+
+it("stops on Node fixture-load exit 1 before any review or repair dispatch", async () => {
+  const { options, fake } = await setup({
+    tests: [
+      {
+        ...typedAddTest(),
+        args: ["--test", "--test-reporter=tap", "missing.test.mjs"],
+      },
+    ],
+  });
+  const result = await runOfficialSingleTask(options, signal());
+  expect(result.checks[0]!.tests[0]!.exitCode).toBe(1);
+  expect(result.error).toBe("verification-infrastructure");
+  expect(result.injection!.attempts).toBe(0);
+  expect(fake.requests.map((r) => r.phase)).toEqual(["plan", "implement"]);
+  expect(result.callBudget!.reserved).toEqual({ plan: 1, implement: 1 });
+});
+
+it("does not classify unknown exit 1 output as an assertion failure", () => {
+  expect(
+    typedAddInfrastructureFailure([
+      {
+        id: "typed-add",
+        exitCode: 1,
+        passed: false,
+        elapsedMs: 1,
+        output: "CommandNotFoundException: node",
+        source: "process",
+      },
+    ]),
+  ).toBe(true);
+});
+
+it.each(["contentDigest", "source", "test"] as const)(
+  "rejects a changed %s with the same spec on resume and before injection",
+  async (field) => {
+    let checkpoint: WorkflowRecord | undefined;
+    const { options, cwd, fake } = await setup({
+      save: async (r) => {
+        if (r.next === "implement" && r.approvedDigest) {
+          checkpoint = structuredClone(r);
+          throw new Error("checkpoint interruption");
+        }
+      },
+    });
+    await expect(runOfficialSingleTask(options, signal())).rejects.toThrow();
+    const changed = structuredClone(checkpoint!);
+    if (field === "contentDigest") changed.injection!.contentDigest = "changed";
+    else changed.injection!.fixtureDigests[field] = "changed";
+    const calls = fake.requests.length;
+    await expect(
+      runOfficialSingleTask(
+        { ...options, resume: changed, save: async () => {} },
+        signal(),
+      ),
+    ).rejects.toThrow("execution-scope-changed");
+    expect(fake.requests).toHaveLength(calls);
+    await expect(
+      assertInjectable(options.workspace, changed, cwd, signal()),
+    ).rejects.toThrow("execution-scope-changed");
+    expect(await log(cwd)).not.toContain("fault-injection");
+    expect(
+      approvalDigest({ ...checkpoint!, executionDigest: "changed" }),
+    ).not.toBe(checkpoint!.approvedDigest);
+  },
+);
+
+it("does not dispatch when saving a call reservation fails", async () => {
+  const { options, fake } = await setup({
+    save: async (r) => {
+      if (r.calls.some((c) => c.status === "running"))
+        throw new Error("save failed");
+    },
+  });
+  await expect(runOfficialSingleTask(options, signal())).rejects.toThrow(
+    "save failed",
+  );
+  expect(fake.requests).toHaveLength(0);
 });
 
 it("stops on test infrastructure trouble instead of fixing", async () => {

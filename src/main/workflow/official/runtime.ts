@@ -26,7 +26,9 @@ import {
 } from "./contracts.js";
 import {
   assertInjectable,
-  infrastructureFailure,
+  assertInjectionDefinition,
+  injectionDefinition,
+  typedAddInfrastructureFailure,
   INJECTED_FILE,
   INJECTED_SOURCE,
   INJECTION_AUTHOR,
@@ -47,6 +49,12 @@ export const digest = (v: unknown) =>
   createHash("sha256")
     .update(JSON.stringify(v) ?? "null")
     .digest("hex");
+export const approvalDigest = (
+  record: Pick<WorkflowRecord, "plan" | "injection" | "executionDigest">,
+) =>
+  record.injection
+    ? digest({ plan: record.plan, executionDigest: record.executionDigest })
+    : digest(record.plan);
 export interface WorkflowRecord {
   version: 1;
   simulated: boolean;
@@ -180,11 +188,15 @@ export async function runOfficialSingleTask(
     tests: options.tests,
     integrationTests: options.integrationTests,
     // Undefined keys are omitted, so records without these keep their digest.
-    faultInjection: options.faultInjection,
+    faultInjection: options.faultInjection
+      ? { ...options.faultInjection, ...injectionDefinition() }
+      : undefined,
     callBudget: options.callBudget,
   });
   if (!initial.clean) throw new WorkflowFailure("dirty-workspace");
   if (options.resume) {
+    if (options.resume.injection)
+      assertInjectionDefinition(options.resume.injection);
     if (options.resume.executionDigest !== executionDigest)
       throw new WorkflowFailure("execution-scope-changed");
     const reason = resumeBlockReason(options.resume);
@@ -281,7 +293,7 @@ export async function runOfficialSingleTask(
       check = record.checks.length - 1,
       passed = tests.every((t) => t.passed);
     // An expected failure has an exit code; no exit code is infrastructure.
-    if (infrastructureFailure(tests))
+    if (typedAddInfrastructureFailure(tests))
       throw new WorkflowFailure("verification-infrastructure");
     if (injection.state === "pending-quality") {
       injection.stages.push({ stage: "quality", head: record.head, check });
@@ -310,6 +322,8 @@ export async function runOfficialSingleTask(
       const effect = { kind: "inject" as const, id: randomUUID() };
       record.pendingEffect = effect;
       await save();
+      // Recheck after persisting the intent, immediately before the write.
+      assertInjectionDefinition(injection);
       try {
         await writeFile(
           await scopedPath(options.cwd, INJECTED_FILE),
@@ -533,7 +547,7 @@ export async function runOfficialSingleTask(
       task.assignee.model,
       task.assignee.effort,
     );
-    const planDigest = digest(record.plan);
+    const planDigest = approvalDigest(record);
     if (record.approvedDigest && record.approvedDigest !== planDigest)
       throw new WorkflowFailure("approval-digest-changed");
     if (!record.approvedDigest) {
@@ -753,7 +767,7 @@ export function resumeBlockReason(record: WorkflowRecord): string | null {
   if (record.pendingEffect || record.calls.some((c) => c.status === "running"))
     return "uncertain-effect";
   if (!record.plan) return "plan-not-checkpointed";
-  if (record.approvedDigest && digest(record.plan) !== record.approvedDigest)
+  if (record.approvedDigest && approvalDigest(record) !== record.approvedDigest)
     return "approval-digest-changed";
   const last = record.calls.at(-1);
   if (

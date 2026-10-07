@@ -6,6 +6,7 @@ import {
   normalizeFile,
   WorkflowFailure,
   type TestSpec,
+  type TestEvidence,
   type WorkspacePort,
 } from "./contracts.js";
 
@@ -63,8 +64,8 @@ export const sha256 = (text: string) =>
 export const typedAddTest = (): TestSpec => ({
   id: "typed-add",
   program: process.versions.electron ? "node" : process.execPath,
-  args: ["--test", "acceptance.test.mjs"],
-  command: "node --test acceptance.test.mjs",
+  args: ["--test", "--test-reporter=tap", "acceptance.test.mjs"],
+  command: "node --test --test-reporter=tap acceptance.test.mjs",
   timeoutMs: 10000,
 });
 
@@ -112,6 +113,7 @@ export interface InjectionRecord {
   task: typeof TYPED_ADD_TASK;
   file: typeof INJECTED_FILE;
   contentDigest: string;
+  fixtureDigests: { source: string; test: string };
   allowedRoot: string;
   state:
     | "pending-quality"
@@ -130,14 +132,40 @@ export const newInjectionRecord = (
   options: FaultInjectionOptions,
 ): InjectionRecord => ({
   spec: options.spec,
-  task: TYPED_ADD_TASK,
-  file: INJECTED_FILE,
-  contentDigest: sha256(INJECTED_SOURCE),
+  ...injectionDefinition(),
   allowedRoot: options.allowedRoot,
   state: "pending-quality",
   attempts: 0,
   stages: [],
 });
+
+/** Immutable definition included in both execution scope and human approval. */
+export function injectionDefinition(): Pick<
+  InjectionRecord,
+  "task" | "file" | "contentDigest" | "fixtureDigests"
+> {
+  return {
+    task: TYPED_ADD_TASK,
+    file: INJECTED_FILE,
+    contentDigest: sha256(INJECTED_SOURCE),
+    fixtureDigests: {
+      source: sha256(TYPED_ADD_SOURCE),
+      test: sha256(TYPED_ADD_TEST),
+    },
+  };
+}
+export function assertInjectionDefinition(injection: InjectionRecord) {
+  const current = injectionDefinition();
+  if (
+    injection.spec !== FIX_CYCLE_SPEC ||
+    injection.task !== current.task ||
+    injection.file !== current.file ||
+    injection.contentDigest !== current.contentDigest ||
+    injection.fixtureDigests?.source !== current.fixtureDigests.source ||
+    injection.fixtureDigests?.test !== current.fixtureDigests.test
+  )
+    throw new WorkflowFailure("execution-scope-changed");
+}
 
 const inside = (root: string, path: string) => {
   const rel = relative(root, path);
@@ -157,6 +185,7 @@ export async function assertInjectable(
   const injection = record.injection;
   if (!injection || !workspace.identity)
     throw new WorkflowFailure("fault-injection-not-allowed");
+  assertInjectionDefinition(injection);
   const root = await realpath(injection.allowedRoot).catch(() => {
     throw new WorkflowFailure("fault-injection-outside-boundary");
   });
@@ -194,3 +223,52 @@ export const infrastructureFailure = (tests: { exitCode: number | null }[]) =>
       t.exitCode < 0 ||
       t.exitCode === OWNED_PROCESS_FAILURE,
   );
+
+/** Only the two fixed fixture tests and known assertion failures are accepted.
+ * A load error, unexpected exception, incomplete/truncated report or unknown
+ * exit is not evidence that the injected defect caused a failing assertion.
+ */
+export function typedAddInfrastructureFailure(tests: TestEvidence[]) {
+  if (
+    tests.length !== 1 ||
+    tests[0]!.id !== "typed-add" ||
+    infrastructureFailure(tests)
+  )
+    return true;
+  const test = tests[0]!;
+  const tap = test.output.replaceAll("\r\n", "\n");
+  const results = [
+    ...tap.matchAll(
+      /^(ok|not ok) (\d+) - (.+)\n([\s\S]*?)(?=^(?:# Subtest:|1\.\.))/gm,
+    ),
+  ];
+  const names = [
+    "finite numbers are added",
+    "anything else throws TypeError on either side",
+  ];
+  if (
+    results.length !== 2 ||
+    results.some((r, i) => r[2] !== String(i + 1) || r[3] !== names[i])
+  )
+    return true;
+  const failures = results.filter((r) => r[1] === "not ok");
+  const summary = (name: string, value: number) =>
+    new RegExp(`^# ${name} ${value}$`, "m").test(tap);
+  return (
+    !/^TAP version 13$/m.test(tap) ||
+    !/^1\.\.2$/m.test(tap) ||
+    !summary("tests", 2) ||
+    !summary("pass", 2 - failures.length) ||
+    !summary("fail", failures.length) ||
+    !summary("cancelled", 0) ||
+    !summary("skipped", 0) ||
+    !summary("todo", 0) ||
+    failures.some(
+      (r) =>
+        !/^  failureType: 'testCodeFailure'$/m.test(r[4]!) ||
+        !/^  code: 'ERR_ASSERTION'$/m.test(r[4]!),
+    ) ||
+    test.exitCode !== (failures.length ? 1 : 0) ||
+    test.passed !== (failures.length === 0)
+  );
+}

@@ -123,3 +123,31 @@
 - 実通信での修正サイクルの通しは、未実施。
 - 配布物へは、まだ反映していない。
 - 実通信の手順・通信回数（Codex 3・Claude 2）と停止条件は、[sandbox-node-fixcycle-haiku-20261007.md](sandbox-node-fixcycle-haiku-20261007.md) の4節による。
+
+## Codex引き継ぎ後の限定修正（2026-10-07）
+
+対象は `86df113`（コード `830971a`）からの本コミット、ブランチ `feature/official-workflow-single-task`。上記の実装・試験記録は当時の結果として残す。ユーザー承認済みの修正2点だけを扱い、モデル通信・Codex sandbox診断・ACL/trusted変更・配布物作成は行わない。
+
+### 固定fixtureの失敗判定
+
+`typed-add` だけに `--test-reporter=tap` を指定する。既知の2テストの名前・番号・集計、キャンセル/skip/todoなし、exitとpassedの一致を確認する。不合格はすべて `testCodeFailure` / `ERR_ASSERTION` のときだけ想定内とする。Node起動後のfixture読込エラーや、未知・不完全な結果はexit 1でも `verification-infrastructure` で停止し、レビュー・fixを送信しない。通常のテスト実行や一般のtest frameworkは変更しない。
+
+### 注入内容と承認の結合
+
+注入内容・fixture初期ソース・fixtureテストのSHA256を実行範囲に含める。障害注入の計画承認は計画と実行範囲digestの組合せに対して行い、予算・テスト・注入定義の変更で過去承認を流用しない。保存された定義は再開時、注入境界確認時、pending保存後の書込み直前に現在の定義と照合する。
+
+通常記録は従来の実行/計画承認digestを維持する。以前の障害注入記録は定義情報が足りないため、安全側に再開拒否する。新しい通信予約の保存に失敗した場合はagentを呼ばない。
+
+### オフライン検証
+
+Windows / PowerShell 7.6.5（Codex同梱の `C:/Users/ahwri/.cache/codex-runtimes/codex-primary-runtime/dependencies/native/powershell/pwsh.exe`）。テスト・型チェックは `scripts/pnpm.ps1` とローカルNode 22.23.3（`.tools/node_modules/.bin/node.exe`）を使用。lint/formatは同梱CLIを直接実行し、Node 24.16.0（`C:/Program Files/nodejs/node.exe`）を使用。Store版pwshや配布Electronの確認結果ではない。
+
+- 重点：`fault-injection.test.ts` 20件成功。ログ `.out/codex-fixcycle-focused.log`。
+- 関連回帰：`fault-injection`・`runtime`・`catalog-compat`・`service`・`report` の5ファイル90件成功（重点20件を含み、件数は合算しない）。ログ `.out/codex-fixcycle-regression.log`。
+- 最終typecheck成功：`.out/codex-fixcycle-typecheck-final.log`。途中の定義共通化でliteral型がstringへ拡大したエラーは戻り値型を指定して解消し、失敗ログ `.out/codex-fixcycle-typecheck.log` も保持した。
+- 変更した3つのTypeScriptファイルのESLint成功：`.out/codex-fixcycle-lint.log`。
+- 変更したコード・SPEC・本報告書のPrettier check成功：`.out/codex-fixcycle-format-check.log`。`pnpm exec prettier` のshimが見つからなかったため、`node node_modules/prettier/bin/prettier.cjs` を直接実行した。
+- 追加した根拠：Nodeによる実際のfixture読込失敗（exit 1）でレビュー/fix未送信、未知exit 1拒否、同一specの注入/fixture digest変更で再開と注入条件確認を拒否、通信予約保存失敗で未送信。
+- 既存のX1品質不合格からの自然な修正、X1/X2/X3とテスト/レビューのHEAD対応、注入後再開、予算引継ぎ、通常記録・旧モデル記録も関連範囲で確認する。
+
+全回帰・GUI・build/package・実通信・sandbox診断は未実施。配布物は旧版のままであり、修正サイクルの実測はまだ未確認。

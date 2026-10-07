@@ -926,7 +926,7 @@ it.each([
     "completed",
     true,
   ],
-  [{ intent: "question", summary: "説明です" }, "completed", false],
+  [{ intent: "question", summary: "五" }, "completed", false],
   [{ summary: "missing intent" }, "failed", false],
   [{ intent: "maybe", summary: "unknown" }, "failed", false],
 ])(
@@ -971,6 +971,8 @@ it.each([
       new AbortController().signal,
     );
     expect(result).toMatchObject({ status, taskRequired });
+    if (status === "completed")
+      expect(result.summary).toBe((output as { summary: string }).summary);
     expect(requests).toHaveLength(1);
     expect(requests[0]).toMatchObject({
       phase: "conversation",

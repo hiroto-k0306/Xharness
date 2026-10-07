@@ -703,6 +703,66 @@ const claudeList = [
   { model: "claude-sonnet-5-5" },
   { model: QUESTION_MODELS.claude },
 ];
+it("panel questions preserve their own history and exclude ordinary sessions across restart", async () => {
+  const target = listAgent("claude", claudeList),
+    prompts: AgentRequest[] = [];
+  const run = target.agent.run;
+  target.agent.run = async (r, s) => {
+    prompts.push(r);
+    return run(r, s);
+  };
+  const path = await home();
+  const first = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    agents: { claude: target.agent },
+  });
+  services.push(first);
+  for (const sessionId of ["A", "B"])
+    await first.submitSession(
+      {
+        sessionId,
+        cwd: path,
+        model: "claude:opus",
+        effort: "high",
+        text: `private-${sessionId}`,
+        history: [],
+      },
+      new AbortController().signal,
+    );
+  await first.command({
+    action: "chat",
+    provider: "claude",
+    text: "panel-first",
+  });
+  await wait(first, (v) => !v.activeId);
+  expect(JSON.parse(prompts.at(-1)!.prompt).history).toEqual([]);
+  await first.close();
+  const restored = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    agents: { claude: target.agent },
+  });
+  services.push(restored);
+  await restored.command({
+    action: "chat",
+    provider: "claude",
+    text: "panel-second",
+  });
+  await wait(restored, (v) => !v.activeId);
+  expect(JSON.parse(prompts.at(-1)!.prompt).history).toEqual([
+    { question: "panel-first", answer: "ok", workflowStatus: "completed" },
+  ]);
+  expect(prompts.at(-1)!.prompt).not.toContain("private-");
+  // Original ordinary records are retained; only the outgoing history is filtered.
+  expect(
+    restored
+      .view()
+      .records.filter((r) => r.record.sessionId)
+      .map((r) => r.record.goal)
+      .sort(),
+  ).toEqual(["private-A", "private-B"]);
+});
 it.each([
   ["codex", "listed last", codexList],
   ["codex", "listed first", [...codexList].reverse()],

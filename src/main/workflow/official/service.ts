@@ -679,7 +679,12 @@ export class OfficialWorkflowService {
             const history =
               sessionHistory ??
               [...this.records.values()]
-                .filter((r) => r.id !== record.id)
+                .filter(
+                  (r) =>
+                    r.id !== record.id &&
+                    !r.sessionId &&
+                    r.simulated === record.simulated,
+                )
                 .sort((a, b) => a.startedAt.localeCompare(b.startedAt))
                 .slice(-5)
                 .map((r) => ({

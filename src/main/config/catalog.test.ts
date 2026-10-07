@@ -64,9 +64,6 @@ it("resolves every shipped role to an enabled, current catalog model", () => {
     ["compaction", "codex"],
     ["authRefresh", "claude"],
     ["authRefresh", "codex"],
-    ["officialLegacyPlanner"],
-    ["officialLegacyReviewer", "claude"],
-    ["officialLegacyReviewer", "codex"],
   ];
   for (const [role, sub] of roles) {
     const resolved = resolveRole(role, sub, catalog);

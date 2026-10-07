@@ -2,7 +2,9 @@ import type { WorkflowRecord } from "../main/workflow/official/runtime.js";
 import type { PendingOperation } from "../main/workflow/official/operation-approval.js";
 export const OFFICIAL_WORKFLOW_CHANNEL = "xharness:official-workflow";
 /** A question model resolved from the catalog role, or why it cannot be used. */
-export type QuestionModel = { id: string } | { error: string };
+export type QuestionModel =
+  | { id: string; effort?: "low" | "medium" | "high" | "xhigh" | "max" | null }
+  | { error: string };
 export type OfficialWorkflowCommand =
   | { action: "list" }
   | { action: "configure"; codexPath: string }

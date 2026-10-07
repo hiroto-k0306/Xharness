@@ -461,5 +461,7 @@ function questionModelLabel(
   if (view?.simulated) return "模擬モデル";
   const resolved = view?.questionModels?.[provider];
   if (!resolved) return "未確認";
-  return "id" in resolved ? resolved.id : `利用不可（${resolved.error}）`;
+  return "id" in resolved
+    ? `${resolved.id}${resolved.effort ? `（${resolved.effort}）` : ""}`
+    : `利用不可（${resolved.error}）`;
 }

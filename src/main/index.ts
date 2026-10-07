@@ -8,7 +8,7 @@ import { loadMainConfig } from "./config/config.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStartupArgs, resolveStartup } from "./config/config.js";
-import { resolveRole } from "./config/catalog.js";
+import { resolveRole, roleEffort } from "./config/catalog.js";
 import { readLocalSecrets } from "./auth/local-secrets.js";
 import { Authentication } from "./auth/authentication.js";
 import { AutoRefresh } from "./auth/auto-refresh.js";
@@ -157,7 +157,11 @@ async function start() {
           : fake
             ? "fake"
             : undefined),
-      cliEffort: startup.effort ?? (connectionTest ? "low" : undefined),
+      cliEffort:
+        startup.effort ??
+        (connectionTest
+          ? roleEffort(resolveRole("connectionTest"))
+          : undefined),
       supported: ["claude", "codex"],
       ...(fake ? { read: async () => "" } : {}),
     });
@@ -259,7 +263,10 @@ async function start() {
     cliModel:
       startup.model ??
       (connectionTest ? resolveRole("connectionTest").key : undefined),
-    cliEffort: (startup.effort ?? (connectionTest ? "low" : undefined)) as
+    cliEffort: (startup.effort ??
+      (connectionTest
+        ? roleEffort(resolveRole("connectionTest"))
+        : undefined)) as
       "low" | "medium" | "high" | "xhigh" | "max" | undefined,
     provider: officialOnly
       ? unavailableLegacy(main.choice.provider)

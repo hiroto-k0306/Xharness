@@ -41,6 +41,8 @@ export interface DagState {
   crossReviewedHead?: string;
 }
 export interface DagOptions extends WorkflowOptions {
+  /** The mock DAG always plans, so its planner is required. */
+  planner: NonNullable<WorkflowOptions["planner"]>;
   worktrees: OfficialWorktrees;
   /** Fresh guard at every wave; unknown/insufficient stops all new starts. */
   canStart?: (

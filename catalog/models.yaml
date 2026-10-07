@@ -235,17 +235,15 @@ roles:
     codex: { model: codex:luna, effort: low }
   question:                              # 公式workflowの「質問だけ送信」
     claude: claude:haiku
-    codex: codex:luna
+    codex: { model: codex:luna, effort: low }
   compaction:                            # Codex 会話の要約による圧縮 (Claude は会話モデル自身のサーバー圧縮)
     codex: { model: codex:luna, effort: low }
   authRefresh:                           # 公式CLIによる認証更新の確認呼び出し
     claude: claude:haiku
     codex: { model: codex:luna, effort: low }
   connectionTest: claude:haiku           # 接続テスト起動時のメインモデル
-  officialLegacyPlanner: { model: claude:opus, effort: high }  # 公式workflowの旧記録 (計画モデルの記録がない) の互換
-  officialLegacyReviewer:                # 公式workflowの旧記録 (計画にレビュー担当がない) の互換
-    claude: { model: claude:opus, effort: high }
-    codex: { model: codex:luna, effort: low }
+# 公式workflowの旧記録 (計画モデル・レビュー担当の記録がない) のモデルは、可変の別名ではなく
+# 記録形式の版ごとの固定定義 (src/main/workflow/official/record-compat.ts) から解決する。
 
 # 以前は提供されていたが、今は Codex で選べないモデル (計画で指定されたら差し戻す)
 retired:

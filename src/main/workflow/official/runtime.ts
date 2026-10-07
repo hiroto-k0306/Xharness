@@ -110,7 +110,11 @@ export interface WorkflowOptions {
   integrationTests: TestSpec[];
   models: ModelCandidate[];
   /** Omitted provider means Claude (records and fixtures before planner choice). */
-  planner: PlannerChoice | { model: string; effort: AgentRequest["effort"] };
+  /**
+   * Required only when a plan still has to be made. A resumed record that
+   * already has its plan does not need (or validate) a planner.
+   */
+  planner?: PlannerChoice | { model: string; effort: AgentRequest["effort"] };
   reviewers: Partial<
     Record<
       ModelCandidate["provider"],
@@ -187,17 +191,17 @@ export async function runOfficialSingleTask(
         commits: [],
       };
   // The planner is fixed when the task starts; a resume keeps the recorded one.
-  if (!options.resume)
+  const startPlanner = options.planner;
+  if (!options.resume && startPlanner)
     record.planner = {
-      provider:
-        "provider" in options.planner ? options.planner.provider : "claude",
-      model: options.planner.model,
-      effort: options.planner.effort,
-      ...("selectedAs" in options.planner && options.planner.selectedAs
-        ? { selectedAs: options.planner.selectedAs }
+      provider: "provider" in startPlanner ? startPlanner.provider : "claude",
+      model: startPlanner.model,
+      effort: startPlanner.effort,
+      ...("selectedAs" in startPlanner && startPlanner.selectedAs
+        ? { selectedAs: startPlanner.selectedAs }
         : {}),
-      ...("catalog" in options.planner && options.planner.catalog
-        ? { catalog: options.planner.catalog }
+      ...("catalog" in startPlanner && startPlanner.catalog
+        ? { catalog: startPlanner.catalog }
         : {}),
     };
   if (options.resume) {
@@ -323,16 +327,26 @@ export async function runOfficialSingleTask(
   };
   try {
     await save();
-    const plannerChoice = record.planner ?? {
-      provider: "claude" as const,
-      model: options.planner.model,
-      effort: options.planner.effort,
-    };
-    const planner = eligible(
-      plannerChoice.provider,
-      plannerChoice.model,
-      plannerChoice.effort,
-    );
+    const plannerChoice =
+      record.planner ??
+      (startPlanner
+        ? {
+            provider: "claude" as const,
+            model: startPlanner.model,
+            effort: startPlanner.effort,
+          }
+        : undefined);
+    // Only an unplanned task needs (and checks) its planner.
+    if (!record.plan && !plannerChoice)
+      throw new WorkflowFailure("planner-missing");
+    const planner =
+      record.plan || !plannerChoice
+        ? undefined
+        : eligible(
+            plannerChoice.provider,
+            plannerChoice.model,
+            plannerChoice.effort,
+          );
     // A different-company review needs usable models from both providers.
     if (
       new Set(
@@ -347,8 +361,8 @@ export async function runOfficialSingleTask(
       record.plan ??
       (await invoke(
         "plan",
-        planner,
-        plannerChoice.effort,
+        planner!,
+        plannerChoice!.effort,
         {
           role: "read-only planner",
           goal: options.goal,

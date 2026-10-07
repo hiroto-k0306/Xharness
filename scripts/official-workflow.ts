@@ -169,8 +169,8 @@ const result = await withSessionTrace(
   () =>
     withTaskTrace(
       {
-        model: options.planner.model,
-        effort: options.planner.effort ?? undefined,
+        model: options.planner!.model,
+        effort: options.planner!.effort ?? undefined,
         taskId: options.id,
       },
       async () => {

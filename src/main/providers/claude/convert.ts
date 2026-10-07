@@ -95,8 +95,11 @@ export function toClaudeRequest(request: ProviderRequest) {
   // enabled catalog models without efforts accept and drop it (e.g. Haiku).
   const catalogEntry = catalogModel(request.model);
   const supportsEffort = !!catalogEntry && sendsEffort(catalogEntry);
-  const effort = request.reasoning?.effort ?? "high";
-  if (!["low", "medium", "high", "xhigh", "max"].includes(effort))
+  const effort = request.reasoning?.effort ?? catalogEntry?.defaultEffort;
+  if (
+    effort !== undefined &&
+    !["low", "medium", "high", "xhigh", "max"].includes(effort)
+  )
     throw new Error("Invalid effort");
   if (
     request.reasoning &&
@@ -135,7 +138,7 @@ export function toClaudeRequest(request: ProviderRequest) {
     messages,
     ...(request.compaction ? { compaction: request.compaction } : {}),
     // Omit thinking entirely: Opus/Sonnet retain their native adaptive behavior.
-    ...(supportsEffort ? { output_config: { effort } } : {}),
+    ...(supportsEffort && effort ? { output_config: { effort } } : {}),
     ...(tools.length || hosted.length
       ? { tools: [...tools, ...hosted], tool_choice: { type: "auto" } }
       : {}),

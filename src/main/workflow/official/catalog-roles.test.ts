@@ -102,7 +102,11 @@ it("displays and sends the question model chosen by the catalog role", async () 
   const codex = agent("codex", codexIds);
   const { instance } = await service(agent("claude", claudeIds), codex);
   const view = await instance.command({ action: "list" });
-  expect(view.questionModels?.codex).toEqual({ id: "gpt-6.1-sol" });
+  // No effort in the role: the model's catalog defaultEffort is used and shown.
+  expect(view.questionModels?.codex).toEqual({
+    id: "gpt-6.1-sol",
+    effort: "high",
+  });
   await instance.command({ action: "chat", provider: "codex", text: "質問" });
   for (let i = 0; i < 200 && !codex.ran.length; i++)
     await new Promise((r) => setTimeout(r, 10));

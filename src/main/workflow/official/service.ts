@@ -53,8 +53,10 @@ import {
   catalogUnavailableReason,
   catalogVersion,
   resolveRole,
+  roleEffort,
   type ResolvedModel,
 } from "../../config/catalog.js";
+import { impliedRecordModels } from "./record-compat.js";
 
 const uuid = (id: unknown): id is string =>
   typeof id === "string" && /^[a-f0-9-]{36}$/i.test(id);
@@ -377,9 +379,13 @@ export class OfficialWorkflowService {
     provider: "claude" | "codex",
     signal: AbortSignal,
     mode: "single" | "dag" = "single",
-    /** New tasks pass the main-model selection; resumes pass the recorded planner. */
-    planner?: PlannerSelection | PlannerChoice,
+    /** A new task's main-model selection, or the record being resumed. */
+    start?:
+      | { kind: "new"; planner: PlannerSelection }
+      | { kind: "resume"; record: WorkflowRecord },
   ) {
+    const planner =
+      start?.kind === "new" ? start.planner : start?.record.planner;
     if (mode === "dag") {
       if (!this.settings.fake)
         throw new Error(
@@ -416,48 +422,35 @@ export class OfficialWorkflowService {
         m.quotaAllowed === true &&
         !catalogUnavailableReason(m.model),
     );
-    // Records created before planner/reviewer selection keep their former roles,
-    // now named in the catalog instead of matched by model name.
-    const legacy = (role: ResolvedModel) => {
-      const listed = usable.find(
-        (m) => m.provider === role.provider && m.model === role.id,
-      );
-      return listed
-        ? {
-            model: listed.model,
-            effort: listed.efforts.includes(role.effort ?? null)
-              ? (role.effort ?? null)
-              : null,
-          }
-        : undefined;
+    // Only a resumed record that did not record its models needs implied ones;
+    // new tasks never resolve them, so a retired historic model cannot block them.
+    const implied =
+      start?.kind === "resume"
+        ? impliedRecordModels(start.record)
+        : { reviewers: {} };
+    const listed = (model: string, effort: AgentRequest["effort"]) => {
+      const found = usable.find((m) => m.model === model);
+      if (!found || !found.efforts.includes(effort))
+        throw new Error(
+          `再開できません：記録のモデル「${model}」（effort ${effort ?? "既定"}）を公式接続で利用できません。推測では置き換えません。`,
+        );
+      return { model, effort };
     };
-    const opus = legacy(resolveRole("officialLegacyPlanner"));
-    const opusReviewer = legacy(
-      resolveRole("officialLegacyReviewer", "claude"),
+    const reviewers = Object.fromEntries(
+      Object.entries(implied.reviewers).map(([p, r]) => [
+        p,
+        listed(r.model, r.effort),
+      ]),
     );
-    const review = legacy(resolveRole("officialLegacyReviewer", "codex"));
-    if (planner) {
-      // Product path: the planner comes from the user's main model, and the plan
-      // may choose any usable official model for implementation and review.
-      const chosen = resolvePlannerChoice(planner, usable);
-      return {
-        ...options,
-        simulated: false,
-        diagnosticText: true, // This service creates only fixed synthetic workspaces.
-        timeoutMs: 120000,
-        agents: { claude, codex },
-        models: usable,
-        planner: chosen,
-        // Used only by records whose plans predate planner-chosen reviewers.
-        reviewers: {
-          ...(opusReviewer ? { claude: opusReviewer } : {}),
-          ...(review ? { codex: review } : {}),
-        },
-        goal: `Correct addition without modifying the test. Assign the one implementation task to ${provider}.`,
-      } satisfies WorkflowOptions;
-    }
-    if (!opus || !opusReviewer || !review)
-      throw new Error("必要な公式modelとincluded usageを確認できません");
+    // A resumed record with a plan needs no planner; the recorded one is only kept.
+    const planned = start?.kind === "resume" && !!start.record.plan;
+    const chosenPlanner = planned ? undefined : (planner ?? implied.planner);
+    if (!planned && !chosenPlanner)
+      throw new Error(
+        "計画モデルが選択されていません。メインモデルを選択してから開始してください。",
+      );
+    // Product path: the planner comes from the user's main model (or the record),
+    // and the plan chooses usable official models for implementation and review.
     return {
       ...options,
       simulated: false,
@@ -465,8 +458,10 @@ export class OfficialWorkflowService {
       timeoutMs: 120000,
       agents: { claude, codex },
       models: usable,
-      planner: opus,
-      reviewers: { claude: opusReviewer, codex: review },
+      ...(chosenPlanner
+        ? { planner: resolvePlannerChoice(chosenPlanner, usable) }
+        : {}),
+      reviewers,
       goal: `Correct addition without modifying the test. Assign the one implementation task to ${provider}.`,
     } satisfies WorkflowOptions;
   }
@@ -498,8 +493,8 @@ export class OfficialWorkflowService {
     const done = withSessionTrace(join(this.root, id), id, redact, () =>
       withTaskTrace(
         {
-          model: options.planner.model,
-          effort: options.planner.effort ?? undefined,
+          model: options.planner?.model ?? "resume",
+          effort: options.planner?.effort ?? undefined,
           taskId: id,
         },
         async () => {
@@ -545,7 +540,11 @@ export class OfficialWorkflowService {
     cwd: string,
     provider: "claude" | "codex",
     signal: AbortSignal,
-  ): Promise<{ agent?: OfficialAgent; model: ModelCandidate }> {
+  ): Promise<{
+    agent?: OfficialAgent;
+    model: ModelCandidate;
+    effort: AgentRequest["effort"];
+  }> {
     const candidates = this.settings.fake
       ? fixtureModels.filter((m) => m.provider === provider)
       : await (async () => {
@@ -561,8 +560,10 @@ export class OfficialWorkflowService {
     // Exactly the fixed question model, independent of list order. The
     // simulated mode keeps its fixture model for the provider.
     let wanted: string;
+    let role: ResolvedModel;
     try {
-      wanted = resolveRole("question", provider).id;
+      role = resolveRole("question", provider);
+      wanted = role.id;
     } catch (error) {
       throw new Error(
         `質問先のモデルを決められません：${error instanceof Error ? error.message : ""}`,
@@ -587,14 +588,24 @@ export class OfficialWorkflowService {
         `質問先のモデル「${wanted}」を利用できないか、通常枠を確認できません。別のモデルへは切り替えていません。`,
       );
     const model = listed;
+    const effort = this.settings.fake ? null : (roleEffort(role) ?? null);
+    if (!model.efforts.includes(effort))
+      throw new Error(
+        `質問先のモデル「${wanted}」はeffort「${effort ?? "既定"}」に対応していません。別のeffortへは切り替えていません。`,
+      );
     return {
       agent: this.settings.fake ? undefined : this.agent(provider),
       model,
+      effort,
     };
   }
   private launchConversation(
     record: WorkflowRecord,
-    target: { agent?: OfficialAgent; model: ModelCandidate },
+    target: {
+      agent?: OfficialAgent;
+      model: ModelCandidate;
+      effort: AgentRequest["effort"];
+    },
     provider: "claude" | "codex",
   ) {
     const controller = new AbortController();
@@ -605,7 +616,7 @@ export class OfficialWorkflowService {
         phase: "conversation" as const,
         provider,
         requestedModel: model.model,
-        effort: model.efforts.includes("low") ? ("low" as const) : null,
+        effort: target.effort,
         status: "running" as const,
       };
       const history = [...this.records.values()]
@@ -818,7 +829,9 @@ export class OfficialWorkflowService {
             command.provider,
             this.preparing.controller.signal,
             mode,
-            command.planner,
+            command.planner
+              ? { kind: "new", planner: command.planner }
+              : undefined,
           );
           options.startedAt = prepared.startedAt;
           this.preparing.controller.signal.throwIfAborted();
@@ -828,15 +841,17 @@ export class OfficialWorkflowService {
         const record = this.records.get(command.id);
         if (!record || resumeBlockReason(record))
           throw new Error("不確定な副作用または再開不能な段階です");
-        // Resume uses the recorded models; a model the catalog no longer
-        // offers stops here instead of being replaced.
-        if (!this.settings.fake)
+        // Resume uses the recorded models (or the fixed per-version ones it
+        // implies); a model the catalog no longer offers stops here.
+        if (!this.settings.fake) {
+          const implied = impliedRecordModels(record);
           for (const id of [
-            record.planner?.model,
+            record.planner?.model ?? implied.planner?.model,
             ...(record.plan?.tasks ?? []).flatMap((t) => [
               t.assignee.model,
               t.reviewer?.model,
             ]),
+            ...Object.values(implied.reviewers).map((r) => r.model),
           ]) {
             const reason = id ? catalogUnavailableReason(id) : undefined;
             if (reason)
@@ -844,6 +859,7 @@ export class OfficialWorkflowService {
                 `再開できません：${reason}別のモデルへは切り替えていません。`,
               );
           }
+        }
         const workspace = gitWorkspace(record.cwd, redact),
           current = await workspace.inspect(new AbortController().signal);
         if (!current.clean || current.head !== record.head)
@@ -854,7 +870,7 @@ export class OfficialWorkflowService {
           record.plan!.tasks[0]!.assignee.provider,
           this.preparing.controller.signal,
           record.dag ? "dag" : "single",
-          record.planner, // never the current selection
+          { kind: "resume", record }, // never the current selection
         );
         this.preparing.controller.signal.throwIfAborted();
         options.goal = record.goal;
@@ -896,7 +912,8 @@ export class OfficialWorkflowService {
 /** The catalog question model of a company, as shown and as used. */
 function questionModel(provider: "claude" | "codex"): QuestionModel {
   try {
-    return { id: resolveRole("question", provider).id };
+    const role = resolveRole("question", provider);
+    return { id: role.id, effort: roleEffort(role) ?? null };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "unknown" };
   }

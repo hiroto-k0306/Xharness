@@ -249,5 +249,6 @@ export function dagWorkflowOptions(
     agents: dagAgents().agents,
     worktrees: new OfficialWorktrees(cwd, owned, (s) => s),
     ...overrides,
+    planner: overrides.planner ?? { model: "fixture-opus", effort: "high" },
   };
 }

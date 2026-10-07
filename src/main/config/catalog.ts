@@ -43,9 +43,7 @@ export type RoleName =
   | "question"
   | "compaction"
   | "authRefresh"
-  | "connectionTest"
-  | "officialLegacyPlanner"
-  | "officialLegacyReviewer";
+  | "connectionTest";
 type RoleEntry = string | { model: string; effort?: ReasoningEffort | null };
 export interface CatalogVersion {
   version: number;

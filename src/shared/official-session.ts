@@ -31,9 +31,12 @@ export interface OfficialSessionSubmission {
   effort: "low" | "medium" | "high" | "xhigh" | "max";
   text: string;
   task?: OfficialTaskScope;
+  /** Main-only permission boundary for automatic discovery/preparation; absent in legacy callers. */
+  automaticWork?: boolean;
   history: { role: "user" | "assistant"; text: string }[];
 }
 export interface OfficialSessionResult {
+  intent?: "question" | "work";
   taskRequired?: boolean;
   summary: string;
   workflowId: string;

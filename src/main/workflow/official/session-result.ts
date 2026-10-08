@@ -5,8 +5,10 @@ import { executionEvidence } from "./execution-evidence.js";
 export function officialSessionSummary(record: WorkflowRecord, task: boolean) {
   const preparation = record.project?.preparation;
   const evidence = executionEvidence(record);
-  const head =
-    evidence.measuredHead ?? "未測定（初期値からGitの有無は判断できません）";
+  const head = record.nativeWork
+    ? `ファイル比較digest ${record.head}（Git HEADではありません）`
+    : (evidence.measuredHead ??
+      "未測定（初期値からGitの有無は判断できません）");
   const calls = `通信確認済み：${evidence.confirmedDispatches}回 / 送信有無未測定：${evidence.unmeasuredDispatches}件`;
   const location = preparation
     ? preparation.destination === record.cwd

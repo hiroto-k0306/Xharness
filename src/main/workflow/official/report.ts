@@ -105,6 +105,9 @@ export function officialWorkflowReport(record: WorkflowRecord) {
     ? `<h3>DAG / 最大2並列 / native会話resume未対応</h3><p>固定合成課題の模擬実行。実provider並行実行は未検証。</p><table><tr><th>node</th><th>状態</th><th>base</th><th>取込HEAD</th></tr>${record.dag.nodes.map((n) => `<tr>${cells([n.id, n.state, n.base, n.integratedHead])}</tr>`).join("")}</table>`
     : "";
   const reviews =
+    (record.nativeWork
+      ? `<h3>通常作業の検証報告</h3><p>base/headはファイル比較digestです。Gitコミットではありません。作業場所: ${escape(record.cwd)}。以下はモデルの実行報告で、ハーネス独立検証ではありません。</p>${record.nativeValidation?.length ? record.nativeValidation.map((t) => `<p>${escape(t.command)}: ${escape(t.status)} / ${escape(t.summary)}</p>`).join("") : "<p>テスト実行報告なし</p>"}`
+      : "") +
     dagSummary +
     record.reviews
       .map(

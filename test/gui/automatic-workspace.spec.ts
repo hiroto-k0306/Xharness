@@ -2,7 +2,7 @@ import { test, expect } from "./electron.fixture.js";
 import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-test("ordinary work proposes scope, opens approval and runs in a local child copy", async ({
+test("ordinary native work explores, awaits approval and uses the selected folder", async ({
   gui,
   electronApp,
 }) => {
@@ -35,18 +35,20 @@ test("ordinary work proposes scope, opens approval and runs in a local child cop
   await prompt.fill("auto-work: 加算を修正してください");
   await prompt.press("Enter");
   const scope = gui.getByRole("region", { name: "実案件の承認範囲" });
-  await expect(scope).toContainText("対象フォルダー内に作業用コピーを作成", {
-    timeout: 20000,
-  });
-  await expect(scope).toContainText("add.mjs");
-  await expect(scope).toContainText("acceptance.test.mjs");
+  await expect(scope).toContainText(
+    "公式エージェントに対象探索・編集・テスト選択を任せます",
+    {
+      timeout: 20000,
+    },
+  );
   const pending = await gui.evaluate(() =>
     window.harness.officialWorkflow!({ action: "list" }),
   );
-  const destination =
-    pending.records[0]!.record.project!.preparation!.destination;
-  expect(destination.startsWith(join(cwd, ".xharness-workspaces"))).toBe(true);
-  await expect(access(destination)).rejects.toThrow();
+  expect(pending.records[0]!.record.cwd).toBe(cwd);
+  expect(pending.records[0]!.record.nativeWork?.validation).toBe(
+    "agent-reported",
+  );
+  expect(await readFile(join(cwd, "add.mjs"), "utf8")).toContain("a-b");
   await gui
     .getByRole("button", { name: "この計画を承認", exact: true })
     .click();
@@ -62,14 +64,11 @@ test("ordinary work proposes scope, opens approval and runs in a local child cop
     )
     .toBe("completed");
   await expect(prompt).toBeEnabled();
-  expect(await readFile(join(cwd, "add.mjs"), "utf8")).toContain("a-b");
-  expect(await readFile(join(destination, "add.mjs"), "utf8")).toContain("a+b");
+  expect(await readFile(join(cwd, "add.mjs"), "utf8")).toContain("a+b");
   await expect(access(join(cwd, ".git"))).rejects.toThrow();
   const final = await gui.evaluate(() =>
     window.harness.officialWorkflow!({ action: "list" }),
   );
-  expect(
-    final.records[0]!.record.checks.at(-1)?.tests.every((t) => t.passed),
-  ).toBe(true);
+  expect(final.records[0]!.record.checks).toEqual([]);
   expect(final.records[0]!.record.reviews.at(-1)?.findings).toEqual([]);
 });

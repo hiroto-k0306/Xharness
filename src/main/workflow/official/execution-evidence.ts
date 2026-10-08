@@ -16,9 +16,10 @@ export function executionEvidence(record: WorkflowRecord) {
     status: record.status,
     sourceCwd: record.project?.source ?? record.sourceCwd ?? null,
     executionCwd: record.cwd,
-    measuredHead: measuredHead(record.head),
-    headExplanation:
-      "ゼロのHEADは初期値で未測定です。Gitリポジトリが存在しない証拠ではありません。",
+    measuredHead: record.nativeWork ? null : measuredHead(record.head),
+    headExplanation: record.nativeWork
+      ? "この記録のbase/headはファイル比較digestです。Git HEADは測定していません。"
+      : "ゼロのHEADは初期値で未測定です。Gitリポジトリが存在しない証拠ではありません。",
     calls,
     confirmedDispatches: calls.filter((c) => c.dispatched === true).length,
     unmeasuredDispatches: calls.filter((c) => c.dispatched === null).length,

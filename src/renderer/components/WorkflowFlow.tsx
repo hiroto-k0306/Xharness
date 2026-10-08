@@ -115,13 +115,19 @@ export function WorkflowFlow({
     },
     {
       id: "scope",
-      title: "対象ファイル・既存テストの確認",
-      actor: "利用者 → ハーネス",
+      title: record?.nativeWork
+        ? "作業場所の確認"
+        : "対象ファイル・既存テストの確認",
+      actor: record?.nativeWork
+        ? "公式エージェントが探索"
+        : "利用者 → ハーネス",
       status: scopeRequired
         ? "対象の確認待ち"
-        : record?.project
-          ? "対象指定済み"
-          : "未記録 / 質問では不要",
+        : record?.nativeWork
+          ? record.cwd
+          : record?.project
+            ? "対象指定済み"
+            : "未記録 / 質問では不要",
     },
     {
       id: "plan",
@@ -151,10 +157,17 @@ export function WorkflowFlow({
     },
     {
       id: "verify",
-      title: "独立テスト",
-      actor: "ハーネスがローカルプロセスを実行",
-      status:
-        phase === "verify"
+      title: record?.nativeWork ? "モデルのテスト実行報告" : "独立テスト",
+      actor: record?.nativeWork
+        ? actor(["implement", "fix"])
+        : "ハーネスがローカルプロセスを実行",
+      status: record?.nativeWork
+        ? record.nativeValidation?.length
+          ? record.nativeValidation
+              .map((t) => `${t.command}: ${t.status}`)
+              .join(" / ")
+          : "テスト実行報告なし"
+        : phase === "verify"
           ? "テスト工程中"
           : tests?.length
             ? `${tests.filter((t) => t.passed).length}/${tests.length}件 合格`
@@ -189,8 +202,9 @@ export function WorkflowFlow({
       {record?.simulated && <p>模擬通信の記録</p>}
       {record && <OfficialCommunication record={record} />}
       <p>
-        モデルは指示・返答を生成。ツールは公式SDK / App
-        Server、独立テスト・Git・記録はハーネスが実行します。
+        {record?.nativeWork
+          ? "探索・編集・テストは公式SDK / App Serverのエージェントが実行します。ハーネスは計画承認・操作確認・別会社レビュー・停止・記録を担当します。"
+          : "モデルは指示・返答を生成。ツールは公式SDK / App Server、独立テスト・Git・記録はハーネスが実行します。"}
       </p>
       <p>
         保存状態を表示します。公式基盤内部の全往復を示すものではありません。

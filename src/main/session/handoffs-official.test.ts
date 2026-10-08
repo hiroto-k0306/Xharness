@@ -15,7 +15,7 @@ import { officialSessionSummary } from "../workflow/official/session-result.js";
 import type { WorkflowRecord } from "../workflow/official/runtime.js";
 import type { HandoffAction } from "../../shared/handoffs.js";
 
-async function setup(work = false) {
+async function setup(work: boolean | "native" = false) {
   const id = randomUUID();
   let record: WorkflowRecord;
   const official = vi.fn(
@@ -86,13 +86,24 @@ async function setup(work = false) {
         record.reviews = [
           { base: record.base, head: record.head, findings: [] },
         ];
+        if (work === "native") {
+          delete record.project;
+          record.nativeWork = {
+            validation: "agent-reported",
+            baseline: "files",
+          };
+          record.nativeValidation = [];
+          record.checks = [];
+          record.answer =
+            "変更しました。テスト実行報告なし。別会社レビュー完了。";
+        }
       }
       await mkdir(join(f.home, "official-workflows", id), { recursive: true });
       await writeFile(path(), JSON.stringify(record));
       return {
         workflowId: id,
         status: record.status,
-        summary: officialSessionSummary(record, work),
+        summary: officialSessionSummary(record, !!work),
       };
     },
   );
@@ -144,7 +155,7 @@ async function setup(work = false) {
   };
 }
 
-it.each([false, true])(
+it.each([false, true, "native"] as const)(
   "delivers a persisted official %s result once without legacy trace, preserves destination and survives restart",
   async (work) => {
     const f = await setup(work),

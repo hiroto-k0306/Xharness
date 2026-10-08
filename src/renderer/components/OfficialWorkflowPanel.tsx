@@ -97,12 +97,12 @@ export function OfficialWorkflowPanel({
             </button>
           </header>
           <p>
-            通常入力の限定作業の計画・結果と、固定合成課題を確認します。 計画 →
-            実装 → 独立テスト → 別会社全差分レビューを行います。
+            通常入力の計画・実装・テスト実行報告・別会社レビューと、固定合成課題を確認します。
+            ハーネスによる独立テストは固定合成課題の経路です。
           </p>
           <p>
             {view?.simulated
-              ? "FAKE：モデルは模擬、受入テストは実プロセスです。"
+              ? "FAKE：モデルは模擬です。通常作業のテスト報告も模擬で、固定合成課題の受入テストだけ実プロセスです。"
               : "公式SDK / App Serverの既存サブスクを使用します。計画生成も枠を使用します。追加課金へ切り替えません。"}
           </p>
           <CodexRuntimeSettings
@@ -354,6 +354,8 @@ export function OfficialWorkflowPanel({
                 task {r.id} / 次の段階 {r.next} / 再開 {r.resumed ?? 0}回
               </small>
               <p>
+                {r.nativeWork &&
+                  "ファイル内容の比較digest（Git HEADではありません）："}
                 base {/^0+$/.test(r.base) ? "未測定" : r.base.slice(0, 12)} →
                 head {/^0+$/.test(r.head) ? "未測定" : r.head.slice(0, 12)}
               </p>
@@ -361,6 +363,21 @@ export function OfficialWorkflowPanel({
                 <>
                   <h4>確認する計画</h4>
                   <p>{r.plan.summary}</p>
+                  {r.nativeWork && (
+                    <section aria-label="実案件の承認範囲">
+                      <p>
+                        公式エージェントに対象探索・編集・テスト選択を任せます。作業場所：
+                        {r.cwd}
+                        （選択中のフォルダー／worktree）。既存の変更を保全し、自動commit・reset・mergeは行いません。
+                      </p>
+                      <p>
+                        ファイル一覧は計画時点の候補です。テストや依存に必要なコマンドは公式sandboxを維持し、承認要求があれば今回の操作だけ確認します。追加課金は禁止のままです。
+                      </p>
+                      <p>
+                        テスト結果はモデルの実行報告です。ハーネスの独立プロセス検証ではありません。別会社レビューと最大2回の修正を行います。
+                      </p>
+                    </section>
+                  )}
                   {r.project && (
                     <section aria-label="実案件の承認範囲">
                       <p>
@@ -434,7 +451,8 @@ export function OfficialWorkflowPanel({
                       <strong>{t.title}</strong>
                       <p>{t.instructions}</p>
                       <p>
-                        対象 {t.files.join(", ")} / テスト{" "}
+                        対象 {t.files.join(", ")} /{" "}
+                        {r.nativeWork ? "検証方針" : "テスト"}{" "}
                         {t.acceptance.join(", ")} / 依存{" "}
                         {t.dependsOn.join(", ") || "なし"}
                       </p>
@@ -489,7 +507,17 @@ export function OfficialWorkflowPanel({
                   </>
                 )
               )}
-              <h4>実テストとレビューの証跡</h4>
+              <h4>
+                {r.nativeWork
+                  ? "モデルの検証報告と別会社レビュー"
+                  : "実テストとレビューの証跡"}
+              </h4>
+              {r.nativeValidation?.map((test, index) => (
+                <p key={index}>
+                  {test.command || "未実行"}: {test.status} / {test.summary}
+                  （モデル報告）
+                </p>
+              ))}
               {r.checks.map((c, i) => (
                 <p key={i}>
                   {c.head.slice(0, 12)}：

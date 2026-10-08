@@ -91,6 +91,24 @@ it("ordinary UI questions use the official bridge and return to idle without a p
   expect(native.mock.calls[0]![0].task).toBeUndefined();
   expect(oldStream).not.toHaveBeenCalled();
 });
+it("ordinary LoopFlow uses workflow state and hides the legacy six-step tabs", async () => {
+  await setup();
+  render(<App />);
+  await screen.findByText("+ new session");
+  act(() => {
+    useStore.setState((state) => ({
+      app: state.app ? { ...state.app, phase4: true } : null,
+    }));
+  });
+  await userEvent.click(screen.getByRole("tab", { name: "LoopFlow" }));
+  expect(
+    screen.getByRole("complementary", { name: "通常ワークフロー" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByTestId("step-model")).toBeNull();
+  expect(
+    screen.queryByRole("complementary", { name: "agent loop" }),
+  ).toBeNull();
+});
 it("inferred work waits for scope confirmation without another model call", async () => {
   const { native, oldStream } = await setup();
   render(<App />);

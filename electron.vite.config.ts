@@ -5,6 +5,22 @@ import { fileURLToPath } from "node:url";
 // main / preload / renderer を一括ビルド(DESIGN.md §17.2)。
 export default defineConfig({
   main: {
+    plugins: [
+      {
+        name: "typescript-esm-paths",
+        transform(code, id) {
+          if (
+            !id.replaceAll("\\", "/").endsWith("/typescript/lib/typescript.js")
+          )
+            return;
+          // TypeScript's CommonJS system initializes before electron-vite's
+          // generated ESM path constants. Bind only this bundled module's paths.
+          return code
+            .replace(/\b__filename\b/g, "import.meta.filename")
+            .replace(/\b__dirname\b/g, "import.meta.dirname");
+        },
+      },
+    ],
     build: {
       // Vite 8 は Rolldown を使う。Electron は実行時提供のモジュールなので同梱しない。
       rolldownOptions: {

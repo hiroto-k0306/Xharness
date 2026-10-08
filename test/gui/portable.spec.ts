@@ -8,7 +8,7 @@ import {
   readdir,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { spawn, execFile, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
@@ -25,7 +25,8 @@ async function port() {
 
 test("portable executable keeps two fake homes and extraction resources isolated", async ({}, info) => {
   test.skip(!process.env.XHARNESS_TEST_PORTABLE, "ポータブル配布exe専用の確認");
-  test.setTimeout(60_000);
+  // SDK resources require extraction on each launch (measured ~35s per launch).
+  test.setTimeout(180_000);
   const root = await mkdtemp(join(tmpdir(), "xh-portable-release-"));
   const extraction = join(root, "extraction");
   await mkdir(extraction);
@@ -69,7 +70,7 @@ test("portable executable keeps two fake homes and extraction resources isolated
             return false;
           }
         },
-        { timeout: 20_000 },
+        { timeout: 60_000 },
       )
       .toBe(true);
     const browser = await chromium.connectOverCDP(`http://127.0.0.1:${number}`);
@@ -99,7 +100,17 @@ test("portable executable keeps two fake homes and extraction resources isolated
     const digest = (bytes: Buffer) =>
       createHash("sha256").update(bytes).digest("hex");
     expect(digest(await readFile(first[0]!))).toBe(
-      digest(await readFile(resolve("dist/win-unpacked/resources/app.asar"))),
+      digest(
+        await readFile(
+          join(
+            dirname(
+              process.env.XHARNESS_TEST_EXECUTABLE ??
+                resolve("dist/win-unpacked/XHarness.exe"),
+            ),
+            "resources/app.asar",
+          ),
+        ),
+      ),
     );
     const b = await launch(bHome);
     const second = await asars();
@@ -114,14 +125,18 @@ test("portable executable keeps two fake homes and extraction resources isolated
     const prompt = a.page.getByRole("textbox", { name: "prompt", exact: true });
     await prompt.fill("ping");
     await prompt.press("Enter");
-    await expect(a.page.getByText("pong", { exact: true })).toBeVisible();
+    await expect(
+      a.page.getByText("模擬回答：計画・実装は開始していません。", {
+        exact: true,
+      }),
+    ).toBeVisible();
     await expect(prompt).toBeEnabled();
     expect(
       await readFile(
         join(aHome, "sessions", `${made.sessionId}.jsonl`),
         "utf8",
       ),
-    ).toContain("pong");
+    ).toContain("模擬回答：計画・実装は開始していません。");
     await a.page.screenshot({
       path: info.outputPath("portable-after-second-exit.png"),
     });

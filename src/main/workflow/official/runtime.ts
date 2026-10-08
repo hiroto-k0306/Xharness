@@ -63,6 +63,7 @@ export const approvalDigest = (
 export interface WorkflowRecord {
   sessionId?: string;
   inputIntent?: "question" | "work";
+  suggestedScope?: import("../../../shared/official-session.js").OfficialTaskScope;
   project?: {
     source: string;
     sourceHead: string;
@@ -150,7 +151,7 @@ export interface WorkflowOptions {
   /** Carries the bounded classifier/scope calls into the final workflow evidence. */
   preparationCalls?: WorkflowRecord["calls"];
   /** Called only after durable plan approval; never replayed on resume. */
-  prepareWorkspace?: () => Promise<{
+  prepareWorkspace?: (signal: AbortSignal) => Promise<{
     cwd: string;
     head: string;
     workspace: WorkspacePort;
@@ -639,7 +640,7 @@ export async function runOfficialSingleTask(
       record.pendingEffect = { kind: "worktree", id: randomUUID() };
       await save();
       signal.throwIfAborted();
-      const prepared = await options.prepareWorkspace();
+      const prepared = await options.prepareWorkspace(signal);
       signal.throwIfAborted();
       options.workspace = prepared.workspace;
       options.cwd = prepared.cwd;

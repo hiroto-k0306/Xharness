@@ -161,3 +161,26 @@ it("reuses a verified session worktree and refuses a dirty Git source", async ()
     ),
   ).rejects.toThrow("作業の準備を停止");
 });
+
+it("honors runtime cancellation separately from submission and excludes generated directories", async () => {
+  const f = await fixture(),
+    inventory = await inspectProjectInventory(f.cwd, signal());
+  const prepared = await automaticWorkspace(
+    inventory,
+    scope,
+    randomUUID(),
+    signal(),
+  );
+  const runtime = new AbortController();
+  runtime.abort();
+  await expect(prepared.prepare(runtime.signal)).rejects.toThrow();
+  await expect(access(prepared.preparation.destination)).rejects.toThrow();
+  await expect(
+    automaticWorkspace(
+      inventory,
+      { ...scope, files: ["Node_Modules/target.mjs"] },
+      randomUUID(),
+      signal(),
+    ),
+  ).rejects.toThrow("project-generated-directory-is-not-task-scope");
+});

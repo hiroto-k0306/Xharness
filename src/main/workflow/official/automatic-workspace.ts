@@ -37,14 +37,31 @@ export async function automaticWorkspace(
   worktreeSource?: string,
 ) {
   validateProjectScope(scope);
+  if (
+    scope.files.some((path) =>
+      path
+        .split(/[\\/]/)
+        .some((part) =>
+          ["node_modules", ".tools", ".out", ".xharness-workspaces"].includes(
+            part.toLowerCase(),
+          ),
+        ),
+    )
+  )
+    throw new WorkflowFailure("project-generated-directory-is-not-task-scope");
   if (!/^[a-f0-9-]{36}$/i.test(id) || !inventory.tests.includes(scope.testFile))
     throw new WorkflowFailure("existing-independent-test-required");
   const source = inventory.cwd;
-  const git = (cwd: string, args: string[]) =>
+  const git = (cwd: string, args: string[], operationSignal = signal) =>
     exec(
       "git",
       [...workflowGitPolicyArgs(), "-c", `safe.directory=${cwd}`, ...args],
-      { cwd, signal, windowsHide: true, env: workflowGitEnvironment() },
+      {
+        cwd,
+        signal: operationSignal,
+        windowsHide: true,
+        env: workflowGitEnvironment(),
+      },
     );
   let isGit = false;
   try {
@@ -86,13 +103,13 @@ export async function automaticWorkspace(
     (process.versions.electron
       ? await projectNode(source, process.env.PATH ?? "")
       : process.execPath);
-  const check = async () => {
-    await assertInventoryUnchanged(inventory, signal);
+  const check = async (operationSignal = signal) => {
+    await assertInventoryUnchanged(inventory, operationSignal);
     if (snapshot) {
       const current = await prepareProjectTask(
         source,
         scope,
-        signal,
+        operationSignal,
         worktreeSource,
       );
       if (current.sourceHead !== head)
@@ -121,12 +138,13 @@ export async function automaticWorkspace(
     preparation,
     workspace: readonly,
     test: projectTest(scope.testFile, program),
-    async prepare() {
+    async prepare(runtimeSignal = signal) {
+      const operationSignal = AbortSignal.any([signal, runtimeSignal]);
       if (started)
         throw new WorkflowFailure("workspace-preparation-already-started");
       started = true;
-      signal.throwIfAborted();
-      await check();
+      operationSignal.throwIfAborted();
+      await check(operationSignal);
       const cwd = preparation.destination;
       if (preparation.kind !== "reuse-worktree") {
         const parent = dirname(cwd);
@@ -142,42 +160,50 @@ export async function automaticWorkspace(
           if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
         }
         if (isGit)
-          await git(source, [
-            "worktree",
-            "add",
-            "-b",
-            `xharness/auto-${id}`,
-            cwd,
-            head,
-          ]);
+          await git(
+            source,
+            ["worktree", "add", "-b", `xharness/auto-${id}`, cwd, head],
+            operationSignal,
+          );
         else {
           await mkdir(cwd);
           for (const file of inventory.files) {
-            signal.throwIfAborted();
+            operationSignal.throwIfAborted();
             const from = await scopedPath(source, file.path),
               to = await scopedPath(cwd, file.path);
             await mkdir(dirname(to), { recursive: true });
             await copyFile(from, to);
           }
-          await check();
-          await assertInventoryUnchanged({ ...inventory, cwd }, signal);
+          await check(operationSignal);
+          await assertInventoryUnchanged(
+            { ...inventory, cwd },
+            operationSignal,
+          );
           // Initialization is confined to the approved child directory, never the original folder.
-          await git(cwd, ["init"]);
-          await git(cwd, ["add", "--", ...inventory.files.map((f) => f.path)]);
-          await git(cwd, [
-            "-c",
-            "user.name=XHarness",
-            "-c",
-            "user.email=xharness@local",
-            "commit",
-            "-m",
-            "workspace: approved local snapshot",
-          ]);
+          await git(cwd, ["init"], operationSignal);
+          await git(
+            cwd,
+            ["add", "--", ...inventory.files.map((f) => f.path)],
+            operationSignal,
+          );
+          await git(
+            cwd,
+            [
+              "-c",
+              "user.name=XHarness",
+              "-c",
+              "user.email=xharness@local",
+              "commit",
+              "-m",
+              "workspace: approved local snapshot",
+            ],
+            operationSignal,
+          );
         }
       }
-      await check();
+      await check(operationSignal);
       const workspace = gitWorkspace(cwd, redact),
-        initial = await workspace.inspect(signal);
+        initial = await workspace.inspect(operationSignal);
       if (!initial.clean || (isGit && initial.head !== head))
         throw new WorkflowFailure("prepared-workspace-mismatch");
       return { cwd, head: initial.head, workspace };

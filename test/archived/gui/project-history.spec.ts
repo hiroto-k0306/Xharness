@@ -1,4 +1,4 @@
-import { test, expect } from "./electron.fixture.js";
+import { test, expect } from "../../gui/electron.fixture.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

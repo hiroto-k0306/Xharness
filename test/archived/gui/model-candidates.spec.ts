@@ -1,4 +1,4 @@
-import { test, expect } from "./electron.fixture.js";
+import { test, expect } from "../../gui/electron.fixture.js";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -192,15 +192,17 @@ test("fake candidate reasons require explicit selection and preserve defaults af
     await expect(gui.getByText("FAKE", { exact: true })).toBeVisible();
     const state = await gui.evaluate(
       () =>
-        new Promise<import("../../src/shared/ipc.js").AppState>((resolve) => {
-          const unsubscribe = window.harness.onEvent((event) => {
-            if (event.type === "state") {
-              unsubscribe();
-              resolve(event.state);
-            }
-          });
-          void window.harness.command({ type: "ready" });
-        }),
+        new Promise<import("../../../src/shared/ipc.js").AppState>(
+          (resolve) => {
+            const unsubscribe = window.harness.onEvent((event) => {
+              if (event.type === "state") {
+                unsubscribe();
+                resolve(event.state);
+              }
+            });
+            void window.harness.command({ type: "ready" });
+          },
+        ),
     );
     expect(state.sessions.find((s) => s.id === sessionId)?.model).toBe(
       target.model,

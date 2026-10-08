@@ -31,6 +31,7 @@ export function OfficialWorkflowPanel({
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [question, setQuestion] = useState("");
   const sending = useRef(false);
+  const openedApproval = useRef("");
   useEffect(() => {
     if (openSignal) setOpen(true);
   }, [openSignal]);
@@ -38,13 +39,21 @@ export function OfficialWorkflowPanel({
   const questionProvider =
     mainProvider ?? (view?.simulated ? provider : undefined);
   useEffect(() => {
-    if (!open) return;
     let live = true;
     const poll = () =>
       void window.harness
         .officialWorkflow?.({ action: "list" })
         .then((v) => {
-          if (live) setView(v);
+          if (live) {
+            setView(v);
+            const key = v.approval
+              ? `${v.approval.id}:${v.approval.digest}`
+              : "";
+            if (key && openedApproval.current !== key) {
+              openedApproval.current = key;
+              setOpen(true);
+            }
+          }
         })
         .catch(() => {
           if (live) setError("保存状態を取得できません");
@@ -55,7 +64,7 @@ export function OfficialWorkflowPanel({
       live = false;
       clearInterval(timer);
     };
-  }, [open]);
+  }, []);
   const send = async (command: OfficialWorkflowCommand) => {
     if (sending.current) return;
     sending.current = true;
@@ -354,19 +363,34 @@ export function OfficialWorkflowPanel({
                   {r.project && (
                     <section aria-label="実案件の承認範囲">
                       <p>
-                        セッションの作業場所：{r.project.source} / 開始HEAD：
+                        セッションの作業場所：{r.project.source} /
+                        {r.project.preparation?.kind === "local-copy"
+                          ? "元ファイルの検査digest："
+                          : "開始HEAD："}
                         {r.project.sourceHead}
                       </p>
                       <p>
                         変更対象：{r.project.files.join(", ")}
-                        。この作業場所で変更とコミットを行います。既存worktreeの反映は従来の完了操作を使います。
+                        。元フォルダーへの反映・mainへのマージは自動で行いません。
                       </p>
+                      {r.project.preparation && (
+                        <p>
+                          作業方式：
+                          {r.project.preparation.kind === "local-copy"
+                            ? "対象フォルダー内に作業用コピーを作成"
+                            : r.project.preparation.kind === "reuse-worktree"
+                              ? "管理済みworktreeを再利用"
+                              : "専用ブランチのworktreeを作成"}
+                          。 作業領域：{r.project.preparation.destination}
+                          （新規作成はこの計画の承認後）。
+                        </p>
+                      )}
                       <p>
                         独立テスト：node --test {r.project.testFile}
                         （既存テストは変更しません）。
                       </p>
                       <p>
-                        承認すると現在の作業場所で実装・ローカルNodeテスト・別会社レビューを行います。テストコードのworkspace外の副作用をOSで完全隔離する機能ではありません。依存のインストールや任意shellは実行しません。
+                        承認すると表示した作業領域で実装・ローカルNodeテスト・別会社レビューを行います。テストコードのworkspace外の副作用をOSで完全隔離する機能ではありません。依存のインストールや任意shellは実行しません。
                       </p>
                       <p>
                         実行するNodeの実体：

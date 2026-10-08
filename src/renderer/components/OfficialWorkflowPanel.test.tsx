@@ -82,7 +82,7 @@ it("shows the existing working directory, host Node and test side-effect limits 
   expect(scope).toHaveTextContent("C:/chosen-project");
   expect(scope).toHaveTextContent("C:/host/node.exe");
   expect(scope).toHaveTextContent("node --test acceptance.test.mjs");
-  expect(scope).toHaveTextContent("この作業場所で変更とコミット");
+  expect(scope).toHaveTextContent("表示した作業領域で実装");
   expect(scope).toHaveTextContent("OSで完全隔離する機能ではありません");
   expect(scope).not.toHaveTextContent("コピー");
   fireEvent.click(screen.getByRole("button", { name: "この計画を承認" }));

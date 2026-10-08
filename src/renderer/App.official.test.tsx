@@ -22,7 +22,8 @@ async function setup() {
     summary: "公式の有限回答",
     workflowId: `ui-native-${request.sessionId}`,
     status: "completed",
-    taskRequired: !request.task && /変更|修正/.test(request.text),
+    taskRequired:
+      !request.task && !request.automaticWork && /変更|修正/.test(request.text),
   }));
   const legacy = new FakeProvider(),
     oldStream = vi.spyOn(legacy, "stream");
@@ -109,19 +110,17 @@ it("ordinary LoopFlow uses workflow state and hides the legacy six-step tabs", a
     screen.queryByRole("complementary", { name: "agent loop" }),
   ).toBeNull();
 });
-it("inferred work waits for scope confirmation without another model call", async () => {
+it("a legacy scope notice cannot prepare work without a selected folder", async () => {
   const { native, oldStream } = await setup();
   render(<App />);
   await screen.findByText("+ new session");
   await userEvent.type(screen.getByLabelText("prompt"), "変更して{Enter}");
   const confirm = await screen.findByRole("button", {
-    name: "対象を確認して計画を作成",
+    name: "作業対象を自動確認して計画を作成",
   });
   await waitFor(() => expect(confirm).toBeEnabled());
   await userEvent.click(confirm);
-  await screen.findByText(
-    /プロジェクト、変更対象、既存の独立テストを指定してください/,
-  );
+  await screen.findByText(/対象フォルダーを選択してください/);
   expect(native).toHaveBeenCalledTimes(1);
   expect(native.mock.calls[0]![0].task).toBeUndefined();
   expect(oldStream).not.toHaveBeenCalled();
@@ -129,11 +128,13 @@ it("inferred work waits for scope confirmation without another model call", asyn
   await waitFor(() => expect(native).toHaveBeenCalledTimes(2));
   await waitFor(() =>
     expect(
-      screen.queryByRole("button", { name: "対象を確認して計画を作成" }),
+      screen.queryByRole("button", {
+        name: "作業対象を自動確認して計画を作成",
+      }),
     ).toBeNull(),
   );
 });
-it("confirmed inferred work uses the original request, selected directory and approval panel", async () => {
+it("work uses the original request and selected directory with automatic discovery and no manual scope fields", async () => {
   const { cwd, native, oldStream } = await setup();
   render(<App />);
   await screen.findByText("+ new session");
@@ -154,22 +155,14 @@ it("confirmed inferred work uses the original request, selected directory and ap
     ).toBe(cwd),
   );
   await userEvent.type(screen.getByLabelText("prompt"), "加算を修正{Enter}");
-  const confirm = await screen.findByRole("button", {
-    name: "対象を確認して計画を作成",
-  });
-  await waitFor(() => expect(confirm).toBeEnabled());
-  await userEvent.type(screen.getByLabelText("公式作業の変更対象"), "add.mjs");
-  await userEvent.type(
-    screen.getByLabelText("公式作業の独立テスト"),
-    "acceptance.test.mjs",
-  );
-  await userEvent.click(confirm);
-  await waitFor(() => expect(native).toHaveBeenCalledTimes(2));
-  expect(native.mock.calls[1]![0]).toMatchObject({
+  await waitFor(() => expect(native).toHaveBeenCalledTimes(1));
+  expect(native.mock.calls[0]![0]).toMatchObject({
     cwd,
     text: "加算を修正",
-    task: { files: ["add.mjs"], testFile: "acceptance.test.mjs" },
+    automaticWork: true,
   });
-  expect(screen.getByLabelText("公式単一タスクworkflow")).toBeInTheDocument();
+  expect(native.mock.calls[0]![0].task).toBeUndefined();
+  expect(screen.queryByLabelText("公式作業の変更対象")).toBeNull();
+  expect(screen.queryByLabelText("公式作業の独立テスト")).toBeNull();
   expect(oldStream).not.toHaveBeenCalled();
 });

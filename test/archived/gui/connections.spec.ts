@@ -1,4 +1,4 @@
-import { test, expect } from "./electron.fixture.js";
+import { test, expect } from "../../gui/electron.fixture.js";
 test("explicit connection selection, cancellation, unconfigured refusal and fake SDK send", async ({
   gui,
 }) => {

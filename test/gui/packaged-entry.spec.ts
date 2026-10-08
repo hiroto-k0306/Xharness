@@ -1,10 +1,18 @@
 import { test, expect, _electron as electron } from "@playwright/test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-test("production official entry refuses unconfigured sends without legacy authentication", async () => {
+test("production official entry refuses an unavailable fixed CLI and incomplete plan without fallback", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-packaged-official-"));
+  await mkdir(join(home, "official-workflows"));
+  await writeFile(
+    join(home, "official-workflows/connection.json"),
+    JSON.stringify({
+      codexMode: "fixed",
+      codexPath: join(home, "missing/codex.exe"),
+    }),
+  );
   const env: NodeJS.ProcessEnv = { ...process.env, XHARNESS_HOME: home };
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.ELECTRON_RENDERER_URL;
@@ -47,6 +55,9 @@ test("production official entry refuses unconfigured sends without legacy authen
     );
     expect(state.records).toEqual([]);
     expect(state.available).toBe(false);
+    expect(state.connection?.codexMode).toBe("fixed");
+    expect(state.activeId).toBeUndefined();
+    expect(state.error).toContain("計画モデルが選択されていません");
   } finally {
     await app.close();
     await rm(home, { recursive: true, force: true, maxRetries: 5 });

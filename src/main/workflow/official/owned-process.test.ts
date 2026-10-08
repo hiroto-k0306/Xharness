@@ -2,10 +2,45 @@ import { it, expect } from "vitest";
 import { spawn } from "node:child_process";
 import { mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runAcceptance } from "./workspace.js";
 import { spawnOwnedProcess } from "./owned-process.js";
+it.skipIf(process.platform !== "win32")(
+  "skips extensionless and cmd shims and selects an exe without loosening containment",
+  async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-owned-shim-"));
+    try {
+      await writeFile(join(cwd, "node"), "#!/bin/sh\nexit 99\n");
+      await writeFile(join(cwd, "node.cmd"), "@exit /b 99\r\n");
+      for (const program of ["node", "node.exe"]) {
+        const child = spawnOwnedProcess(
+          program,
+          ["-e", 'console.log("fixture-exe")'],
+          {
+            cwd,
+            env: {
+              ...process.env,
+              PATH: `${cwd};${dirname(process.execPath)};${process.env.PATH}`,
+            },
+          },
+        );
+        let output = "";
+        child.stdout.on("data", (b) => (output += b));
+        child.stderr.resume();
+        expect(await new Promise((r) => child.once("close", r))).toBe(0);
+        expect(output.trim()).toBe("fixture-exe");
+      }
+      const refused = spawnOwnedProcess(join(cwd, "node"), [], { cwd });
+      refused.stdout.resume();
+      refused.stderr.resume();
+      expect(await new Promise((r) => refused.once("close", r))).toBe(125);
+    } finally {
+      await rm(cwd, { recursive: true, force: true, maxRetries: 10 });
+    }
+  },
+  30000,
+);
 it.skipIf(process.platform !== "win32")(
   "preserves bidirectional stdio without parsing or logging native messages",
   async () => {

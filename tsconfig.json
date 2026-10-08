@@ -18,7 +18,9 @@
     "src/**/*.tsx",
     "scripts/**/*.ts",
     "test/gui/**/*.ts",
+    "test/archived/gui/**/*.ts",
     "playwright.config.ts",
+    "playwright.legacy.config.ts",
     "electron.vite.config.ts"
   ]
 }

@@ -33,7 +33,9 @@ test("packaged restart preserves records and a killed process never replays pend
   const prompt = gui.getByRole("textbox", { name: "prompt", exact: true });
   await prompt.fill("ping");
   await prompt.press("Enter");
-  await expect(gui.getByText("pong", { exact: true })).toBeVisible();
+  await expect(
+    gui.getByText("模擬回答：計画・実装は開始していません。", { exact: true }),
+  ).toBeVisible();
   await expect(prompt).toBeEnabled();
   const historyPath = join(home, "sessions", `${id}.jsonl`);
   const history = await readFile(historyPath, "utf8");
@@ -75,7 +77,11 @@ test("packaged restart preserves records and a killed process never replays pend
   const restartedProcess = restarted.process();
   try {
     const page = await open(restarted);
-    await expect(page.getByText("pong", { exact: true })).toBeVisible();
+    await expect(
+      page.getByText("模擬回答：計画・実装は開始していません。", {
+        exact: true,
+      }),
+    ).toBeVisible();
     expect(await readFile(historyPath, "utf8")).toBe(history);
     await page
       .getByRole("button", { name: "ローカル操作の土台", exact: true })

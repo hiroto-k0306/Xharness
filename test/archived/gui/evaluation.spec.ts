@@ -1,4 +1,4 @@
-import { test, expect } from "./electron.fixture.js";
+import { test, expect } from "../../gui/electron.fixture.js";
 import { readFile } from "node:fs/promises";
 
 test("exports and displays evaluation from an isolated fake UI task", async ({

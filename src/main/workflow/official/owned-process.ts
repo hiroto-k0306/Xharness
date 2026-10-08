@@ -56,12 +56,17 @@ public static class XHarnessOwnedJob {
   b.Append('\\',slash*2); b.Append('"'); return b.ToString();
  }
  static string Locate(string program) {
-  if(Path.IsPathRooted(program)) return program;
+  // CreateProcessW cannot execute pnpm's extensionless shell shim or a .cmd.
+  if(Path.IsPathRooted(program)) {
+   if(!program.EndsWith(".exe",StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("executable-required");
+   return program;
+  }
+  if(program.IndexOfAny(new[]{'\\','/'})>=0) throw new InvalidOperationException("absolute-path-required");
+  string name=program.EndsWith(".exe",StringComparison.OrdinalIgnoreCase) ? program : program+".exe";
   foreach(string path in (Environment.GetEnvironmentVariable("PATH")??"").Split(';')) {
-   foreach(string suffix in new[]{"", ".exe"}) {
-    string full=Path.Combine(path,program+suffix);
-    if(File.Exists(full)) return Path.GetFullPath(full);
-   }
+   if(!Path.IsPathRooted(path)) continue;
+   string full=Path.Combine(path,name);
+   if(File.Exists(full)) return Path.GetFullPath(full);
   }
   throw new Exception("Executable unavailable");
  }

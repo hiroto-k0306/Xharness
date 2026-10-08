@@ -1,4 +1,4 @@
-import { test, expect } from "./electron.fixture.js";
+import { test, expect } from "../../gui/electron.fixture.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 

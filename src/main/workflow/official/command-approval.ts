@@ -183,6 +183,39 @@ export async function classifyCommand(
   )
     return reject("envelope", "environment");
   const original = params.command;
+  if (request.nativeWork) {
+    // Opaque shell text is never classified as safe. The official sandbox is
+    // retained and a person approves this exact command once, compounds included.
+    if (
+      /[\0]|\.\.[\\/]|(?:\.credentials\.json|auth\.json|\.env\b|\.npmrc|\.netrc|id_rsa|id_ed25519)|git\s+(?:reset|clean)\b/i.test(
+        original,
+      )
+    )
+      return reject("target", "protected-native-operation");
+    if (
+      ![params.threadId, params.turnId, params.itemId].every(
+        (v) => typeof v === "string" && /^[A-Za-z0-9_-]{1,200}$/.test(v),
+      )
+    )
+      return reject("identity", "ids-invalid");
+    return {
+      kind: "operation",
+      shape,
+      operation: {
+        requestId: request.requestId,
+        sessionId: params.threadId as string,
+        turnId: params.turnId as string,
+        itemId: params.itemId as string,
+        command: original,
+        cwd: request.cwd,
+        targets: [request.cwd],
+        reason:
+          typeof params.reason === "string"
+            ? redact(params.reason.slice(0, 1000))
+            : "公式エージェントが要求した操作。コマンド全体を確認してください。",
+      },
+    };
+  }
   // Codex on Windows wraps the model's command in Windows PowerShell. Only this
   // exact form is unwrapped; the inner text then meets the unwrapped grammar.
   const wrapped = windowsPowerShellCommand(original);

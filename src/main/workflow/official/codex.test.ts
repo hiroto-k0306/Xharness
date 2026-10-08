@@ -207,6 +207,59 @@ const request = (phase: AgentRequest["phase"] = "review"): AgentRequest => ({
   tool: vi.fn(async () => {}),
   approve: vi.fn(async () => false),
 });
+it.each(["new.ts", "../outside.ts", "auth.json"])(
+  "native file changes can exceed hints but keep workspace and secret boundaries: %s",
+  async (path) => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-native-file-"));
+    try {
+      const mock = fakeServer(),
+        original = mock.server.request;
+      let decision: unknown;
+      mock.server.request = async (method, raw, signal) => {
+        if (method !== "turn/start") return original(method, raw, signal);
+        queueMicrotask(() => {
+          void (async () => {
+            mock.emit("turn/started", {
+              threadId: "thread-fixture",
+              turn: { id: "turn-fixture" },
+            });
+            mock.emit("item/started", {
+              threadId: "thread-fixture",
+              turnId: "turn-fixture",
+              item: {
+                id: "edit-fixture",
+                type: "fileChange",
+                changes: [{ path }],
+              },
+            });
+            decision = await mock.approval()(
+              "item/fileChange/requestApproval",
+              {
+                threadId: "thread-fixture",
+                turnId: "turn-fixture",
+                itemId: "edit-fixture",
+              },
+            );
+            mock.emit("turn/completed", {
+              threadId: "thread-fixture",
+              turn: { id: "turn-fixture", status: "completed" },
+            });
+          })();
+        });
+        return { turn: { id: "turn-fixture" } };
+      };
+      await new CodexWorkflowAgent(() => mock.server).run(
+        { ...request("implement"), cwd, nativeWork: true },
+        new AbortController().signal,
+      );
+      expect(decision).toEqual({
+        decision: path === "new.ts" ? "accept" : "decline",
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+);
 function commandFailureServer(
   delivery: "item" | "final" | "both",
   source: string | undefined = "unifiedExecStartup",
@@ -373,71 +426,81 @@ it("preserves startup failure in workflow history and report without no-changes,
     await rm(cwd, { recursive: true, force: true, maxRetries: 5 });
   }
 });
-it.each(["allow", "deny", "changed", "duplicate"])(
-  "routes a scoped operation through request.approve: %s",
-  async (mode) => {
-    const cwd = await mkdtemp(join(tmpdir(), "xh-codex-approval-"));
-    try {
-      await writeFile(join(cwd, "add.mjs"), "synthetic");
-      const mock = fakeServer(),
-        original = mock.server.request;
-      let decision: unknown, duplicate: unknown;
-      const params = {
-        threadId: "thread-fixture",
-        turnId: "turn-fixture",
-        itemId: "read-fixture",
-        cwd,
-        command: "Get-Content add.mjs",
-      };
-      const r = {
-        ...request("implement"),
-        cwd,
-        requestId: "11111111-1111-4111-8111-111111111111",
-      };
-      r.approve = vi.fn(async () => {
-        if (mode === "changed") params.command = "Get-Content .env";
-        return mode !== "deny";
-      });
-      mock.server.request = async (method, raw, signal) => {
-        if (method !== "turn/start") return original(method, raw, signal);
-        queueMicrotask(() => {
-          void (async () => {
-            mock.emit("turn/started", {
-              threadId: params.threadId,
-              turn: { id: params.turnId },
-            });
-            decision = await mock.approval()(
+it.each([
+  "allow",
+  "deny",
+  "changed",
+  "duplicate",
+  "native-allow",
+  "native-deny",
+])("routes a scoped operation through request.approve: %s", async (mode) => {
+  const cwd = await mkdtemp(join(tmpdir(), "xh-codex-approval-"));
+  try {
+    await writeFile(join(cwd, "add.mjs"), "synthetic");
+    const mock = fakeServer(),
+      original = mock.server.request;
+    let decision: unknown, duplicate: unknown;
+    const params = {
+      threadId: "thread-fixture",
+      turnId: "turn-fixture",
+      itemId: "read-fixture",
+      cwd,
+      command: mode.startsWith("native-")
+        ? "rg --files; node --test"
+        : "Get-Content add.mjs",
+    };
+    const r = {
+      ...request("implement"),
+      cwd,
+      requestId: "11111111-1111-4111-8111-111111111111",
+      nativeWork: mode.startsWith("native-"),
+    };
+    r.approve = vi.fn(async () => {
+      if (mode === "changed") params.command = "Get-Content .env";
+      return mode !== "deny" && mode !== "native-deny";
+    });
+    mock.server.request = async (method, raw, signal) => {
+      if (method !== "turn/start") return original(method, raw, signal);
+      queueMicrotask(() => {
+        void (async () => {
+          mock.emit("turn/started", {
+            threadId: params.threadId,
+            turn: { id: params.turnId },
+          });
+          decision = await mock.approval()(
+            "item/commandExecution/requestApproval",
+            params,
+          );
+          if (mode === "duplicate")
+            duplicate = await mock.approval()(
               "item/commandExecution/requestApproval",
               params,
             );
-            if (mode === "duplicate")
-              duplicate = await mock.approval()(
-                "item/commandExecution/requestApproval",
-                params,
-              );
-            mock.emit("turn/completed", {
-              threadId: params.threadId,
-              turn: { id: params.turnId, status: "completed" },
-            });
-          })();
-        });
-        return { turn: { id: params.turnId } };
-      };
-      await new CodexWorkflowAgent(() => mock.server).run(
-        r,
-        new AbortController().signal,
-      );
-      expect(r.approve).toHaveBeenCalledTimes(1);
-      expect(decision).toEqual({
-        decision: mode === "deny" || mode === "changed" ? "decline" : "accept",
+          mock.emit("turn/completed", {
+            threadId: params.threadId,
+            turn: { id: params.turnId, status: "completed" },
+          });
+        })();
       });
-      if (mode === "duplicate")
-        expect(duplicate).toEqual({ decision: "decline" });
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  },
-);
+      return { turn: { id: params.turnId } };
+    };
+    await new CodexWorkflowAgent(() => mock.server).run(
+      r,
+      new AbortController().signal,
+    );
+    expect(r.approve).toHaveBeenCalledTimes(1);
+    expect(decision).toEqual({
+      decision:
+        mode === "deny" || mode === "changed" || mode === "native-deny"
+          ? "decline"
+          : "accept",
+    });
+    if (mode === "duplicate")
+      expect(duplicate).toEqual({ decision: "decline" });
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
 it.each([
   [true, "accept", undefined],
   ["declined", "decline", "user-declined"],

@@ -6,6 +6,44 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runAcceptance } from "./workspace.js";
 import { spawnOwnedProcess } from "./owned-process.js";
+import { runtimeEnvironment } from "./workspace.js";
+it.skipIf(process.platform !== "win32")(
+  "preserves executable discovery and initializes Windows PowerShell modules after the pwsh supervisor",
+  async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-owned-env-"));
+    const child = spawnOwnedProcess(
+      join(
+        process.env.SystemRoot!,
+        "System32/WindowsPowerShell/v1.0/powershell.exe",
+      ),
+      [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "$ErrorActionPreference='Stop'; foreach($n in @('node','pwsh','Get-FileHash')) { $null=Get-Command $n -ErrorAction Stop }; [Console]::WriteLine('commands-found')",
+      ],
+      {
+        cwd,
+        env: {
+          ...runtimeEnvironment(),
+          PATH: `${dirname(process.execPath)};${process.env.PATH}`,
+          PATHEXT: ".EXE;.CMD;.BAT",
+        },
+      },
+    );
+    let output = "";
+    child.stdout.on("data", (b) => (output += b));
+    child.stderr.resume();
+    try {
+      expect(await new Promise((r) => child.once("close", r))).toBe(0);
+      expect(output.trim()).toBe("commands-found");
+    } finally {
+      child.kill();
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+  30000,
+);
 it.skipIf(process.platform !== "win32")(
   "skips extensionless and cmd shims and selects an exe without loosening containment",
   async () => {

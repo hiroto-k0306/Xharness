@@ -19,6 +19,7 @@ export function runtimeEnvironment(source = process.env): NodeJS.ProcessEnv {
   for (const key of [
     "PATH",
     "Path",
+    "PATHEXT",
     "SystemRoot",
     "WINDIR",
     "TEMP",

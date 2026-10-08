@@ -131,10 +131,12 @@ it("strips provider keys and process injection from helper environment", () => {
   expect(
     runtimeEnvironment({
       PATH: "allowed",
+      PATHEXT: ".EXE;.CMD",
+      PSModulePath: "untrusted-shell-modules",
       ANTHROPIC_API_KEY: "untrusted",
       OPENAI_API_KEY: "untrusted",
       NODE_OPTIONS: "--require injection",
       GIT_CONFIG_COUNT: "1",
     }),
-  ).toEqual({ PATH: "allowed" });
+  ).toEqual({ PATH: "allowed", PATHEXT: ".EXE;.CMD" });
 });

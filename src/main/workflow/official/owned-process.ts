@@ -103,6 +103,9 @@ public static class XHarnessOwnedJob {
 }
 '@
 $payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('__PAYLOAD__')) | ConvertFrom-Json
+# The supervisor's PowerShell 7 module paths must not leak into a child's
+# Windows PowerShell 5.1. Each child shell initializes its own module paths.
+$env:PSModulePath = $null
 exit [XHarnessOwnedJob]::Run($payload.program, [string[]]$payload.args, $payload.cwd, $payload.lease)
 } catch { [Console]::Error.WriteLine('owned-process-containment-unavailable'); exit 125 }
 `;

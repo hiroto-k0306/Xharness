@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["src/headless.ts"],
+  "include": ["src/headless.ts", "src/main/workflow/official/sdk-worker.ts"],
   "exclude": ["src/**/*.test.ts"]
 }

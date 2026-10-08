@@ -1,5 +1,6 @@
 import { resolveConfig } from "electron-vite";
 import { readFile } from "node:fs/promises";
+import { posix } from "node:path";
 import { build, createServer } from "vite";
 import { describe, expect, it } from "vitest";
 
@@ -39,6 +40,22 @@ describe("Electron runtime bundles", () => {
         build: { ...target.build, write: false },
       });
       const bundles = Array.isArray(result) ? result : [result];
+      if (name === "main") {
+        const chunks = bundles
+          .flatMap((bundle) => ("output" in bundle ? bundle.output : []))
+          .filter((item) => item.type === "chunk");
+        const worker = chunks.find(
+          (chunk) => chunk.name === "sdk-worker" && chunk.isEntry,
+        );
+        expect(worker?.fileName).toBe("sdk-worker.js");
+        const client = chunks.find((chunk) =>
+          chunk.code.includes('new URL("./sdk-worker.js", import.meta.url)'),
+        );
+        expect(client).toBeDefined();
+        expect(posix.dirname(client!.fileName)).toBe(
+          posix.dirname(worker!.fileName),
+        );
+      }
       const code = bundles
         .flatMap((b) => {
           if (!("output" in b)) throw new Error("Unexpected watch build");

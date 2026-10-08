@@ -132,7 +132,10 @@ function baseOptions(cwd: string, abortController: AbortController): Options {
 /** Official Claude loop with X-owned per-tool boundary; authentication remains SDK-owned. */
 export class ClaudeWorkflowAgent implements OfficialAgent {
   readonly provider = "claude";
-  constructor(private start: ClaudeStart = query) {}
+  constructor(
+    private start: ClaudeStart = query,
+    private sdkVersion?: string,
+  ) {}
   async discover(cwd: string, signal: AbortSignal): Promise<ModelCandidate[]> {
     const controller = new AbortController(),
       cancel = () => controller.abort();
@@ -188,6 +191,8 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
       readonly ? "read-only" : "scoped-write",
       readonly ? "plan" : "default",
     );
+    if (this.sdkVersion && /^0\.3\.\d+$/.test(this.sdkVersion))
+      diagnostic.data.sdkVersion = this.sdkVersion;
     let session: ReturnType<typeof held> | undefined,
       dispatched = false,
       usage: RuntimeUsage | null = null,

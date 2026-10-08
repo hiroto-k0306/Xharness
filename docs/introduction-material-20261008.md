@@ -1,5 +1,19 @@
 # XHarness紹介資料の作成（2026-10-08）
 
+## 再撮影した通常workflowの画面へ更新（2026-10-08）
+
+対象HEADは27262a3bea4ff0840604a23036a1534b5345c90d、作業ブランチはcodex/loopflow-workflow-ui。ユーザーの依頼により、資料の7枚構成と暗色・橙色のデザインを維持し、1〜3枚目を再撮影画像へ更新した。アプリコード・SPEC・認証更新の作業とはファイルを分離し、資料の作業では実通信・アプリ起動・認証操作を行っていない。
+
+採用画像は.out/loopflow-live-20261008/screenshots/のretake-conversation.jpg（表紙）、retake-completed.jpg（担当モデルと独立テスト・別会社レビュー）、retake-scope.jpg（LoopFlow）。配布コード6ae006ae024fc22e62e102e87bee7d384460c767で撮影した合成課題の画面である。再撮影5枚を目視し、ゲーム表示・ライセンス認証の透かし・他アプリが重なっていないことを確認した。01〜07の再起動前画像は採用していない。採用画像は内容を改変せず、2・3枚目のみ説明する領域をトリミングした。
+
+LoopFlowの「6つのSTEP」という旧経路の説明を削除し、モデルの計画・回答、公式実行基盤のツール実行、ハーネスの承認確認・独立テスト・Git・記録を区別した。最新の保存workflowを表示することも明記した。通常の作業と別機能に見える「公式ワークフロー」という紹介文を「通常の作業」へ変更した。撮影したUI内に残る当時の文言は画像上で改変していない。
+
+4〜7枚目は再撮影素材がないため、既存のHTMLデモ・模擬画面を保持した。枠待ち再開・子エージェントの記録は旧実行経路の例であり、現在の通常workflowで利用できるという説明にはしていない。一般機能や検証実績のスライドは復活させていない。Claude実装・独立テスト・Codexレビューの合成課題は完了しているが、Codex実装の逆方向は起動失敗で未完了。Haiku 5.5成功や修正サイクル成功も主張していない。根拠はSPEC.md §7・§10・§11・§15とdocs/loopflow-live-20261008.md。
+
+検証環境はWindows、同梱Node 24.19.0、@oai/artifact-tool、Edge headless。元PPTXを保護してimport編集し、最終PPTXを再importして7枚すべてを描画・目視確認した。構造・スライド寸法・見出し・フォント検査は指摘0件。HTMLの7画像decode、前後・左右キー・番号移動、390px幅で横はみ出しなし、PPTXリンクの実在、ページエラー0件を確認。PowerPoint本体のネイティブ描画、全画面操作・印刷は未確認。アプリの回帰テストは資料作業では実施していない。
+
+公開保存先はdocs/presentations/20261008の既存PPTX・HTML。元資料と生成・検証記録は.out/presentation-retake-20261008/buildへ保護。PPTX SHA256は2f97a54dd7c6727b03fd4238308a3c52e66faf10a5ee3206734a132bfe048457、HTML SHA256はdffc402f5921a72a20e244e741bfd51f355bba788cc63c6ddb9a58ded93e0ecf。コミット・push・mergeはこの資料作業では行っていない。
+
 ## 独自機能を中心にした改訂（2026-10-08）
 
 ユーザーの依頼により、紹介資料を12枚から7枚へ再構成した。質問と作業の自動判別、検証実績、一般的な計画承認・スキル読込・対応範囲一覧・導入手順は削除。両社サブスク、別会社レビュー、LoopFlow、詳細HTMLレポート、会話間の結果受け渡し、枠待ち再開を中心に説明する。仕様の根拠はSPEC.md §7・§10・§15。全機能が同じ実行経路で同時に使えるとは説明しない。
@@ -40,3 +54,13 @@ HTMLは最終PPTXの描画7枚と説明文を内蔵。画像7枚のdecode、前�
 ## 公開準備
 
 ユーザーのマージ指示を受け、最新origin/main b4c6d38からcodex/app-introduction-materialsを作成した。成果物2件をdocs/presentations/20261008へ内容を変更せずコピーし、READMEの案内と公開リンクを追加。作成用の一時ファイル・検証profile・exe・アプリ履歴は含めない。コピー後のハッシュ一致、HTMLのリンク・12枚の画像表示・前後／キー／番号／一覧操作、390px幅の横はみ出しなし、PPTXの再importと12枚構造を確認済み。ページエラーなし。PPTXのXML/関連情報65件とHTMLに秘密値らしい文字列がないこと、exe・履歴ファイルを含まないことも確認した。アプリの実装に変更がないため、アプリ全回帰・型・lint・buildは新たに実施しない。
+
+## 2026-10-08 alpha.20実通信素材への更新
+
+基準HEAD 27262a3と未コミット差分から作ったv3配布物で、Codex CLI 0.162.0-alpha.20と管理Claude SDK 0.3.293を使用。実通信9 queryの記録は[codex-prerelease-live](codex-prerelease-live-20261008.md)。1〜3枚をHaikuの通常会話、Opus実装/Solレビュー、Luna実装/Haikuレビューの実画面へ差し替えた。7枚構成を維持し、画像内容を改変せず切り出した。承認とruntime設定の追加素材も.out/codex-alpha20-live-20261008/screenshotsへ保存した。
+
+4〜7枚は旧経路のデモ・模擬素材を保持。現在の通常workflowから結果受け渡しが拒否されたため、5枚目のcaption/footerとREADMEに利用不可と明記した。枠待ち再開と子の記録を新しい実通信の成功例に見せない。修正サイクルも今回指摘0件のため未検証。
+
+PresentationsのArtifact Toolで元のPPTXをimportし、別作業フォルダーで構造・配置・見出し・フォント・再importを検証。全7枚を描画して個別に目視した。HTMLは最終描画を内蔵し、7枚decode、ボタン/キー/番号移動、390pxで横はみ出しなし、PPTXリンク、pageerror 0件を確認。作業記録は.out/presentation-alpha20-20261008/build。PowerPointネイティブ描画は未確認。
+
+PPTX SHA256: BC6769F794002EF67EDFE785C28D7E81D501F3871A4816FE3A16CBDDCC96FEB6。HTML SHA256: F6D2EA757082BC06551C85D11C8106113C0C47EE1C46D3ED6C544AD3A08CA6AB。公開保存先はdocs/presentations/20261008の既存2ファイル。既存変更を保護し、コミット・push・mergeは行っていない。

@@ -14,7 +14,8 @@ export function OfficialModelEvidence({ data }: { data: AgentDiagnostics }) {
   return (
     <section aria-label="モデルの観測結果">
       <p>
-        同梱CLI：{data.cliVersion ?? "欠測"} / モデル変更通知：
+        SDK：{data.sdkVersion ?? "欠測"} / 付属CLI：{data.cliVersion ?? "欠測"}{" "}
+        / モデル変更通知：
         {JSON.stringify(data.modelChanges ?? [])}
         （通知なしは変更なしの証明ではありません）
       </p>

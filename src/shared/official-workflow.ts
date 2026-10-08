@@ -8,6 +8,7 @@ export type QuestionModel =
 export type OfficialWorkflowCommand =
   | { action: "list" }
   | { action: "configure"; codexPath: string }
+  | { action: "configure_auto" }
   | { action: "workspace_root"; path: string }
   | { action: "chat"; provider: "claude" | "codex"; text: string }
   | {
@@ -32,6 +33,7 @@ export type OfficialWorkflowCommand =
     }
   | { action: "cancel" | "resume"; id: string };
 export interface OfficialWorkflowView {
+  claudeRuntime?: import("./sdk-runtime.js").SdkRuntimeView;
   /** Workflow (plan / implement / review) can start: storage and both connections configured. */
   available: boolean;
   /** Storage is usable; a question to Claude needs nothing else configured. */
@@ -43,6 +45,9 @@ export interface OfficialWorkflowView {
   verification?: "fix-cycle-v1";
   connection?: {
     codexPath: string;
+    codexMode?: "auto" | "fixed";
+    codexPackage?: string;
+    codexError?: string;
     /** Empty means the default location under the workflow storage. */
     workspaceRoot: string;
     status: "unconfigured" | "configured";

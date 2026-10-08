@@ -28,6 +28,15 @@ const cwd = async () => {
   homes.push(home);
   return home;
 };
+it("records the managed SDK version separately from native model and CLI observations", async () => {
+  const mock = mockStart();
+  const result = await new ClaudeWorkflowAgent(mock.start, "0.3.291").run(
+    request(await cwd()),
+    new AbortController().signal,
+  );
+  expect(result.diagnostics?.sdkVersion).toBe("0.3.291");
+  expect(result.diagnostics?.cliVersion).toBeUndefined();
+});
 const usage = {
   subscription_type: "pro",
   rate_limits_available: true,

@@ -10,7 +10,15 @@ import {
 } from "./codex.js";
 import { commandApproval } from "./command-approval.js";
 import type { AppServerPort } from "./app-server-rpc.js";
-import { fixtureModels, fixtureTest } from "./fixtures.js";
+import {
+  createSyntheticWorkspace,
+  fixtureAgents,
+  fixtureModels,
+  fixtureTest,
+  fixtureWorkflowOptions,
+} from "./fixtures.js";
+import { runOfficialSingleTask } from "./runtime.js";
+import { officialWorkflowReport } from "./report.js";
 import { schemas, type AgentRequest } from "./contracts.js";
 import { normalizeTokens } from "../../providers/token-usage.js";
 import { object } from "./usage.js";
@@ -153,6 +161,172 @@ const request = (phase: AgentRequest["phase"] = "review"): AgentRequest => ({
   timeoutMs: 1000,
   tool: vi.fn(async () => {}),
   approve: vi.fn(async () => false),
+});
+function commandFailureServer(
+  delivery: "item" | "final" | "both",
+  source: string | undefined = "unifiedExecStartup",
+  before?: (mock: ReturnType<typeof fakeServer>) => void,
+) {
+  const mock = fakeServer(),
+    original = mock.server.request;
+  mock.server.request = async (method, raw, signal) => {
+    if (method !== "turn/start") return original(method, raw, signal);
+    mock.calls.push([method, object(raw)]);
+    queueMicrotask(() => {
+      const binding = { threadId: "thread-fixture", turnId: "turn-fixture" };
+      mock.emit("turn/started", {
+        ...binding,
+        turn: { id: binding.turnId },
+      });
+      before?.(mock);
+      const item = {
+        id: "startup-fixture",
+        type: "commandExecution",
+        status: "failed",
+        source,
+        exitCode: -1,
+        durationMs: 0,
+        command: "never-persist-command",
+        aggregatedOutput: "never-persist-token never-persist-thinking",
+      };
+      if (delivery !== "final") {
+        mock.emit("item/completed", { ...binding, item });
+        mock.emit("item/completed", { ...binding, item });
+      }
+      const answer = {
+        id: "answer",
+        type: "agentMessage",
+        text: JSON.stringify({ summary: "No edits" }),
+      };
+      mock.emit("turn/completed", {
+        ...binding,
+        turn: {
+          id: binding.turnId,
+          status: "completed",
+          items: [...(delivery === "item" ? [] : [item]), answer],
+        },
+      });
+    });
+    return { turn: { id: "turn-fixture" } };
+  };
+  return mock;
+}
+it.each(["item", "final", "both"] as const)(
+  "stops native startup failure despite a completed turn (%s), without duplicate evidence or raw text",
+  async (delivery) => {
+    const mock = commandFailureServer(delivery),
+      r = request("implement");
+    const result = await new CodexWorkflowAgent(() => mock.server).run(
+      r,
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("公式Codexのコマンド実行準備に失敗");
+    expect(result.error).toContain("native-exec-startup-failed");
+    expect(result.diagnostics?.stops).toEqual(["native-exec-startup-failed"]);
+    expect(result.diagnostics?.commandRuns).toHaveLength(1);
+    expect(r.tool).toHaveBeenCalledTimes(1);
+    expect(
+      mock.calls.filter(([method]) => method === "turn/start"),
+    ).toHaveLength(1);
+    expect(
+      mock.calls.filter(([method]) => method === "turn/interrupt"),
+    ).toHaveLength(1);
+    expect(mock.close).toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain("never-persist");
+  },
+);
+it.each(["agent", "unknown", undefined])(
+  "does not infer a startup failure from exit -1 or duration zero alone (%s)",
+  async (source) => {
+    const mock = commandFailureServer("both", source ?? "");
+    const result = await new CodexWorkflowAgent(() => mock.server).run(
+      request("implement"),
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("completed");
+    expect(result.error).toBeUndefined();
+    expect(result.diagnostics?.commandRuns?.[0]).toMatchObject({
+      status: "failed",
+      exitCode: -1,
+    });
+    expect(mock.calls.some(([method]) => method === "turn/interrupt")).toBe(
+      false,
+    );
+  },
+);
+it("does not replace cancellation or a prior quota stop with a late startup failure", async () => {
+  for (const reason of ["cancel", "quota"]) {
+    const controller = new AbortController();
+    const mock = commandFailureServer(
+      "both",
+      "unifiedExecStartup",
+      (server) => {
+        if (reason === "cancel") controller.abort();
+        else
+          server.emit("account/rateLimits/updated", {
+            ordinaryUsageAllowed: false,
+          });
+      },
+    );
+    const result = await new CodexWorkflowAgent(() => mock.server).run(
+      request("implement"),
+      controller.signal,
+    );
+    expect(result.status).toBe(
+      reason === "cancel" ? "cancelled" : "quota-paused",
+    );
+    expect(result.error ?? "").not.toContain("native-exec-startup-failed");
+  }
+});
+it("does not attribute another thread's startup failure to this request", async () => {
+  const mock = commandFailureServer("item", "agent", (server) => {
+    server.emit("item/completed", {
+      threadId: "another-thread",
+      turnId: "turn-fixture",
+      item: {
+        id: "other",
+        type: "commandExecution",
+        status: "failed",
+        source: "unifiedExecStartup",
+      },
+    });
+  });
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    request("implement"),
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
+  expect(result.diagnostics?.stops).toBeUndefined();
+  expect(result.diagnostics?.commandRuns).toHaveLength(1);
+});
+it("preserves startup failure in workflow history and report without no-changes, commit, tests or review", async () => {
+  const cwd = await createSyntheticWorkspace();
+  try {
+    const fake = fixtureAgents("codex"),
+      mock = commandFailureServer("final");
+    fake.agents.codex = new CodexWorkflowAgent(() => mock.server);
+    const result = await runOfficialSingleTask(
+      fixtureWorkflowOptions(cwd, { agents: fake.agents }),
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("native-exec-startup-failed");
+    expect(result.error).not.toContain("no-changes");
+    expect(result.calls.map((call) => call.phase)).toEqual([
+      "plan",
+      "implement",
+    ]);
+    expect(result.commits).toEqual([]);
+    expect(result.checks).toEqual([]);
+    expect(result.reviews).toEqual([]);
+    expect(result.correctionRounds).toBe(0);
+    expect(officialWorkflowReport(result)).toContain(
+      "native-exec-startup-failed",
+    );
+  } finally {
+    await rm(cwd, { recursive: true, force: true, maxRetries: 5 });
+  }
 });
 it.each(["allow", "deny", "changed", "duplicate"])(
   "routes a scoped operation through request.approve: %s",

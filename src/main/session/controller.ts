@@ -2228,9 +2228,16 @@ export class SessionController {
       };
     const known =
       resolved &&
-      (this.options.providers ?? [this.options.provider]).some((p) =>
-        p.models().some((m) => m.id === resolved.model),
-      );
+      (this.options.officialSession
+        ? loadModelCatalog().some(
+            (m) =>
+              m.enabled &&
+              m.provider === resolved.provider &&
+              m.id === resolved.model,
+          )
+        : (this.options.providers ?? [this.options.provider]).some((p) =>
+            p.models().some((m) => m.id === resolved.model),
+          ));
     if (!resolved || !known) return { ok: false, error: "Unknown model" };
     if (effort !== undefined && !isEffort(effort))
       return { ok: false, error: "Unknown effort" };

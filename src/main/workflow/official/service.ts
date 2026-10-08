@@ -38,6 +38,11 @@ import { gitWorkspace } from "./workspace.js";
 import { ClaudeWorkflowAgent } from "./claude.js";
 import { CodexWorkflowAgent } from "./codex.js";
 import { connectionFailure } from "./connection-failure.js";
+import {
+  discoverCodexInstallation,
+  resolveCodexOverride,
+  type CodexInstallation,
+} from "./codex-installation.js";
 import { OperationApprovals } from "./operation-approval.js";
 import {
   planContract,
@@ -107,18 +112,29 @@ export class OfficialWorkflowService {
   private loading: Promise<void>;
   private busy = false;
   private storageReady = false;
+  private codexExecutable?: string;
+  private codexPackage?: string;
+  private codexError?: string;
+  private invalidConnection = false;
   private preparing?: { id: string; controller: AbortController };
   constructor(
     private settings: {
       home: string;
       fake: boolean;
       codexPath?: string;
+      /** Metadata-only test seam; never starts a CLI. */
+      discoverCodex?: () => Promise<CodexInstallation>;
       /** Explicit fix-cycle verification mode (fault-injection.ts); off in normal use. */
       verification?: VerificationMode;
       /** Parent folder for new synthetic workspaces; unset keeps the record folder. */
       workspaceRoot?: string;
       /** Test seam: official agents to use instead of the real SDK / App Server. */
       agents?: Partial<Record<"claude" | "codex", OfficialAgent>>;
+      /** Desktop pins a managed SDK version when each task creates its agent. */
+      claudeRuntime?: {
+        agent: () => OfficialAgent;
+        view: () => import("../../../shared/sdk-runtime.js").SdkRuntimeView;
+      };
       options?: (
         cwd: string,
         provider: "claude" | "codex",
@@ -148,8 +164,15 @@ export class OfficialWorkflowService {
         throw new Error("Invalid connection file");
       const saved = JSON.parse(await readFile(file, "utf8")) as {
         codexPath?: unknown;
+        codexMode?: unknown;
         workspaceRoot?: unknown;
       };
+      if (
+        saved.codexMode !== undefined &&
+        saved.codexMode !== "auto" &&
+        saved.codexMode !== "fixed"
+      )
+        throw new Error("Invalid Codex mode");
       if (saved.workspaceRoot !== undefined) {
         // Kept as saved even when unusable; creation reports why instead of
         // silently falling back to the default location.
@@ -165,17 +188,25 @@ export class OfficialWorkflowService {
           },
         );
       }
-      if (saved.codexPath !== undefined) {
-        await this.validateExecutable(saved.codexPath);
-        this.settings.codexPath = saved.codexPath as string;
-      }
+      if (saved.codexMode === "auto") this.settings.codexPath = undefined;
+      else if (saved.codexPath !== undefined) {
+        if (
+          typeof saved.codexPath !== "string" ||
+          saved.codexPath.length > 1000
+        )
+          throw new Error("Invalid Codex override");
+        // Preserve legacy overrides, even when the executable has disappeared.
+        this.settings.codexPath = saved.codexPath;
+      } else if (saved.codexMode !== undefined)
+        throw new Error("Invalid Codex mode");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        this.settings.codexPath = undefined;
+        this.invalidConnection = true;
         this.error =
           "公式接続設定を確認できません。実行パスを設定し直してください。";
       }
     }
+    await this.refreshCodex();
     for (const id of (await readdir(this.root)).filter(uuid).slice(-50)) {
       try {
         const directory = join(this.root, id),
@@ -286,25 +317,30 @@ export class OfficialWorkflowService {
   view(): OfficialWorkflowView {
     return {
       available:
-        this.storageReady && (this.settings.fake || !!this.settings.codexPath),
+        this.storageReady && (this.settings.fake || !!this.codexExecutable),
       storageReady: this.storageReady,
       questionModels: {
         claude: questionModel("claude"),
         codex: questionModel("codex"),
       },
       simulated: this.settings.fake,
+      claudeRuntime: this.settings.claudeRuntime?.view(),
       ...(this.settings.verification
         ? { verification: this.settings.verification }
         : {}),
       connection: {
-        codexPath: this.settings.codexPath ?? "",
+        codexPath: this.settings.codexPath ?? this.codexExecutable ?? "",
+        codexMode: this.settings.codexPath !== undefined ? "fixed" : "auto",
+        codexPackage: this.codexPackage,
+        codexError: this.codexError,
         workspaceRoot: this.settings.workspaceRoot ?? "",
-        status: this.settings.codexPath ? "configured" : "unconfigured",
+        status: this.codexExecutable ? "configured" : "unconfigured",
         message: this.settings.fake
           ? "模擬通信のみ"
-          : this.settings.codexPath
-            ? "実行パス設定済み。認証・通常枠・モデルは送信前に公式SDK / App Serverで確認します。"
-            : "未設定：公式Codexのexeを指定してください。認証情報は入力しません。",
+          : (this.codexError ??
+            (this.codexExecutable
+              ? "公式Codexの実行パス確認済み。認証・通常枠・モデルは送信前に公式SDK / App Serverで確認します。"
+              : "公式Codexの同梱CLIを確認できません。実行パスを指定してください。")),
       },
       activeId: this.active?.id ?? this.preparing?.id,
       operationApproval: this.operationApprovals.view(),
@@ -325,12 +361,33 @@ export class OfficialWorkflowService {
         })),
     };
   }
-  private async validateExecutable(path: unknown) {
-    if (typeof path !== "string" || !isAbsolute(path) || !/\.exe$/i.test(path))
-      throw new Error("公式Codexの実行パスはexeの絶対パスで指定してください");
-    const stat = await lstat(path);
-    if (!stat.isFile() || stat.isSymbolicLink())
-      throw new Error("公式Codexの実行パスは通常ファイルが必要です");
+  private async refreshCodex() {
+    this.codexExecutable = undefined;
+    this.codexPackage = undefined;
+    this.codexError = undefined;
+    if (this.settings.fake || this.invalidConnection) return;
+    try {
+      if (this.settings.codexPath !== undefined) {
+        this.codexExecutable =
+          this.settings.agents || this.settings.options
+            ? this.settings.codexPath
+            : await resolveCodexOverride(this.settings.codexPath);
+      } else if (
+        this.settings.discoverCodex ||
+        (!this.settings.agents && !this.settings.options)
+      ) {
+        const found = await (
+          this.settings.discoverCodex ?? discoverCodexInstallation
+        )();
+        this.codexExecutable = found.path;
+        this.codexPackage = found.package;
+      }
+    } catch (error) {
+      this.codexError =
+        error instanceof Error
+          ? error.message
+          : "公式Codexの実行パスを確認できません";
+    }
   }
   /**
    * Must be an existing, writable, non-link absolute folder. Never created or
@@ -399,6 +456,7 @@ export class OfficialWorkflowService {
       temporary,
       JSON.stringify({
         codexPath: this.settings.codexPath,
+        codexMode: this.settings.codexPath !== undefined ? "fixed" : "auto",
         workspaceRoot: this.settings.workspaceRoot,
       }),
       { mode: 0o600 },
@@ -450,8 +508,11 @@ export class OfficialWorkflowService {
       workspace: gitWorkspace(cwd, redact),
     });
     if (this.settings.fake) return options;
-    if (!this.settings.codexPath)
-      throw new Error("公式Codexの実行パスを設定してください");
+    await this.refreshCodex();
+    if (!this.codexExecutable)
+      throw new Error(
+        this.codexError ?? "公式Codexの実行パスを設定してください",
+      );
     // The workflow (plan, implementation, cross-company review) needs both.
     const claude = this.agent("claude"),
       codex = this.agent("codex");
@@ -579,8 +640,8 @@ export class OfficialWorkflowService {
     const injected = this.settings.agents?.[provider];
     if (injected) return injected;
     return provider === "claude"
-      ? new ClaudeWorkflowAgent()
-      : CodexWorkflowAgent.local(this.settings.codexPath!);
+      ? (this.settings.claudeRuntime?.agent() ?? new ClaudeWorkflowAgent())
+      : CodexWorkflowAgent.local(this.codexExecutable!);
   }
   /**
    * A question needs only the selected company's connection. The other company
@@ -595,12 +656,19 @@ export class OfficialWorkflowService {
     model: ModelCandidate;
     effort: AgentRequest["effort"];
   }> {
+    let selectedAgent: OfficialAgent | undefined;
     const candidates = this.settings.fake
       ? fixtureModels.filter((m) => m.provider === provider)
       : await (async () => {
-          if (provider === "codex" && !this.settings.codexPath)
-            throw new Error("公式Codexの実行パスを設定してください");
-          const found = await this.agent(provider)
+          if (provider === "codex") {
+            await this.refreshCodex();
+            if (!this.codexExecutable)
+              throw new Error(
+                this.codexError ?? "公式Codexの実行パスを設定してください",
+              );
+          }
+          selectedAgent = this.agent(provider);
+          const found = await selectedAgent
             .discover(cwd, signal)
             .catch((e: unknown) => {
               throw new Error(connectionFailure(provider, e));
@@ -644,7 +712,7 @@ export class OfficialWorkflowService {
         `質問先のモデル「${wanted}」はeffort「${effort ?? "既定"}」に対応していません。別のeffortへは切り替えていません。`,
       );
     return {
-      agent: this.settings.fake ? undefined : this.agent(provider),
+      agent: selectedAgent,
       model,
       effort,
     };
@@ -820,10 +888,6 @@ export class OfficialWorkflowService {
       const reason = catalogUnavailableReason(selected.model);
       if (reason) throw new Error(`${reason} 旧HTTPへ切り替えません。`);
     }
-    if (request.task && !this.settings.fake && !this.settings.codexPath)
-      throw new Error(
-        "公式Codexの実行パスを設定してください。実案件は両社の公式接続が必要です。",
-      );
     const id = randomUUID(),
       directory = join(this.root, id),
       controller = new AbortController();
@@ -988,13 +1052,30 @@ export class OfficialWorkflowService {
     this.error = undefined;
     try {
       if (!this.storageReady) throw new Error("Unsafe workflow storage");
-      if (command.action === "configure") {
-        await this.validateExecutable(command.codexPath);
-        this.settings.codexPath = command.codexPath;
-        await this.writeConnection();
+      if (
+        command.action === "configure" ||
+        command.action === "configure_auto"
+      ) {
+        const previous = this.settings.codexPath;
+        this.settings.codexPath =
+          command.action === "configure"
+            ? await resolveCodexOverride(command.codexPath)
+            : undefined;
+        try {
+          await this.writeConnection();
+        } catch (error) {
+          this.settings.codexPath = previous;
+          throw error;
+        }
+        this.invalidConnection = false;
+        await this.refreshCodex();
         return this.view();
       }
       if (command.action === "workspace_root") {
+        if (this.invalidConnection)
+          throw new Error(
+            "公式Codexの接続設定が不正です。固定版または自動追従を明示設定してから保存してください。",
+          );
         // Empty clears the setting and returns to the default location.
         this.settings.workspaceRoot = command.path.trim()
           ? await this.validateWorkspaceRoot(command.path.trim())
@@ -1002,13 +1083,6 @@ export class OfficialWorkflowService {
         await this.writeConnection();
         return this.view();
       }
-      // Questions check only their own company's connection (below).
-      if (
-        !this.settings.fake &&
-        !this.settings.codexPath &&
-        command.action !== "chat"
-      )
-        throw new Error("公式Codexの実行パスを設定してください");
       if (
         !this.settings.fake &&
         command.action === "create" &&
@@ -1019,6 +1093,14 @@ export class OfficialWorkflowService {
         throw new Error(
           "計画モデルが選択されていません。メインモデルを選択してから開始してください。",
         );
+      // Questions check only their own company's connection (below).
+      if (!this.settings.fake && command.action !== "chat") {
+        await this.refreshCodex();
+        if (!this.codexExecutable)
+          throw new Error(
+            this.codexError ?? "公式Codexの実行パスを設定してください",
+          );
+      }
       if (command.action === "create" || command.action === "chat") {
         const mode = command.action === "create" ? command.mode : "single";
         const task = command.action === "create" ? command.task : undefined;

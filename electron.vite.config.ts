@@ -8,7 +8,10 @@ export default defineConfig({
     build: {
       // Vite 8 は Rolldown を使う。Electron は実行時提供のモジュールなので同梱しない。
       rolldownOptions: {
-        input: { index: "src/main/index.ts" },
+        input: {
+          index: "src/main/index.ts",
+          "sdk-worker": "src/main/workflow/official/sdk-worker.ts",
+        },
         external: ["electron", /^electron\//, "@anthropic-ai/claude-agent-sdk"],
       },
     },

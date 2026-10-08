@@ -35,6 +35,9 @@ import {
 } from "./connections/test-profile.js";
 import { createLocalBrowser } from "./local-browser-electron.js";
 import { OfficialWorkflowService } from "./workflow/official/service.js";
+import { ClaudeSdkManager } from "./workflow/official/sdk-manager.js";
+import { managedClaudeStart } from "./workflow/official/sdk-worker-client.js";
+import { ClaudeWorkflowAgent } from "./workflow/official/claude.js";
 import { verificationMode } from "./workflow/official/fault-injection.js";
 import { registerOfficialWorkflowIpc } from "./official-workflow-ipc.js";
 import { fileSecretStore } from "./mcp/secret-file.js";
@@ -89,6 +92,7 @@ let quitting = false;
 let window: BrowserWindow | null = null;
 let controller: SessionController | undefined;
 let officialWorkflow: OfficialWorkflowService | undefined;
+let claudeSdk: ClaudeSdkManager | undefined;
 
 function createWindow() {
   window = new BrowserWindow({
@@ -325,10 +329,36 @@ async function start() {
     () => controller!,
     () => window,
   );
+  if (!fake && (officialOnly || officialDefault)) {
+    claudeSdk = new ClaudeSdkManager(join(home, "runtimes", "claude-sdk"), {
+      ...(app.isPackaged
+        ? {
+            source: async () =>
+              join(
+                process.resourcesPath,
+                "claude-sdk-seed/node_modules/@anthropic-ai/claude-agent-sdk",
+              ),
+          }
+        : {}),
+    });
+    await claudeSdk.start();
+  }
   officialWorkflow = new OfficialWorkflowService({
     home,
     fake,
     codexPath: main.auth.codexCliPath,
+    ...(claudeSdk
+      ? {
+          claudeRuntime: {
+            agent: () =>
+              new ClaudeWorkflowAgent(
+                managedClaudeStart(claudeSdk!.selectedEntry()),
+                claudeSdk!.view().version,
+              ),
+            view: () => claudeSdk!.view(),
+          },
+        }
+      : {}),
     // Explicit flag + environment value + isolated home only; off otherwise.
     verification: verificationMode(process.argv.slice(1), process.env),
   });
@@ -359,6 +389,7 @@ else {
     void Promise.allSettled([
       controller.shutdown(),
       officialWorkflow?.close(),
+      claudeSdk?.close(),
     ]).finally(() => app.quit());
   });
   app.on("activate", () => {

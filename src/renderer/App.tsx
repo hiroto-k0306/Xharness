@@ -4,6 +4,7 @@ import { builtinCommands } from "../shared/commands.js";
 import { AgentsPanel } from "./components/AgentsPanel.js";
 import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
 import { OfficialWorkflowPanel } from "./components/OfficialWorkflowPanel.js";
+import { WorkflowFlow } from "./components/WorkflowFlow.js";
 import { PhaseBar } from "./components/PhaseBar.js";
 import { ModelPicker } from "./components/ModelPicker.js";
 import { ConnectionPicker } from "./components/ConnectionPicker.js";
@@ -40,6 +41,12 @@ function modelLabel(model: string, effort: string): string {
 }
 
 export function App() {
+  const [wideFlow, setWideFlow] = useState(() => window.innerWidth >= 1100);
+  useEffect(() => {
+    const resize = () => setWideFlow(window.innerWidth >= 1100);
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
   const [modelOpen, setModelOpen] = useState(false);
   const [officialFiles, setOfficialFiles] = useState("");
   const [officialTest, setOfficialTest] = useState("");
@@ -400,11 +407,13 @@ export function App() {
             }}
           />
           {!app.phase4 && agentsPanel}
-          <StepTabs
-            active={activeView?.step}
-            waiting={waiting}
-            model={agent?.model ?? model}
-          />
+          {!app.officialDefault && (
+            <StepTabs
+              active={activeView?.step}
+              waiting={waiting}
+              model={agent?.model ?? model}
+            />
+          )}
           {app.phase4 && (
             <div
               className={styles.paneTabs}
@@ -440,9 +449,18 @@ export function App() {
                 }
                 onReply={selected === "auto" || !agent ? s.send : undefined}
               />
-              {app.phase4 && (
-                <LoopFlow view={activeView} model={agent?.model ?? model} />
-              )}
+              {app.phase4 &&
+                (app.officialDefault ? (
+                  <WorkflowFlow
+                    key={current ?? "no-session"}
+                    sessionId={current ?? undefined}
+                    running={!!view?.running}
+                    scopeRequired={!!view?.officialScopeText}
+                    enabled={wideFlow || pane === "flow"}
+                  />
+                ) : (
+                  <LoopFlow view={activeView} model={agent?.model ?? model} />
+                ))}
             </div>
           </div>
           {app.phase4 && (

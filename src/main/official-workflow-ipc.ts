@@ -5,6 +5,7 @@ import type { OfficialWorkflowService } from "./workflow/official/service.js";
 const id = z.string().uuid();
 const command = z.discriminatedUnion("action", [
   z.object({ action: z.literal("list") }).strict(),
+  z.object({ action: z.literal("configure_auto") }).strict(),
   z
     .object({
       action: z.literal("chat"),

@@ -54,6 +54,23 @@
   color: var(--dim);
   margin-top: 4px;
 }
+.workflowFlow {
+  width: 360px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.workflowFlow h2 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.workflowFlow p {
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.workflowFlow .node[aria-current="step"] {
+  border-color: var(--warn);
+}
 .receipts {
   border-top: 1px solid var(--line);
   position: relative;

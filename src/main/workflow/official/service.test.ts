@@ -162,6 +162,91 @@ it.each([true, false])(
     ).not.toContain(pending.approvalId);
   },
 );
+it.each(["auto", "flow", "single"] as const)(
+  "native work still asks for its plan and applies bounded operation mode %s",
+  async (mode) => {
+    const path = await home();
+    const project = join(path, "project");
+    await mkdir(project);
+    await writeFile(join(project, "add.mjs"), "export const add=(a,b)=>a-b;\n");
+    let operations = 0;
+    const instance = service(path, async (cwd) => {
+      const fake = fixtureAgents("codex"),
+        original = fake.agents.codex.run;
+      fake.agents.codex.run = async (request, signal) => {
+        if (request.phase === "implement")
+          for (const itemId of ["one", "two"]) {
+            const outcome = await request.approve(
+              "native/operation",
+              {
+                requestId: request.requestId,
+                sessionId: "native",
+                turnId: "turn",
+                itemId,
+                command: "Get-Content add.mjs",
+                cwd,
+                targets: ["add.mjs"],
+                reason: "fixture",
+              },
+              signal,
+            );
+            expect(outcome).toBe(true);
+            operations++;
+          }
+        return original(request, signal);
+      };
+      return fixtureWorkflowOptions(cwd, { agents: fake.agents });
+    });
+    const done = instance.submitSession(
+      {
+        sessionId: "s",
+        cwd: project,
+        model: "claude:opus",
+        effort: "high",
+        text: "auto-work: fix",
+        history: [],
+        automaticWork: true,
+        autoOperations: mode === "auto",
+      },
+      new AbortController().signal,
+    );
+    const planned = await wait(instance, (v) => !!v.approval);
+    expect(operations).toBe(0);
+    expect(planned.approval!.autoOperations).toBe(mode === "auto");
+    await instance.command({ action: "approve", ...planned.approval! });
+    if (mode !== "auto") {
+      const pending = (await wait(instance, (v) => !!v.operationApproval))
+        .operationApproval!;
+      await instance.command({
+        action: "tool_decision",
+        id: pending.workflowId,
+        approvalId: pending.approvalId,
+        digest: pending.digest,
+        allow: true,
+        ...(mode === "flow" ? { scope: "flow" as const } : {}),
+      });
+      if (mode === "single") {
+        const next = (
+          await wait(
+            instance,
+            (v) =>
+              !!v.operationApproval && v.operationApproval.itemId === "two",
+          )
+        ).operationApproval!;
+        await instance.command({
+          action: "tool_decision",
+          id: next.workflowId,
+          approvalId: next.approvalId,
+          digest: next.digest,
+          allow: true,
+        });
+      }
+    }
+    await done;
+    expect(operations).toBe(2);
+    expect(instance.view().operationApproval).toBeUndefined();
+  },
+);
 it("persists denied approval across restart, asks again, and finishes without replaying planning", async () => {
   const path = await home(),
     first = service(path);

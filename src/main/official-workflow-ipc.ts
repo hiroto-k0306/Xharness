@@ -58,6 +58,7 @@ const command = z.discriminatedUnion("action", [
       approvalId: id,
       digest: z.string().regex(/^[a-f0-9]{64}$/),
       allow: z.boolean(),
+      scope: z.literal("flow").optional(),
     })
     .strict(),
 ]);

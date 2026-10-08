@@ -4,6 +4,8 @@ import { executionEvidence } from "./execution-evidence.js";
 /** Fixed explanations; never return the SDK's raw error text. */
 export function officialFailureMessage(record: WorkflowRecord) {
   const messages: Record<string, string> = {
+    timeout:
+      "工程の実行制限時間に達したため停止しました。承認待ちの時間はこの制限から除きます。作業は保全し、自動再送していません。",
     "claude-max-turns-exceeded":
       "Claude SDKの内部往復回数の上限に達したため停止しました。自動再送していません。",
     "claude-sdk-budget-exceeded":

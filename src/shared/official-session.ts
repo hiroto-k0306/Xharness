@@ -33,6 +33,8 @@ export interface OfficialSessionSubmission {
   task?: OfficialTaskScope;
   /** Main-only permission boundary for automatic discovery/preparation; absent in legacy callers. */
   automaticWork?: boolean;
+  /** Effective main-process permission mode; never a model-provided grant. */
+  autoOperations?: boolean;
   history: { role: "user" | "assistant"; text: string }[];
 }
 export interface OfficialSessionResult {

@@ -236,7 +236,7 @@ it.each([
     );
   },
 );
-it.each([true, false])(
+it.each([true, false, "flow"] as const)(
   "shows concrete operation and sends one bound decision (%s)",
   async (allow) => {
     const pending = {
@@ -258,7 +258,38 @@ it.each([true, false])(
       simulated: true,
       activeId: "workflow",
       operationApproval: pending,
-      records: [],
+      records:
+        allow === "flow"
+          ? [
+              {
+                record: {
+                  version: 1,
+                  id: "workflow",
+                  sessionId: "s",
+                  simulated: true,
+                  goal: "fixture",
+                  cwd: pending.cwd,
+                  startedAt: new Date().toISOString(),
+                  status: "implementing",
+                  next: "implement",
+                  base: "a".repeat(64),
+                  head: "a".repeat(64),
+                  correctionRounds: 0,
+                  calls: [],
+                  tools: [],
+                  checks: [],
+                  reviews: [],
+                  commits: [],
+                  nativeWork: {
+                    validation: "agent-reported",
+                    baseline: "files",
+                  },
+                },
+                resumeBlocked: null,
+                reportHref: "fixture",
+              },
+            ]
+          : [],
     };
     let release!: () => void;
     const commands: OfficialWorkflowCommand[] = [];
@@ -277,7 +308,12 @@ it.each([true, false])(
     expect(screen.getByText(/操作：/)).toHaveTextContent(pending.command);
     expect(screen.getByText(/作業場所：/)).toHaveTextContent(pending.cwd);
     const button = screen.getByRole("button", {
-      name: allow ? "今回の操作だけ許可" : "拒否",
+      name:
+        allow === "flow"
+          ? "このフローのみ許可"
+          : allow
+            ? "今回の操作だけ許可"
+            : "拒否",
     });
     fireEvent.click(button);
     fireEvent.click(button);
@@ -288,7 +324,8 @@ it.each([true, false])(
           id: "workflow",
           approvalId: "nonce",
           digest: pending.digest,
-          allow,
+          allow: allow !== false,
+          ...(allow === "flow" ? { scope: "flow" } : {}),
         },
       ]),
     );

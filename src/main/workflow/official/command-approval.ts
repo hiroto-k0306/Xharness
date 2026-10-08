@@ -185,7 +185,8 @@ export async function classifyCommand(
   const original = params.command;
   if (request.nativeWork) {
     // Opaque shell text is never classified as safe. The official sandbox is
-    // retained and a person approves this exact command once, compounds included.
+    // retained; the service asks once or uses this workflow's explicit grant.
+    // Compounds are not declared safe merely because a flow grant exists.
     if (
       /[\0]|\.\.[\\/]|(?:\.credentials\.json|auth\.json|\.env\b|\.npmrc|\.netrc|id_rsa|id_ed25519)|git\s+(?:reset|clean)\b/i.test(
         original,

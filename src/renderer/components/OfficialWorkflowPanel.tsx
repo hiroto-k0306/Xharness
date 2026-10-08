@@ -152,7 +152,7 @@ export function OfficialWorkflowPanel({
             >
               <h3>操作の許可が必要です</h3>
               <p>
-                今回の読み取り操作だけを許可します。10分以内に回答がなければ拒否します。承認待ちの間はphaseの制限時間を止めます。
+                今回の操作だけ、またはこのフローの残りの操作を許可できます。フロー許可は終了・停止時に失効し、禁止操作は許可しません。10分以内に回答がなければ拒否します。承認待ちの間はphaseの制限時間を止めます。
               </p>
               <p>操作：{view.operationApproval.command}</p>
               <p>対象：{view.operationApproval.targets.join(", ")}</p>
@@ -185,6 +185,27 @@ export function OfficialWorkflowPanel({
                   {allow ? "今回の操作だけ許可" : "拒否"}
                 </button>
               ))}
+              {view.records.some(
+                ({ record }) =>
+                  record.id === view.operationApproval!.workflowId &&
+                  record.nativeWork,
+              ) && (
+                <button
+                  disabled={pending}
+                  onClick={() =>
+                    void send({
+                      action: "tool_decision",
+                      id: view.operationApproval!.workflowId,
+                      approvalId: view.operationApproval!.approvalId,
+                      digest: view.operationApproval!.digest,
+                      allow: true,
+                      scope: "flow",
+                    })
+                  }
+                >
+                  このフローのみ許可
+                </button>
+              )}
             </section>
           )}
           <p>
@@ -372,8 +393,14 @@ export function OfficialWorkflowPanel({
                         （選択中のフォルダー／worktree）。既存の変更を保全し、自動commit・reset・mergeは行いません。
                       </p>
                       <p>
-                        ファイル一覧は計画時点の候補です。テストや依存に必要なコマンドは公式sandboxを維持し、承認要求があれば今回の操作だけ確認します。追加課金は禁止のままです。
+                        ファイル一覧は計画時点の候補です。公式sandboxを維持します。通常モードでは操作ごとに確認し、「このフローのみ許可」も選べます。追加課金は禁止のままです。
                       </p>
+                      {view.approval?.id === r.id &&
+                        view.approval.autoOperations && (
+                          <p>
+                            自動モード：計画承認後、このフローの操作は自動許可します。禁止操作と作業範囲の検査は維持します。
+                          </p>
+                        )}
                       <p>
                         テスト結果はモデルの実行報告です。ハーネスの独立プロセス検証ではありません。別会社レビューと最大2回の修正を行います。
                       </p>

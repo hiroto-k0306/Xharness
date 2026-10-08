@@ -26,6 +26,11 @@ export interface PendingOperation extends Operation {
 }
 /** Ephemeral grants: never loaded from disk and consumed exactly once. */
 export class OperationApprovals {
+  private flow?: { workflowId: string; cwd: string };
+  /** Main grants only after the plan is approved; never serialized. */
+  allowFlow(workflowId: string, cwd: string) {
+    this.flow = { workflowId, cwd };
+  }
   private waiting?: {
     view: PendingOperation;
     finish: (outcome: OperationOutcome) => void;
@@ -43,6 +48,8 @@ export class OperationApprovals {
     if (!parsed.success || signal.aborted || this.waiting)
       return Promise.resolve("cancelled");
     const operation = structuredClone(parsed.data);
+    if (this.flow?.workflowId === workflowId && this.flow.cwd === operation.cwd)
+      return Promise.resolve(true);
     const digest = createHash("sha256")
       .update(JSON.stringify([workflowId, operation]))
       .digest("hex");
@@ -77,6 +84,7 @@ export class OperationApprovals {
     approvalId: string,
     digest: string,
     allow: boolean,
+    flow = false,
   ) {
     const pending = this.waiting;
     if (
@@ -86,11 +94,14 @@ export class OperationApprovals {
       pending.view.digest !== digest
     )
       return;
+    if (allow && flow && Date.now() < pending.view.expiresAt)
+      this.allowFlow(workflowId, pending.view.cwd);
     pending.finish(
       Date.now() >= pending.view.expiresAt ? "expired" : allow || "declined",
     );
   }
   cancel() {
+    this.flow = undefined;
     this.waiting?.finish("cancelled");
   }
 }

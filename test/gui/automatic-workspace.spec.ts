@@ -31,6 +31,15 @@ test("ordinary native work explores, awaits approval and uses the selected folde
     selected.workspaceId,
   );
   if (!made.ok || !made.sessionId) throw Error("session missing");
+  await gui.evaluate(
+    (sessionId) =>
+      window.harness.command({
+        type: "set_mode",
+        sessionId,
+        mode: "acceptEdits",
+      }),
+    made.sessionId,
+  );
   const prompt = gui.getByRole("textbox", { name: "prompt", exact: true });
   await prompt.fill("auto-work: 加算を修正してください");
   await prompt.press("Enter");
@@ -45,6 +54,8 @@ test("ordinary native work explores, awaits approval and uses the selected folde
     window.harness.officialWorkflow!({ action: "list" }),
   );
   expect(pending.records[0]!.record.cwd).toBe(cwd);
+  expect(pending.approval?.autoOperations).toBe(true);
+  await expect(scope).toContainText("自動モード：計画承認後");
   expect(pending.records[0]!.record.nativeWork?.validation).toBe(
     "agent-reported",
   );

@@ -331,9 +331,11 @@ export async function runOfficialSessionTurn(
         automaticWork:
           !!session.workspaceId &&
           !session.readOnly &&
-          config.permissions.mode !== "plan" &&
+          (session.permissionMode ?? config.permissions.mode) !== "plan" &&
           !config.permissions.rules.length &&
           !config.untrusted,
+        autoOperations:
+          (session.permissionMode ?? config.permissions.mode) === "acceptEdits",
         ...(task ? { task } : {}),
         ...(session.worktree && projectRoot
           ? { worktreeSource: projectRoot }

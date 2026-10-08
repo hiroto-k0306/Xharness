@@ -115,6 +115,7 @@ export class OfficialWorkflowService {
     id: string;
     digest: string;
     accept: (accepted: boolean) => void;
+    autoOperations?: boolean;
   };
   private error?: string;
   private loading: Promise<void>;
@@ -368,7 +369,11 @@ export class OfficialWorkflowService {
       activeId: this.active?.id ?? this.preparing?.id,
       operationApproval: this.operationApprovals.view(),
       approval: this.approval
-        ? { id: this.approval.id, digest: this.approval.digest }
+        ? {
+            id: this.approval.id,
+            digest: this.approval.digest,
+            autoOperations: this.approval.autoOperations,
+          }
         : undefined,
       error: this.error,
       records: [...this.records.values()]
@@ -603,6 +608,7 @@ export class OfficialWorkflowService {
     id: string,
     options: WorkflowOptions,
     resume?: WorkflowRecord,
+    autoOperations = false,
   ) {
     const controller = new AbortController();
     options.id = id;
@@ -618,10 +624,17 @@ export class OfficialWorkflowService {
         const finish = (yes: boolean) => {
           signal.removeEventListener("abort", cancel);
           this.approval = undefined;
+          if (yes && !signal.aborted && options.nativeWork && autoOperations)
+            this.operationApprovals.allowFlow(id, options.cwd);
           accept(yes);
         };
         const cancel = () => finish(false);
-        this.approval = { id, digest, accept: finish };
+        this.approval = {
+          id,
+          digest,
+          accept: finish,
+          autoOperations: !!options.nativeWork && autoOperations,
+        };
         signal.addEventListener("abort", cancel, { once: true });
         if (signal.aborted) cancel();
       });
@@ -1167,7 +1180,7 @@ export class OfficialWorkflowService {
           delete options.prepareWorkspace;
           options.preparationCalls = record.calls;
           controller.signal.throwIfAborted();
-          this.launch(id, options);
+          this.launch(id, options, undefined, request.autoOperations === true);
           await waitRun();
           record = this.records.get(id)!;
         } catch (error) {
@@ -1213,11 +1226,19 @@ export class OfficialWorkflowService {
     await this.loading;
     if (command.action === "list") return this.view();
     if (command.action === "tool_decision") {
+      if (
+        command.scope === "flow" &&
+        (this.active?.id !== command.id ||
+          !this.records.get(command.id)?.nativeWork ||
+          !this.records.get(command.id)?.approvedDigest)
+      )
+        return this.view();
       this.operationApprovals.decide(
         command.id,
         command.approvalId,
         command.digest,
         command.allow,
+        command.scope === "flow",
       );
       return this.view();
     }

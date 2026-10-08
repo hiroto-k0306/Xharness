@@ -30,6 +30,7 @@ export type OfficialWorkflowCommand =
       approvalId: string;
       digest: string;
       allow: boolean;
+      scope?: "flow";
     }
   | { action: "cancel" | "resume"; id: string };
 export interface OfficialWorkflowView {
@@ -54,7 +55,7 @@ export interface OfficialWorkflowView {
     message: string;
   };
   activeId?: string;
-  approval?: { id: string; digest: string };
+  approval?: { id: string; digest: string; autoOperations?: boolean };
   operationApproval?: PendingOperation;
   records: {
     record: WorkflowRecord;

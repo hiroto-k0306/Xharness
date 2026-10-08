@@ -185,6 +185,19 @@ it.each(["claude", "codex"] as const)(
     );
     expect(result.status).toBe("completed");
     expect(result.correctionRounds).toBe(1);
+    for (const [i, call] of result.calls.entries()) {
+      const request = fake.requests[i]!;
+      expect(JSON.parse(call.communication!.input.text)).toEqual({
+        prompt: JSON.parse(request.prompt),
+        files: request.files,
+        tests: request.tests,
+        outputSchema: request.outputSchema,
+      });
+      expect(call.communication?.output).toBeDefined();
+    }
+    const reserved = saved.find((r) => r.calls.at(-1)?.status === "running");
+    expect(reserved?.calls.at(-1)?.communication?.input.text).toBeTruthy();
+    expect(reserved?.calls.at(-1)?.communication?.output).toBeUndefined();
     expect(fake.requests[0]!.outputSchema).toMatchObject({
       properties: {
         tasks: {

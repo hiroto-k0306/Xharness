@@ -1,4 +1,10 @@
-import { afterEach, it, expect } from "vitest";
+import { afterEach, it, expect, vi } from "vitest";
+vi.mock("./codex-installation.js", async (load) => ({
+  ...(await load<typeof import("./codex-installation.js")>()),
+  discoverCodexInstallation: vi.fn(async () => {
+    throw new Error("公式Codexの実行パスを設定してください");
+  }),
+}));
 import {
   mkdtemp,
   rm,
@@ -282,6 +288,7 @@ it("configures and restores a production executable without executing it, and re
   const refused = await unconfigured.command({
     action: "create",
     provider: "claude",
+    planner: { model: "claude-opus-4-6" },
   });
   expect(refused.available).toBe(false);
   expect(refused.records).toHaveLength(0);
@@ -303,6 +310,144 @@ it("configures and restores a production executable without executing it, and re
   expect(
     (await restarted.command({ action: "list" })).connection?.codexPath,
   ).toBe(executable);
+});
+it("preserves a missing legacy override until explicitly returning to automatic discovery", async () => {
+  const path = await home();
+  const storage = join(path, "official-workflows");
+  await mkdir(storage);
+  const missing = join(path, "missing.exe");
+  await writeFile(
+    join(storage, "connection.json"),
+    JSON.stringify({ codexPath: missing }),
+  );
+  const discoverCodex = vi.fn(async () => ({
+    path: "registered-codex.exe",
+    package: "registered-package",
+  }));
+  const instance = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    discoverCodex,
+  });
+  services.push(instance);
+  const fixed = await instance.command({ action: "list" });
+  expect(fixed.connection).toMatchObject({
+    codexMode: "fixed",
+    codexPath: missing,
+    status: "unconfigured",
+  });
+  expect(discoverCodex).not.toHaveBeenCalled();
+  const automatic = await instance.command({ action: "configure_auto" });
+  expect(automatic.connection).toMatchObject({
+    codexMode: "auto",
+    codexPath: "registered-codex.exe",
+    status: "configured",
+  });
+  expect(
+    JSON.parse(await readFile(join(storage, "connection.json"), "utf8")),
+  ).toEqual({ codexMode: "auto" });
+  const restarted = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    discoverCodex: async () => ({
+      path: "new-registration.exe",
+      package: "new-package",
+    }),
+  });
+  services.push(restarted);
+  expect(
+    (await restarted.command({ action: "list" })).connection?.codexPath,
+  ).toBe("new-registration.exe");
+});
+it("rechecks registration between tasks and refuses switching an active task", async () => {
+  let executable = "registered-old.exe";
+  const discoverCodex = vi.fn(async () => ({
+    path: executable,
+    package: executable,
+  }));
+  const instance = new OfficialWorkflowService({
+    home: await home(),
+    fake: false,
+    discoverCodex,
+    options: async (cwd) => fixtureWorkflowOptions(cwd),
+  });
+  services.push(instance);
+  await instance.command({ action: "list" });
+  executable = "registered-next.exe";
+  await instance.command({
+    action: "create",
+    provider: "claude",
+    planner: { model: "fixture" },
+  });
+  const active = await wait(instance, (view) => !!view.approval);
+  expect(active.connection?.codexPath).toBe(executable);
+  const reads = discoverCodex.mock.calls.length;
+  executable = "registered-later.exe";
+  const refused = await instance.command({ action: "configure_auto" });
+  expect(refused.error).toBe("別のworkflowが実行中です");
+  expect(refused.connection?.codexPath).toBe("registered-next.exe");
+  expect(discoverCodex).toHaveBeenCalledTimes(reads);
+  await instance.command({ action: "cancel", id: active.activeId! });
+  await instance.command({
+    action: "create",
+    provider: "claude",
+    planner: { model: "fixture" },
+  });
+  expect(
+    (await wait(instance, (view) => !!view.approval)).connection?.codexPath,
+  ).toBe(executable);
+});
+it("does not rewrite an unreadable connection as automatic when saving an unrelated setting", async () => {
+  const path = await home(),
+    storage = join(path, "official-workflows");
+  await mkdir(storage);
+  const file = join(storage, "connection.json");
+  await writeFile(file, "invalid-json");
+  const discoverCodex = vi.fn(async () => ({
+    path: "registered.exe",
+    package: "registered",
+  }));
+  const instance = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    discoverCodex,
+  });
+  services.push(instance);
+  const blocked = await instance.command({
+    action: "workspace_root",
+    path: "",
+  });
+  expect(blocked.error).toContain("接続設定が不正");
+  expect(await readFile(file, "utf8")).toBe("invalid-json");
+  expect(discoverCodex).not.toHaveBeenCalled();
+  expect(
+    (await instance.command({ action: "configure_auto" })).connection?.status,
+  ).toBe("configured");
+});
+it("keeps fixed mode if persisting the switch to automatic fails", async () => {
+  const path = await home(),
+    exe = join(path, "codex.exe");
+  await writeFile(exe, "never run");
+  const discoverCodex = vi.fn(async () => ({
+    path: "registered.exe",
+    package: "registered",
+  }));
+  const instance = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    codexPath: exe,
+    discoverCodex,
+  });
+  services.push(instance);
+  await instance.command({ action: "list" });
+  await mkdir(join(path, "official-workflows/connection.json"));
+  const result = await instance.command({ action: "configure_auto" });
+  expect(result.error).toBeDefined();
+  expect(result.connection).toMatchObject({
+    codexMode: "fixed",
+    codexPath: exe,
+  });
+  expect(discoverCodex).not.toHaveBeenCalled();
 });
 it("ends consecutive questions and post-work chat after one bounded call and preserves answers", async () => {
   const path = await home(),
@@ -836,6 +981,40 @@ it("uses question models that exist and are enabled in the shipped catalog", () 
     expect(
       catalog.find((m) => m.id === QUESTION_MODELS[provider]),
     ).toMatchObject({ provider, enabled: true });
+});
+it("pins the managed Claude agent through discovery and a question, then uses the next version for the next task", async () => {
+  const first = listAgent("claude", claudeList),
+    second = listAgent("claude", claudeList);
+  const factory = vi
+    .fn()
+    .mockReturnValueOnce(first.agent)
+    .mockReturnValue(second.agent);
+  const path = await home();
+  const instance = new OfficialWorkflowService({
+    home: path,
+    fake: false,
+    claudeRuntime: {
+      agent: factory,
+      view: () => ({ state: "ready", version: "0.3.291", message: "準備済み" }),
+    },
+  });
+  services.push(instance);
+  const request = {
+    sessionId: "managed-session",
+    effort: "high" as const,
+    cwd: path,
+    model: "claude:opus",
+    text: "質問",
+    history: [],
+  };
+  await instance.submitSession(request, new AbortController().signal);
+  expect(factory).toHaveBeenCalledTimes(1);
+  expect(first.calls).toMatchObject({ discover: 1, run: 1 });
+  expect(second.calls).toMatchObject({ discover: 0, run: 0 });
+  await instance.submitSession(request, new AbortController().signal);
+  expect(factory).toHaveBeenCalledTimes(2);
+  expect(second.calls).toMatchObject({ discover: 1, run: 1 });
+  expect(instance.view().claudeRuntime?.version).toBe("0.3.291");
 });
 
 it.each(["claude", "codex"] as const)(

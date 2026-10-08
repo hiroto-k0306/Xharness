@@ -6,6 +6,7 @@ import { scopedPath } from "./workspace.js";
 import { digest } from "./runtime.js";
 import { codexPublicEvents } from "./public-events.js";
 import { diagnostics } from "./diagnostics.js";
+import { phaseTimer } from "./phase-timer.js";
 import {
   classifyCommand,
   commandApproval,
@@ -210,17 +211,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
     if (signal.aborted) cancel();
     // The phase limit measures agent time: waiting for a person's operation
     // decision pauses it and the remaining time resumes afterwards.
-    let remaining = request.timeoutMs,
-      resumedAt = Date.now(),
-      timer = setTimeout(cancel, remaining);
-    const pauseTimer = () => {
-        clearTimeout(timer);
-        remaining -= Date.now() - resumedAt;
-      },
-      resumeTimer = () => {
-        resumedAt = Date.now();
-        timer = setTimeout(cancel, Math.max(0, remaining));
-      };
+    const timer = phaseTimer(request.timeoutMs, cancel);
     const server = this.start(request.cwd),
       readonly = ["plan", "review", "conversation"].includes(request.phase);
     const diagnostic = diagnostics(
@@ -531,7 +522,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
           rejection = { stage: decision.stage, reason: decision.reason };
         if (decision.kind === "operation") {
           explicit = true;
-          pauseTimer();
+          timer.pause();
           let outcome: Awaited<ReturnType<AgentRequest["approve"]>>;
           try {
             outcome = await request.approve(
@@ -540,7 +531,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
               controller.signal,
             );
           } finally {
-            resumeTimer();
+            timer.resume();
           }
           allowed = outcome === true;
           // A grant belongs to this immutable request, never a later changed command.
@@ -860,7 +851,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
               : "failed"),
       );
     } finally {
-      clearTimeout(timer);
+      timer.close();
       signal.removeEventListener("abort", cancel);
       controller.signal.removeEventListener("abort", stop);
       unsubscribe();

@@ -252,7 +252,9 @@ it("sends the role effort, changed only in the catalog, in each request", async 
   expect(webSummaryRequest("codex", "q", "p").reasoning).toEqual({
     effort: "medium",
   });
-  expect(webSummaryRequest("claude", "q", "p")).not.toHaveProperty("reasoning");
+  expect(webSummaryRequest("claude", "q", "p").reasoning).toEqual({
+    effort: "medium",
+  });
   // Web search
   const sent: ProviderRequest[] = [];
   const provider = {

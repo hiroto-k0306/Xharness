@@ -505,14 +505,13 @@ function officialAgent(
       calls.discover++;
       if (state === "unreachable")
         throw new WorkflowFailure("app-server-closed");
-      const model =
-        provider === "claude" ? "claude-haiku-4-5-20251001" : "gpt-6-luna";
+      const model = provider === "claude" ? "claude-haiku-5-5" : "gpt-6-luna";
       return [
         {
           provider,
           model: provider === "claude" ? "haiku" : model,
           resolvedModel: provider === "claude" ? model : undefined,
-          efforts: [null, "low"],
+          efforts: [null, "low", "medium"],
           available: true,
           quotaAllowed: state === "ok" ? true : null,
           capabilitySource:
@@ -571,7 +570,7 @@ it.each([
     expect(view.error).toBeUndefined();
     const record = view.records[0]!.record;
     expect(record.status).toBe("completed");
-    expect(record.answer).toBe("answer from claude-haiku-4-5-20251001");
+    expect(record.answer).toBe("answer from claude-haiku-5-5");
     expect(record.plan).toBeUndefined();
     expect(codex.calls).toEqual({ discover: 0, run: 0 });
   },
@@ -628,7 +627,7 @@ it("stops a Claude question when Claude is unusable even though Codex is availab
     text: "質問",
   });
   expect(view.error).toMatch(
-    /^質問先のモデル「claude-haiku-4-5-20251001」を利用できないか/,
+    /^質問先のモデル「claude-haiku-5-5」を利用できないか/,
   );
   expect(claude.calls).toEqual({ discover: 1, run: 0 });
   expect(codex.calls).toEqual({ discover: 0, run: 0 });
@@ -671,7 +670,7 @@ function listAgent(
         provider,
         model: m.model,
         resolvedModel: provider === "claude" ? m.model : undefined,
-        efforts: [null, "low"],
+        efforts: [null, "low", "medium"],
         available: true,
         quotaAllowed: m.quotaAllowed === undefined ? true : m.quotaAllowed,
         capabilitySource:

@@ -84,6 +84,33 @@ it("resolves every shipped role to an enabled, current catalog model", () => {
   expect(DEFAULT_ALIASES).toEqual(catalogAliases(catalog));
 });
 
+it("uses Haiku 5.5 for new aliases while preserving explicit Haiku 4.5 IDs", () => {
+  const catalog = loadCatalog();
+  const latest = catalogLookup("claude:haiku", catalog)!;
+  expect(latest).toMatchObject({
+    id: "claude-haiku-5-5",
+    contextTokens: 1000000,
+    defaultEffort: "medium",
+  });
+  expect(Object.keys(latest.efforts!)).toEqual([
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max",
+  ]);
+  for (const role of ["question", "utility", "authRefresh"] as const) {
+    const resolved = resolveRole(role, "claude", catalog);
+    expect(resolved.id).toBe(latest.id);
+    expect(roleEffort(resolved)).toBe("medium");
+  }
+  const previous = catalogLookup("claude:haiku-4.5", catalog)!;
+  expect(previous.id).toBe("claude-haiku-4-5-20251001");
+  expect(catalogLookup(previous.id, catalog)).toBe(previous);
+  expect(catalogLookup("claude-haiku-4-5", catalog)).toBe(previous);
+  expect(sendsEffort(previous)).toBe(false);
+});
+
 it("adds a model by changing only the catalog", () => {
   const catalog = swapped((doc) => {
     doc.models.push({

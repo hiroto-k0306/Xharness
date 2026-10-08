@@ -106,9 +106,7 @@ it("resolves the main model to its own official connection without substituting"
   // Unavailable on its connection: stop with the reason, never pick Opus instead.
   expect(() =>
     resolvePlannerChoice({ model: "claude:haiku", effort: null }, official),
-  ).toThrow(
-    /^計画モデル「claude-haiku-4-5-20251001」は公式Claude SDKで利用できない/,
-  );
+  ).toThrow(/^計画モデル「claude-haiku-5-5」は公式Claude SDKで利用できない/);
   expect(() =>
     resolvePlannerChoice({ model: "codex:sol", effort: "max" }, official),
   ).toThrow(/推論レベル「max」に対応していません/);

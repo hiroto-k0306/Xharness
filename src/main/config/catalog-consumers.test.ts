@@ -95,10 +95,10 @@ it("routes helper processes to the catalog roles", async () => {
 it("passes the connection-test role's model and effort as startup arguments", async () => {
   const { connectionTestStartup } = await import("./catalog.js");
   const { resolveStartup } = await import("./config.js");
-  // Shipped: Haiku has no efforts, so no effort argument is passed.
+  // Shipped Haiku 5.5 uses its catalog default effort.
   expect(connectionTestStartup()).toEqual({
     model: "claude:haiku",
-    effort: undefined,
+    effort: "medium",
   });
   // Changing only the role changes both arguments, and startup applies them.
   useCatalog((doc) => {

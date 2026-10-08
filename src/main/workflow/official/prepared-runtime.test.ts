@@ -53,6 +53,10 @@ it("prepares only after saved approval, then implements/tests/reviews in the pre
   expect(prepare).toHaveBeenCalledTimes(1);
   expect(fake.requests.find((r) => r.phase === "plan")?.cwd).toBe(cwd);
   expect(
+    JSON.parse(fake.requests.find((r) => r.phase === "plan")!.prompt)
+      .instruction,
+  ).toContain("in Japanese for user approval");
+  expect(
     fake.requests
       .filter((r) => r.phase !== "plan")
       .every((r) => r.cwd === result.cwd),

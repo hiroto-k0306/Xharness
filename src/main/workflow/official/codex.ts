@@ -285,6 +285,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
     const evidence: Promise<void>[] = [];
     // Bounded per-item output deltas, used only when the item has no aggregate.
     const outputs = new Map<string, string>();
+    const finishedItems = new Set<string>();
     const add = (
       item: Record<string, unknown>,
       status: "requested" | "completed" | "failed",
@@ -302,6 +303,11 @@ export class CodexWorkflowAgent implements OfficialAgent {
         !["commandExecution", "fileChange"].includes(String(item.type))
       )
         return;
+      // A finished item can occur in both item/completed and turn.items.
+      if (status !== "requested") {
+        if (finishedItems.has(item.id)) return;
+        finishedItems.add(item.id);
+      }
       if (item.type === "commandExecution" && status !== "requested")
         diagnostic.commandRun(item.id, status, item, outputs.get(item.id));
       diagnostic.tool({
@@ -335,6 +341,16 @@ export class CodexWorkflowAgent implements OfficialAgent {
             controller.abort();
           }),
       );
+      if (
+        item.type === "commandExecution" &&
+        status === "failed" &&
+        item.source === "unifiedExecStartup" &&
+        !controller.signal.aborted
+      ) {
+        stopReason ??=
+          "公式Codexのコマンド実行準備に失敗しました（native-exec-startup-failed）。CLIの実行環境を確認してください。自動再試行はしません。";
+        fail("native-exec-startup-failed");
+      }
     };
     const unsubscribe = server.subscribe((method, params) => {
       if (method === "account/rateLimits/updated") {
@@ -411,6 +427,12 @@ export class CodexWorkflowAgent implements OfficialAgent {
       if (method === "turn/started" || method === "turn/completed") {
         const turn = object(params.turn);
         if (id(turn.id)) nativeTurnId = turn.id;
+        if (method === "turn/completed" && Array.isArray(turn.items))
+          for (const raw of turn.items) {
+            const item = object(raw);
+            if (item.status === "completed" || item.status === "failed")
+              add(item, item.status);
+          }
         if (method === "turn/completed" && turn.status === "failed") {
           const info = diagnostic.nativeError(
             "turn",

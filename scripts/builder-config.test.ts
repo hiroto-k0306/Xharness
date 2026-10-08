@@ -46,15 +46,30 @@ describe("electron-builder.yml (DESIGN §17.2)", () => {
     expect(config.portable.unpackDirName).toBe(true);
   });
   it("ships only the fixtures --fake needs, and they exist", async () => {
-    expect(config.extraResources[0]).toMatchObject({
+    expect(
+      config.extraResources.find((r) => r.to === "fixtures"),
+    ).toMatchObject({
       from: "test/fixtures/claude",
       to: "fixtures",
     });
-    expect(config.extraResources[1]).toMatchObject({
+    expect(
+      config.extraResources.find((r) => r.to === "fixtures-codex"),
+    ).toMatchObject({
       from: "test/fixtures/codex",
       to: "fixtures-codex",
     });
-    for (const resource of config.extraResources) {
+    expect(
+      config.extraResources.find(
+        (r) => r.to === "claude-sdk-seed/node_modules",
+      ),
+    ).toEqual({
+      from: ".out/claude-sdk-seed/node_modules",
+      to: "claude-sdk-seed/node_modules",
+      filter: ["**/*"],
+    });
+    for (const resource of config.extraResources.filter(
+      (r) => r.to === "fixtures" || r.to === "fixtures-codex",
+    )) {
       for (const name of resource.filter)
         await expect(
           access(`${resource.from}/${name}`),

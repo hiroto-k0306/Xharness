@@ -249,7 +249,10 @@ it("stops resuming a record whose recorded model the catalog retired", async () 
   const restarted = new OfficialWorkflowService({
     home,
     fake: false,
-    codexPath: "C:/configured/codex.exe",
+    discoverCodex: async () => ({
+      path: "C:/fixture/codex.exe",
+      package: "fixture",
+    }),
   });
   services.push(restarted);
   const view = await restarted.command({ action: "resume", id });

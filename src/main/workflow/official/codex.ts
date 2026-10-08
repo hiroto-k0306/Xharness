@@ -4,6 +4,7 @@ import { AppServerRpc, type AppServerPort } from "./app-server-rpc.js";
 import { codexUsage, object, modelName } from "./usage.js";
 import { scopedPath } from "./workspace.js";
 import { digest } from "./runtime.js";
+import { codexPublicEvents } from "./public-events.js";
 import { diagnostics } from "./diagnostics.js";
 import {
   classifyCommand,
@@ -380,6 +381,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
         return;
       }
       if (method === "error") {
+        // Error bodies may contain secrets; public events retain fixed status only.
         diagnostic.nativeError(
           "notification",
           object(params.error).codexErrorInfo,
@@ -397,6 +399,14 @@ export class CodexWorkflowAgent implements OfficialAgent {
         );
       if (method === "thread/tokenUsage/updated")
         usage = codexUsage(params.tokenUsage) ?? usage;
+      for (const detail of codexPublicEvents(method, params))
+        if (request.event)
+          evidence.push(
+            request.event(detail).catch(() => {
+              stopped = "failed";
+              controller.abort();
+            }),
+          );
       if (method === "item/started" || method === "item/completed") {
         const item = object(params.item);
         if (
@@ -750,6 +760,12 @@ export class CodexWorkflowAgent implements OfficialAgent {
       nativeSessionId = native.id;
       observedModels.add(thread.model as string);
       await waitQuota();
+      await request.event?.({
+        actor: "harness",
+        kind: "start",
+        itemId: request.requestId,
+        name: "モデル入力の送信",
+      });
       dispatched = true;
       const turn = object(
         await server.request(

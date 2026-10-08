@@ -1,5 +1,6 @@
 import { randomUUID, createHash } from "node:crypto";
 import { communicationInput, communicationText } from "./communication.js";
+import { publicEventRecorder } from "./public-events.js";
 import { dagResumeBlockReason } from "./dag.js";
 import {
   beginTrace,
@@ -426,6 +427,7 @@ export async function runOfficialSingleTask(
       record.callBudget.reserved[phase] = used + 1;
     }
     record.calls.push(entry);
+    const observe = publicEventRecorder(entry.communication);
     await save(); // Crash after this point is uncertain; never automatically replay it.
     const span = beginTrace(
       "llm",
@@ -460,10 +462,21 @@ export async function runOfficialSingleTask(
             outputSchema,
             timeoutMs: options.timeoutMs ?? 180000,
             approve: options.approveTool,
+            event: async (event) => {
+              if (observe(event)) await save();
+            },
             tool: async (evidence) => {
               if (record.tools.length >= 1000)
                 throw new WorkflowFailure("tool-evidence-limit");
               record.tools.push({ ...evidence, requestId });
+              if (evidence.status === "allowed" || evidence.status === "denied")
+                observe({
+                  actor: "harness",
+                  kind: "approval",
+                  itemId: evidence.actionId,
+                  name: evidence.name,
+                  status: evidence.status,
+                });
               await save();
             },
           },
@@ -471,6 +484,13 @@ export async function runOfficialSingleTask(
         ),
     );
     const { output, ...metadata } = result;
+    observe({
+      actor: "harness",
+      kind: "end",
+      itemId: requestId,
+      name: phase,
+      status: result.status,
+    });
     record.calls[record.calls.length - 1] = {
       ...entry,
       ...metadata,

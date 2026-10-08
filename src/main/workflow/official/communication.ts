@@ -8,6 +8,8 @@ export interface WorkflowCommunication {
   boundary: "xharness-official-agent";
   input: CommunicationText;
   output?: CommunicationText;
+  events?: import("./public-events.js").PublicEvent[];
+  eventsOmitted?: boolean;
 }
 export const phaseExplanation: Record<string, string> = {
   conversation: "質問に回答、または入力を質問・作業に判別します。",
@@ -33,11 +35,17 @@ function clean(value: unknown, depth = 0): unknown {
   if (value && typeof value === "object") {
     if (
       "type" in value &&
-      ["thinking", "reasoning", "redacted_thinking"].includes(
-        String(value.type),
-      )
+      [
+        "thinking",
+        "reasoning",
+        "redacted_thinking",
+        "image",
+        "input_image",
+        "audio",
+        "input_audio",
+      ].includes(String(value.type))
     )
-      return "[思考本文を除去]";
+      return "[思考・画像・音声の本体を除去]";
     return Object.fromEntries(
       Object.entries(value).map(([key, v]) => [
         key,
@@ -47,10 +55,12 @@ function clean(value: unknown, depth = 0): unknown {
   }
   return value;
 }
-/** Application request/structured result only. Never pass raw SDK events here. */
-export function communicationText(value: unknown): CommunicationText {
+/** Application snapshots or selected public content only; never raw SDK events. */
+export function communicationText(
+  value: unknown,
+  limit = 24_000,
+): CommunicationText {
   const text = JSON.stringify(clean(value), null, 2) ?? "未取得";
-  const limit = 24_000;
   // Do not split a surrogate pair at the display/storage boundary.
   const end = /[\uD800-\uDBFF]/.test(text[limit - 1] ?? "") ? limit - 1 : limit;
   return { text: text.slice(0, end), truncated: text.length > end };

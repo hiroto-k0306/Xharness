@@ -6,6 +6,8 @@ import {
   type SDKControlGetUsageResponse,
 } from "@anthropic-ai/claude-agent-sdk";
 import { lstat } from "node:fs/promises";
+import { claudePublicEvents } from "./public-events.js";
+import { communicationText } from "./communication.js";
 import { resolve } from "node:path";
 import { approvePersonalQuery } from "../../connections/personal-sdk.js";
 import { tokenMeasurement } from "../../providers/token-usage.js";
@@ -205,6 +207,15 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
       string,
       { inputDigest: string; allowed: boolean; completed: boolean }
     >();
+    const observe = async (event: import("./public-events.js").PublicEvent) => {
+      try {
+        await request.event?.(event);
+      } catch {
+        evidenceFailed = true;
+        controller.abort();
+        throw new Error("Workflow evidence unavailable");
+      }
+    };
     const emit: AgentRequest["tool"] = async (evidence) => {
       diagnostic.tool(evidence);
       try {
@@ -378,6 +389,14 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
                       status: "completed",
                       source: "plan",
                     });
+                    await observe({
+                      actor: "tool",
+                      kind: "tool_result",
+                      itemId: hook.tool_use_id,
+                      name: hook.tool_name,
+                      status: "completed",
+                      body: communicationText(hook.tool_response, 4000),
+                    });
                   }
                   return {};
                 },
@@ -398,6 +417,13 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
                       outputDigest: digest(hook.error),
                       status: "failed",
                       source: "plan",
+                    });
+                    await observe({
+                      actor: "tool",
+                      kind: "tool_result",
+                      itemId: hook.tool_use_id,
+                      name: hook.tool_name,
+                      status: "failed",
                     });
                   }
                   return {};
@@ -421,6 +447,12 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
       );
       if (quota?.allowed !== true) return result("quota-paused");
       controller.signal.throwIfAborted();
+      await observe({
+        actor: "harness",
+        kind: "start",
+        itemId: request.requestId,
+        name: "モデル入力の送信",
+      });
       dispatched = true;
       session.release(request.prompt);
       const iterator = session.active[Symbol.asyncIterator]();
@@ -431,6 +463,7 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
         controller.signal.throwIfAborted();
         const event = object(raw);
         diagnostic.claude(event);
+        for (const detail of claudePublicEvents(event)) await observe(detail);
         if (
           typeof event.session_id === "string" &&
           /^[a-f0-9-]{36}$/i.test(event.session_id)

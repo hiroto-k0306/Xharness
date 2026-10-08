@@ -2,13 +2,18 @@ import type { WorkflowRecord } from "./runtime.js";
 import { workflowUsage } from "./runtime.js";
 import { normalizeTokens } from "../../providers/token-usage.js";
 import { phaseExplanation } from "./communication.js";
+import { publicActors, publicKinds } from "./public-events.js";
 const escape = (value: unknown) =>
   String(value ?? "不明")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
-/** Standalone reviewable report; no script, provider response body, credential or thinking content. */
+/** Escaped public excerpts only; raw private events and thinking are never rendered. */
+function publicTimeline(c: import("./communication.js").WorkflowCommunication) {
+  const events = c.events ?? [];
+  return `<details><summary>公開イベントの時系列（${events.length}件）</summary><p>取得した順序。全内部往復・完全な送信JSONの再現ではありません。</p>${c.eventsOmitted ? "<p>保存上限のため一部のイベントを省略しました。</p>" : ""}${!events.length ? "<p>公開イベントは未取得・未保存です。処理がなかったとは判断しません。</p>" : ""}<ol>${events.map((e, i) => `<li style="border-left:3px solid ${e.actor === "llm" ? "#9cbbfc" : e.actor === "tool" ? "#8cccaa" : "#e3b45b"};padding-left:12px"><b>#${escape(e.sequence ?? i + 1)} ${escape(publicActors[e.actor])} — ${escape(publicKinds[e.kind])}</b><p>${escape(e.at)} / ${escape(e.name ?? e.model)} / ${escape(e.status)}</p><p>項目ID ${escape(e.itemId)} / 親ツールID ${e.parentId === null ? "主系列" : escape(e.parentId)}</p>${e.body ? `<pre style="overflow-wrap:anywhere">${escape(e.body.text)}</pre>${e.body.truncated ? "<p>本文の末尾を省略しています。</p>" : ""}` : e.kind === "response" || e.kind === "tool_result" ? "<p>本文は提供されていません。</p>" : ""}</li>`).join("")}</ol></details>`;
+}
 export function officialWorkflowReport(record: WorkflowRecord) {
   const usage = workflowUsage(record),
     cells = (values: unknown[]) =>
@@ -28,7 +33,7 @@ export function officialWorkflowReport(record: WorkflowRecord) {
     .map((c, i) => {
       const body = (v: import("./communication.js").CommunicationText) =>
         `<pre>${escape(v.text)}</pre>${v.truncated ? "<p>保存上限のため末尾を省略しています。</p>" : ""}`;
-      return `<details><summary>#${i + 1} ${escape(phaseExplanation[c.phase] ?? c.phase)} / ${escape(c.provider)} / ${escape(c.status)}</summary><p>要求ID ${escape(c.requestId)} / 指定モデル ${escape(c.requestedModel)}</p>${c.communication ? `<h3>LLMへの入力（指示・参考データ）</h3>${body(c.communication.input)}<h3>LLMからの応答（構造化結果）</h3>${c.communication.output ? body(c.communication.output) : "<p>応答本文は未取得・未保存です。</p>"}` : "<p>本文記録なし。過去の内容は補完しません。</p>"}</details>`;
+      return `<details><summary>#${i + 1} ${escape(phaseExplanation[c.phase] ?? c.phase)} / ${escape(c.provider)} / ${escape(c.status)}</summary><p>要求ID ${escape(c.requestId)} / 指定モデル ${escape(c.requestedModel)}</p>${c.communication ? `${publicTimeline(c.communication)}<h3>LLMへの入力（指示・参考データ）</h3>${body(c.communication.input)}<h3>LLMからの応答（構造化結果）</h3>${c.communication.output ? body(c.communication.output) : "<p>応答本文は未取得・未保存です。</p>"}` : "<p>本文記録なし。過去の内容は補完しません。</p>"}</details>`;
     })
     .join("")}`;
   const modelEvidence = record.calls

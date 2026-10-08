@@ -174,6 +174,18 @@ it.each(["claude", "codex"] as const)(
     const cwd = await workspace(),
       fake = fixtureAgents(implementation),
       saved: WorkflowRecord[] = [];
+    for (const agent of Object.values(fake.agents)) {
+      const run = agent.run;
+      agent.run = async (request, s) => {
+        await request.event?.({
+          actor: "llm",
+          kind: "response",
+          itemId: "mock-response",
+          body: { text: "safe public response", truncated: false },
+        });
+        return run(request, s);
+      };
+    }
     const result = await runOfficialSingleTask(
       fixtureWorkflowOptions(cwd, {
         agents: fake.agents,
@@ -194,10 +206,22 @@ it.each(["claude", "codex"] as const)(
         outputSchema: request.outputSchema,
       });
       expect(call.communication?.output).toBeDefined();
+      expect(call.communication?.events?.map((e) => e.kind)).toEqual([
+        "response",
+        ...(["implement", "fix"].includes(call.phase) ? ["approval"] : []),
+        "end",
+      ]);
     }
     const reserved = saved.find((r) => r.calls.at(-1)?.status === "running");
     expect(reserved?.calls.at(-1)?.communication?.input.text).toBeTruthy();
     expect(reserved?.calls.at(-1)?.communication?.output).toBeUndefined();
+    expect(
+      saved.some(
+        (r) =>
+          r.calls.at(-1)?.status === "running" &&
+          r.calls.at(-1)?.communication?.events?.[0]?.kind === "response",
+      ),
+    ).toBe(true);
     expect(fake.requests[0]!.outputSchema).toMatchObject({
       properties: {
         tasks: {

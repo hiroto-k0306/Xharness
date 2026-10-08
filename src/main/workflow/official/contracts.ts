@@ -172,6 +172,8 @@ export interface AgentRequest {
   outputSchema: Record<string, unknown>;
   timeoutMs: number;
   tool(evidence: ToolEvidence): Promise<void>;
+  /** Sanitized public events only, not raw SDK/RPC payloads. */
+  event?(event: import("./public-events.js").PublicEvent): Promise<void>;
   /** true grants; any other value is the reason the person's grant is missing. */
   approve(
     name: string,

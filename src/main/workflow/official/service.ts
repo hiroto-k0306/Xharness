@@ -40,6 +40,7 @@ import { CodexWorkflowAgent } from "./codex.js";
 import { connectionFailure } from "./connection-failure.js";
 import { officialSessionSummary } from "./session-result.js";
 import { communicationInput, communicationText } from "./communication.js";
+import { publicEventRecorder } from "./public-events.js";
 import {
   discoverCodexInstallation,
   resolveCodexOverride,
@@ -781,6 +782,14 @@ export class OfficialWorkflowService {
               outputSchema,
             });
             record.calls.push({ ...entry, communication });
+            const observe = publicEventRecorder(communication);
+            let eventTail: Promise<void> = Promise.resolve();
+            const saveEvent = () => {
+              const snapshot = structuredClone(record);
+              const pending = eventTail.then(() => this.save(snapshot));
+              eventTail = pending;
+              return pending;
+            };
             await this.save(record); // An interrupted request is never replayed.
             const span = beginTrace(
               "llm",
@@ -823,9 +832,20 @@ export class OfficialWorkflowService {
                       outputSchema,
                       timeoutMs: 60000,
                       approve: async () => false,
+                      event: async (event) => {
+                        if (observe(event)) await saveEvent();
+                      },
                       tool: async (e) => {
                         record.tools.push({ ...e, requestId: entry.requestId });
-                        await this.save(record);
+                        if (e.status === "allowed" || e.status === "denied")
+                          observe({
+                            actor: "harness",
+                            kind: "approval",
+                            itemId: e.actionId,
+                            name: e.name,
+                            status: e.status,
+                          });
+                        await saveEvent();
                       },
                       prompt: JSON.stringify(prompt),
                     },
@@ -841,6 +861,13 @@ export class OfficialWorkflowService {
               result.status,
             );
             const { output, ...metadata } = result;
+            observe({
+              actor: "harness",
+              kind: "end",
+              itemId: entry.requestId,
+              name: "conversation",
+              status: result.status,
+            });
             record.calls[0] = {
               ...entry,
               ...metadata,

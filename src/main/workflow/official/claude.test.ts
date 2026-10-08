@@ -17,7 +17,132 @@ import {
 import { schemas, type AgentRequest } from "./contracts.js";
 import { sdkUsage } from "./usage.js";
 import { normalizeTokens } from "../../providers/token-usage.js";
+import { communicationInput } from "./communication.js";
+import { publicEventRecorder } from "./public-events.js";
 const homes: string[] = [];
+it("records sanitized tool results from the SDK hook even when no user message is forwarded", async () => {
+  const c = communicationInput({}),
+    record = publicEventRecorder(c);
+  const mock = mockStart(async (options) => {
+    await options.hooks!.PostToolUse![0]!.hooks[0]!(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "fixture",
+        transcript_path: "unused",
+        cwd: options.cwd!,
+        tool_name: "Read",
+        tool_use_id: "read-hook",
+        tool_input: { file_path: "add.mjs" },
+        tool_response: {
+          text: "safe tool output",
+          authorization: "private-auth",
+        },
+      } as HookInput,
+      "read-hook",
+      { signal: new AbortController().signal },
+    );
+  });
+  const result = await new ClaudeWorkflowAgent(mock.start).run(
+    {
+      ...request(await cwd()),
+      event: async (e) => {
+        record(e);
+      },
+    },
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
+  expect(c.events?.find((e) => e.kind === "tool_result")?.body?.text).toContain(
+    "safe tool output",
+  );
+  expect(JSON.stringify(c)).not.toContain("private-auth");
+});
+it("persists the public response/tool/response sequence without thinking or account data", async () => {
+  const values = [
+    {
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: {
+        id: "m1",
+        model: "fixture-haiku",
+        content: [
+          { type: "thinking", thinking: "private-thought" },
+          { type: "text", text: "Read next" },
+          {
+            type: "tool_use",
+            id: "tool1",
+            name: "Read",
+            input: { file_path: "add.mjs" },
+          },
+        ],
+      },
+    },
+    {
+      type: "user",
+      parent_tool_use_id: null,
+      message: {
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool1",
+            content: "return a - b",
+          },
+        ],
+      },
+    },
+    {
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: {
+        id: "m2",
+        model: "fixture-haiku",
+        content: [{ type: "text", text: "Final answer" }],
+      },
+    },
+    {
+      type: "result",
+      subtype: "success",
+      structured_output: { summary: "OK" },
+      account_id: "private-account",
+    },
+  ] as unknown as SDKMessage[];
+  const c = communicationInput({}),
+    record = publicEventRecorder(c);
+  const result = await new ClaudeWorkflowAgent(
+    mockStart(undefined, values).start,
+  ).run(
+    {
+      ...request(await cwd()),
+      event: async (e) => {
+        record(e);
+      },
+    },
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
+  expect(c.events?.map((e) => e.kind)).toEqual([
+    "start",
+    "response",
+    "tool_request",
+    "tool_result",
+    "response",
+    "end",
+  ]);
+  expect(JSON.stringify(c)).not.toContain("private-");
+});
+it("stops when public event persistence fails without replaying the SDK query", async () => {
+  const mock = mockStart(),
+    event = vi.fn(async () => {
+      throw Error("fixture save failure");
+    });
+  const result = await new ClaudeWorkflowAgent(mock.start).run(
+    { ...request(await cwd()), event },
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("failed");
+  expect(result.dispatched).toBe(false);
+  expect(event).toHaveBeenCalledTimes(1);
+});
 afterEach(async () => {
   vi.unstubAllEnvs();
   for (const home of homes.splice(0))

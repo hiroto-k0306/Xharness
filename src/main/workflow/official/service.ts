@@ -40,6 +40,7 @@ import { CodexWorkflowAgent } from "./codex.js";
 import { connectionFailure } from "./connection-failure.js";
 import { officialSessionSummary } from "./session-result.js";
 import { executionEvidence } from "./execution-evidence.js";
+import { projectRecordPathValid } from "./project-record-path.js";
 import { communicationInput, communicationText } from "./communication.js";
 import { publicEventRecorder } from "./public-events.js";
 import {
@@ -295,7 +296,7 @@ export class OfficialWorkflowService {
         if (
           record.project &&
           (!record.sessionId ||
-            record.project.source !== record.cwd ||
+            !projectRecordPathValid(record) ||
             !isAbsolute(record.cwd) ||
             !/^[a-f0-9]{40,64}$/.test(record.project.sourceHead) ||
             !Array.isArray(record.project.files) ||

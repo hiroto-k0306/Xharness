@@ -108,6 +108,20 @@ it.each([false, true])(
     expect(final.reviews.at(-1)?.findings).toEqual([]);
     expect(final.calls.length).toBeLessThanOrEqual(9);
     if (!git) await expect(access(join(f.cwd, ".git"))).rejects.toThrow();
+    await f.service.close();
+    const restored = new OfficialWorkflowService({
+      home: join(f.cwd, "../home"),
+      fake: true,
+    });
+    services.push(restored);
+    const loaded = await restored.command({ action: "list" });
+    expect(loaded.records[0]?.record).toMatchObject({
+      id: final.id,
+      status: "completed",
+      cwd: prep.destination,
+    });
+    expect(loaded.records[0]?.resumeBlocked).toBeTruthy();
+    expect(loaded.activeId).toBeUndefined();
   },
 );
 it("stops missing tests and read-only work without planning or creating a workspace", async () => {

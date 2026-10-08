@@ -62,6 +62,21 @@ it("separates model evidence and escapes it without leaking diagnostic answer te
   expect(detail).not.toContain("<script>");
   expect(detail).toContain("structured response");
   expect(detail).toContain("保存上限");
+  record.calls[0]!.communication.events = [
+    {
+      actor: "llm",
+      kind: "response",
+      sequence: 1,
+      body: { text: "<script>public</script>", truncated: true },
+    },
+  ];
+  record.calls[0]!.communication.eventsOmitted = true;
+  const eventsHtml = officialWorkflowReport(record);
+  expect(eventsHtml).toContain("公開イベントの時系列");
+  expect(eventsHtml).toContain("LLM — 応答");
+  expect(eventsHtml).toContain("&lt;script&gt;public&lt;/script&gt;");
+  expect(eventsHtml).not.toContain("<script>");
+  expect(eventsHtml).toContain("一部のイベントを省略");
   const call = record.calls[0]!;
   if (!("diagnostics" in call) || !call.diagnostics) throw new Error("fixture");
   call.diagnostics.approvals = [

@@ -32,6 +32,6 @@ it("shows numbered inputs/results, omission and legacy gaps without executing HT
   expect(screen.getByText(/応答本文は未取得/)).toBeInTheDocument();
   expect(screen.getByText(/過去の内容は補完/)).toBeInTheDocument();
   expect(container.querySelector("script")).toBeNull();
-  expect(container.querySelectorAll("details")).toHaveLength(2);
+  expect(container.querySelectorAll("section > details")).toHaveLength(2);
   expect(container.querySelector("details")?.open).toBe(false);
 });

@@ -27,7 +27,7 @@
 # 役割のモデルが無効・廃止なら、その役割は理由を示して停止し、別モデルへ置き換えない。
 
 version: 1
-updatedAt: 2026-10-01
+updatedAt: 2026-10-08
 
 models:
 
@@ -72,8 +72,27 @@ models:
     capabilities: { serverCompaction: true, quotaWindow: seven_day_sonnet }
 
   - provider: claude
-    id: claude-haiku-4-5-20251001
+    id: claude-haiku-5-5
     alias: haiku
+    displayName: Haiku 5.5
+    enabled: true
+    verified: false  # 2026-10-07正式リリース。XHarnessの実通信は未確認
+    roles: [worker, utility]
+    strengths:
+      - 分類・質問回答・抽出・短いツール作業
+      - 型定義・単純なテスト追加・定型的な書き換え
+    avoid:
+      - 設計判断を含む作業
+      - 複数ファイルの整合性が必要な変更
+    efforts: { low: low, medium: medium, high: high, xhigh: xhigh, max: max }
+    defaultEffort: medium
+    quotaWeight: 1
+    contextTokens: 1000000  # 公式仕様。上限入力・サブスク実通信は未確認
+    notes: "公式IDに日付suffixなし。旧4.5のIDは別モデルとして保持。serverCompaction/quotaWindowは未確認のため設定しない"
+
+  - provider: claude
+    id: claude-haiku-4-5-20251001
+    alias: haiku-4.5
     displayName: Haiku 4.5
     enabled: true
     verified: true  # C2 / C3 の OAuth 疎通を確認。effort は送らない

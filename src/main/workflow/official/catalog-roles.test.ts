@@ -91,9 +91,22 @@ async function service(
 const claudeIds = [
   "claude-opus-5-5",
   "claude-sonnet-5-5",
+  "claude-haiku-5-5",
   "claude-haiku-4-5-20251001",
 ];
 const codexIds = ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"];
+
+it("refuses a new Haiku question when only Haiku 4.5 is offered", async () => {
+  const claude = agent("claude", ["claude-haiku-4-5-20251001"]);
+  const { instance } = await service(claude, agent("codex", codexIds));
+  const view = await instance.command({
+    action: "chat",
+    provider: "claude",
+    text: "質問",
+  });
+  expect(view.error).toMatch(/claude-haiku-5-5.*一覧にありません/);
+  expect(claude.ran).toEqual([]);
+});
 
 it("displays and sends the question model chosen by the catalog role", async () => {
   useCatalog((doc) => {

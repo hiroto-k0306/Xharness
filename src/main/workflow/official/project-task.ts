@@ -9,6 +9,8 @@ import {
 import { projectPreflight } from "./preflight.js";
 import { scopedPath } from "./workspace.js";
 import type { OfficialTaskScope } from "../../../shared/official-session.js";
+import { inspectProjectInventory } from "./project-inventory.js";
+import { projectVitest } from "./project-vitest.js";
 
 export const projectTest = (
   testFile: string,
@@ -62,7 +64,11 @@ export function validateProjectScope(scope: OfficialTaskScope) {
     throw new WorkflowFailure("project-configuration-is-not-task-scope");
   if (
     scope.testFile.startsWith("-") ||
-    !/^[A-Za-z0-9_./-]+\.(mjs|cjs|js)$/.test(scope.testFile) ||
+    !/^[A-Za-z0-9_./-]+\.(mjs|cjs|js|ts|tsx|mts|cts|jsx)$/.test(
+      scope.testFile,
+    ) ||
+    (/\.(ts|tsx|mts|cts|jsx)$/.test(scope.testFile) &&
+      !/[.-](test|spec)\.(ts|tsx|mts|cts|jsx)$/.test(scope.testFile)) ||
     scope.files.some((f) => normalizeFile(f) === normalizeFile(scope.testFile))
   )
     throw new WorkflowFailure("immutable-node-test-required");
@@ -100,12 +106,20 @@ export async function prepareProjectTask(
   const program = process.versions.electron
     ? await projectNode(cwd, process.env.PATH ?? "", worktreeSource)
     : process.execPath;
+  const vitest = await projectVitest(
+    await inspectProjectInventory(cwd, signal),
+    scope.testFile,
+    program,
+    signal,
+    worktreeSource,
+  );
   return {
     cwd: inspection.cwd,
     source: inspection.cwd,
     sourceHead: inspection.head,
     files: [...scope.files],
     testFile: scope.testFile,
-    test: projectTest(scope.testFile, program),
+    test: vitest?.test ?? projectTest(scope.testFile, program),
+    vitest,
   };
 }

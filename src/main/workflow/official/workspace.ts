@@ -87,6 +87,7 @@ export async function scopedPath(cwd: string, path: string) {
 export function gitWorkspace(
   cwd: string,
   redact: (s: string) => string,
+  dependencyIntegrity?: () => Promise<void>,
 ): WorkspacePort {
   const execute = (
     args: string[],
@@ -145,7 +146,13 @@ export function gitWorkspace(
   const changes = async (signal: AbortSignal) => {
     const tokens = (
       await git(
-        ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        [
+          "status",
+          "--porcelain=v1",
+          "-z",
+          "--untracked-files=all",
+          ...(dependencyIntegrity ? ["--", ".", ":(exclude)node_modules"] : []),
+        ],
         signal,
       )
     ).split("\0");
@@ -166,6 +173,7 @@ export function gitWorkspace(
   };
   return {
     async inspect(signal) {
+      await dependencyIntegrity?.();
       if (normalizeFile(await realpath(cwd)) !== normalizeFile(resolve(cwd)))
         throw new WorkflowFailure("linked-workspace");
       const root = (await git(["rev-parse", "--show-toplevel"], signal)).trim();
@@ -177,6 +185,7 @@ export function gitWorkspace(
       };
     },
     async commit(allowed, signal, as) {
+      await dependencyIntegrity?.();
       const files = await changes(signal);
       if (
         !files.length ||
@@ -251,6 +260,7 @@ export function gitWorkspace(
       return { root, gitDir, digests };
     },
     async snapshot(base, head, signal) {
+      await dependencyIntegrity?.();
       if (
         ![base, head].every((h) => /^[a-f0-9]{40,64}$/.test(h)) ||
         (await hash(signal)) !== head ||
@@ -293,7 +303,12 @@ export function gitWorkspace(
         throw new WorkflowFailure("unsafe-review-diff");
       return { base, head, files, diff };
     },
-    test: (spec, signal) => runAcceptance(cwd, spec, signal, redact),
+    test: async (spec, signal) => {
+      await dependencyIntegrity?.();
+      const result = await runAcceptance(cwd, spec, signal, redact);
+      await dependencyIntegrity?.();
+      return result;
+    },
   };
 }
 export function runAcceptance(

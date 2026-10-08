@@ -96,18 +96,38 @@ export async function inspectProjectInventory(
     }
   }
   await walk(root, "");
+  const manifest = files.find((f) => f.path === "package.json");
+  let vitest = false;
+  if (manifest) {
+    const data = await readFile(join(root, "package.json"));
+    if (sha(data) !== manifest.hash)
+      throw new WorkflowFailure("project-changed-after-inspection");
+    try {
+      const pkg = JSON.parse(data.toString("utf8"));
+      vitest =
+        typeof (pkg.devDependencies?.vitest ?? pkg.dependencies?.vitest) ===
+        "string";
+    } catch {
+      /* no inferred runner for malformed metadata */
+    }
+  }
   const tests = files
     .filter((f) => !/(^|\/)(fixtures?|helpers?|support)\//i.test(f.path))
     .filter(
       (f) =>
-        /[.-](test|spec)\.(mjs|cjs|js)$/.test(f.path) ||
+        (vitest
+          ? /[.-](test|spec)\.(mjs|cjs|js|ts|tsx|mts|cts|jsx)$/
+          : /[.-](test|spec)\.(mjs|cjs|js)$/
+        ).test(f.path) ||
         (/(^|\/)(tests?|__tests__)\//.test(f.path) &&
           /(?:from\s*["']node:(?:test|assert)|require\s*\(\s*["']node:(?:test|assert))/.test(
             f.sample,
           )),
     )
     .map((f) => f.path)
-    .filter((p) => /^[A-Za-z0-9_./-]+\.(mjs|cjs|js)$/.test(p));
+    .filter((p) =>
+      /^[A-Za-z0-9_./-]+\.(mjs|cjs|js|ts|tsx|mts|cts|jsx)$/.test(p),
+    );
   const fingerprint = sha(
     Buffer.from(
       JSON.stringify(files.map(({ path, hash }) => ({ path, hash }))),

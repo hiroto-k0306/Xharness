@@ -21,6 +21,8 @@ import {
   workflowGitPolicyArgs,
 } from "./workspace.js";
 import { redact } from "../../core/redact.js";
+import { projectVitest } from "./project-vitest.js";
+import { projectPreflight } from "./preflight.js";
 
 const exec = promisify(execFile);
 export type WorkspacePreparation = {
@@ -84,36 +86,53 @@ export async function automaticWorkspace(
   const snapshot = isGit
     ? await prepareProjectTask(source, scope, signal, worktreeSource)
     : undefined;
-  const preparation: WorkspacePreparation = {
-    kind: worktreeSource
-      ? "reuse-worktree"
-      : isGit
-        ? "git-worktree"
-        : "local-copy",
-    destination: worktreeSource
-      ? source
-      : isGit
-        ? join(dirname(source), "XHarness-workspaces", basename(source), id)
-        : join(source, ".xharness-workspaces", id),
-    fingerprint: inventory.fingerprint,
-  };
-  const head = snapshot?.sourceHead ?? inventory.fingerprint;
   const program =
     snapshot?.test.program ??
     (process.versions.electron
       ? await projectNode(source, process.env.PATH ?? "")
       : process.execPath);
+  const vitest =
+    snapshot?.vitest ??
+    (await projectVitest(inventory, scope.testFile, program, signal));
+  if (
+    vitest &&
+    scope.files.some((f) =>
+      vitest.setup.settings.some(
+        (s) => s.path.toLowerCase() === f.toLowerCase(),
+      ),
+    )
+  )
+    throw new WorkflowFailure("immutable-test-settings-required");
+  const preparation: WorkspacePreparation = {
+    kind:
+      worktreeSource && !vitest
+        ? "reuse-worktree"
+        : isGit
+          ? "git-worktree"
+          : "local-copy",
+    destination:
+      worktreeSource && !vitest
+        ? source
+        : isGit
+          ? join(dirname(source), "XHarness-workspaces", basename(source), id)
+          : join(source, ".xharness-workspaces", id),
+    fingerprint: inventory.fingerprint,
+  };
+  const head = snapshot?.sourceHead ?? inventory.fingerprint;
   const check = async (operationSignal = signal) => {
     await assertInventoryUnchanged(inventory, operationSignal);
+    await vitest?.check();
     if (snapshot) {
-      const current = await prepareProjectTask(
+      const current = await projectPreflight(
         source,
-        scope,
+        [...scope.files, scope.testFile],
         operationSignal,
         worktreeSource,
       );
-      if (current.sourceHead !== head)
+      if (current.head !== head)
         throw new WorkflowFailure("project-head-changed");
+      if (!current.inspectionPassed)
+        throw new WorkflowFailure("project-inspection-changed");
     }
   };
   const readonly: WorkspacePort = {
@@ -137,7 +156,8 @@ export async function automaticWorkspace(
     head,
     preparation,
     workspace: readonly,
-    test: projectTest(scope.testFile, program),
+    test: vitest?.test ?? projectTest(scope.testFile, program),
+    testSetup: vitest?.setup,
     async prepare(runtimeSignal = signal) {
       const operationSignal = AbortSignal.any([signal, runtimeSignal]);
       if (started)
@@ -202,7 +222,8 @@ export async function automaticWorkspace(
         }
       }
       await check(operationSignal);
-      const workspace = gitWorkspace(cwd, redact),
+      const integrity = await vitest?.prepare(cwd, operationSignal);
+      const workspace = gitWorkspace(cwd, redact, integrity),
         initial = await workspace.inspect(operationSignal);
       if (!initial.clean || (isGit && initial.head !== head))
         throw new WorkflowFailure("prepared-workspace-mismatch");

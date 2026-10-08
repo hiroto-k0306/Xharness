@@ -1,7 +1,7 @@
 /** Confirmed scope is required before planning; inferred intent never grants write permission. */
 export interface OfficialTaskScope {
   files: string[];
-  /** One existing, immutable Node test file. No shell, installation or generated tests. */
+  /** One existing immutable Node/Vitest test. No shell, installation or generated tests. */
   testFile: string;
 }
 export function parseOfficialTaskScope(

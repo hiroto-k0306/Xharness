@@ -72,6 +72,7 @@ export interface WorkflowRecord {
     files: string[];
     testFile: string;
     testProgram?: string;
+    testSetup?: import("./project-vitest.js").VitestSetup;
     preparation?: import("./automatic-workspace.js").WorkspacePreparation;
   };
   version: 1;

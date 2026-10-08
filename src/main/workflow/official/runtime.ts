@@ -69,6 +69,7 @@ export interface WorkflowRecord {
     files: string[];
     testFile: string;
     testProgram?: string;
+    preparation?: import("./automatic-workspace.js").WorkspacePreparation;
   };
   version: 1;
   simulated: boolean;
@@ -146,6 +147,14 @@ export interface WorkflowRecord {
 export interface WorkflowOptions {
   sessionId?: string;
   project?: WorkflowRecord["project"];
+  /** Carries the bounded classifier/scope calls into the final workflow evidence. */
+  preparationCalls?: WorkflowRecord["calls"];
+  /** Called only after durable plan approval; never replayed on resume. */
+  prepareWorkspace?: () => Promise<{
+    cwd: string;
+    head: string;
+    workspace: WorkspacePort;
+  }>;
   diagnosticText?: boolean;
   startedAt?: string;
   resume?: WorkflowRecord;
@@ -242,7 +251,7 @@ export async function runOfficialSingleTask(
         base: initial.head,
         head: initial.head,
         correctionRounds: 0,
-        calls: [],
+        calls: structuredClone(options.preparationCalls ?? []),
         tools: [],
         checks: [],
         reviews: [],
@@ -622,6 +631,22 @@ export async function runOfficialSingleTask(
       signal.throwIfAborted();
       record.approvedDigest = planDigest;
       record.next = "implement";
+      await save();
+    }
+    if (options.prepareWorkspace) {
+      if (options.resume)
+        throw new WorkflowFailure("workspace-preparation-resume-refused");
+      record.pendingEffect = { kind: "worktree", id: randomUUID() };
+      await save();
+      signal.throwIfAborted();
+      const prepared = await options.prepareWorkspace();
+      signal.throwIfAborted();
+      options.workspace = prepared.workspace;
+      options.cwd = prepared.cwd;
+      record.cwd = prepared.cwd;
+      record.base = prepared.head;
+      record.head = prepared.head;
+      delete record.pendingEffect;
       await save();
     }
     while (true) {

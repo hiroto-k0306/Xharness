@@ -354,7 +354,8 @@ export function OfficialWorkflowPanel({
                 task {r.id} / 次の段階 {r.next} / 再開 {r.resumed ?? 0}回
               </small>
               <p>
-                base {r.base.slice(0, 12)} → head {r.head.slice(0, 12)}
+                base {/^0+$/.test(r.base) ? "未測定" : r.base.slice(0, 12)} →
+                head {/^0+$/.test(r.head) ? "未測定" : r.head.slice(0, 12)}
               </p>
               {r.plan && (
                 <>

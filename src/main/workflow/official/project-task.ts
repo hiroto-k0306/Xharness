@@ -92,7 +92,7 @@ export async function prepareProjectTask(
   );
   if (!inspection.inspectionPassed || !inspection.head)
     throw new Error(
-      `作業の準備を停止しました：${inspection.blockers.join(", ")}。既存の変更を保全し、送信していません。`,
+      `作業の準備を停止しました：${inspection.blockers.join(", ")}。既存の変更を保全し、計画・実装を開始していません。`,
     );
   const test = await lstat(await scopedPath(cwd, scope.testFile));
   if (!test.isFile() || test.nlink !== 1)

@@ -62,6 +62,8 @@ export const approvalDigest = (
     : digest(record.plan);
 export interface WorkflowRecord {
   sessionId?: string;
+  /** Original session folder; conversation cwd is an isolated execution directory. */
+  sourceCwd?: string;
   inputIntent?: "question" | "work";
   suggestedScope?: import("../../../shared/official-session.js").OfficialTaskScope;
   project?: {

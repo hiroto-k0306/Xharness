@@ -10,6 +10,13 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { createSyntheticWorkspace } from "./fixtures.js";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import {
+  workflowGitEnvironment,
+  workflowGitPolicyArgs,
+  gitWorkspace,
+} from "./workspace.js";
 import { projectPreflight } from "./preflight.js";
 const roots: string[] = [];
 afterEach(async () => {
@@ -21,6 +28,48 @@ async function fixture() {
   roots.push(root);
   return root;
 }
+it("accepts a clean tracked built-in attributes file through inspection, commit and diff", async () => {
+  const root = await fixture(),
+    signal = new AbortController().signal;
+  await writeFile(
+    join(root, ".gitattributes"),
+    "* text=auto eol=lf\n*.svg -text\n*.png binary\n",
+  );
+  const run = (args: string[]) =>
+    promisify(execFile)(
+      "git",
+      [...workflowGitPolicyArgs(), "-c", `safe.directory=${root}`, ...args],
+      { cwd: root, windowsHide: true, env: workflowGitEnvironment() },
+    );
+  await run(["add", "--", ".gitattributes"]);
+  await run([
+    "-c",
+    "user.name=fixture",
+    "-c",
+    "user.email=fixture@local",
+    "commit",
+    "-qm",
+    "fixture: safe attributes",
+  ]);
+  const before = await readFile(join(root, ".gitattributes"));
+  expect(await projectPreflight(root, ["add.mjs"], signal)).toMatchObject({
+    inspectionPassed: true,
+    clean: true,
+  });
+  const port = gitWorkspace(root, (s) => s),
+    base = await port.inspect(signal);
+  await writeFile(join(root, "add.mjs"), "export const add=(a,b)=>a+b;\n");
+  const head = await port.commit(["add.mjs"], signal);
+  expect((await port.snapshot(base.head, head, signal)).files).toEqual([
+    "add.mjs",
+  ]);
+  expect(await readFile(join(root, ".gitattributes"))).toEqual(before);
+  await mkdir(join(root, "nested"));
+  await writeFile(join(root, "nested/.gitattributes"), "* diff=driver\n");
+  await expect(port.inspect(signal)).rejects.toThrow(
+    "git-attributes-not-supported",
+  );
+});
 it("does not run configured clean filters or refresh the index during inspection", async () => {
   const root = await fixture(),
     config = join(root, ".git/config");
@@ -58,6 +107,33 @@ it("recognizes normalized conditional-include keys without following their targe
   );
   expect(result.clean).toBeNull();
   expect(result.blockers).toContain("local-git-execution-configuration");
+});
+
+it("allows built-in attributes and preserves unknown cleanliness for unsafe attributes", async () => {
+  const root = await fixture();
+  await writeFile(
+    join(root, ".gitattributes"),
+    "* text=auto eol=lf\n*.png binary\n",
+  );
+  // Untracked attributes are safe to interpret; their uncommitted presence still stops execution.
+  const measured = await projectPreflight(
+    root,
+    ["add.mjs"],
+    new AbortController().signal,
+  );
+  expect(measured.clean).toBe(false);
+  expect(measured.blockers).not.toContain(
+    "project-configuration:.gitattributes",
+  );
+  expect(measured.blockers).toContain("uncommitted-changes-preserved");
+  await writeFile(join(root, ".gitattributes"), "* filter=unknown\n");
+  const rejected = await projectPreflight(
+    root,
+    ["add.mjs"],
+    new AbortController().signal,
+  );
+  expect(rejected.clean).toBeNull();
+  expect(rejected.blockers).toContain("project-configuration:.gitattributes");
 });
 it("inspects a general project without enabling native DAG or changing HEAD/files", async () => {
   const root = await fixture(),

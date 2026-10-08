@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { spawnOwnedProcess } from "./owned-process.js";
 import { lstat, realpath, readFile } from "node:fs/promises";
 import { resolve, relative, isAbsolute, dirname } from "node:path";
+import { assertSafeGitAttributes } from "./git-attributes.js";
 import {
   relativeFile,
   normalizeFile,
@@ -127,6 +128,18 @@ export function gitWorkspace(
     );
     if (unsafe.trim())
       throw new WorkflowFailure("local-git-execution-configuration");
+    if (["status", "add", "diff", "check-attr"].includes(args[0]!)) {
+      const [tracked, common] = await Promise.all([
+        execute(["ls-files", "-z"], signal),
+        execute(["rev-parse", "--git-common-dir"], signal),
+      ]);
+      await assertSafeGitAttributes(
+        cwd,
+        tracked.split("\0"),
+        common.trim(),
+        signal,
+      );
+    }
     return execute(args, signal);
   };
   const changes = async (signal: AbortSignal) => {

@@ -54,6 +54,26 @@ const result = {
   workflowId: "offline-workflow",
   status: "completed",
 };
+it("official model selection uses the enabled catalog without invoking legacy providers", async () => {
+  const { c, id, official, oldStream } = await setup(async () => result);
+  expect(
+    await c.handle({
+      type: "set_model",
+      sessionId: id,
+      model: "gpt-6-luna",
+      effort: "low",
+    }),
+  ).toMatchObject({ ok: true });
+  expect((await c.state()).sessions.find((s) => s.id === id)).toMatchObject({
+    model: "gpt-6-luna",
+    effort: "low",
+  });
+  expect(
+    await c.handle({ type: "set_model", sessionId: id, model: "gpt-unknown" }),
+  ).toMatchObject({ ok: false, error: "Unknown model" });
+  expect(official).not.toHaveBeenCalled();
+  expect(oldStream).not.toHaveBeenCalled();
+});
 it("ordinary questions finish once, retain only this session's history and never use HTTP", async () => {
   const { c, id, home, official, oldStream, events } = await setup(
     async () => result,

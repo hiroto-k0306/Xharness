@@ -1,6 +1,7 @@
 # DESIGN.md §17.2。exe の作成は手元(Windows)で行う: docs/phase2-local-check.md
 appId: local.xharness.app
 productName: XHarness
+beforePack: ./scripts/prepare-sdk-runtime.mjs
 copyright: XHarness
 directories:
   output: dist
@@ -13,6 +14,9 @@ files:
   - "!**/*.map"
 # --fake 用の fixtures(実レスポンスの録画。秘密値は除去済み)を exe に同梱する
 extraResources:
+  - from: .out/claude-sdk-seed/node_modules
+    to: claude-sdk-seed/node_modules
+    filter: ["**/*"]
   - from: test/fixtures/claude
     to: fixtures
     filter:

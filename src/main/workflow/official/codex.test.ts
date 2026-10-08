@@ -264,6 +264,8 @@ function commandFailureServer(
   delivery: "item" | "final" | "both",
   source: string | undefined = "unifiedExecStartup",
   before?: (mock: ReturnType<typeof fakeServer>) => void,
+  overrides: Record<string, unknown> = {},
+  finalStatus: "completed" | "failed" = "completed",
 ) {
   const mock = fakeServer(),
     original = mock.server.request;
@@ -285,7 +287,9 @@ function commandFailureServer(
         exitCode: -1,
         durationMs: 0,
         command: "never-persist-command",
-        aggregatedOutput: "never-persist-token never-persist-thinking",
+        aggregatedOutput:
+          "Failed to create unified exec process: helper_unknown_error: never-persist-token never-persist-thinking",
+        ...overrides,
       };
       if (delivery !== "final") {
         mock.emit("item/completed", { ...binding, item });
@@ -300,7 +304,7 @@ function commandFailureServer(
         ...binding,
         turn: {
           id: binding.turnId,
-          status: "completed",
+          status: finalStatus,
           items: [...(delivery === "item" ? [] : [item]), answer],
         },
       });
@@ -334,6 +338,82 @@ it.each(["item", "final", "both"] as const)(
     expect(JSON.stringify(result)).not.toContain("never-persist");
   },
 );
+it.each([
+  {
+    aggregatedOutput:
+      "node : CommandNotFoundException / ObjectNotFound: (node:String)",
+    exitCode: 1,
+    durationMs: 2891,
+  },
+  { aggregatedOutput: "AssertionError: test failed", exitCode: 1 },
+  { aggregatedOutput: "unknown error", exitCode: -1, durationMs: 0 },
+  { aggregatedOutput: undefined, exitCode: -1, durationMs: 0 },
+  {
+    aggregatedOutput:
+      "test prints: Failed to create unified exec process: fixture text",
+    exitCode: 1,
+  },
+])(
+  "keeps ordinary command failures available to the native agent (%j)",
+  async (item) => {
+    const mock = commandFailureServer(
+      "both",
+      "unifiedExecStartup",
+      undefined,
+      item,
+    );
+    const result = await new CodexWorkflowAgent(() => mock.server).run(
+      request("implement"),
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("completed");
+    expect(result.error).toBeUndefined();
+    expect(result.diagnostics?.stops).toBeUndefined();
+    expect(result.diagnostics?.commandRuns).toHaveLength(1);
+    expect(result.diagnostics?.commandRuns?.[0]?.status).toBe("failed");
+    expect(mock.calls.filter(([m]) => m === "turn/start")).toHaveLength(1);
+    expect(mock.calls.some(([m]) => m === "turn/interrupt")).toBe(false);
+  },
+);
+it("recognizes explicit startup failure from output deltas when aggregated output is missing", async () => {
+  const mock = commandFailureServer(
+    "both",
+    "unifiedExecStartup",
+    (server) =>
+      server.emit("item/commandExecution/outputDelta", {
+        threadId: "thread-fixture",
+        turnId: "turn-fixture",
+        itemId: "startup-fixture",
+        delta: "Failed to create unified exec process: helper_unknown_error",
+      }),
+    { aggregatedOutput: undefined },
+  );
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    request("implement"),
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("failed");
+  expect(result.error).toContain("native-exec-startup-failed");
+  expect(result.diagnostics?.commandRuns).toHaveLength(1);
+});
+it("preserves a failed terminal turn after an ordinary command failure", async () => {
+  const mock = commandFailureServer(
+    "both",
+    "unifiedExecStartup",
+    undefined,
+    { aggregatedOutput: "CommandNotFoundException: node", exitCode: 1 },
+    "failed",
+  );
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    request("implement"),
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("failed");
+  expect(result.error).not.toContain("native-exec-startup-failed");
+  expect(result.diagnostics?.termination).toBe("failed");
+  expect(result.diagnostics?.commandRuns?.[0]?.status).toBe("failed");
+  expect(mock.calls.some(([m]) => m === "turn/interrupt")).toBe(false);
+});
 it.each(["agent", "unknown", undefined])(
   "does not infer a startup failure from exit -1 or duration zero alone (%s)",
   async (source) => {

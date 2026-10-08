@@ -348,6 +348,13 @@ export class CodexWorkflowAgent implements OfficialAgent {
         item.type === "commandExecution" &&
         status === "failed" &&
         item.source === "unifiedExecStartup" &&
+        // This source also labels successfully launched commands. Only an
+        // explicit process-creation error identifies a native startup failure.
+        /^\s*Failed to create unified exec process:/.test(
+          typeof item.aggregatedOutput === "string"
+            ? item.aggregatedOutput
+            : (outputs.get(item.id) ?? ""),
+        ) &&
         !controller.signal.aborted
       ) {
         stopReason ??=
@@ -391,7 +398,6 @@ export class CodexWorkflowAgent implements OfficialAgent {
       }
       if (
         method === "item/commandExecution/outputDelta" &&
-        request.diagnosticText &&
         id(params.itemId) &&
         typeof params.delta === "string"
       )

@@ -1,8 +1,36 @@
 import type { WorkflowRecord } from "./runtime.js";
 import { executionEvidence } from "./execution-evidence.js";
 
+/** Fixed explanations; never return the SDK's raw error text. */
+export function officialFailureMessage(record: WorkflowRecord) {
+  const messages: Record<string, string> = {
+    "claude-max-turns-exceeded":
+      "Claude SDKの内部往復回数の上限に達したため停止しました。自動再送していません。",
+    "claude-sdk-budget-exceeded":
+      "Claude SDKの予算上限に達したため停止しました。追加課金へ切り替えていません。",
+    "claude-structured-output-retries-exceeded":
+      "Claude SDKが構造化結果を生成できず、生成の試行上限に達しました。自動再送していません。",
+    "claude-sdk-execution-failed":
+      "Claude SDKが実行エラーで終了しました。詳細本文は保存していません。",
+    "claude-sdk-result-failed":
+      "Claude SDKが失敗結果を返しました。詳細本文は保存していません。",
+  };
+  const last = record.calls.at(-1);
+  const legacy =
+    record.error === "failed" &&
+    last &&
+    last.status !== "running" &&
+    last.diagnostics?.termination === "error_max_turns";
+  return (
+    messages[legacy ? "claude-max-turns-exceeded" : (record.error ?? "")] ??
+    record.error
+  );
+}
+
 /** The exact public answer persisted in the ordinary session, never hidden model text. */
 export function officialSessionSummary(record: WorkflowRecord, task: boolean) {
+  // Local display copy only; existing persisted history is never rewritten.
+  record = { ...record, error: officialFailureMessage(record) };
   const preparation = record.project?.preparation;
   const evidence = executionEvidence(record);
   const head = record.nativeWork

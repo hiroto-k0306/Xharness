@@ -9,6 +9,7 @@ import { OfficialCommunication } from "./OfficialCommunication.js";
 import { OfficialPlanAssignments } from "./OfficialPlanAssignments.js";
 import { ClaudeSdkStatus } from "./ClaudeSdkStatus.js";
 import { CodexRuntimeSettings } from "./CodexRuntimeSettings.js";
+import { officialFailureMessage } from "../../main/workflow/official/session-result.js";
 export function OfficialWorkflowPanel({
   mainModel,
   mainEffort,
@@ -569,7 +570,9 @@ export function OfficialWorkflowPanel({
                   )}
                 </pre>
               </details>
-              {r.error && <p role="status">停止理由：{r.error}</p>}
+              {r.error && (
+                <p role="status">停止理由：{officialFailureMessage(r)}</p>
+              )}
             </article>
           ))}
           {view?.activeId &&

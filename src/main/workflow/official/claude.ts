@@ -212,6 +212,7 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
       nativeSessionId: string | undefined,
       evidenceFailed = false,
       boundaryFailure: string | undefined,
+      sdkFailure: string | undefined,
       quota: QuotaSnapshot | undefined;
     const observedModels = new Set<string>(),
       partial = new Map<string, unknown>();
@@ -374,7 +375,9 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
       output?: unknown,
     ): AgentResult => ({
       status: boundaryFailure ? "failed" : status,
-      ...(boundaryFailure ? { error: boundaryFailure } : {}),
+      ...(boundaryFailure || sdkFailure
+        ? { error: boundaryFailure ?? sdkFailure }
+        : {}),
       dispatched,
       output,
       nativeSessionId,
@@ -387,6 +390,9 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
     try {
       const options: Options = {
         ...baseOptions(request.cwd, controller),
+        // Normal exploration keeps the phase timeout, without the fixture's
+        // eight internal SDK turns. Never automatically retry a query.
+        maxTurns: request.nativeWork ? undefined : 8,
         model: request.model.model,
         effort: request.effort ?? undefined,
         systemPrompt: {
@@ -599,6 +605,19 @@ export class ClaudeWorkflowAgent implements OfficialAgent {
           usage = sdkUsage(event) ?? usage;
           for (const m of Object.keys(object(event.modelUsage)))
             if (modelName(m)) observedModels.add(m);
+          if (event.subtype !== "success" || event.is_error === true) {
+            const failures: Record<string, string> = {
+              error_max_turns: "claude-max-turns-exceeded",
+              error_max_budget_usd: "claude-sdk-budget-exceeded",
+              error_max_structured_output_retries:
+                "claude-structured-output-retries-exceeded",
+              error_during_execution: "claude-sdk-execution-failed",
+            };
+            sdkFailure =
+              (typeof event.subtype === "string"
+                ? failures[event.subtype]
+                : undefined) ?? "claude-sdk-result-failed";
+          }
           return result(
             event.subtype === "success" && event.is_error !== true
               ? "completed"

@@ -20,6 +20,50 @@ import { normalizeTokens } from "../../providers/token-usage.js";
 import { communicationInput } from "./communication.js";
 import { publicEventRecorder } from "./public-events.js";
 const homes: string[] = [];
+it.each(["plan", "implement", "review"] as const)(
+  "native %s does not inherit the fixture's eight-turn cap",
+  async (phase) => {
+    const mock = mockStart();
+    const outcome = await new ClaudeWorkflowAgent(mock.start).run(
+      { ...request(await cwd(), phase), nativeWork: true },
+      new AbortController().signal,
+    );
+    expect(outcome.status).toBe("completed");
+    expect(mock.options().maxTurns).toBeUndefined();
+    expect(mock.accountInfo).toHaveBeenCalledTimes(1);
+  },
+);
+it.each([
+  ["error_max_turns", "claude-max-turns-exceeded"],
+  ["error_max_budget_usd", "claude-sdk-budget-exceeded"],
+  [
+    "error_max_structured_output_retries",
+    "claude-structured-output-retries-exceeded",
+  ],
+  ["error_during_execution", "claude-sdk-execution-failed"],
+])(
+  "preserves a fixed failure code from SDK result %s without raw errors or retries",
+  async (subtype, code) => {
+    const mock = mockStart(undefined, [
+      {
+        type: "result",
+        subtype,
+        is_error: true,
+        errors: ["Bearer PRIVATE_TOKEN raw failure"],
+      },
+    ] as unknown as SDKMessage[]);
+    const outcome = await new ClaudeWorkflowAgent(mock.start).run(
+      request(await cwd()),
+      new AbortController().signal,
+    );
+    expect(outcome.status).toBe("failed");
+    expect(outcome.error).toBe(code);
+    expect(outcome.diagnostics?.termination).toBe(subtype);
+    expect(JSON.stringify(outcome)).not.toContain("PRIVATE_TOKEN");
+    expect(mock.options().maxTurns).toBe(8);
+    expect(mock.accountInfo).toHaveBeenCalledTimes(1);
+  },
+);
 it.each(["allow", "deny", "cancel", "changed"])(
   "native tools explore beyond file hints and ask once for a command: %s",
   async (mode) => {

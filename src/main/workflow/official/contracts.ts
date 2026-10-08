@@ -74,10 +74,24 @@ export const reviewContract = z
   .strict();
 export type OfficialReview = z.infer<typeof reviewContract>;
 export const implementationContract = z.object({ summary: text }).strict();
+export const projectScopeContract = z
+  .object({
+    summary: text,
+    files: z.array(relativeFile).min(1).max(29),
+    testFile: relativeFile,
+  })
+  .strict();
+export const projectScopeSchema = (tests: string[]) =>
+  z.toJSONSchema(
+    projectScopeContract.extend({
+      testFile: z.enum(tests as [string, ...string[]]),
+    }),
+    { target: "draft-7" },
+  );
 export const inputIntentContract = z
   .object({
     summary: text.describe(
-      "For question: the direct answer shown verbatim to the user, not a description of the question. Follow the user's requested language and answer format. For work: ask for target files and an existing Node test; do not claim execution.",
+      "For question: the direct answer shown verbatim to the user, not a description of the question. Follow the user's requested language and answer format. For work: summarize the requested change. The harness proposes scope before plan approval; do not claim execution or ask for manual scope entry.",
     ),
     intent: z.enum(["question", "work"]),
   })

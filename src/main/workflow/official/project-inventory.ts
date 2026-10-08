@@ -97,13 +97,17 @@ export async function inspectProjectInventory(
   }
   await walk(root, "");
   const tests = files
-    .map((f) => f.path)
+    .filter((f) => !/(^|\/)(fixtures?|helpers?|support)\//i.test(f.path))
     .filter(
-      (p) =>
-        /^[A-Za-z0-9_./-]+\.(mjs|cjs|js)$/.test(p) &&
-        (/(^|\/)(tests?|__tests__)\//.test(p) ||
-          /[.-](test|spec)\.(mjs|cjs|js)$/.test(p)),
-    );
+      (f) =>
+        /[.-](test|spec)\.(mjs|cjs|js)$/.test(f.path) ||
+        (/(^|\/)(tests?|__tests__)\//.test(f.path) &&
+          /(?:from\s*["']node:(?:test|assert)|require\s*\(\s*["']node:(?:test|assert))/.test(
+            f.sample,
+          )),
+    )
+    .map((f) => f.path)
+    .filter((p) => /^[A-Za-z0-9_./-]+\.(mjs|cjs|js)$/.test(p));
   const fingerprint = sha(
     Buffer.from(
       JSON.stringify(files.map(({ path, hash }) => ({ path, hash }))),

@@ -83,3 +83,25 @@ it("rejects native configuration and cancellation", async () => {
     inspectProjectInventory(other, cancelled.signal),
   ).rejects.toThrow();
 });
+
+it("does not propose fixture servers or helpers as independent tests", async () => {
+  const root = await fixture();
+  await mkdir(join(root, "test/fixtures/mcp"), { recursive: true });
+  await writeFile(
+    join(root, "test/fixtures/mcp/server.mjs"),
+    "process.stdin.resume();\n",
+  );
+  await writeFile(join(root, "test/server.mjs"), "process.stdin.resume();\n");
+  await writeFile(
+    join(root, "test/arithmetic.mjs"),
+    "import assert from 'node:assert/strict'; assert.equal(1+1,2);\n",
+  );
+  const inventory = await inspectProjectInventory(
+    root,
+    new AbortController().signal,
+  );
+  expect(inventory.tests).toEqual([
+    "acceptance.test.mjs",
+    "test/arithmetic.mjs",
+  ]);
+});

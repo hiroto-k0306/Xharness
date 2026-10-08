@@ -20,6 +20,75 @@ import { normalizeTokens } from "../../providers/token-usage.js";
 import { communicationInput } from "./communication.js";
 import { publicEventRecorder } from "./public-events.js";
 const homes: string[] = [];
+it.each(["allow", "deny", "cancel", "changed"])(
+  "native tools explore beyond file hints and ask once for a command: %s",
+  async (mode) => {
+    const root = await cwd(),
+      controller = new AbortController();
+    const command: Record<string, unknown> = {
+      command: "node --test; pnpm lint",
+    };
+    const approve = vi.fn(async () => {
+      if (mode === "cancel") controller.abort();
+      if (mode === "changed") command.command = "Get-Content .env";
+      return mode !== "deny";
+    });
+    const behaviors: string[] = [];
+    const mock = mockStart(async (options) => {
+      expect(options.tools).toContain("Bash");
+      const edit = await options.canUseTool!(
+        "Write",
+        { file_path: join(root, "new.ts") },
+        {
+          toolUseID: "new-file",
+          requestId: "new-file",
+          signal: controller.signal,
+        },
+      );
+      behaviors.push(edit?.behavior ?? "missing");
+      const notebook = await options.canUseTool!(
+        "NotebookEdit",
+        { notebook_path: join(root, "new.ipynb") },
+        {
+          toolUseID: "notebook",
+          requestId: "notebook",
+          signal: controller.signal,
+        },
+      );
+      behaviors.push(notebook?.behavior ?? "missing");
+      const result = await options.canUseTool!("Bash", command, {
+        toolUseID: "cmd",
+        requestId: "cmd",
+        signal: controller.signal,
+      });
+      behaviors.push(result?.behavior ?? "missing");
+    });
+    const outcome = await new ClaudeWorkflowAgent(mock.start).run(
+      {
+        ...request(root),
+        requestId: "11111111-1111-4111-8111-111111111111",
+        nativeWork: true,
+        approve,
+      },
+      controller.signal,
+    );
+    expect(approve).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() =>
+      expect(behaviors).toEqual([
+        "allow",
+        "allow",
+        mode === "allow" ? "allow" : "deny",
+      ]),
+    );
+    expect(outcome.status).toBe(
+      mode === "allow"
+        ? "completed"
+        : mode === "cancel"
+          ? "cancelled"
+          : "failed",
+    );
+  },
+);
 it("records sanitized tool results from the SDK hook even when no user message is forwarded", async () => {
   const c = communicationInput({}),
     record = publicEventRecorder(c);

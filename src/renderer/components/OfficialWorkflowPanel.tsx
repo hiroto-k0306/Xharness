@@ -387,11 +387,40 @@ export function OfficialWorkflowPanel({
                         </p>
                       )}
                       <p>
-                        独立テスト：node --test {r.project.testFile}
+                        独立テスト：
+                        {r.project.testSetup?.command ??
+                          `node --test ${r.project.testFile}`}
                         （既存テストは変更しません）。
                       </p>
+                      {r.project.testSetup && (
+                        <p>
+                          Vitest {r.project.testSetup.version} / 設定：
+                          {r.project.testSetup.config ?? "既定"}
+                          。設定・依存の指紋を承認に固定します。既存依存{" "}
+                          {r.project.testSetup.dependencies.packages.length}
+                          パッケージ・{r.project.testSetup.dependencies.files}
+                          ファイル（
+                          {Math.ceil(
+                            r.project.testSetup.dependencies.bytes / 1048576,
+                          )}{" "}
+                          MiB）を作業領域にコピーし、元のnode_modulesは共有しません。設定ファイル：
+                          {r.project.testSetup.settings
+                            .map((f) => f.path)
+                            .join(", ")}
+                        </p>
+                      )}
+                      {r.project.testSetup && (
+                        <details>
+                          <summary>コピーする依存のバージョン</summary>
+                          <p>
+                            {r.project.testSetup.dependencies.packages
+                              .map((p) => `${p.name}@${p.version}`)
+                              .join(", ")}
+                          </p>
+                        </details>
+                      )}
                       <p>
-                        承認すると表示した作業領域で実装・ローカルNodeテスト・別会社レビューを行います。テストコードのworkspace外の副作用をOSで完全隔離する機能ではありません。依存のインストールや任意shellは実行しません。
+                        承認すると表示した作業領域で実装・ローカルテスト・別会社レビューを行います。設定・plugin・setup・テストコードのworkspace外の副作用をOSで完全隔離する機能ではありません。依存のインストールや任意shellは実行しません。
                       </p>
                       <p>
                         実行するNodeの実体：

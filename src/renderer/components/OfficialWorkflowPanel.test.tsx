@@ -17,83 +17,110 @@ const QUESTION_MODELS = {
   codex: "codex-question-y",
 };
 afterEach(() => vi.unstubAllGlobals());
-it("shows the existing working directory, host Node and test side-effect limits before a bounded task approval, with no copy claim", async () => {
-  const record: WorkflowRecord = {
-    version: 1,
-    id: "normal-project",
-    sessionId: "session",
-    simulated: true,
-    goal: "fixture",
-    cwd: "C:/chosen-project",
-    project: {
-      source: "C:/chosen-project",
-      sourceHead: "a".repeat(40),
-      files: ["add.mjs"],
-      testFile: "acceptance.test.mjs",
-      testProgram: "C:/host/node.exe",
-    },
-    startedAt: "2026-10-07T00:00:00Z",
-    status: "approval",
-    next: "approval",
-    base: "a".repeat(40),
-    head: "a".repeat(40),
-    correctionRounds: 0,
-    calls: [],
-    tools: [],
-    checks: [],
-    reviews: [],
-    commits: [],
-    plan: {
-      summary: "Bounded task",
-      tasks: [
-        {
-          id: "add",
-          title: "Add",
-          instructions: "Fix arithmetic",
-          files: ["add.mjs"],
-          dependsOn: [],
-          acceptance: ["project-node-test"],
-          assignee: {
-            provider: "codex",
-            model: "gpt-6-luna",
-            effort: "low",
-            reason: "bounded",
+it.each([false, true])(
+  "shows Node/Vitest scope and dependency method before bounded approval (Vitest=%s)",
+  async (vitest) => {
+    const record: WorkflowRecord = {
+      version: 1,
+      id: "normal-project",
+      sessionId: "session",
+      simulated: true,
+      goal: "fixture",
+      cwd: "C:/chosen-project",
+      project: {
+        source: "C:/chosen-project",
+        sourceHead: "a".repeat(40),
+        files: ["add.mjs"],
+        testFile: "acceptance.test.mjs",
+        testProgram: "C:/host/node.exe",
+      },
+      startedAt: "2026-10-07T00:00:00Z",
+      status: "approval",
+      next: "approval",
+      base: "a".repeat(40),
+      head: "a".repeat(40),
+      correctionRounds: 0,
+      calls: [],
+      tools: [],
+      checks: [],
+      reviews: [],
+      commits: [],
+      plan: {
+        summary: "Bounded task",
+        tasks: [
+          {
+            id: "add",
+            title: "Add",
+            instructions: "Fix arithmetic",
+            files: ["add.mjs"],
+            dependsOn: [],
+            acceptance: ["project-node-test"],
+            assignee: {
+              provider: "codex",
+              model: "gpt-6-luna",
+              effort: "low",
+              reason: "bounded",
+            },
+            reviewer: {
+              provider: "claude",
+              model: "claude-sonnet-5-5",
+              effort: null,
+              reason: "other company",
+            },
           },
-          reviewer: {
-            provider: "claude",
-            model: "claude-sonnet-5-5",
-            effort: null,
-            reason: "other company",
-          },
+        ],
+      },
+    };
+    if (vitest)
+      record.project!.testSetup = {
+        kind: "vitest",
+        version: "5.0.3",
+        config: "vitest.config.ts",
+        settings: [{ path: "vitest.config.ts", hash: "a".repeat(64) }],
+        dependencies: {
+          fingerprint: "b".repeat(64),
+          bytes: 1048576,
+          files: 10,
+          packages: [{ name: "vitest", version: "5.0.3" }],
         },
-      ],
-    },
-  };
-  const view: OfficialWorkflowView = {
-    available: true,
-    simulated: true,
-    approval: { id: record.id, digest: "approved-scope" },
-    records: [{ record, resumeBlocked: null, reportHref: "report.html" }],
-  };
-  const api = vi.fn(async () => view);
-  vi.stubGlobal("harness", { officialWorkflow: api });
-  render(<OfficialWorkflowPanel openSignal={1} />);
-  const scope = await screen.findByRole("region", { name: "実案件の承認範囲" });
-  expect(scope).toHaveTextContent("C:/chosen-project");
-  expect(scope).toHaveTextContent("C:/host/node.exe");
-  expect(scope).toHaveTextContent("node --test acceptance.test.mjs");
-  expect(scope).toHaveTextContent("表示した作業領域で実装");
-  expect(scope).toHaveTextContent("OSで完全隔離する機能ではありません");
-  expect(scope).not.toHaveTextContent("コピー");
-  fireEvent.click(screen.getByRole("button", { name: "この計画を承認" }));
-  await waitFor(() =>
-    expect(api).toHaveBeenCalledWith({
-      action: "approve",
-      id: record.id,
-      digest: "approved-scope",
-    }),
-  );
-});
+        command:
+          "node node_modules/.xharness-vitest-runner.mjs acceptance.test.ts vitest.config.ts",
+      };
+    const view: OfficialWorkflowView = {
+      available: true,
+      simulated: true,
+      approval: { id: record.id, digest: "approved-scope" },
+      records: [{ record, resumeBlocked: null, reportHref: "report.html" }],
+    };
+    const api = vi.fn(async () => view);
+    vi.stubGlobal("harness", { officialWorkflow: api });
+    render(<OfficialWorkflowPanel openSignal={1} />);
+    const scope = await screen.findByRole("region", {
+      name: "実案件の承認範囲",
+    });
+    expect(scope).toHaveTextContent("C:/chosen-project");
+    expect(scope).toHaveTextContent("C:/host/node.exe");
+    expect(scope).toHaveTextContent(
+      vitest
+        ? ".xharness-vitest-runner.mjs acceptance.test.ts vitest.config.ts"
+        : "node --test acceptance.test.mjs",
+    );
+    expect(scope).toHaveTextContent("表示した作業領域で実装");
+    expect(scope).toHaveTextContent("OSで完全隔離する機能ではありません");
+    if (vitest) {
+      expect(scope).toHaveTextContent("元のnode_modulesは共有しません");
+      expect(scope).toHaveTextContent("vitest@5.0.3");
+    } else expect(scope).not.toHaveTextContent("コピー");
+    fireEvent.click(screen.getByRole("button", { name: "この計画を承認" }));
+    await waitFor(() =>
+      expect(api).toHaveBeenCalledWith({
+        action: "approve",
+        id: record.id,
+        digest: "approved-scope",
+      }),
+    );
+  },
+);
 it.each([
   "saved",
   "saved-default",

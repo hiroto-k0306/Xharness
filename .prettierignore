@@ -13,3 +13,5 @@ docs/phase0-findings.md
 test/fixtures/
 # アプリが出力した実行レポートのサンプル(出力したままの形を保つ)
 docs/examples/
+# 実アプリから出力した紹介用レシートも原本の形式を保つ
+docs/presentations/20261008/receipts/*.html

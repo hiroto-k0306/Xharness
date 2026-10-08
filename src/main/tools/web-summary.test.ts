@@ -88,30 +88,32 @@ it.each(["claude", "codex"] as const)(
               accountId: "test",
             }),
           });
-    // The page fetch itself is isolated by a mocked global fetch, adapter traffic uses its own injected fetcher.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response("Example Domain", {
-          headers: { "content-type": "text/plain" },
-        }),
-      ),
+    // Isolate both DNS and page traffic; adapter traffic has its own fetcher.
+    const lookup = vi.fn(async () => [{ address: "93.184.215.14", family: 4 }]);
+    const pageFetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response("Example Domain", {
+        headers: { "content-type": "text/plain" },
+      }),
     );
-    try {
-      const tool = new Map(webTools(() => provider, "live", false)).get(
-        "WebFetch",
-      )!;
-      const out = await tool.execute(
-        { url: "https://example.com/", prompt: "purpose" },
-        signal(),
-      );
-      expect(JSON.parse(out.content).summary).toMatch(
-        /documentation|placeholder/i,
-      );
-      expect(fetcher).toHaveBeenCalledTimes(1);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    const tool = new Map(
+      webTools(() => provider, "live", false, undefined, {
+        fetch: { lookup, fetcher: pageFetcher },
+      }),
+    ).get("WebFetch")!;
+    const out = await tool.execute(
+      { url: "https://example.com/", prompt: "purpose" },
+      signal(),
+    );
+    expect(JSON.parse(out.content).summary).toMatch(
+      /documentation|placeholder/i,
+    );
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledWith("example.com");
+    expect(pageFetcher).toHaveBeenCalledTimes(1);
+    const request = JSON.parse(String(fetcher.mock.calls[0]![1]?.body));
+    expect(request.model).toBe(
+      id === "claude" ? "claude-haiku-5-5" : "gpt-6-luna",
+    );
   },
 );
 it("matches exact domain grants without allowing sibling, subdomain or deceptive hosts", async () => {
@@ -138,7 +140,7 @@ it("matches exact domain grants without allowing sibling, subdomain or deceptive
 it("summarizer uses a light model, no tools, and is told never to follow page instructions", async () => {
   const { webSummaryRequest } = await import("./web.js");
   for (const [provider, model] of [
-    ["claude", "claude-haiku-4-5-20251001"],
+    ["claude", "claude-haiku-5-5"],
     ["codex", "gpt-6-luna"],
   ] as const) {
     const request = webSummaryRequest(

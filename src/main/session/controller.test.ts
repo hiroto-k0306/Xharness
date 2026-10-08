@@ -570,6 +570,7 @@ class MultiModel extends FakeProvider {
       "fake",
       "claude-opus-5-5",
       "claude-sonnet-5-5",
+      "claude-haiku-5-5",
       "claude-haiku-4-5",
       "claude-haiku-4-5-20251001",
     ].map((id) => ({ id, contextTokens: null }));
@@ -668,11 +669,13 @@ describe("model and effort are kept per session", () => {
     });
     await until(() => events.some((e) => e.type === "permission_request"));
     // 1周目(ツール呼び出しの権限待ち)の最中に切り替える
-    await controller.handle({
-      type: "set_model",
-      sessionId: id,
-      model: "haiku",
-    });
+    expect(
+      await controller.handle({
+        type: "set_model",
+        sessionId: id,
+        model: "haiku",
+      }),
+    ).toMatchObject({ ok: true });
     expect(seen).toHaveLength(1);
     const req = events.find((e) => e.type === "permission_request") as Extract<
       UiEvent,
@@ -687,10 +690,10 @@ describe("model and effort are kept per session", () => {
     await until(() => idle(id));
     expect(seen.map((s) => s.model)).toEqual([
       "claude-opus-5-5",
-      "claude-haiku-4-5-20251001",
+      "claude-haiku-5-5",
     ]);
     // 実行中の set_model が、終了時の保存で巻き戻されない
-    expect(sessionOf(id).model).toBe("claude-haiku-4-5-20251001");
+    expect(sessionOf(id).model).toBe("claude-haiku-5-5");
   });
   it("rejects unknown sessions, unknown models and bad efforts", async () => {
     const { controller } = build();

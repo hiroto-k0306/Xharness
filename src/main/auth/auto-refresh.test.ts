@@ -94,7 +94,7 @@ describe("official CLI auto refresh (offline)", () => {
     expect(args).toContain('model_reasoning_effort="low"');
     expect(args.join(" ")).not.toContain("model_providers");
     expect(refreshArguments("claude", "empty-temp")).toContain(
-      "claude-haiku-4-5-20251001",
+      "claude-haiku-5-5",
     );
     expect(refreshEnvironment().OPENAI_API_KEY).toBeUndefined();
   });

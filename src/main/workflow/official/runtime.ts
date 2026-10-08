@@ -54,13 +54,19 @@ export const digest = (v: unknown) =>
 export const approvalDigest = (
   record: Pick<
     WorkflowRecord,
-    "plan" | "injection" | "executionDigest" | "project"
+    "plan" | "injection" | "executionDigest" | "project" | "nativeWork"
   >,
 ) =>
-  record.injection || record.project
+  record.injection || record.project || record.nativeWork
     ? digest({ plan: record.plan, executionDigest: record.executionDigest })
     : digest(record.plan);
 export interface WorkflowRecord {
+  nativeWork?: { validation: "agent-reported"; baseline: "files" };
+  nativeValidation?: {
+    command: string;
+    status: "passed" | "failed" | "not-run";
+    summary: string;
+  }[];
   sessionId?: string;
   /** Original session folder; conversation cwd is an isolated execution directory. */
   sourceCwd?: string;
@@ -149,6 +155,7 @@ export interface WorkflowRecord {
   error?: string;
 }
 export interface WorkflowOptions {
+  nativeWork?: boolean;
   sessionId?: string;
   project?: WorkflowRecord["project"];
   /** Carries the bounded classifier/scope calls into the final workflow evidence. */
@@ -836,6 +843,7 @@ export async function runOfficialSingleTask(
 
 /** No provider query or filesystem effect is automatically replayed after an uncertain boundary. */
 export function resumeBlockReason(record: WorkflowRecord): string | null {
+  if (record.nativeWork) return "native-work-resume-not-supported";
   if (record.dag) return dagResumeBlockReason(record);
   if (!record.executionDigest) return "execution-scope-not-checkpointed";
   if (

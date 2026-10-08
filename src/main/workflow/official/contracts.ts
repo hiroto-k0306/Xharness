@@ -172,6 +172,8 @@ export interface RuntimeUsage {
   complete: boolean;
 }
 export interface AgentRequest {
+  /** Delegates normal work to the official native agent within its sandbox. */
+  nativeWork?: boolean;
   /** Only explicitly approved synthetic diagnostics may retain response text. */
   diagnosticText?: boolean;
   requestId: string;

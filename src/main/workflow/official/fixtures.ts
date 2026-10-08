@@ -187,6 +187,7 @@ export function fixtureAgents(
         });
         output = {
           summary: "Model claims success; X must run the actual tests.",
+          ...(request.nativeWork ? { tests: [] } : {}),
         };
       } else {
         const input = JSON.parse(request.prompt),

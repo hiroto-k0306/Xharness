@@ -40,6 +40,8 @@ export interface AgentDiagnostics {
   requestedModel: string;
   resolvedRequestedModel?: string;
   cliVersion?: string;
+  /** Managed SDK package version, fixed when the task selects its agent. */
+  sdkVersion?: string;
   modelChanges?: { from: string; to: string; source: string }[];
   phase: AgentRequest["phase"];
   cwd: string;

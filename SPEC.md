@@ -445,6 +445,8 @@ auth、通信回数上限、チェックポイント保持期間はglobal設定�
 
 正確な受理キーと検証規則: [config.ts](src/main/config/config.ts)、[project.ts](src/main/config/project.ts)、[definitions.ts](src/main/agents/definitions.ts)。この表は全型定義の複製ではなく、主要な既定値の参照表。
 
+Desktopの公式接続ランタイムは§15の方式を使う。Claude SDKはホームの`runtimes/claude-sdk/`に版別保存し、`active.json`が次のタスク用の版、`check.json`が24時間の更新確認間隔を保持する。旧版・未完了の候補は実行中プロセスを壊さないため自動削除しない。Codexは`official-workflows/connection.json`の`codexMode: auto | fixed`で自動追従／指定版を保存する。旧`codexPath`は固定指定として保護し、空や不正・消失した指定を自動追従へ読み替えない。旧HTTP経路の`auth.*`設定は変更しない。
+
 ## 13. 検証・配布・残る制限
 
 実モデル通信を通常のテストに混ぜない。FakeProvider、モック、fixture、一時Gitリポジトリで検証する。CLI認証・spike・実プロバイダ試験は別途明示的な許可と回数制限の対象。資格情報の期限を書き換えて試さない。
@@ -491,7 +493,7 @@ Claudeのモデル証跡は指定alias/解決済みID、SDK初期化、parent=nu
 
 公式phaseの診断はrequest IDに結び付け、送信モデル・phase・cwd・sandbox・承認設定・ツール名と状態・終了理由を保存する。ClaudeはSDK初期モデル、assistantモデルとparent_tool_use_id（欠測はunknown）、resultのモデル別トークン値を別々に保持する。モデル名の集合から主応答や補助処理の役割を推測しない。通常の最終返答は明示的な合成課題診断だけで最大8000文字を保存し、認証情報をマスクする。思考ブロック・rawイベント・ツール本文・認証応答は保存しない。一般のAgentRequestは本文保存を既定で無効にする。
 
-Codex実装/fixのnative exec用に公式code-mode hostを使用する。起動時の一律無効化を行わず、phase設定で実装/fixだけcode_mode/hostを有効にする。code_mode_onlyは無効にし、読み取りphaseには既存のツール無効設定を適用する。workspace-write、networkAccess:false、untrusted承認、既存のscope・テストコマンド照合は維持する。hostの起動失敗や権限拒否は停止対象で、sandboxを緩めない。
+Codex実装/fixのnative exec用に公式code-mode hostを使用する。起動時の一律無効化を行わず、phase設定で実装/fixだけcode_mode/hostを有効にする。code_mode_onlyは無効にし、読み取りphaseには既存のツール無効設定を適用する。workspace-write、networkAccess:false、untrusted承認、既存のscope・テストコマンド照合は維持する。hostの起動失敗や権限拒否は停止対象で、sandboxを緩めない。commandExecutionのfailedかつsource=unifiedExecStartupは、最終turnがcompletedでもnative-exec-startup-failedとして停止し、「変更なし」に置き換えない。個別通知と最終turn.itemsの双方を確認し、同じ完了itemの証跡は重複させない。終了コードや所要時間だけから起動失敗・共有違反を推定しない（2026-10-08エラー分類修正）。
 
 Codexの残量と認証・課金経路は別に検証する。公式App Server 0.160.0のread応答にある`ordinaryUsageAllowed`を通常枠の許可根拠にし、未知を割合やreset時刻から補わない。`credits`残高だけで従量課金中と判定しない。現在の実験はChatGPT認証の個人向けPlus/Pro系plan、上書きのない公式openai接続先、標準速度、provider/model fallback無効に限定する。認証・plan・thread応答の経路が確認できない場合は具体的理由を表示し停止する。APIキー、追加credits利用への切替、購入や課金設定変更は行わない。workspaceの従量課金経路は未対応。
 
@@ -548,3 +550,15 @@ DAGのUI・runtime公開入口はfixture/modelの模擬実行に限定する。�
 既存のX権限ルール・フック・通信回数上限をnative経路に適用できない初期対応では、これらが設定されていれば無視せず明示停止する。自動モードでも今回の計画承認は省略しない。画像・旧slash機能・任意shell・依存install・実案件DAG・workerごとの追加worktree分離・native会話resume・実案件の自動再開は未対応。中断後の未確定な副作用は再送せず、保存記録と作業を保全する。ローカルNodeテストは任意コードの副作用をOSで完全隔離しないため、未知のrepoを選んだだけでは実行しない。実行の承認はそのテスト内容も利用者が確認して行う。画面上の模擬試験の成功は実providerや配布exeの成功を意味しない。
 
 実装・オフライン確認・残る制約は [通常入力の公式既定経路](docs/official-default-session-20261007.md)。
+
+### 公式接続ランタイムの自動追従（2026-10-08ユーザー承認）
+
+上記のCodex手動exe設定を既定とする記述を更新する。通常はWindowsの登録済み`OpenAI.Codex` AppXパッケージ（発行者IDも照合）のインストール先から、同梱CLIとhelper一式を確認する。キャッシュフォルダーの日時やPATHから最新版を推測しない。アプリ起動時と次のタスク開始前に再取得し、各タスクのAgentは選択済み実体を維持する。今回のような実行準備の障害時には利用者がフォルダーまたはexeを明示指定でき、固定中はアプリ更新後も切り替えない。「同梱版の自動追従に戻す」の明示操作でのみ解除する。既存のexe指定・旧設定も固定として扱う。対象が消失・不正・アクセス不能なら停止し、別のCLI・HTTP経路・緩いsandboxへ自動で逃がさない。自動探索はAppX登録版に限り、それ以外は明示指定を使う。
+
+Claudeは同梱SDKを初期版として、固定の管理フォルダーへSDK・対応native CLI・依存関係をコピーし、専用Workerから使用する。各タスクはAgent生成時のSDK版を保持し、discoveryとモデル送信の間や計画承認待ちに更新が完了しても取り替えない。指定した版が不正・欠損なら停止し、同梱版へ暗黙に戻さない。管理領域の準備は資格情報を扱わず、SDKをimportするだけでquery・認証を起動しない。
+
+配布時は`beforePack`でSDKの依存関係と型宣言を検証してまとめ、`resources/claude-sdk-seed/node_modules/`へ通常ファイルとして同梱する。管理領域の初期化元にはこれを使用する。electron-builderが一部のpeer依存・型宣言を除くapp.asar内のSDKを初期化元にしない。配布物の同一性はexe・app.asarに加え、この外部resourceのハッシュでも確認する。
+
+起動時および起動中の定期確認で、前回の通信試行から24時間経過した場合だけ公式npmレジストリのstable latestを確認する。失敗も試行時刻を保存して再通信を抑止する。閉じている間は動かず、次回起動時に確認する。更新確認・取得はモデル通信ではない。現時点の自動適用範囲はSDK `0.3.290`以降の`0.3.x`安定版で、Node要件・依存宣言が同梱基準と同一、既知のplatform nativeパッケージはSDKと同じ版の組であるものに限定する。互換範囲外は候補と理由を表示し、XHarnessの対応更新を待つ。構造検査は将来の実API挙動の保証ではないため、実行時にもSDK契約・認証・課金経路・利用枠を従来どおり検査する。
+
+候補は既存版を上書きせず新規フォルダーへ取得する。公開レジストリへのHTTPS以外・redirectを拒否し、SHA512整合性・サイズ・archiveのパスと種類・SDK/nativeの版・必要API宣言・別Workerでのimportを検査する。install scriptやCLIを起動しない。検査後にactive pointerを一時ファイル＋renameで切り替える。多重更新はプロセス内の同一Promiseと管理領域の排他的ロックで防ぐ。異常終了で残ったロックをPID推測で削除せず、更新を止めて確認を促す。旧版はそのまま残す。画面に管理先・次のタスク用の版・更新候補・最終確認・結果を表示し、各Claude要求の診断には固定したSDK版を記録する。fakeと開発用接続実験は更新を開始しない。詳細・復旧手順・未検証事項は[ランタイム自動追従の記録](docs/official-runtime-updates-20261008.md)。

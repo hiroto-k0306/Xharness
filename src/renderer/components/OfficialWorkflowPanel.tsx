@@ -6,6 +6,8 @@ import type {
 import styles from "./OfficialWorkflowPanel.module.css";
 import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
 import { OfficialPlanAssignments } from "./OfficialPlanAssignments.js";
+import { ClaudeSdkStatus } from "./ClaudeSdkStatus.js";
+import { CodexRuntimeSettings } from "./CodexRuntimeSettings.js";
 export function OfficialWorkflowPanel({
   mainModel,
   mainEffort,
@@ -25,7 +27,6 @@ export function OfficialWorkflowPanel({
     [provider, setProvider] = useState<"claude" | "codex">("claude"),
     [mode, setMode] = useState<"single" | "dag">("single"),
     [pending, setPending] = useState(false);
-  const [codexPath, setCodexPath] = useState("");
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [question, setQuestion] = useState("");
   const sending = useRef(false);
@@ -94,24 +95,12 @@ export function OfficialWorkflowPanel({
               ? "FAKE：モデルは模擬、受入テストは実プロセスです。"
               : "公式SDK / App Serverの既存サブスクを使用します。計画生成も枠を使用します。追加課金へ切り替えません。"}
           </p>
-          <label>
-            公式Codex実行パス
-            <input
-              aria-label="公式Codex実行パス"
-              value={codexPath}
-              placeholder={view?.connection?.codexPath || "C:\\...\\codex.exe"}
-              onChange={(e) => setCodexPath(e.target.value)}
-            />
-          </label>
-          <button
-            disabled={pending || !!view?.activeId || !codexPath.trim()}
-            onClick={() =>
-              void send({ action: "configure", codexPath: codexPath.trim() })
-            }
-          >
-            公式接続設定を保存
-          </button>
-          <p role="status">{view?.connection?.message}</p>
+          <CodexRuntimeSettings
+            connection={view?.connection}
+            disabled={pending || !!view?.activeId}
+            send={send}
+          />
+          <ClaudeSdkStatus runtime={view?.claudeRuntime} />
           <p aria-label="計画モデル">
             計画モデル：{mainModel ?? "未選択"}
             {mainEffort ? `（${mainEffort}）` : ""}

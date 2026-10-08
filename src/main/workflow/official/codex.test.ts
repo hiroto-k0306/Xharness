@@ -22,6 +22,51 @@ import { officialWorkflowReport } from "./report.js";
 import { schemas, type AgentRequest } from "./contracts.js";
 import { normalizeTokens } from "../../providers/token-usage.js";
 import { object } from "./usage.js";
+import { communicationInput } from "./communication.js";
+import { publicEventRecorder } from "./public-events.js";
+it("stops before turn/start when public event persistence fails", async () => {
+  const mock = fakeServer(),
+    event = vi.fn(async () => {
+      throw Error("fixture write failure");
+    });
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    { ...request(), event },
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("failed");
+  expect(result.dispatched).toBe(false);
+  expect(event).toHaveBeenCalledTimes(1);
+  expect(mock.calls.some(([m]) => m === "turn/start")).toBe(false);
+  expect(mock.close).toHaveBeenCalled();
+});
+it("records public App Server response once and rejects foreign thread events", async () => {
+  const mock = fakeServer(),
+    c = communicationInput({}),
+    record = publicEventRecorder(c);
+  const run = mock.server.request.bind(mock.server);
+  mock.server.request = async (method, params, signal) => {
+    if (method === "turn/start")
+      mock.emit("item/completed", {
+        threadId: "foreign",
+        item: { id: "foreign", type: "agentMessage", text: "private-foreign" },
+      });
+    return run(method, params, signal);
+  };
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    {
+      ...request(),
+      event: async (e) => {
+        record(e);
+      },
+    },
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
+  expect(c.events?.filter((e) => e.kind === "response")).toHaveLength(1);
+  expect(c.events?.at(-1)?.status).toBe("completed");
+  expect(JSON.stringify(c)).not.toContain("private-foreign");
+  expect(mock.calls.filter(([m]) => m === "turn/start")).toHaveLength(1);
+});
 function fakeServer(quotaOverride: Record<string, unknown> = {}) {
   let listener:
     ((method: string, params: Record<string, unknown>) => void) | undefined;

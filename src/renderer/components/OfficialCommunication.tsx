@@ -1,5 +1,6 @@
 import type { WorkflowRecord } from "../../main/workflow/official/runtime.js";
 import { phaseExplanation } from "../../main/workflow/official/communication.js";
+import { OfficialPublicEvents } from "./OfficialPublicEvents.js";
 
 export function OfficialCommunication({ record }: { record: WorkflowRecord }) {
   return (
@@ -19,6 +20,7 @@ export function OfficialCommunication({ record }: { record: WorkflowRecord }) {
           </p>
           {call.communication ? (
             <>
+              <OfficialPublicEvents communication={call.communication} />
               <h4>LLMへの入力（指示・参考データ）</h4>
               <pre
                 style={{

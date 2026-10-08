@@ -67,7 +67,7 @@ async function fixture(git = false) {
   return { cwd, service, request };
 }
 it.each([false, true])(
-  "automatically selects scope and runs in an approved isolated workspace (Git=%s)",
+  "native work starts after plan approval in the selected folder (Git=%s)",
   async (git) => {
     const f = await fixture(git),
       abort = new AbortController(),
@@ -77,17 +77,12 @@ it.each([false, true])(
       .poll(() => f.service.view().approval, { timeout: 20000 })
       .toBeTruthy();
     const view = f.service.view(),
-      record = view.records[0]!.record,
-      prep = record.project!.preparation!;
-    expect(record.calls.map((c) => c.phase)).toEqual([
-      "conversation",
-      "conversation",
-      "plan",
-    ]);
-    expect(prep.kind).toBe(git ? "git-worktree" : "local-copy");
-    expect(record.project?.files).toEqual(["add.mjs"]);
-    expect(record.project?.testFile).toBe("acceptance.test.mjs");
-    await expect(access(prep.destination)).rejects.toThrow();
+      record = view.records[0]!.record;
+    expect(record.calls.map((c) => c.phase)).toEqual(["conversation", "plan"]);
+    expect(record.nativeWork?.validation).toBe("agent-reported");
+    expect(record.project).toBeUndefined();
+    expect(record.cwd).toBe(f.cwd);
+    expect(await readFile(join(f.cwd, "add.mjs"))).toEqual(before);
     await f.service.command({
       action: "approve",
       id: view.approval!.id,
@@ -99,12 +94,9 @@ it.each([false, true])(
       intent: "work",
       taskRequired: false,
     });
-    expect(await readFile(join(f.cwd, "add.mjs"))).toEqual(before);
-    expect(await readFile(join(prep.destination, "add.mjs"), "utf8")).toContain(
-      "a+b",
-    );
+    expect(await readFile(join(f.cwd, "add.mjs"), "utf8")).toContain("a+b");
     const final = f.service.view().records[0]!.record;
-    expect(final.checks.at(-1)?.tests.every((t) => t.passed)).toBe(true);
+    expect(final.checks).toEqual([]);
     expect(final.reviews.at(-1)?.findings).toEqual([]);
     expect(final.calls.length).toBeLessThanOrEqual(9);
     if (!git) await expect(access(join(f.cwd, ".git"))).rejects.toThrow();
@@ -118,22 +110,27 @@ it.each([false, true])(
     expect(loaded.records[0]?.record).toMatchObject({
       id: final.id,
       status: "completed",
-      cwd: prep.destination,
+      cwd: f.cwd,
     });
     expect(loaded.records[0]?.resumeBlocked).toBeTruthy();
     expect(loaded.activeId).toBeUndefined();
   },
 );
-it("stops missing tests and read-only work without planning or creating a workspace", async () => {
+it("does not require existing tests, while read-only work remains blocked", async () => {
   const f = await fixture();
   await rm(join(f.cwd, "acceptance.test.mjs"));
-  const missing = await f.service.submitSession(
+  const missing = f.service.submitSession(
     f.request,
     new AbortController().signal,
   );
-  expect(missing.status).toBe("failed");
-  expect(missing.summary).toContain("既存のNodeテスト");
-  expect(f.service.view().records[0]!.record.calls).toHaveLength(1);
+  await expect.poll(() => f.service.view().approval).toBeTruthy();
+  const approval = f.service.view().approval!;
+  await f.service.command({
+    action: "approve",
+    id: approval.id,
+    digest: approval.digest,
+  });
+  expect((await missing).status).toBe("completed");
   const readonly = await f.service.submitSession(
     { ...f.request, automaticWork: false },
     new AbortController().signal,
@@ -148,9 +145,7 @@ it("a changed source after plan display stops before creating or editing a works
   await expect
     .poll(() => f.service.view().approval, { timeout: 20000 })
     .toBeTruthy();
-  const approval = f.service.view().approval!,
-    target =
-      f.service.view().records[0]!.record.project!.preparation!.destination;
+  const approval = f.service.view().approval!;
   await writeFile(join(f.cwd, "add.mjs"), "user's newer edit\n");
   await f.service.command({
     action: "approve",
@@ -161,5 +156,7 @@ it("a changed source after plan display stops before creating or editing a works
   expect(await readFile(join(f.cwd, "add.mjs"), "utf8")).toContain(
     "user's newer edit",
   );
-  await expect(access(target)).rejects.toThrow();
+  expect(f.service.view().records[0]!.record.calls.map((c) => c.phase)).toEqual(
+    ["conversation", "plan"],
+  );
 });

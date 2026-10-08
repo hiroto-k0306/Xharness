@@ -74,11 +74,8 @@ import {
 } from "../../config/catalog.js";
 import { impliedRecordModels } from "./record-compat.js";
 import { prepareProjectTask } from "./project-task.js";
-import {
-  inspectProjectInventory,
-  type ProjectInventory,
-} from "./project-inventory.js";
-import { automaticWorkspace } from "./automatic-workspace.js";
+import type { ProjectInventory } from "./project-inventory.js";
+import { runNativeTask } from "./native-runtime.js";
 import { projectScopeContract, projectScopeSchema } from "./contracts.js";
 import type {
   OfficialSessionSubmission,
@@ -286,11 +283,23 @@ export class OfficialWorkflowService {
         );
         if (
           !record.project &&
+          !record.nativeWork &&
           (!rel ||
             rel.startsWith("..") ||
             rel.includes("/") ||
             rel.includes("\\") ||
             !rel.startsWith("workspace-"))
+        )
+          continue;
+        if (
+          record.nativeWork &&
+          (!record.sessionId ||
+            record.nativeWork.validation !== "agent-reported" ||
+            record.nativeWork.baseline !== "files" ||
+            !record.sourceCwd ||
+            !isAbsolute(record.cwd) ||
+            resolve(record.cwd).toLowerCase() !==
+              resolve(record.sourceCwd).toLowerCase())
         )
           continue;
         if (
@@ -600,7 +609,8 @@ export class OfficialWorkflowService {
     options.resume = resume;
     options.save = (r) => this.save(r);
     options.approveTool = (name, input, signal) =>
-      name === "item/commandExecution/requestApproval"
+      name === "item/commandExecution/requestApproval" ||
+      name === "native/operation"
         ? this.operationApprovals.ask(id, input, signal)
         : Promise.resolve(false);
     options.approve = async (_plan, digest, signal) =>
@@ -624,7 +634,11 @@ export class OfficialWorkflowService {
         },
         async () => {
           const record = await (
-            "worktrees" in options ? runOfficialDag : runOfficialSingleTask
+            "worktrees" in options
+              ? runOfficialDag
+              : options.nativeWork
+                ? runNativeTask
+                : runOfficialSingleTask
           )(options as DagOptions, controller.signal);
           return {
             ...record,
@@ -987,7 +1001,7 @@ export class OfficialWorkflowService {
       });
     this.active = { id: record.id, controller, done };
   }
-  /** A single lightweight query classifies input; only confirmed scope may start planning. */
+  /** A single lightweight query classifies input; native work still awaits plan approval. */
   async submitSession(
     request: OfficialSessionSubmission,
     signal: AbortSignal,
@@ -1131,43 +1145,6 @@ export class OfficialWorkflowService {
             throw new Error(
               "書き込み可能な対象フォルダーを選択してください。plan・読み取り専用・既存権限の制限中は自動作業を開始しません。",
             );
-          const inventory = await inspectProjectInventory(
-            request.cwd,
-            controller.signal,
-          );
-          if (!inventory.tests.length)
-            throw new Error(
-              "既存のNodeテスト、またはpackage.jsonでVitestを宣言したプロジェクトのtest/specファイルが見つかりません。テストを実行せず停止しました。",
-            );
-          const target = await this.conversationTarget(
-            record.cwd,
-            provider,
-            controller.signal,
-          );
-          record.status = "planning";
-          delete record.finishedAt;
-          await this.save(record);
-          this.launchConversation(
-            record,
-            target,
-            provider,
-            request.history,
-            false,
-            inventory,
-          );
-          await waitRun();
-          record = this.records.get(id)!;
-          if (record.status !== "completed" || !record.suggestedScope)
-            throw new Error(
-              "作業対象の自動提案を検証できませんでした。再試行・編集していません。",
-            );
-          const prepared = await automaticWorkspace(
-            inventory,
-            record.suggestedScope,
-            id,
-            controller.signal,
-            request.worktreeSource,
-          );
           const options = await this.options(
             request.cwd,
             provider,
@@ -1179,22 +1156,15 @@ export class OfficialWorkflowService {
             },
           );
           options.goal = request.text;
-          options.files = record.suggestedScope.files;
-          options.tests = [prepared.test];
+          options.nativeWork = true;
+          options.cwd = request.cwd;
+          options.files = [];
+          options.tests = [];
           options.integrationTests = [];
           options.diagnosticText = false;
           options.sessionId = request.sessionId;
-          options.project = {
-            source: prepared.source,
-            sourceHead: prepared.head,
-            files: options.files,
-            testFile: record.suggestedScope.testFile,
-            testProgram: prepared.test.program,
-            testSetup: prepared.testSetup,
-            preparation: prepared.preparation,
-          };
-          options.workspace = prepared.workspace;
-          options.prepareWorkspace = prepared.prepare;
+          delete options.project;
+          delete options.prepareWorkspace;
           options.preparationCalls = record.calls;
           controller.signal.throwIfAborted();
           this.launch(id, options);

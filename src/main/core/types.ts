@@ -28,6 +28,7 @@ export interface Message {
   role: Role;
   content: ContentBlock[];
   meta?: {
+    officialWorkflow?: { id: string; status: string; taskRequired?: boolean };
     rewind?: { keep: number };
     provider?: ProviderId;
     model?: string;

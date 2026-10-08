@@ -21,6 +21,8 @@ desktopを閉じて同じhomeのwriterを解放する。Windowsではローカ�
 
 ## 保存と整合性
 
+2026-10-08の公式接続対応: 通常入力は旧評価task/traceを作らないため、従来の判定では完了していても拒否していた。公式接続の結果は、最新のOfficialWorkflow receiptと同じsessionのworkflow.json、最終user入力・assistant公開回答を照合する。質問の確定回答と、承認・最終HEADの独立テスト成功・レビューまで完了した作業が対象。判別だけで対象確認待ちの作業、失敗、取消、実行中、保存欠落、不一致は拒否する。旧履歴へmetadataを一括追加せず、既存のreceipt・workflow・本文が一致するものも確認できる。詳しい検証は [公式結果の受け渡し修正](official-result-handoff-20261008.md)。
+
 homeの `handoffs.json` は1レコードが送信receiptと宛先の永続受信を兼ねるatomic台帳。送信時snapshot、両sessionの作成時刻/cwd、project実体、task ID、本文hash、source history/trace hash、完了/受信日時を保持する。既存JsonFileのsync→renameとhome writerを再利用する。会話・評価・trace・既存receipt JSONLへ別々に追記しないため、「送信成功だけ保存、受信欠落」の途中状態を作らない。台帳の受信確定が成功の根拠であり、既存モデル実行receiptとは別の記録として画面に表示する。
 
 送信時に現在の登録・project実体・両会話のidle・権限・最新のsettled/active・完了trace・本文を再確認する。本文またはtrace変更、巻き戻し、欠落、未確定、別タスク、完了後の手動圧縮は拒否。確認中のsource/destination削除・権限変更・project解除・モデル実行はsession leaseで拒否する。同じsnapshot/task/宛先の再プレビューや二重クリックは1受信だけ。返信を失っても同じdelivery IDの再確認や受信一覧で確認できる。未送信確認票は再起動で消え、確定受信は残る。

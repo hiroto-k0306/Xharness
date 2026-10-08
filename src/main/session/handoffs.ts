@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { JsonFile } from "./store.js";
 import { readTraceReplay } from "./report-trace.js";
 import { evaluateTrace } from "./evaluation.js";
+import { officialHandoffSource } from "./handoff-official.js";
 import {
   historyText,
   projectHistoryAccess,
@@ -138,17 +139,7 @@ export class Handoffs {
       fail("同じprojectの別の保存済み会話を選んでください。");
     const settled = await scope.sessions.evaluationTask(source!.id),
       destinationTask = await scope.sessions.evaluationTask(destination!.id);
-    if (
-      !settled ||
-      settled.active ||
-      settled.settled !== true ||
-      settled.recoveryRequired ||
-      destinationTask?.recoveryRequired
-    )
-      fail("確定済みの完了タスクと、保存未確定でない宛先が必要です。");
-    const history = await scope.sessions.historyRecords(source!.id, pin!.home),
-      trace = await readTraceReplay(pin!.home, source!.id, scope.clean),
-      task = evaluateTrace(trace).find((t) => t.taskId === settled!.id);
+    const history = await scope.sessions.historyRecords(source!.id, pin!.home);
     const last = history?.records.at(-1)?.message;
     if (
       !history ||
@@ -156,37 +147,64 @@ export class Handoffs {
       !last ||
       last.role !== "assistant" ||
       last.content.some((b) => b.type === "tool_use") ||
-      history.records.some((r) => r.message.meta?.rewind) ||
-      !task ||
-      task.outcome !== "completed" ||
-      task.recordingIncomplete
+      history.records.some((r) => r.message.meta?.rewind)
     )
-      fail(
-        "最終回答と完了traceを確認できません。巻き戻し・欠落のある会話は対象外です。",
+      fail("最終回答を確認できません。巻き戻し・欠落のある会話は対象外です。");
+    let official: Awaited<ReturnType<typeof officialHandoffSource>>;
+    try {
+      official = await officialHandoffSource(
+        scope,
+        pin!.home,
+        history!.records.map((r) => r.message),
       );
-    const roots = new Set(
-      trace!.records
-        .filter(
-          (r) =>
-            r.kind === "task" &&
-            r.phase === "start" &&
-            (r.input as { taskId?: string })?.taskId === task!.taskId,
-        )
-        .map((r) => r.id),
-    );
-    const ends = trace!.records.filter(
-      (r) => r.kind === "task" && r.phase === "end" && roots.has(r.id),
-    );
-    const completedAt = ends.at(-1)?.at;
-    if (!completedAt || !Number.isFinite(Date.parse(completedAt)))
-      fail("完了日時が不明です。");
-    // Manual compaction after completion is not the original final answer.
+    } catch {
+      fail(
+        "公式workflowの確定結果と最終回答を確認できません。実行状態・保存記録を確認してください。",
+      );
+    }
     if (
-      trace!.records.some(
-        (r) => r.kind === "llm" && Date.parse(r.at) > Date.parse(completedAt!),
-      )
+      settled?.active ||
+      (!official && (!settled || settled.settled !== true)) ||
+      settled?.recoveryRequired ||
+      destinationTask?.recoveryRequired
     )
-      fail("完了後に会話が変更されています。元の結果を特定できません。");
+      fail("確定済みの完了タスクと、保存未確定でない宛先が必要です。");
+    let completedAt = official?.completedAt;
+    let taskId = official?.taskId;
+    let trace: Awaited<ReturnType<typeof readTraceReplay>>;
+    if (!official) {
+      trace = await readTraceReplay(pin!.home, source!.id, scope.clean);
+      const task = evaluateTrace(trace).find((t) => t.taskId === settled!.id);
+      if (!task || task.outcome !== "completed" || task.recordingIncomplete)
+        fail(
+          "最終回答と完了traceを確認できません。巻き戻し・欠落のある会話は対象外です。",
+        );
+      const roots = new Set(
+        trace!.records
+          .filter(
+            (r) =>
+              r.kind === "task" &&
+              r.phase === "start" &&
+              (r.input as { taskId?: string })?.taskId === task!.taskId,
+          )
+          .map((r) => r.id),
+      );
+      const ends = trace!.records.filter(
+        (r) => r.kind === "task" && r.phase === "end" && roots.has(r.id),
+      );
+      completedAt = ends.at(-1)?.at;
+      taskId = settled!.id;
+      if (!completedAt || !Number.isFinite(Date.parse(completedAt)))
+        fail("完了日時が不明です。");
+      // Manual compaction after completion is not the original final answer.
+      if (
+        trace!.records.some(
+          (r) =>
+            r.kind === "llm" && Date.parse(r.at) > Date.parse(completedAt!),
+        )
+      )
+        fail("完了後に会話が変更されています。元の結果を特定できません。");
+    }
     const body = historyText(
       last!.content
         .filter((b) => b.type === "text")
@@ -206,11 +224,11 @@ export class Handoffs {
       project: pin!.root,
       sourceCwd: source!.cwd,
       destinationCwd: destination!.cwd,
-      taskId: settled!.id,
+      taskId: taskId!,
       completedAt: completedAt!,
       body,
       bodyHash: hash(body),
-      sourceHash: hash({ history, trace, settled }),
+      sourceHash: hash({ history, trace, settled, official }),
     } satisfies HandoffRecord;
   }
   private async perform(
@@ -287,13 +305,8 @@ export class Handoffs {
     if (
       !(await access.eligible(scope.sessions.get(scope.sessionId), true)) ||
       !(await access.eligible(scope.sessions.get(latest.destinationId))) ||
-      hash(await scope.sessions.evaluationTask(scope.sessionId)) !==
-        hash({
-          id: latest.taskId,
-          active: false,
-          settled: true,
-          recoveryRequired: false,
-        })
+      latest.sourceHash !==
+        (await this.source(scope, latest.destinationId)).sourceHash
     )
       fail("出典・project・確定状態が変更されました。");
     if (

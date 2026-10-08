@@ -380,6 +380,8 @@ HTMLレポートに品質結果／In／Out／所要時間を中心とする評�
 
 「結果の受け渡し」は最新の確定済み・完了タスクの最終回答1件を、同じprojectの別会話へ未信頼の参照として明示送信する。出典session/task・完了/受信日時・宛先・本文/hashを確認する。送信/受信を同じatomic台帳で確定し、二重送信・取消・出典/宛先変更・再起動・応答喪失を照合する。受信だけでモデルを実行せず、system・権限・認証・隠れた推論を移植しない。使用には受信側の通常入力と権限が必要。任意の双方向会話や自律ループは未対応。操作・headless・制約: [確定結果の受け渡し](docs/task-handoff.md)。
 
+通常の公式接続では、保存したOfficialWorkflow receipt・同じsessionの完了workflow記録・会話の最終回答を照合する。作業は承認済み計画、最終HEADの独立テスト成功・レビュー記録も必要。質問の確定回答は対象にできるが、作業と判別しただけの対象確認待ちは対象外。新しい最終回答にはworkflow ID・状態を保存し、旧履歴はreceiptと保存記録が一致する場合に限り扱う。旧経路は従来の確定評価・完了traceを照合する。公式記録の欠落・不一致を旧経路へ読み替えず拒否し、プレビュー後に出典が変われば再確認を求める。
+
 「ローカル操作の土台」は内蔵固定ページと専用の非永続Electron profileだけで、観測→明示確認した固定DOMボタン1回→receipt→停止を行う。画像の世代/タブ/document/URL/DOM/対象を確認票に結び、遷移・変更・期限・停止・二重操作を拒否する。intentと開始を保存してから実行し、結果不明/pendingの再起動は再実行しない。通常profile・Cookie・認証情報をコピーせず、外部URL/download/追加window/permissionsを拒否する。画像やページ命令を権限にせず、readOnly/plan/write denyと既存session lease/receiptを使う。モデルへの画像送信、任意座標/キー入力、外部サイト、PC全体、自律操作は未対応の限定Computer Use土台。操作・制約・次のローカル実証: [限定Computer Use土台](docs/local-computer-use.md)。
 
 ## 11. コマンドと予約
@@ -492,6 +494,8 @@ Codexのcommand承認は登録済みテストの単一コマンド照合を維�
 Claudeのモデル証跡は指定alias/解決済みID、SDK初期化、parent=nullの主系列assistant、parentありの補助系列、parent欠測、resultモデル別使用量を分けて表示する。不一致を警告し、モデル名を読み替えない。同梱CLIの初期化時バージョン、PostModelSwitchおよびmodel_refusal_fallbackの変更元/変更先/種別を許可リストで保存する（通知本文や思考は保存しない）。通知欠測から変更なしと推定しない。
 
 公式phaseの診断はrequest IDに結び付け、送信モデル・phase・cwd・sandbox・承認設定・ツール名と状態・終了理由を保存する。ClaudeはSDK初期モデル、assistantモデルとparent_tool_use_id（欠測はunknown）、resultのモデル別トークン値を別々に保持する。モデル名の集合から主応答や補助処理の役割を推測しない。通常の最終返答は明示的な合成課題診断だけで最大8000文字を保存し、認証情報をマスクする。思考ブロック・rawイベント・ツール本文・認証応答は保存しない。一般のAgentRequestは本文保存を既定で無効にする。
+
+2026-10-08の利用者依頼により、通常の単一タスクと質問には、これとは別にXHarness→公式エージェント境界の学習用記録を追加する。request IDごとに送信前の指示・参考履歴/差分・対象・テスト定義・応答schemaと、エージェントが返した構造化結果を保存する。資格情報名/値の既知形式・思考ブロックを除去し、入力/応答それぞれ24,000文字まで。末尾省略・応答欠測・旧記録の本文なしを明示する。LoopFlow、詳細パネル、HTMLに番号ごとの折りたたみと日本語の役割説明を表示する。英語の実指示を日本語に翻訳したものと偽らず、原文を安全化して表示する。SDK内部の追加system/ツール定義・イベント・HTTPヘッダ・全往復は含まない。診断用finalAnswer保存の制限とnative DAG無効を維持し、過去の未保存本文を補完しない。
 
 Codex実装/fixのnative exec用に公式code-mode hostを使用する。起動時の一律無効化を行わず、phase設定で実装/fixだけcode_mode/hostを有効にする。code_mode_onlyは無効にし、読み取りphaseには既存のツール無効設定を適用する。workspace-write、networkAccess:false、untrusted承認、既存のscope・テストコマンド照合は維持する。hostの起動失敗や権限拒否は停止対象で、sandboxを緩めない。commandExecutionのfailedかつsource=unifiedExecStartupは、最終turnがcompletedでもnative-exec-startup-failedとして停止し、「変更なし」に置き換えない。個別通知と最終turn.itemsの双方を確認し、同じ完了itemの証跡は重複させない。終了コードや所要時間だけから起動失敗・共有違反を推定しない（2026-10-08エラー分類修正）。
 

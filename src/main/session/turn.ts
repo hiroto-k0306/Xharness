@@ -353,6 +353,13 @@ export async function runOfficialSessionTurn(
     rt.messages.push({
       role: "assistant",
       content: [{ type: "text", text: summary }],
+      meta: {
+        officialWorkflow: {
+          id: result.workflowId,
+          status: result.status,
+          taskRequired: result.taskRequired,
+        },
+      },
     });
     ctx.options.emit({
       type: "transcript",

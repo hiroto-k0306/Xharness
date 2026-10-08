@@ -716,6 +716,12 @@ it.each([
     const record = view.records[0]!.record;
     expect(record.status).toBe("completed");
     expect(record.answer).toBe("answer from claude-haiku-5-5");
+    expect(
+      JSON.parse(record.calls[0]!.communication!.input.text).prompt.question,
+    ).toBe("質問");
+    expect(
+      JSON.parse(record.calls[0]!.communication!.output!.text).summary,
+    ).toBe(record.answer);
     expect(record.plan).toBeUndefined();
     expect(codex.calls).toEqual({ discover: 0, run: 0 });
   },

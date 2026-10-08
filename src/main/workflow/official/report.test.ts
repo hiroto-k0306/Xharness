@@ -51,6 +51,17 @@ it("separates model evidence and escapes it without leaking diagnostic answer te
   expect(html).toContain("主系列assistant（parent=null）: sonnet");
   expect(html).toContain("モデル不一致");
   expect(html).not.toContain("never-show");
+  record.calls[0]!.communication = {
+    boundary: "xharness-official-agent",
+    input: { text: "<script>request</script>", truncated: true },
+    output: { text: "structured response", truncated: false },
+  };
+  const detail = officialWorkflowReport(record);
+  expect(detail).toContain("LLMの入力と応答");
+  expect(detail).toContain("&lt;script&gt;request&lt;/script&gt;");
+  expect(detail).not.toContain("<script>");
+  expect(detail).toContain("structured response");
+  expect(detail).toContain("保存上限");
   const call = record.calls[0]!;
   if (!("diagnostics" in call) || !call.diagnostics) throw new Error("fixture");
   call.diagnostics.approvals = [

@@ -19,6 +19,24 @@ HTML SHA256：b795db192d787c45b8ad42266916599baddc6d319b62f1f56533488051d6791c�
 
 初回finalizerはRUNTIME_NODE_MODULES不足で停止した。環境変数を指定して再実行し成功。私用ビルド／検証記録は.out/presentation-20261008/buildに保持し、出力フォルダーには最終2ファイルだけを置いた。
 
+## 実画面を中心にした再改訂（2026-10-08）
+
+ユーザーからリポジトリ最新化の指示を受け、origin/mainをfetchした。作業開始時の作業ツリーは清潔。最新main 9265300（7枚への改訂を含む）からcodex/introduction-real-screensを作成し、編集前PPTXを.out/presentation-revision-20261008/build/source.pptxへ保護した。アプリコード・既存設定・履歴は変更していない。
+
+削除済みの一般的な機能、検証実績、導入説明は復活させず、7枚を維持。元の暗色背景・橙色アクセント・Noto Sans CJK JPを引き継ぎ、説明を短くして実画面を拡大した。表紙、担当選択とレビュー結果、LoopFlow、HTML入出力、結果受け渡し、枠待ち取消の保存済み画面を使用。最後のまとめを「親と子のやり取りまで、ひとつの記録に」へ変更し、委託元リンクと子の入力・応答が見えるHTML記録を追加した。
+
+HTML画面はdocs/examples/execution-report.htmlをEdge headlessで表示し、実際の記録カードを撮影。その他はXharness-connections側の保存済み配布検証画像を使用した。各スライドのノートに出典を記録。画像は内容を改変せずトリミングのみ。旧UI・模擬データを明記し、過去の画面を現行リビジョンの実通信検証として扱わない。枠待ちの例はcancelled状態であり、待機中や再開成功を示さない。SPEC.md §7・§10・§15と照合し、公式workflow途中の自動再開は対象外と記載した。
+
+環境はWindows、同梱Node 24.19.0、@oai/artifact-tool、Edge headless。元PPTXをimportして編集し、最終PPTXを再importして全7枚を描画・目視確認。構造、スライド内配置、見出し収容、フォント指定の検証は指摘0件。元PPTXのサイズ12191999×6858000 EMUを維持した。元ファイルの参照フォント検査はValueErrorとなったため、読めたlayoutのNoto Sans CJK JPを明示したdesignポリシーで最終ファイルのフォントを検証。最終ファイル検証ツールは出力・検証記録の上書きを禁止するため、改訂候補は別名で検証した後に公開保存先へコピーした。
+
+HTMLは最終PPTXの描画7枚と説明文を内蔵。画像7枚のdecode、前後・左右キー・番号移動、390px幅で横はみ出しなし、PPTXリンク先の存在、ページエラー0件を確認した。PowerPoint本体のネイティブ描画・全画面の手動操作・印刷は未確認。資料のみの変更のため、アプリ回帰・型チェック・lint・buildは実施していない。モデル通信・認証操作・アプリ起動・push・mergeは行っていない。
+
+公開保存先は上記のPPTX・HTMLと同じ。PPTX SHA256: 09838d518a6c5bda5abbc9548839b97d0769de6be7c9ba46a8216e90d0327fee。HTML SHA256: 28c6849be6b1c02450382f7fe1dd704426ab66abe1cd451c0dc5c61ba5e5010c。検証記録は.out/presentation-revision-20261008/buildに保持。
+
+### 再改訂版のマージ準備
+
+ユーザーのマージ指示を受け、origin/mainが9265300のままであること、差分が紹介資料と記録の4ファイルだけであることを確認。公開保存先のHTMLを直接開き、7枚の画像、前後移動、左右キー、番号移動、一覧表示、390px幅の横はみ出しなし、PPTXリンク、ページエラー0件を再確認した。成果物のSHA256は上記と一致。PPTXのXML・ノートの秘密値パターン検査、git diff --checkも成功。アプリの実装変更がないため全回帰・型・lint・buildは追加実行していない。ローカルに.github/workflowsは存在しない。GitHub側のCIとマージ結果はPRで確認する。
+
 ## 公開準備
 
 ユーザーのマージ指示を受け、最新origin/main b4c6d38からcodex/app-introduction-materialsを作成した。成果物2件をdocs/presentations/20261008へ内容を変更せずコピーし、READMEの案内と公開リンクを追加。作成用の一時ファイル・検証profile・exe・アプリ履歴は含めない。コピー後のハッシュ一致、HTMLのリンク・12枚の画像表示・前後／キー／番号／一覧操作、390px幅の横はみ出しなし、PPTXの再importと12枚構造を確認済み。ページエラーなし。PPTXのXML/関連情報65件とHTMLに秘密値らしい文字列がないこと、exe・履歴ファイルを含まないことも確認した。アプリの実装に変更がないため、アプリ全回帰・型・lint・buildは新たに実施しない。

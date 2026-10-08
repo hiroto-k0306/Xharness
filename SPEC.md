@@ -495,6 +495,8 @@ Claudeのモデル証跡は指定alias/解決済みID、SDK初期化、parent=nu
 
 公式phaseの診断はrequest IDに結び付け、送信モデル・phase・cwd・sandbox・承認設定・ツール名と状態・終了理由を保存する。ClaudeはSDK初期モデル、assistantモデルとparent_tool_use_id（欠測はunknown）、resultのモデル別トークン値を別々に保持する。モデル名の集合から主応答や補助処理の役割を推測しない。通常の最終返答は明示的な合成課題診断だけで最大8000文字を保存し、認証情報をマスクする。思考ブロック・rawイベント・ツール本文・認証応答は保存しない。一般のAgentRequestは本文保存を既定で無効にする。
 
+2026-10-08の利用者依頼により、通常の単一タスクと質問には、これとは別にXHarness→公式エージェント境界の学習用記録を追加する。request IDごとに送信前の指示・参考履歴/差分・対象・テスト定義・応答schemaと、エージェントが返した構造化結果を保存する。資格情報名/値の既知形式・思考ブロックを除去し、入力/応答それぞれ24,000文字まで。末尾省略・応答欠測・旧記録の本文なしを明示する。LoopFlow、詳細パネル、HTMLに番号ごとの折りたたみと日本語の役割説明を表示する。英語の実指示を日本語に翻訳したものと偽らず、原文を安全化して表示する。SDK内部の追加system/ツール定義・イベント・HTTPヘッダ・全往復は含まない。診断用finalAnswer保存の制限とnative DAG無効を維持し、過去の未保存本文を補完しない。
+
 Codex実装/fixのnative exec用に公式code-mode hostを使用する。起動時の一律無効化を行わず、phase設定で実装/fixだけcode_mode/hostを有効にする。code_mode_onlyは無効にし、読み取りphaseには既存のツール無効設定を適用する。workspace-write、networkAccess:false、untrusted承認、既存のscope・テストコマンド照合は維持する。hostの起動失敗や権限拒否は停止対象で、sandboxを緩めない。commandExecutionのfailedかつsource=unifiedExecStartupは、最終turnがcompletedでもnative-exec-startup-failedとして停止し、「変更なし」に置き換えない。個別通知と最終turn.itemsの双方を確認し、同じ完了itemの証跡は重複させない。終了コードや所要時間だけから起動失敗・共有違反を推定しない（2026-10-08エラー分類修正）。
 
 Codexの残量と認証・課金経路は別に検証する。公式App Server 0.160.0のread応答にある`ordinaryUsageAllowed`を通常枠の許可根拠にし、未知を割合やreset時刻から補わない。`credits`残高だけで従量課金中と判定しない。現在の実験はChatGPT認証の個人向けPlus/Pro系plan、上書きのない公式openai接続先、標準速度、provider/model fallback無効に限定する。認証・plan・thread応答の経路が確認できない場合は具体的理由を表示し停止する。APIキー、追加credits利用への切替、購入や課金設定変更は行わない。workspaceの従量課金経路は未対応。

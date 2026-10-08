@@ -1,4 +1,5 @@
 import { randomUUID, createHash } from "node:crypto";
+import { communicationInput, communicationText } from "./communication.js";
 import { dagResumeBlockReason } from "./dag.js";
 import {
   beginTrace,
@@ -117,6 +118,7 @@ export interface WorkflowRecord {
   calls: (
     | {
         requestId: string;
+        communication?: import("./communication.js").WorkflowCommunication;
         nodeId?: string;
         phase: AgentRequest["phase"];
         provider: ModelCandidate["provider"];
@@ -126,6 +128,7 @@ export interface WorkflowRecord {
       }
     | ({
         requestId: string;
+        communication?: import("./communication.js").WorkflowCommunication;
         nodeId?: string;
         phase: AgentRequest["phase"];
         provider: ModelCandidate["provider"];
@@ -396,8 +399,18 @@ export async function runOfficialSingleTask(
   ) => {
     signal.throwIfAborted();
     const requestId = randomUUID();
+    const tests = options.project
+      ? options.tests.map((test) => ({ ...test, command: "" }))
+      : options.tests;
+    const outputSchema =
+      phase === "plan"
+        ? planOutputSchema(options.tests)
+        : phase === "review"
+          ? schemas.review
+          : schemas.implement;
     const entry = {
       requestId,
+      communication: communicationInput({ prompt, files, tests, outputSchema }),
       phase,
       provider: model.provider,
       requestedModel: model.model,
@@ -443,15 +456,8 @@ export async function runOfficialSingleTask(
             files,
             // General-project tests run only on X's host, after plan approval.
             // Keep args for read-only test-file scope; disable native command auto-approval.
-            tests: options.project
-              ? options.tests.map((test) => ({ ...test, command: "" }))
-              : options.tests,
-            outputSchema:
-              phase === "plan"
-                ? planOutputSchema(options.tests)
-                : phase === "review"
-                  ? schemas.review
-                  : schemas.implement,
+            tests,
+            outputSchema,
             timeoutMs: options.timeoutMs ?? 180000,
             approve: options.approveTool,
             tool: async (evidence) => {
@@ -465,7 +471,14 @@ export async function runOfficialSingleTask(
         ),
     );
     const { output, ...metadata } = result;
-    record.calls[record.calls.length - 1] = { ...entry, ...metadata };
+    record.calls[record.calls.length - 1] = {
+      ...entry,
+      ...metadata,
+      communication: {
+        ...entry.communication,
+        ...(output !== undefined ? { output: communicationText(output) } : {}),
+      },
+    };
     span.end(
       {
         dispatched: result.dispatched,

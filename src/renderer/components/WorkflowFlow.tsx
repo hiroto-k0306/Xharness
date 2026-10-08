@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { OfficialWorkflowView } from "../../shared/official-workflow.js";
 import type { WorkflowRecord } from "../../main/workflow/official/runtime.js";
 import styles from "./Activity.module.css";
+import { OfficialCommunication } from "./OfficialCommunication.js";
 
 const endings: Record<string, string> = {
   completed: "完了",
@@ -186,6 +187,7 @@ export function WorkflowFlow({
                 : "この会話の実行記録は未取得です"}
       </p>
       {record?.simulated && <p>模擬通信の記録</p>}
+      {record && <OfficialCommunication record={record} />}
       <p>
         モデルは指示・返答を生成。ツールは公式SDK / App
         Server、独立テスト・Git・記録はハーネスが実行します。

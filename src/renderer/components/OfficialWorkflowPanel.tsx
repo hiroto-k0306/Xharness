@@ -5,6 +5,7 @@ import type {
 } from "../../shared/official-workflow.js";
 import styles from "./OfficialWorkflowPanel.module.css";
 import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
+import { OfficialCommunication } from "./OfficialCommunication.js";
 import { OfficialPlanAssignments } from "./OfficialPlanAssignments.js";
 import { ClaudeSdkStatus } from "./ClaudeSdkStatus.js";
 import { CodexRuntimeSettings } from "./CodexRuntimeSettings.js";
@@ -320,6 +321,7 @@ export function OfficialWorkflowPanel({
                 {r.status} / 修正 {r.correctionRounds}回
               </h3>
               <a href={reportHref}>HTMLレポートを開く</a>
+              <OfficialCommunication record={r} />
               <p>保全した作業領域：{r.cwd}</p>
               <p>{r.goal}</p>
               {r.answer && <p aria-label="公式回答">{r.answer}</p>}

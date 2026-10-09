@@ -1,14 +1,14 @@
 import { expect, it, vi } from "vitest";
 import { readFile, writeFile, appendFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fixture } from "./improvements.fixture.js";
+import { fixture } from "./handoffs.fixture.js";
 import { JsonFile, SessionStore, WorkspaceStore } from "./store.js";
 import { Handoffs } from "./handoffs.js";
 import { type HandoffAction } from "../../shared/handoffs.js";
 import { parseCommand } from "../../shared/ipc.js";
 
-async function setup() {
-  const f = await fixture();
+async function setup(answer = "pong") {
+  const f = await fixture(answer);
   const made = await f.c.handle({
     type: "new_session",
     workspaceId: f.workspaceId,
@@ -342,15 +342,15 @@ it("cancels an in-progress preview before it can create a confirmation ticket", 
 });
 
 it("copies only sanitized final text, never reasoning, tools, system or credentials", async () => {
-  const f = await setup(),
+  const f = await setup("safe result\napi_key=private-value"),
     { service, scope } = await direct(f);
+  const final = (await scope.sessions.messages(f.sessionId)).at(-1)!;
   await scope.sessions.append(
     f.sessionId,
     [
       {
         role: "assistant",
         content: [
-          { type: "text", text: "safe result\napi_key=private-value" },
           {
             type: "reasoning",
             provider: "claude",
@@ -358,6 +358,7 @@ it("copies only sanitized final text, never reasoning, tools, system or credenti
           },
         ],
       },
+      final,
     ],
     (s) => s,
   );

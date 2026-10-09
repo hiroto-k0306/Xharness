@@ -2,8 +2,12 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, vi } from "vitest";
+import { randomUUID } from "node:crypto";
 import { SessionController, type ControllerOptions } from "./controller.js";
-import { FakeProvider } from "../providers/fake/fake-provider.js";
+import { unavailableLegacy } from "../official-profile.js";
+import type { OfficialSessionSubmission } from "../../shared/official-session.js";
+import type { WorkflowRecord } from "../workflow/official/runtime.js";
+import { officialSessionSummary } from "../workflow/official/session-result.js";
 import { type UiEvent } from "../../shared/ipc.js";
 import {
   type Improvement,
@@ -39,17 +43,66 @@ export async function fixture(
   await writeFile(join(home, "config.yaml"), "workflow: {mode: off}\n");
   const controllers: SessionController[] = [],
     events: UiEvent[] = [],
-    requests = vi.fn();
+    requests = vi.fn(
+      async (r: OfficialSessionSubmission, signal: AbortSignal) => {
+        signal.throwIfAborted();
+        const id = randomUUID();
+        const record: WorkflowRecord = {
+          version: 1,
+          id,
+          sessionId: r.sessionId,
+          goal: r.text,
+          cwd: r.cwd,
+          simulated: true,
+          startedAt: new Date(Date.now() - 1).toISOString(),
+          finishedAt: new Date().toISOString(),
+          status: "completed",
+          next: "complete",
+          base: "",
+          head: "",
+          correctionRounds: 0,
+          inputIntent: "question",
+          answer: "pong",
+          calls: [
+            {
+              requestId: randomUUID(),
+              phase: "conversation",
+              provider: "claude",
+              requestedModel: "claude-haiku-5-5",
+              effort: "medium",
+              observedModels: ["claude-haiku-5-5"],
+              status: "completed",
+              dispatched: true,
+              usage: null,
+              elapsedMs: 1,
+            },
+          ],
+          tools: [],
+          commits: [],
+          checks: [],
+          reviews: [],
+        };
+        const folder = join(home, "official-workflows", id);
+        await mkdir(folder, { recursive: true });
+        await writeFile(join(folder, "workflow.json"), JSON.stringify(record));
+        return {
+          workflowId: id,
+          status: record.status,
+          summary: officialSessionSummary(record, false),
+        };
+      },
+    );
   fixtures.push({ base, controllers });
   const create = () => {
     const c = new SessionController({
       home,
-      model: "fake",
+      model: "claude:opus",
       fake: true,
       version: "test",
       phase4: true,
       quotaNow,
-      provider: new FakeProvider({ onRequest: requests }),
+      provider: unavailableLegacy("claude"),
+      officialSession: requests,
       host: { pickFolder: async () => root },
       emit: (e) => events.push(e),
       ...extra,

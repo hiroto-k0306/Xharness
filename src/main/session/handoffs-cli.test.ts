@@ -3,7 +3,7 @@ import { createInterface } from "node:readline/promises";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { handoffCli } from "../../../scripts/handoff.js";
-import { fixture } from "./improvements.fixture.js";
+import { fixture } from "./handoffs.fixture.js";
 vi.mock("node:readline/promises", () => ({ createInterface: vi.fn() }));
 
 it("headless requires same-process preview confirmation; cancel/list/send never call a provider", async () => {

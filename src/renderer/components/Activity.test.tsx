@@ -93,6 +93,7 @@ it("shows receipt details as plain text and loop gate as waiting", () => {
       />
     </>,
   );
+  fireEvent.click(screen.getByRole("button", { name: /receipts ·/ }));
   fireEvent.click(screen.getByText("#001"));
   expect(screen.getByRole("dialog")).toHaveTextContent("untrusted()");
   expect(screen.getByRole("dialog").querySelector("script")).toBeNull();
@@ -150,4 +151,41 @@ it("submits repository options and worktree branch choices through the validated
     undefined,
     "feature/test",
   );
+});
+
+it("keeps receipt evidence collapsed on mount, session switch and remount, without opening on updates", () => {
+  const view = render(
+    <Receipts sessionId="a">
+      <p>saved evidence</p>
+    </Receipts>,
+  );
+  const toggle = () => screen.getByRole("button", { name: /receipts ·/ });
+  expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText("saved evidence")).not.toBeInTheDocument();
+  fireEvent.click(toggle());
+  expect(screen.getByText("saved evidence")).toBeInTheDocument();
+  view.rerender(
+    <Receipts sessionId="b">
+      <p>other evidence</p>
+    </Receipts>,
+  );
+  expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  view.rerender(
+    <Receipts sessionId="a" running>
+      <p>saved evidence updated</p>
+    </Receipts>,
+  );
+  expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByText("saved evidence updated")).not.toBeInTheDocument();
+  fireEvent.click(toggle());
+  expect(screen.getByText("saved evidence updated")).toBeInTheDocument();
+  fireEvent.click(toggle());
+  expect(toggle()).toHaveAttribute("aria-expanded", "false");
+  view.unmount();
+  render(
+    <Receipts sessionId="a">
+      <p>saved evidence</p>
+    </Receipts>,
+  );
+  expect(toggle()).toHaveAttribute("aria-expanded", "false");
 });

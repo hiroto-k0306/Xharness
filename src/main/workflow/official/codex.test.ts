@@ -232,7 +232,11 @@ it.each(["plan", "implement", "fix", "review"] as const)(
       new AbortController().signal,
     );
     expect(result.status).toBe("failed");
+    expect(result.error).toMatch(
+      /^official-skills-codex-discovery-boundary-unverified:/,
+    );
     expect(result.error).toContain("公式skill実行は未対応");
+    expect(result.error).toContain("project/ancestor/user/admin/system");
     expect(result.dispatched).toBe(false);
     expect(start).not.toHaveBeenCalled();
     expect(mock.calls).toEqual([]);
@@ -253,6 +257,45 @@ it.each(["plan", "implement", "fix", "review"] as const)(
     expect(JSON.stringify(result)).not.toContain("private skill body");
   },
 );
+it("cancelled selected skills remain requested metadata without a server, dispatch, observation or body", async () => {
+  const start = vi.fn(() => fakeServer().server);
+  const controller = new AbortController();
+  controller.abort();
+  const selected = {
+    provider: "codex" as const,
+    scope: "project" as const,
+    name: "selected",
+    source: "/synthetic/.agents/skills/selected/SKILL.md",
+    hash: "a".repeat(64),
+    bundleHash: "b".repeat(64),
+    files: [
+      {
+        relativePath: "SKILL.md",
+        body: "PRIVATE SKILL BODY",
+        hash: "a".repeat(64),
+      },
+    ],
+  };
+  const result = await new CodexWorkflowAgent(start).run(
+    { ...request(), nativeWork: true, officialSkills: [selected] },
+    controller.signal,
+  );
+  expect(result.status).toBe("cancelled");
+  expect(result.dispatched).toBe(false);
+  expect(start).not.toHaveBeenCalled();
+  expect(result.officialSkillsEvidence).toMatchObject({
+    requested: [
+      {
+        name: "selected",
+        hash: selected.hash,
+        bundleHash: selected.bundleHash,
+      },
+    ],
+    dispatched: [],
+    observed: [],
+  });
+  expect(JSON.stringify(result)).not.toContain("PRIVATE SKILL BODY");
+});
 it("an empty skill selection preserves ordinary Codex execution", async () => {
   const mock = fakeServer();
   const result = await new CodexWorkflowAgent(() => mock.server).run(

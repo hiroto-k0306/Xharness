@@ -606,6 +606,7 @@ export function App() {
           </div>
           {app.phase4 && (
             <Receipts
+              key={`receipts-${current ?? "no-session"}`}
               receipts={view?.receipts}
               sessionId={current ?? undefined}
               running={session?.status !== "idle"}

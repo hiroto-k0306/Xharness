@@ -34,6 +34,8 @@ it.each(["transcript", "receipt-rows"])(
         <Receipts sessionId={sessionId} receipts={receipts(n)} />
       );
     const view = render(element(1));
+    if (panel === "receipt-rows")
+      fireEvent.click(screen.getByRole("button", { name: /receipts ·/ }));
     const pane = screen.getByTestId(panel);
     expect(pane.scrollTop).toBe(400);
     pane.scrollLeft = 30;
@@ -56,6 +58,10 @@ it.each(["transcript", "receipt-rows"])(
     view.rerender(element(5));
     expect(pane.scrollTop).toBe(700);
     view.rerender(element(6, "other-session"));
+    if (panel === "receipt-rows") {
+      expect(screen.queryByTestId(panel)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /receipts ·/ }));
+    }
     expect(screen.getByTestId(panel).scrollTop).toBe(800);
   },
 );

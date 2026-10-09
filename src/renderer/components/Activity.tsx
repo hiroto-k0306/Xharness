@@ -95,7 +95,17 @@ export function Receipts({
   sessionId?: string;
   running?: boolean;
 }) {
-  const rows = useFollowScroll(receipts, sessionId);
+  const [expandedSession, setExpandedSession] = useState<string>();
+  const scope = sessionId ?? "no-session";
+  const expanded = expandedSession === scope;
+  const rows = useFollowScroll(receipts, `${scope}:${expanded}`);
+  useEffect(() => {
+    setExpandedSession(undefined);
+    setSelected(undefined);
+    setReplay(undefined);
+    setReplayError("");
+    setExportStatus("");
+  }, [sessionId]);
   const [selected, setSelected] = useState<Receipt>();
   const [replay, setReplay] = useState<ReceiptReplay>();
   const [replayError, setReplayError] = useState("");
@@ -111,100 +121,116 @@ export function Receipts({
   return (
     <section className={styles.receipts} aria-label="receipts">
       <div className={styles.heading}>
-        receipts · {receipts.length}
-        {sessionId && (
-          <button
-            className={styles.replayButton}
-            disabled={running || exporting}
-            onClick={async () => {
-              setExporting(true);
-              setExportStatus("");
-              try {
-                const result = await window.harness.command({
-                  type: "export_report",
-                  sessionId,
-                });
-                setExportStatus(
-                  result.ok
-                    ? "HTMLを保存しました"
-                    : result.error === "cancelled"
-                      ? ""
-                      : result.error,
-                );
-              } catch {
-                setExportStatus("レポートを保存できませんでした");
-              } finally {
-                setExporting(false);
-              }
-            }}
-          >
-            HTML出力
-          </button>
-        )}
-        {exportStatus && <span role="status">{exportStatus}</span>}
         <button
           className={styles.replayButton}
-          disabled={!receipts.length}
+          aria-expanded={expanded}
           onClick={() => {
-            try {
-              setReplay(buildReceiptReplay(receipts));
-              setSelected(undefined);
-              setReplayError("");
-            } catch {
-              setReplayError("記録が大きすぎるため再生できません");
-            }
+            setExpandedSession(expanded ? undefined : scope);
+            setSelected(undefined);
+            setReplay(undefined);
           }}
         >
-          再生
+          {expanded ? "▾" : "▸"} receipts · {receipts.length}
         </button>
-        {replayError && <span role="status">{replayError}</span>}
       </div>
-      <div ref={rows} className={styles.rows} data-testid="receipt-rows">
-        {receipts.slice(-100).map((r) => (
-          <button
-            key={r.id}
-            className={styles.row}
-            onClick={() => setSelected(r)}
-          >
-            <span>{r.id}</span>
-            <span>{r.provider}</span>
-            <span>{r.tool ?? r.kind}</span>
-            <span>{r.decision ?? "—"}</span>
-            <span>{r.durationMs}ms</span>
-            <span>
-              {r.usage
-                ? `${r.usage.inputTokens}/${r.usage.outputTokens} tok`
-                : "—"}
-            </span>
-          </button>
-        ))}
-      </div>
-      {children}
-      {replay && (
-        <ReceiptReplayDialog
-          replay={replay}
-          onClose={() => setReplay(undefined)}
-        />
-      )}
-      {selected && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="receipt details"
-          className={styles.details}
-        >
-          <button autoFocus onClick={() => setSelected(undefined)}>
-            close
-          </button>
-          <b>
-            {selected.id} · {selected.summary}
-          </b>
-          <pre>{JSON.stringify(selected.input ?? {}, null, 2)}</pre>
-          {selected.tool === "TodoWrite" && parseTodos(selected.input) && (
-            <TodoList todos={parseTodos(selected.input)!} />
+      {expanded && (
+        <>
+          <div className={styles.heading}>
+            {sessionId && (
+              <button
+                className={styles.replayButton}
+                disabled={running || exporting}
+                onClick={async () => {
+                  setExporting(true);
+                  setExportStatus("");
+                  try {
+                    const result = await window.harness.command({
+                      type: "export_report",
+                      sessionId,
+                    });
+                    setExportStatus(
+                      result.ok
+                        ? "HTMLを保存しました"
+                        : result.error === "cancelled"
+                          ? ""
+                          : result.error,
+                    );
+                  } catch {
+                    setExportStatus("レポートを保存できませんでした");
+                  } finally {
+                    setExporting(false);
+                  }
+                }}
+              >
+                HTML出力
+              </button>
+            )}
+            {exportStatus && <span role="status">{exportStatus}</span>}
+            <button
+              className={styles.replayButton}
+              disabled={!receipts.length}
+              onClick={() => {
+                try {
+                  setReplay(buildReceiptReplay(receipts));
+                  setSelected(undefined);
+                  setReplayError("");
+                } catch {
+                  setReplayError("記録が大きすぎるため再生できません");
+                }
+              }}
+            >
+              再生
+            </button>
+            {replayError && <span role="status">{replayError}</span>}
+          </div>
+          <div ref={rows} className={styles.rows} data-testid="receipt-rows">
+            {receipts.slice(-100).map((r) => (
+              <button
+                key={r.id}
+                className={styles.row}
+                onClick={() => setSelected(r)}
+              >
+                <span>{r.id}</span>
+                <span>{r.provider}</span>
+                <span>{r.tool ?? r.kind}</span>
+                <span>{r.decision ?? "—"}</span>
+                <span>{r.durationMs}ms</span>
+                <span>
+                  {r.usage
+                    ? `${r.usage.inputTokens}/${r.usage.outputTokens} tok`
+                    : "—"}
+                </span>
+              </button>
+            ))}
+          </div>
+          {children}
+          {replay && (
+            <ReceiptReplayDialog
+              replay={replay}
+              onClose={() => setReplay(undefined)}
+            />
           )}
-          <pre>{selected.output ?? ""}</pre>
-        </div>
+          {selected && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="receipt details"
+              className={styles.details}
+            >
+              <button autoFocus onClick={() => setSelected(undefined)}>
+                close
+              </button>
+              <b>
+                {selected.id} · {selected.summary}
+              </b>
+              <pre>{JSON.stringify(selected.input ?? {}, null, 2)}</pre>
+              {selected.tool === "TodoWrite" && parseTodos(selected.input) && (
+                <TodoList todos={parseTodos(selected.input)!} />
+              )}
+              <pre>{selected.output ?? ""}</pre>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

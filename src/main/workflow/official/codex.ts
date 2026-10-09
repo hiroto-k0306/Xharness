@@ -25,6 +25,8 @@ import {
   type RuntimeUsage,
 } from "./contracts.js";
 export type AppServerStart = (cwd: string) => AppServerPort;
+const skillDiscoveryBoundaryStop =
+  "official-skills-codex-discovery-boundary-unverified: Codexの公式skill実行は未対応です。未選択のproject/ancestor/user/admin/systemスキルを一時allowlistで除外する契約をこの公式CLIで確認できないため、App Serverを起動せずモデル入力も送信していません。";
 /**
  * Fixed phase rules. Implementations are told the exact commands XHarness can
  * route to approval (one planned-file read or one registered test per call), so
@@ -229,8 +231,7 @@ export class CodexWorkflowAgent implements OfficialAgent {
         observedModels: [],
         usage: null,
         elapsedMs: 0,
-        error:
-          "Codexの公式skill実行は未対応です。選択したskillだけに限定する隔離をこの公式CLIで確認できないため、モデル入力を送信していません。",
+        error: skillDiscoveryBoundaryStop,
         officialSkillsEvidence: {
           requested: request.officialSkills.map((skill) => ({
             provider: skill.provider,

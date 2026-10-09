@@ -24,6 +24,7 @@ it("exports the parent session using the typed command and disables export while
     const { rerender } = render(
       <Receipts receipts={values} sessionId="parent" />,
     );
+    fireEvent.click(screen.getByRole("button", { name: /receipts ·/ }));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "HTML出力" }));
     });
@@ -61,6 +62,7 @@ it("takes a snapshot while live receipts grow and closes on Esc without aborting
   const abort = vi.fn();
   window.addEventListener("keydown", abort);
   const { rerender } = render(<Receipts receipts={values} />);
+  fireEvent.click(screen.getByRole("button", { name: /receipts ·/ }));
   fireEvent.click(screen.getByText("再生"));
   rerender(<Receipts receipts={[...values, { ...values[0]!, id: "new" }]} />);
   expect(screen.getByText("1 / 3")).toBeInTheDocument();

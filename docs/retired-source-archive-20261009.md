@@ -1,6 +1,6 @@
 # 未使用旧ソースのOld整理（2026-10-09）
 
-基準はPR #26マージ後のmain `991e6e44e6fabed671f74a9b6c4ffcb50ae5a088`。PRのmerge commitは `fce9ebaee0049790737947d735bdaa8da06fb6db`。ユーザーがマージした後の最新mainを読み取り確認し、ユーザーのOld/docs/プロンプト変更は保持した。今回の作業はローカルのみで、push/mergeしない。
+基準はPR #26マージ後のmain `991e6e44e6fabed671f74a9b6c4ffcb50ae5a088`。PRのmerge commitは `fce9ebaee0049790737947d735bdaa8da06fb6db`。ユーザーがマージした後の最新mainを読み取り確認し、ユーザーのOld/docs/プロンプト変更は保持した。初回整理はローカルコミットまで（98cad952）。その後の利用者の明示依頼により、push/PR/通常マージへ進める。
 
 ## 保存対象と対応
 
@@ -42,3 +42,9 @@ project inventory/native snapshotはOldを汎用テキストとして読む。�
 - 変更した現行文書/設定/コードと新索引のPrettier、git diff --checkを確認。既存Old資料と今回保存したソース本文は再整形しない。
 
 独立レビューで移動閉包、出典、共通機能の保護、探索/配布境界を確認し、READMEの旧MCP fixture説明を修正した。独立した型検査も終了0、Vitest収集195ファイルのOld/spike候補は0件。独立のcontroller/quota3ファイル33件も成功（上記57件と重複するため加算しない）。現行公式workflow/config/catalogとユーザーのOld/docs/プロンプトに変更なし。レビューでブロッカーは見つからなかった。
+
+## Windows検証マージ後の統合
+
+利用者のマージ依頼を受け、最新main `2190398f98b5fa0ff5c891d6481715b2367331b2` をOld整理ブランチへ競合なく通常mergeした。PR #27 / `03aa87f926a373f9e89b1b75238f5987c180540c` の文書・検証ログ16件は原本のまま保持。製品コードの変更はない。[Windows検証記録](windows-pr26-validation-20261009.md)の対象はPR26 merge fce9ebaで、限定48件成功・対象失敗/skip0、ACL操作を伴うSIWC1件は未実施。この結果をOld整理後の新しいWindows実行結果と扱わない。
+
+統合後は型・lint・内部リンク・アーカイブ原本ハッシュとWindows追加16件の完全一致を確認する。コード差分が増えていないため限定57件の再実行や全回帰は行わない。CI/保護ルールは変更しない。

@@ -95,7 +95,7 @@ Claude SDK/Codex App Serverの正規サブスク認証と通常枠を確認し�
 
 ## 10. 画面・停止・レポート
 
-desktopは会話、model/effort、作業場所、計画/native操作承認、停止、Transcript/LoopFlow、公式記録の詳細を表示する。停止ボタンと `/stop` を使い、旧slashのモデル実行・画像添付・旧履歴の送信/設定変更を許可しない。
+desktopは会話、model/effort、作業場所、計画/native操作承認、停止、Transcript/LoopFlow、公式記録の詳細を表示する。停止ボタンと `/stop` を使い、旧slashのモデル実行・画像添付・旧履歴のphase/MCP操作を許可しない。headlessの旧会話は閲覧専用とし、GUIの完了済み保存会話への新規送信は公式入口と参考履歴の境界を使う。
 
 HTML出力・旧レシート/トレースの読取再生を維持する。再生は記録の閲覧であり、モデル・旧ツール・shellの再実行ではない。学習用指示/応答・公開イベント・nativeValidation・固定課題checksは出典を分け、秘密除去・省略・欠測を表示する。非公開思考・全HTTP往復の録画ではない。保存失敗は公式phase停止対象（§15）。
 
@@ -107,7 +107,7 @@ headlessも共通SessionControllerのofficialSessionからOfficialWorkflowServic
 
 起動は `--model` / `--effort` / `--cwd` / `--resume` / `--mode` / `--fake` / `--codex-path`。端末専用の `/help` / `/exit` / `/stop` / `/model` / `/mode` / `/resume` / `/clear` / `/history` / `/workflow` はheadless側が処理し、モデルへ旧slashツールを渡すものではない。最新の受理引数は [headless.ts](src/headless.ts) のhelpとparserを基準にする。
 
-計画/native操作承認は入力・出力ともTTYである場合だけ受け付ける。非TTYで承認が必要なら無断許可せず理由付きで停止し、記録/変更を保全する。Ctrl+Cまたは実行中EOFは取消とし、成功へ変換しない。終了コードは0正常、1拒否/失敗/承認不能、130中断。
+計画/native操作承認は入力・出力ともTTYである場合だけ受け付ける。非TTYで承認が必要なら無断許可せず理由付きで停止し、記録/変更を保全する。非TTYのEOFは入力完了として受領済みの質問を処理する。Ctrl+CまたはTTYの実行中EOFは取消とし、成功へ変換しない。終了コードは0正常、1拒否/失敗/承認不能、130中断。
 
 `--resume`は保存済みcwd/model/modeを保持し、変更指定と併用しない。旧会話は閲覧専用で、送信/設定変更を拒否し `/clear` で新しい公式会話を作る。`--report <sessionId> --output <new.html>` と `--replay <sessionId>` はモデルを初期化しない読取互換経路。必要時の旧権限比較は実行許可ではない。通常作業の自動resumeとは区別する。
 

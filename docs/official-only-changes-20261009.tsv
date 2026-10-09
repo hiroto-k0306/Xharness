@@ -39,6 +39,8 @@ M	docs/claude-refresh-investigation.md
 A	docs/documentation-refresh-20261009.md
 M	docs/gui-testing.md
 M	docs/official-default-session-20261007.md
+A	docs/official-only-changes-20261009.tsv
+A	docs/official-only-consolidation-20261009.md
 M	docs/review-limit-progress.md
 M	docs/stabilize-progress.md
 M	electron-builder.yml
@@ -185,5 +187,10 @@ M	src/renderer/components/Transcript.test.tsx
 M	src/renderer/components/Transcript.tsx
 D	src/renderer/workflow-bridge.test.ts
 M	src/shared/project-skills.ts
-A	docs/official-only-changes-20261009.tsv
-A	docs/official-only-consolidation-20261009.md
+A	docs/official-only-review-20261009.md
+A	docs/verification-20261009/baseline-6370866-fixed-resume.log
+A	docs/verification-20261009/baseline-6370866-memory.log
+A	docs/verification-20261009/deleted-test-classification.tsv
+A	docs/verification-20261009/fixed-resume-observation.json
+A	docs/verification-20261009/headless-review-final.log
+A	docs/verification-20261009/scoped-suite-f292b0f.log

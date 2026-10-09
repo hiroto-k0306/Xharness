@@ -47,7 +47,7 @@ GUIと同じSessionController/OfficialWorkflowServiceを使います。`--model`
 
 端末専用の `/help` / `/exit` / `/stop` / `/model` / `/mode` / `/resume` / `/clear` / `/history` / `/workflow` はheadlessで処理します。旧 `/compact` / `/mcp` / `/review` / `/init`等をモデル実行へ送信しません。
 
-計画/native操作承認は入出力ともTTYの場合だけです。非TTYで承認が必要なら取消・理由表示・終了1とし、無断で許可しません。Ctrl+C/実行中EOFは取消・終了130。旧会話は閲覧専用で、`/clear`から新しい公式会話を始めます。
+計画/native操作承認は入出力ともTTYの場合だけです。非TTYで承認が必要なら取消・理由表示・終了1とし、無断で許可しません。非TTYのEOFは入力完了として受領済みの質問を処理します。Ctrl+C/TTYの実行中EOFは取消・終了130。旧会話は閲覧専用で、`/clear`から新しい公式会話を始めます。
 
 `--report <sessionId> --output <new.html>` と `--replay <sessionId>` は旧記録も扱うモデル初期化なしの読取互換機能です。レシート再生や旧権限比較はモデル/shellの再実行ではありません。
 

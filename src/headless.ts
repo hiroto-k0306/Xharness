@@ -212,6 +212,7 @@ export async function headless(
   let turnSignal: AbortController | undefined;
   let exitCode = 0;
   let interrupted = false;
+  let stopAfterTurn = false;
   const lifetime = new AbortController();
   const cancel = () => {
     exitCode = 130;
@@ -235,7 +236,7 @@ export async function headless(
       ports.interactive ?? !!(process.stdin.isTTY && process.stdout.isTTY),
     );
     terminal.onEnd = () => {
-      if (activeSession) cancel();
+      if (terminal!.interactive && activeSession) cancel();
     };
     terminal.onLine = (line) => {
       if (activeSession && line.trim() === "/stop") {
@@ -394,7 +395,7 @@ export async function headless(
       for (const { record } of view.records)
         write(`workflow ${record.id} · ${record.status} · ${record.goal}\n`);
     };
-    while (!interrupted) {
+    while (!interrupted && !stopAfterTurn) {
       const line = await terminal.read("❯ ", lifetime.signal);
       if (line === undefined) break;
       const text = line.trim();
@@ -491,8 +492,8 @@ export async function headless(
       turnSignal = new AbortController();
       activeSession = sessionId;
       try {
-        if (terminal.ended) {
-          write("stdinが終了したため新しい実行を開始しません。\n");
+        if (terminal.interactive && terminal.ended) {
+          write("TTYが終了したため新しい実行を開始しません。\n");
           exitCode ||= 130;
           break;
         }
@@ -534,6 +535,7 @@ export async function headless(
                 "自動モード: この計画を承認すると、この実行の操作確認も許可されます。\n",
               );
             if (!terminal.interactive) {
+              stopAfterTurn = true;
               error.write(
                 "非TTYでは計画/操作を承認できません。無断許可せず記録を保全して停止しました。\n",
               );

@@ -1,0 +1,27 @@
+
+ RUN  v5.0.3 /tmp/xharness-baseline-6370866
+
+ ❯ |node| src/main/workflow/official/service.test.ts (51 tests | 1 failed | 50 skipped) 20258ms
+   × persists denied approval across restart, asks again, and finishes without replaying planning 20257ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| src/main/workflow/official/service.test.ts > persists denied approval across restart, asks again, and finishes without replaying planning
+Error: Workflow fixture did not reach expected state
+ ❯ wait src/main/workflow/official/service.test.ts:91:9
+     89|     await new Promise((r) => setTimeout(r, 20));
+     90|   }
+     91|   throw new Error("Workflow fixture did not reach expected state");
+       |         ^
+     92| }
+     93| it.each([true, false])(
+ ❯ src/main/workflow/official/service.test.ts:270:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 50 skipped (51)
+   Start at  01:43:47
+   Duration  21.61s (tests 94%, transform 3%, import 3%)
+

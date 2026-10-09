@@ -61,7 +61,7 @@ workspace選択時のメモリ・受渡し・改善・ローカルブラウザ�
 
 SkillsManagerの明示送信は、mainのpreview IPCでsource/hashを再確認して既存許可を通し、非信頼JSONの本文/出典情報を通常sendへ渡します。全量4000文字以内・非省略に限定し、超過を切り詰めません。SDK skills/MCP/権限・scriptを有効化せず、永続登録ではありません。成功表示は通常sendの受付であり、旧LoadProjectSkillレシート成功とは区別します。付属資料は版確認/プレビューのみで送信未対応です。セッション切替/取消後の遅延previewは無効化します。
 
-headlessは実行要求時に共通OfficialWorkflowServiceを準備します。入力・出力ともTTYの場合だけ計画/操作を承認でき、非TTYの承認要求は取消・理由表示・終了1です。実行中EOF/Ctrl+Cは取消・終了130。report/replayはモデル初期化なしの読取互換経路で、旧資格情報readerを使いません。旧sessionのresumeは保存値を保持して閲覧し、公式作業の自動再開ではありません。
+headlessは実行要求時に共通OfficialWorkflowServiceを準備します。入力・出力ともTTYの場合だけ計画/操作を承認でき、非TTYの承認要求は取消・理由表示・終了1です。非TTYのEOFは入力完了であり受領済みの質問を処理します。TTYの実行中EOF/Ctrl+Cは取消・終了130。report/replayはモデル初期化なしの読取互換経路で、旧資格情報readerを使いません。旧sessionのresumeは保存値を保持して閲覧し、公式作業の自動再開ではありません。
 
 ## 7. 配布・検証・将来項目
 

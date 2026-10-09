@@ -242,6 +242,59 @@ it("refuses non-TTY consent even when piped input contains y", async () => {
     await headless(["--fake", "--cwd", cwd], { ...io, home: root, service }),
   ).toBe(1);
   expect(io.result().error).toContain("非TTY");
+  expect(service.submitSession).toHaveBeenCalledTimes(1);
+  expect(service.command).toHaveBeenCalledWith(
+    expect.objectContaining({ action: "cancel" }),
+  );
+  expect(
+    service.command.mock.calls.some(
+      ([c]) => c.action === "approve" || c.action === "tool_decision",
+    ),
+  ).toBe(false);
+});
+
+it("processes a closed non-TTY pipe as input completion and preserves the question", async () => {
+  const root = await home();
+  const io = terminal([]);
+  io.input.end("hello\n");
+  expect(
+    await headless(["--fake", "--model", "codex:sol"], { ...io, home: root }),
+  ).toBe(0);
+  expect(io.result().output).toContain("模擬回答");
+  const store = new SessionStore(root);
+  await store.load();
+  const messages = await store.messages(store.list()[0]!.id);
+  expect(
+    messages.some(
+      (m) =>
+        m.role === "user" &&
+        m.content.some((b) => b.type === "text" && b.text === "hello"),
+    ),
+  ).toBe(true);
+  expect(
+    messages.some((m) => m.role === "assistant" && m.meta?.officialWorkflow),
+  ).toBe(true);
+});
+it("does not dispatch a buffered request after the TTY closes during startup", async () => {
+  const root = await home(),
+    cwd = await home();
+  const service = mockService(cwd);
+  const io = terminal([], true);
+  io.input.end("hello\n");
+  expect(await headless(["--fake"], { ...io, home: root, service })).toBe(130);
+  expect(service.submitSession).not.toHaveBeenCalled();
+});
+it("a closed pipe and queued y never authorize native work", async () => {
+  const root = await home(),
+    cwd = await home();
+  const service = mockService(cwd, true);
+  const io = terminal([]);
+  io.input.end("fix arithmetic\ny\n/exit\n");
+  expect(
+    await headless(["--fake", "--cwd", cwd], { ...io, home: root, service }),
+  ).toBe(1);
+  expect(io.result().error).toContain("非TTY");
+  expect(service.submitSession).toHaveBeenCalledTimes(1);
   expect(service.command).toHaveBeenCalledWith(
     expect.objectContaining({ action: "cancel" }),
   );

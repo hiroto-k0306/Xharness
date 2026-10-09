@@ -1,0 +1,39 @@
+
+ RUN  v5.0.3 /tmp/xharness-baseline-6370866
+
+ ❯ |node| src/main/session/project-memory.test.ts (11 tests | 1 failed | 10 skipped) 29ms
+   × foreign source, foreign cwd, scratch, another home and forgotten project cannot read or write 28ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| src/main/session/project-memory.test.ts > foreign source, foreign cwd, scratch, another home and forgotten project cannot read or write
+AssertionError: promise resolved "{ …(4) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "entries": [],
++   "limit": 50,
++   "scope": "e388043d57437fa73543c9eafa198455f2b830bb51da1e0ed03346af15703fc0",
++   "warnings": [],
+  }
+
+ ❯ src/main/session/project-memory.test.ts:161:4
+    159|   await expect(
+    160|     new ProjectMemory({ ...f.scope, cwd: f.other }).list(),
+    161|   ).rejects.toThrow();
+       |    ^
+    162|   await expect(
+    163|     new ProjectMemory({ ...f.scope, workspaceId: null }).list(),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 skipped (11)
+   Start at  02:01:52
+   Duration  368ms (transform 71%, import 15%, tests 12%, worker 2%)
+

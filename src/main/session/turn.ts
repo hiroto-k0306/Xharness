@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { runConnectedTurnOwned } from "../connections/integration.js";
 import { withSessionTrace, withTaskTrace } from "../core/trace.js";
 import { FILE_LINK_GUIDANCE } from "../core/output-guidance.js";
-import { checkPremises } from "./premises.js";
 import { withSessionCalls } from "./llm-calls.js";
 import {
   LlmBudgetError,
@@ -13,41 +12,24 @@ import {
 } from "../core/llm-budget.js";
 import { resolve } from "node:path";
 import { loadAgentConfig } from "../agents/definitions.js";
-import { loadMainConfig, resolveModel } from "../config/config.js";
+import { resolveModel } from "../config/config.js";
 import {
   loadProjectConfig,
   projectMemory,
   type ProjectConfig,
 } from "../config/project.js";
-import { estimateTokens } from "../context/compactor.js";
 import { hasProjectCommands } from "./slash-commands.js";
-import { prepareProviderHistory } from "../context/provider-compactor.js";
-import { Router } from "../core/router.js";
-import { webTools } from "../tools/web.js";
-import { diagnoseEnvironment } from "../tools/environment.js";
 import { FileCheckpointStore } from "../checkpoints/store.js";
-import { type Receipt } from "../../shared/ipc.js";
 import { usedProviders, type StoredSession } from "./store.js";
-import { itemsFromMessages } from "./transcript.js";
 import { type PermissionGate } from "./permission-gate.js";
-import { TurnEvents, usageEvent } from "./turn-events.js";
-import { createWorkflow, needsNewWorkflow } from "./workflow-factory.js";
+import { TurnEvents } from "./turn-events.js";
+import { itemsFromMessages } from "./transcript.js";
 import {
-  checkpointFile,
   sessionTools,
-  safeInput,
   STOP_NOTICE,
   type ControllerContext,
   type Runtime,
 } from "./context.js";
-import {
-  expandMcpPrompt,
-  handleMcpCommand,
-  mcpCommandError,
-  MCP_PROMPT_COMMAND,
-  mcpChangeNote,
-  prepareMcp,
-} from "./mcp-session.js";
 
 /** システムプロンプト。プロジェクト設定があればメモリファイル(§12)を、無ければ AGENTS.md / CLAUDE.md を足す */
 export async function systemPrompt(
@@ -198,67 +180,6 @@ async function loadTrustedConfig(
   )
     await ctx.sessions.save({ ...latest, permissionMode: heldMode });
   return config;
-}
-
-/** ツール・設定・圧縮チェックポイントを、このターン用に読み直す */
-async function prepareRuntime(
-  ctx: ControllerContext,
-  gate: PermissionGate,
-  session: StoredSession,
-  rt: Runtime,
-  signal: AbortSignal,
-  onAuthRefresh?: (
-    event: Extract<
-      import("../providers/provider.js").ProviderEvent,
-      { type: "auth_refresh" }
-    >,
-  ) => void,
-) {
-  const { options } = ctx;
-  const root = ctx.workspaceRoot(session);
-  rt.tools ??= sessionTools(ctx, session);
-  if (options.phase4) {
-    rt.config = await loadTrustedConfig(ctx, gate, session, rt, root, signal);
-    rt.mainConfig = await loadMainConfig(options.home, undefined, root);
-  }
-  const web = rt.mainConfig?.web ?? options.web;
-  const webSignature = JSON.stringify(web);
-  if (rt.webSignature !== webSignature) {
-    rt.webSignature = webSignature;
-    rt.tools.delete("WebSearch");
-    rt.tools.delete("WebFetch");
-    if (web?.enabled)
-      for (const [name, tool] of webTools(
-        () =>
-          new Router(options.providers ?? [options.provider]).provider(
-            (ctx.sessions.get(session.id) ?? session).model,
-          ),
-        web.searchMode,
-        options.fake,
-        (event) => {
-          // Web の要約・検索の通信でも枠を更新する(auto の選択が古い値を使わないように)
-          if (event.type === "usage") options.emit(usageEvent(ctx, event));
-          if (event.type === "auth_refresh") onAuthRefresh?.(event);
-        },
-        {
-          settings: web,
-          providers: () => options.providers ?? [options.provider],
-          usage: ctx.usage,
-          budget: (rt.searchBudget ??= {
-            used: 0,
-            limit: web.maxSearchesPerSession ?? 100,
-          }),
-        },
-      ))
-        rt.tools.set(name, tool);
-  }
-  // MCP はセッションの最初のターンでだけ準備する(tools を途中で変えない。§24・§25)
-  await prepareMcp(ctx, gate, session, rt, signal);
-  if (options.phase4 && !rt.checkpoint)
-    rt.checkpoint = await checkpointFile(options.home, session.id).read(
-      undefined,
-    );
-  return { web };
 }
 
 /** One native submission; inferred work waits for scope and plan approval. */
@@ -499,54 +420,8 @@ async function runSessionBody(
   const sessionId = session.id;
   const clean = ctx.clean;
   const events = new TurnEvents(ctx, session, rt);
-  if (MCP_PROMPT_COMMAND.test(text.trim())) {
-    // MCP のプロンプトは、接続を準備してから展開し、確認後に通常の発言として送る(§25.6)
-    let expanded: Awaited<ReturnType<typeof expandMcpPrompt>>;
-    try {
-      await prepareRuntime(
-        ctx,
-        gate,
-        session,
-        rt,
-        abort.signal,
-        events.onEvent,
-      );
-      expanded = await expandMcpPrompt(
-        ctx,
-        gate,
-        session,
-        rt,
-        text,
-        abort.signal,
-      );
-    } catch {
-      expanded = { error: "MCP のプロンプトを準備できませんでした" };
-    }
-    if ("error" in expanded) {
-      emit({
-        type: "notice",
-        sessionId,
-        tone: "warn",
-        message: expanded.error,
-      });
-      rt.abort = undefined;
-      rt.status = "idle";
-      emit({ type: "turn", sessionId, status: "idle", stopCause: "aborted" });
-      if (rt.closing) ctx.dropRuntime(sessionId);
-      await ctx.emitState();
-      return;
-    }
-    text = expanded.text;
-  }
   if (!continuation)
-    session = await beginTurn(
-      ctx,
-      session,
-      rt,
-      text,
-      mcpChangeNote(rt.mcp),
-      images,
-    );
+    session = await beginTurn(ctx, session, rt, text, undefined, images);
   else {
     emit({ type: "turn", sessionId, status: "running" });
     await ctx.emitState();
@@ -675,295 +550,13 @@ async function runSessionBody(
     await finishTurn(ctx, session, rt, events, llmStopCause() ?? stopCause);
     return;
   }
-  try {
-    const { web } = await prepareRuntime(
-      ctx,
-      gate,
-      session,
-      rt,
-      abort.signal,
-      events.onEvent,
-    );
-    const files = new FileCheckpointStore(options.home);
-    await files.purge(rt.config?.checkpoints?.retentionDays ?? 30);
-    const fileCheckpoint = await files.begin(
-      sessionId,
-      session.cwd,
-      rt.messages.length - 1,
-      clean,
-      (message) => emit({ type: "notice", sessionId, tone: "warn", message }),
-    );
-    if (!rt.environment) {
-      rt.environment =
-        session.environment ?? (await diagnoseEnvironment(session.cwd));
-      if (!session.environment) {
-        await ctx.sessions.save({
-          ...(ctx.sessions.get(sessionId) ?? session),
-          environment: rt.environment,
-        });
-        for (const message of rt.environment.warnings)
-          emit({ type: "notice", sessionId, tone: "warn", message });
-      }
-    }
-    // preserved thinking: system は過去の thinking の前提として検査されるため、
-    // セッションの最初に決めたら変えない(途中で AGENTS.md が編集されても次のセッションから反映)
-    rt.system ??=
-      (await systemPrompt(
-        ctx,
-        session.cwd,
-        !session.workspaceId,
-        rt.config,
-        session.fileLinkGuidanceVersion === 1,
-      )) +
-      "\n" +
-      rt.environment.summary;
-    const system = rt.system;
-    const trustRoot = ctx.workspaceRoot(session);
-    const agentConfig = await loadAgentConfig(
-      options.home,
-      session.workspaceId ? session.cwd : undefined,
-      !trustRoot ||
-        !!rt.trustedSession ||
-        (await ctx.trust.isTrusted(trustRoot)),
-    );
-    if (needsNewWorkflow(rt)) {
-      const previous = await ctx.sessions.evaluationTask(sessionId);
-      rt.evaluationTaskId = previous?.active ? previous.id : randomUUID();
-      rt.workflow = createWorkflow(ctx, gate, {
-        session,
-        rt,
-        agentConfig,
-        web,
-        events,
-      });
-    }
-    await ctx.sessions.recordEvaluationTask(
-      sessionId,
-      rt.evaluationTaskId!,
-      true,
-      false,
-    );
-    // Persist the accepted request before any provider/tool side effect.
-    await ctx.sessions.append(
-      sessionId,
-      rt.messages.slice(rt.persisted),
-      ctx.clean,
-    );
-    rt.persisted = rt.messages.length;
-    // 自動圧縮に失敗したら、このターンでは再試行しない(次のターンで再試行する)
-    let compactionFailure: string | undefined;
-    const result = await rt.workflow!.run(
-      {
-        prepareContext: async (messages, route, signal, context) => {
-          signal.throwIfAborted();
-          if (
-            !(await checkPremises(
-              ctx,
-              sessionId,
-              rt,
-              {
-                system: context?.system ?? system,
-                tools:
-                  context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
-              },
-              messages,
-            ))
-          )
-            return { messages, stop: "premise_mismatch" };
-          if (rt.quotaGuard) {
-            const guard = rt.quotaGuard;
-            rt.quotaGuard = undefined;
-            if (!(await guard())) return { messages, stop: "premise_mismatch" };
-          }
-          if (!options.phase4) return { messages };
-          const limit = route.provider
-            .models()
-            .find((m) => m.id === route.model)?.contextTokens;
-          const prepared = await prepareProviderHistory(messages, {
-            onAuthRefresh: events.onEvent,
-            provider: route.provider,
-            model: route.model,
-            signal,
-            system: context?.system ?? system,
-            tools: context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
-            checkpoint: rt.checkpoint,
-            skipCompaction: !!compactionFailure,
-            limit,
-            threshold: rt.config?.context.compactThreshold ?? 0.8,
-            overhead:
-              estimateTokens({
-                system: context?.system ?? system,
-                tools:
-                  context?.tools ?? [...rt.tools!.values()].map((t) => t.spec),
-              }) + 4096,
-          });
-          if (prepared.compacted && prepared.checkpoint) {
-            rt.checkpoint = prepared.checkpoint;
-            await checkpointFile(options.home, sessionId).write(
-              prepared.checkpoint,
-            );
-            events.record({
-              id: events.nextReceiptId(),
-              sessionId,
-              ts: Date.now(),
-              provider: "harness",
-              kind: "compact",
-              durationMs: 0,
-              summary: `Compacted ${prepared.checkpoint.covered} older messages`,
-            });
-          }
-          if (prepared.failure && !compactionFailure) {
-            compactionFailure = prepared.failure;
-            emit({
-              type: "notice",
-              sessionId,
-              tone: "warn",
-              message: clean(
-                prepared.fits
-                  ? `履歴の自動圧縮ができなかったため、圧縮せずに続けます(${route.model}: ${prepared.failure})。次のターンで再試行します`
-                  : `履歴の自動圧縮ができず、コンテキスト上限を超えるため停止します(${route.model}: ${prepared.failure})`,
-              ),
-            });
-          }
-          return {
-            messages: prepared.messages,
-            ...(!prepared.fits ? { stop: "context_overflow" } : {}),
-          };
-        },
-        provider: options.provider,
-        router: options.providers
-          ? new Router(
-              options.providers,
-              rt.mainConfig?.fallback ?? options.fallback,
-              rt.mainConfig?.aliases ?? options.aliases,
-            )
-          : undefined,
-        sessionId,
-        onFallback: async (route) => {
-          events.activeProvider = route.provider.id;
-          const latest = ctx.sessions.get(sessionId) ?? session;
-          await ctx.sessions.save({
-            ...latest,
-            model: route.model,
-            effort: route.reasoning?.effort ?? latest.effort,
-          });
-          emit({
-            type: "error",
-            sessionId,
-            message: `↻ fallback: ${route.model}`,
-          });
-          await ctx.emitState();
-        },
-        model: session.model,
-        reasoning: { effort: session.effort },
-        // 各周の STEP 1 で、このセッションの最新のモデルを読む
-        current: () => {
-          const latest = ctx.sessions.get(sessionId) ?? session;
-          events.activeProvider =
-            resolveModel(latest.model)?.provider ?? options.provider.id;
-          return {
-            model: latest.model,
-            reasoning: { effort: latest.effort },
-          };
-        },
-        system,
-        messages: rt.messages,
-        tools: rt.tools!,
-        redact: clean,
-        checkpoint: fileCheckpoint,
-        sleep: options.sleep,
-        permission: async (call, signal, context) => {
-          const started = Date.now();
-          const allowed = await gate.ask({
-            session,
-            rt,
-            call,
-            receiptId: events.receiptByCall.get(call.id),
-            forceAsk: !!context?.forceAsk || rt.quotaContinuation,
-            signal,
-          });
-          if (options.phase4) {
-            const receipt: Receipt = {
-              id: events.nextReceiptId(),
-              sessionId,
-              ts: Date.now(),
-              provider: "harness",
-              kind: "permission",
-              tool: call.name,
-              decision: rt.asked
-                ? allowed
-                  ? "ask→allow"
-                  : "ask→deny"
-                : allowed
-                  ? "allow"
-                  : "deny",
-              durationMs: Date.now() - started,
-              summary: `${call.name}: ${allowed ? "allow" : "deny"}`,
-              input: safeInput(call.input, clean),
-            };
-            events.record(receipt);
-          }
-          return allowed;
-        },
-        onEvent: events.onEvent,
-      },
-      abort.signal,
-    );
-    events.flush();
-    rt.messages = result.messages;
-    stopCause = result.stopCause;
-  } catch {
-    events.flush();
-    stopCause = abort.signal.aborted ? "aborted" : "step_failed";
-    if (!abort.signal.aborted)
-      emit({ type: "error", sessionId, message: "内部エラーで停止しました" });
-  }
-  await finishTurn(ctx, session, rt, events, llmStopCause() ?? stopCause);
-}
-
-/**
- * /mcp の表示と操作(§25.8)。MCP をまだ準備していなければ、ここで準備する(承認の確認が出る)。
- * モデルには送らず、履歴にも残さない
- */
-export async function runMcpCommand(
-  ctx: ControllerContext,
-  gate: PermissionGate,
-  session: StoredSession,
-  rt: Runtime,
-  text: string,
-): Promise<void> {
-  const { emit } = ctx.options;
-  const abort = new AbortController();
-  rt.abort = abort;
-  emit({ type: "turn", sessionId: session.id, status: "running" });
-  try {
-    const usage = mcpCommandError(text);
-    if (usage)
-      emit({
-        type: "notice",
-        sessionId: session.id,
-        tone: "warn",
-        message: usage,
-      });
-    else {
-      await prepareRuntime(ctx, gate, session, rt, abort.signal);
-      await handleMcpCommand(ctx, gate, session, rt, text, abort.signal);
-    }
-  } catch {
-    if (!abort.signal.aborted)
-      emit({
-        type: "notice",
-        sessionId: session.id,
-        tone: "warn",
-        message: "MCP の操作に失敗しました",
-      });
-  }
-  rt.abort = undefined;
-  rt.pending = undefined;
-  rt.status = "idle";
-  emit({ type: "turn", sessionId: session.id, status: "idle" });
-  if (rt.closing) ctx.dropRuntime(session.id);
-  await ctx.emitState();
+  emit({
+    type: "error",
+    sessionId,
+    message:
+      "旧HTTP・旧workflow実行は廃止されました。公式ワークフローを使用してください。暗黙の切替は行いません。",
+  });
+  await finishTurn(ctx, session, rt, events, "legacy_unavailable");
 }
 
 /** 履歴・レシート・索引を保存し、idle に戻す */
@@ -1001,9 +594,7 @@ async function finishTurn(
         !(
           stopCause === "workflow_complete" ||
           stopCause === "reported_done" ||
-          (stopCause === "end_turn" &&
-            ((!!session.connection && session.connection !== "legacy") ||
-              ["off", "complete"].includes(rt.workflow?.state.phase ?? "")))
+          stopCause === "end_turn"
         ),
         true,
       );
@@ -1030,13 +621,6 @@ async function finishTurn(
   rt.status = "idle";
   const notice = STOP_NOTICE[stopCause];
   rt.lastStopCause = stopCause;
-  if (
-    stopCause === "authentication" &&
-    (!session.connection || session.connection === "legacy") &&
-    !ctx.options.fake &&
-    (events.activeProvider === "claude" || events.activeProvider === "codex")
-  )
-    ctx.options.authentication?.reject(events.activeProvider);
   if (notice && stopCause !== "aborted")
     if (["agent_stopped", "awaiting_user"].includes(stopCause))
       emit({ type: "notice", sessionId, tone: "dim", message: notice });

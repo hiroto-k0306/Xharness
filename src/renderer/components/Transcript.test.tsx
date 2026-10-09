@@ -23,6 +23,38 @@ const question: TranscriptItem = {
   },
 };
 const props = { items: [question], running: false, model: "fake" };
+it("official mode keeps MCP history readable without reconnect/reset/logout actions", () => {
+  const onCommand = vi.fn();
+  render(
+    <Transcript
+      {...props}
+      officialDefault
+      onCommand={onCommand}
+      items={[
+        {
+          kind: "mcp",
+          id: "saved-mcp",
+          servers: [
+            {
+              name: "saved",
+              type: "stdio",
+              status: "connected",
+              tools: 2,
+              oauth: true,
+            },
+          ],
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByText("saved")).toBeVisible();
+  expect(screen.getByText(/ツール 2/)).toBeVisible();
+  expect(screen.getByRole("status")).toHaveTextContent("記録は閲覧のみ");
+  expect(screen.queryByRole("button", { name: "再接続" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "承認を取り消す" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "ログアウト" })).toBeNull();
+  expect(onCommand).not.toHaveBeenCalled();
+});
 const command = (
   id: string,
   status: Extract<TranscriptItem, { kind: "tool" }>["status"] = "ok",

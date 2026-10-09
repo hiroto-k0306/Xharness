@@ -7,15 +7,15 @@
 XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を直接使う、Windows 向けデスクトップ(Electron)の汎用コーディングエージェント。
 
 - 現行仕様: [SPEC.md](SPEC.md)。**作業を始める前に、担当する節を必ず読むこと**
-- 過去資料: [DESIGN.md](DESIGN.md)。旧仕様・未実装案を含むため、現行の実装要件として扱わない
+- 現行設計: [DESIGN.md](DESIGN.md)。旧仕様・未実装案は [Old索引](Old/README.md) に保存し、現行の実装要件として扱わない
 - UI の見本: [mockup/index.html](mockup/index.html)(ブラウザで開くだけで見られる)
 - モデル一覧: [catalog/models.yaml](catalog/models.yaml)
 - ロゴ・アイコン: [brand/](brand/)
-- 状態: デスクトップ・headless、workflow、MCP、レポート、汎用ツール、予約、認証自動更新まで実装が進んでいる。機能差・未確認事項は [SPEC.md](SPEC.md) を参照する。Windows配布物の作成記録は [docs/release-20261004-integrated.md](docs/release-20261004-integrated.md)、その後の認証更新の検証は [docs/auth-refresh-progress.md](docs/auth-refresh-progress.md)。過去の成功を現在のリビジョンで再検証したものと扱わない
+- 状態: GUI/headlessは同じ公式SessionController / OfficialWorkflowServiceとClaude SDK/Codex App Serverを使う。旧HTTPモデル通信・独自ツール実行・認証読込/ログイン/自動更新は通常経路から撤去する。旧履歴・手動管理・開発fixtureの存在を公式モデルへの機能提供と混同しない。機能差・未確認事項は [SPEC.md](SPEC.md) を参照する。過去のWindows配布/実通信の成功を最新リビジョンで再検証したものと扱わない。変更前の指示は [旧AGENTS](Old/AGENTS-6370866.md)
 
 ## 作業の進め方
 
-1. 現行仕様と依頼の対象を照合し、最新コードでも課題が残っているか確認してから作業する。DESIGN.mdの旧フェーズ順を現在の作業制約にしない
+1. 現行仕様と依頼の対象を照合し、最新コードでも課題が残っているか確認してから作業する。Oldの旧設計のフェーズ順を現在の作業制約にしない
 2. 1つの作業は小さく区切る(目安: 1コミット = 1つの目的、差分 400 行以内)
 3. SPEC.mdと違うことをしたくなったら、**実装する前に**理由と影響を書いて人間に確認する。確認が取れたらSPEC.mdも更新する。コードとの不一致を見つけても、無条件に仕様をコードへ合わせない
 4. 調べて分かった事実(ヘッダ名、エラー形式など)は推測で埋めず、実際の通信結果を記録してから使う
@@ -38,24 +38,24 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - Vitest / Playwright / ESLint / Prettier
 - 実行シェル: PowerShell 7(Windows)
 - Windows検証はユーザーが使うpwshの実体・配布形態まで合わせる。Codex同梱版だけで成功しても、WindowsApps / Store版での成功とみなさない。使用したNode・pwshの版と実体をdocs/へ記録する
-- MCP クライアント: 公式 `@modelcontextprotocol/sdk`(ユーザー承認済み。SPEC.md §9。モデルの API 呼び出しには引き続き SDK を使わない)
-- Node代替検索: `ignore` と `node:path.matchesGlob` は採用承認済み。rgがない場合も動作を確認する
+- モデル実行: 公式Claude Agent SDK / Codex App Server。GUIとheadlessで同じ認証・通常枠・sandbox・承認境界を使い、旧HTTPへfallbackしない
+- MCP SDKや旧検索の依存が互換処理に残っていても、通常の公式モデルへ旧ツールを公開する根拠にはしない
 
 ## コードのルール
 
 - `src/main/` の core・providers・auth・tools・workflow・hooks は **electron を import しない**(UI なしでテストできるようにするため。SPEC.md §2)
-- プロバイダごとの違い(HTTP・SSE・形式変換)は `src/main/providers/<provider>/` の中に閉じ込める。Agent Loop は `ProviderEvent` だけを見る(SPEC.md §2)
-- 外部 API の呼び出しには Node 標準の `fetch` を使う。SDK は使わない(サブスクの OAuth で呼ぶため)
-- 変換処理(内部形式 ⇄ 各 API)には必ず単体テストを書く。テストには `test/fixtures/` の実レスポンスを使う
+- 公式SDK/App Serverの差は `src/main/workflow/official/` のAdapterに閉じ込める。モデル・認証・通常枠を送信前に照合し、未知・利用不能なら理由を示して停止する
+- 旧HTTPや独自ツールをGUI/headlessの代替経路として復活させない。開発fixture、読み取り専用履歴、手動管理の境界を保つ
+- 契約の解析・形式変換・承認境界の変更には、モック/fixtureを使う直接関連の単体テストを書く。思考や秘密を含むrawイベントをfixtureへ保存しない
 
 ## 絶対に守ること(セキュリティ)
 
 - **アクセストークン・リフレッシュトークン・アカウント ID を、ログ・標準出力・ファイル・コミット・エラーメッセージに出さない**。出す必要があるときは先頭 6 文字 + `…` にマスクする
 - `test/fixtures/` に保存するときは、リクエストヘッダの `Authorization` と `chatgpt-account-id` を必ず取り除く。保存前にマスク処理を通す
-- `~/.claude/.credentials.json` と `~/.codex/auth.json` はXHarness・開発用スクリプトからは**読むだけ**。自前refresh、資格情報編集、期限の改変、秘密値の保存は禁止
-  - 承認済みの製品動作: アプリの許可操作を経た公式CLIログイン、およびSPEC.md §8の期限切れ・401時の公式CLI自動更新。書き込みは公式CLIのみ。自動更新CLIはモデル通信を伴う
+- 資格情報は公式基盤で扱う。XHarness側の直接資格情報読込、自前refresh、資格情報編集、期限の改変、秘密値の保存、アプリ内の旧ログイン/自動更新は追加しない
+  - 認証が必要なら利用者が公式側でログインする。旧資料の認証更新許可を、現行の実行経路や開発試験の許可へ読み替えない
   - 製品機能の承認を、開発中の任意の実通信試験の許可に読み替えない。通常の検証はFakeProvider・モック・fixtureを使う。実通信は依頼で承認された範囲・回数だけ行い、結果を記録する
-  - Phase 0〜5やstabilizeの過去の試験許可・通信予算は各docsの履歴であり、新しい作業の恒常的な通信許可ではない（[Phase 0](docs/phase0-findings.md)、[stabilize](docs/stabilize-progress.md)）
+  - Phase 0〜5やstabilizeの過去の試験許可・通信予算は各docsの履歴であり、新しい作業の恒常的な通信許可ではない（[Phase 0](Old/docs/phase0-findings.md)、[stabilize](docs/stabilize-progress.md)）
 - トークンをレンダラプロセス(画面側)に渡さない
 - 使用量を無駄にしない: 承認された実試験も、指定された回数・軽いモデル・短い入力に限定する。未確認なら未確認と記録する
 
@@ -68,8 +68,9 @@ pnpm install
 pnpm test          # Vitest
 pnpm lint          # ESLint
 pnpm typecheck     # tsc --noEmit
-pnpm spike:<name>  # Phase 0 の疎通確認スクリプト(docs/phase0-runbook.md)
 pnpm dev:fake      # Electron を --fake(通信なし)で起動
+pnpm headless      # GUIと同じ公式workflowのREPL
+pnpm build:headless # headlessのビルド
 pnpm build         # electron-vite でビルド
 pnpm package       # exe を作る(手元の Windows で実行)
 pnpm release       # exe を作り、配布に必要なファイルだけをリポジトリの外へ集める(手元の Windows で実行。README.md)
@@ -83,6 +84,7 @@ Codex クラウドや Claude Code on the web など、Linux のクラウド環�
 - **資格情報を要求・作成しない**: `~/.claude/.credentials.json` と `~/.codex/auth.json` を作らない・人間に貼らせない。無いことを前提にコードとテストを書く
 - **PowerShell 依存のテストは実行しない**: Linux では `pwsh` が無く落ちるため、`it.skipIf` で除外する。手元(Windows)で必要な確認は、最後の報告に「手元で実施が必要」として列挙する
 - **exe を作らない**: `electron-builder` による exe / インストーラの作成は手元で行う。クラウドでは `electron-vite build` が通るところまで確認する
+- 既存の依存があるクラウドでpnpmの実体が指定版と異なる場合は、勝手にインストール・lockfile更新しない。今回のpnpm 11系は `exec` でも依存確認の自動インストールを試みるため、検証には `node node_modules/vitest/vitest.mjs`、`node node_modules/typescript/bin/tsc`、ESLint/Prettierのローカル実体を直接使う
 
 ## コミット
 

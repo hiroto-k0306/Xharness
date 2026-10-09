@@ -11,6 +11,7 @@ import {
 } from "../../shared/images.js";
 
 export interface PromptLineProps {
+  officialDefault?: boolean;
   maxImages?: number;
   sessionId?: string | null;
   imageInput?: boolean;
@@ -74,8 +75,14 @@ export function PromptLine(p: PromptLineProps) {
       setImageError("");
       setReading(false);
     }
-  }, [p.sessionId]);
+  }, [p.sessionId, p.officialDefault]);
   const attach = async (files: File[]) => {
+    if (p.officialDefault) {
+      setImageError(
+        "公式経路は画像添付に未対応です。テキストで依頼してください。",
+      );
+      return;
+    }
     if (disabled) return;
     const generation = attachmentGeneration.current;
     setReading(true);
@@ -134,7 +141,12 @@ export function PromptLine(p: PromptLineProps) {
       if (generation === attachmentGeneration.current) setReading(false);
     }
   };
-  const matches = matchSuggestions(text, p.suggestions);
+  const matches = matchSuggestions(
+    text,
+    p.officialDefault
+      ? p.suggestions?.filter((s) => s.value === "/stop")
+      : p.suggestions,
+  );
   const accept = (s: Suggestion) => {
     setText(s.args ? `${s.value} ` : s.value);
     setSelected(0);
@@ -155,6 +167,12 @@ export function PromptLine(p: PromptLineProps) {
       }}
     >
       <div className={styles.attachments}>
+        {p.officialDefault && (
+          <span role="status">
+            公式経路は画像添付・旧slashコマンドに未対応です。停止は停止ボタンまたは
+            /stop を使ってください。
+          </span>
+        )}
         {images.map((image, i) => (
           <div key={i}>
             <img
@@ -258,6 +276,16 @@ export function PromptLine(p: PromptLineProps) {
           }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
+            if (
+              p.officialDefault &&
+              text.trim().startsWith("/") &&
+              text.trim() !== "/stop"
+            ) {
+              setImageError(
+                "公式経路は旧slashコマンドに未対応です。入力は送信していません。",
+              );
+              return;
+            }
             if ((!text.trim() && !images.length) || disabled || sending.current)
               return;
             const sent = text;

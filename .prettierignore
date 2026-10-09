@@ -7,11 +7,23 @@ mockup/
 catalog/
 DESIGN.md
 AGENTS.md
-docs/phase0-runbook.md
-docs/phase0-findings.md
+Old/docs/phase0-runbook.md
+Old/docs/phase0-findings.md
+# 更新前文書の本文・整形を原本どおり保存する
+Old/SPEC-9a275bc.md
+Old/DESIGN-9a275bc.md
+Old/FEATURES-9a275bc.md
 # 実通信の録画は記録したままの形を保つ
 test/fixtures/
 # アプリが出力した実行レポートのサンプル(出力したままの形を保つ)
 docs/examples/
 # 実アプリから出力した紹介用レシートも原本の形式を保つ
 docs/presentations/20261008/receipts/*.html
+
+# 保存本文を再整形しない（公式専用化前6370866）
+Old/SPEC-6370866.md
+Old/DESIGN-6370866.md
+Old/FEATURES-6370866.md
+Old/README-6370866.md
+Old/AGENTS-6370866.md
+Old/release-README-6370866.md

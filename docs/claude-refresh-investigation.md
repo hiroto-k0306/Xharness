@@ -16,10 +16,10 @@
   `launchOfficialLogin` 経由で `claude auth login --claudeai` を起動する。
   このため、単なる期限切れでもブラウザログインが案内される。
   ユーザーが遭遇した各事象の原因を、通信ログで確定したわけではない。
-- [Phase 5 の手元検証](phase5-local-result.md)には、期限切れ時に
+- [Phase 5 の手元検証](../Old/docs/phase5-local-result.md)には、期限切れ時に
   `auth status` では資格情報が変化せず、公式CLIでHaikuへ1回送信した後、
   アクセストークンが変わって有効期限内になった、と記録されている。
-- [Phase 3 の記録](phase3-progress.md)も、更新時にHaikuへ1ターン送信している。
+- [Phase 3 の記録](../Old/docs/phase3-progress.md)も、更新時にHaikuへ1ターン送信している。
   既存の `spike:cli:refresh` はモデルへ送信するため、今回の許可では実行しない。
 - [公式CLIリファレンス](https://code.claude.com/docs/en/cli-reference)は
   `auth status` を状態確認として説明する。専用の更新コマンドはこの資料では確認できない。

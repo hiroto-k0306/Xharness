@@ -28,6 +28,10 @@ async function fixture() {
   await mkdir(home);
   await mkdir(root);
   await mkdir(other);
+  // Give each project an explicit identity: a temporary directory may itself
+  // live inside a repository (including a cloud workspace's /tmp/.git).
+  await mkdir(join(root, ".git"));
+  await mkdir(join(other, ".git"));
   const sessions = new SessionStore(home),
     workspaces = new WorkspaceStore(home);
   await sessions.load();
@@ -169,6 +173,25 @@ it("foreign source, foreign cwd, scratch, another home and forgotten project can
   ).rejects.toThrow();
   await f.workspaces.forget(f.scope.workspaceId);
   await expect(f.memory.list()).rejects.toThrow();
+});
+it("accepts the same repository's linked worktree but rejects an independent nested repository", async () => {
+  const f = await fixture();
+  const entry = await f.memory.propose(f.draft);
+  await f.adopt(entry);
+  const tree = join(f.base, "linked-worktree");
+  const metadata = join(f.root, ".git", "worktrees", "linked");
+  await mkdir(tree);
+  await mkdir(metadata, { recursive: true });
+  await writeFile(join(tree, ".git"), `gitdir: ${metadata}\n`);
+  await writeFile(join(metadata, "commondir"), "../..\n");
+  const linked = new ProjectMemory({ ...f.scope, cwd: tree });
+  expect((await linked.search("SQLite")).results[0]?.id).toBe(entry.id);
+
+  const nested = join(f.root, "independent");
+  await mkdir(join(nested, ".git"), { recursive: true });
+  const foreign = new ProjectMemory({ ...f.scope, cwd: nested });
+  await expect(foreign.list()).rejects.toThrow("project/home");
+  await expect(foreign.propose(f.draft)).rejects.toThrow("project/home");
 });
 it("duplicate/conflicting proposals do not overwrite accepted user edits; merge requires current revisions", async () => {
   const f = await fixture();

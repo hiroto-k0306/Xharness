@@ -1,0 +1,59 @@
+{
+  "source": "temporary diagnosis before final commit; diagnostic test edit restored before committing",
+  "baseline_comparison": "same test fails at wait line270 on6370866",
+  "observation": [
+    {
+      "status": "attention",
+      "checks": [
+        {
+          "head": "1cd8cf7a5842009ae80c2e4b0a5681d5182b187b",
+          "tests": [
+            {
+              "id": "arithmetic",
+              "exitCode": null,
+              "passed": false,
+              "elapsedMs": 1,
+              "output": "",
+              "source": "process"
+            }
+          ]
+        },
+        {
+          "head": "46acffc0edf0154db991bdfd4bfe276570e91aa5",
+          "tests": [
+            {
+              "id": "arithmetic",
+              "exitCode": null,
+              "passed": false,
+              "elapsedMs": 0,
+              "output": "",
+              "source": "process"
+            }
+          ]
+        },
+        {
+          "head": "46acffc0edf0154db991bdfd4bfe276570e91aa5",
+          "tests": [
+            {
+              "id": "arithmetic",
+              "exitCode": null,
+              "passed": false,
+              "elapsedMs": 0,
+              "output": "",
+              "source": "process"
+            }
+          ]
+        }
+      ],
+      "call_phases": [
+        "plan",
+        "implement",
+        "review",
+        "fix",
+        "review",
+        "fix",
+        "review"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+path	test	classification
+src/main/session/handoffs-cli.test.ts	headless requires same-process preview confirmation; cancel/list/send never call a provider	旧FakeProvider実行fixture
+src/main/session/handoffs.test.ts	expires previews, rejects destination project changes, and loses only undelivered previews on restart	旧FakeProvider実行fixture
+src/main/session/handoffs.test.ts	previews without delivery; confirms once and preserves destination history/model/permissions across restart	旧FakeProvider実行fixture
+src/main/session/handoffs.test.ts	cancels, invalidates previews on ready/restart and detects modified source	旧FakeProvider実行fixture
+src/main/session/handoffs.test.ts	rejects deleted destinations/sources and foreign projects; retains received snapshot after source deletion	旧FakeProvider実行fixture
+src/main/session/handoffs.test.ts	does not falsely report delivery on atomic write failure; lost replies recover via persisted inbox	旧FakeProvider実行fixture
+src/main/session/handoffs.test.ts	cancels an in-progress preview before it can create a confirmation ticket	旧FakeProvider実行fixture
+src/main/session/handoffs.test.ts	copies only sanitized final text, never reasoning, tools, system or credentials	旧FakeProvider実行fixture
+src/main/session/handoffs.test.ts	holds both sessions through commit; cancellation after commit starts cannot retract a receive	旧FakeProvider実行fixture
+src/main/session/improvement-boundaries.test.ts	completes a fixed evaluation whose provenance contains a hash with 429	旧FakeProvider実行fixture（改善評価は公式結果読取も未対応）
+src/main/session/improvement-boundaries.test.ts	binds source provenance to recorded inputs so an external source edit invalidates old results	旧FakeProvider実行fixture（改善評価は公式結果読取も未対応）
+src/main/session/improvement-boundaries.test.ts	requires every fixed case before a candidate can be accepted	旧FakeProvider実行fixture（改善評価は公式結果読取も未対応）
+src/main/session/improvements.test.ts	versions fixed inputs, compares quality first and persists explicit adoption and restoration across restart	旧FakeProvider実行fixture（改善評価は公式結果読取も未対応）
+src/main/session/improvements.test.ts	failed explicit quality, different input, unfinished records and changed evidence cannot be adopted	旧FakeProvider実行fixture（改善評価は公式結果読取も未対応）
+src/main/session/model-candidates.integration.test.ts	records repeated fixed-task observations, offers mock as reference and explicitly selects only this session across restart	旧FakeProvider実行fixture（改善評価は公式結果読取も未対応）
+src/main/session/skill-ui.test.ts	UI list/preview use the gate and real budgets but never send body or model calls; trace shows preview separately	旧モデルツール送信を待つfixture
+src/main/session/skill-ui.test.ts	reference UI inspection/preview remain local and actual reference load has separate versioned trace evidence	旧モデルツール送信を待つfixture
+src/main/session/skill-ui.test.ts	renderer reconnect cancels orphaned local reads but replays active task permissions without approval	旧モデルツール送信を待つfixture
+src/main/workflow/official/dag.test.ts	runs independent tasks in parallel, depends on confirmed imports and globally cross-reviews	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/dag.test.ts	runs conflicting writers sequentially from the imported predecessor	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/dag.test.ts	stops new starts on unknown quota and resumes without repeating the approved plan	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/dag.test.ts	resumes a durable import checkpoint without importing a result twice	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	ships a task whose test fails the seed and the injected defect and passes the spec	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	separates X1 quality, X2 injection and X3 fix with fresh tests and reviews against one base	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	does not pass a failed test when the review has no findings	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	does not inject when X1 fails its quality test and follows the natural fix path	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	never injects into outside the allowed folder	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	never injects into a non-synthetic workspace	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	stops before review when the injection is ineffective	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	stops on Node fixture-load exit 1 before any review or repair dispatch	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	never re-injects after an interruption during injection, even with HEAD at X1	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	resumes after the injection without injecting twice and keeps the call reservations	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	refuses a call over the per-phase budget before sending it	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/fault-injection.test.ts	keeps normal runs free of injection and budgets	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/planner-choice.test.ts	plans with a Codex main model through the same validation and approval, and records it	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/prepared-runtime.test.ts	prepares only after saved approval, then implements/tests/reviews in the prepared cwd	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/project-task.test.ts	runs only after scope/test approval, writes the same session directory, tests failures objectively and fixes with cross-company review	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/project-vitest.test.ts	runs exactly one real TypeScript Vitest file from copied dependencies; rejects settings and runner edits	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/project-vitest.test.ts	refuses no-tests without installing dependencies or running an unapproved file	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/project-vitest.test.ts	refuses extra-file without installing dependencies or running an unapproved file	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/project-vitest.test.ts	refuses all-skipped without installing dependencies or running an unapproved file	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/project-vitest.test.ts	refuses unhandled-error without installing dependencies or running an unapproved file	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/project-vitest.test.ts	refuses missing-dependency without installing dependencies or running an unapproved file	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	resumes verify checkpoint without replaying completed model work	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	resumes review checkpoint without replaying completed model work	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	runs claude implementation, other-provider full review, correction and process evidence	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	runs codex implementation, other-provider full review, correction and process evidence	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	shares X task identity and native usage with existing evaluation trace	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	hands the claude fix the review, failed test and diff, then re-reviews the fixed head	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	hands the codex fix the review, failed test and diff, then re-reviews the fixed head	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	fixes a failed independent test even when the review has no findings	Windows専用実行器をLinuxから呼ぶテスト前提
+src/main/workflow/official/runtime.test.ts	completes on nit-only findings with passing tests and does not start a fix	Windows専用実行器をLinuxから呼ぶテスト前提

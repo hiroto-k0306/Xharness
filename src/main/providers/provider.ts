@@ -47,7 +47,17 @@ export type ProviderEvent =
   | ({
       type: "auth_refresh";
       provider: ProviderId;
-    } & import("../auth/auto-refresh.js").RefreshResult)
+    } & {
+      result:
+        | "success"
+        | "unchanged"
+        | "timeout"
+        | "cli_missing"
+        | "failed"
+        | "limited"
+        | "disabled";
+      durationMs: number;
+    })
   | ({ type: "usage"; provider: ProviderId } & QuotaUsage)
   | { type: "text_delta"; text: string }
   | { type: "reasoning_delta"; text: string }

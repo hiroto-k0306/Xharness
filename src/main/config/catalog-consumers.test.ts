@@ -1,12 +1,15 @@
 import { readFileSync } from "node:fs";
 import { afterEach, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
-import { overrideCatalogForTest, parseCatalog } from "./catalog.js";
+import {
+  overrideCatalogForTest,
+  parseCatalog,
+  catalogModel,
+  catalogAliases,
+  resolveRole,
+} from "./catalog.js";
+import { resolveModel } from "./config.js";
 import { toClaudeRequest } from "../providers/claude/convert.js";
-import { ClaudeAdapter } from "../providers/claude/adapter.js";
-import { webSummaryRequest } from "../tools/web.js";
-import { refreshArguments } from "../auth/refresh-cli.js";
-import { loadAgentConfig } from "../agents/definitions.js";
 import { tmpdir } from "node:os";
 import { type ProviderRequest } from "../providers/provider.js";
 
@@ -18,7 +21,6 @@ interface Doc {
   models: Entry[];
   roles: Record<string, unknown> & {
     utility: Record<string, unknown>;
-    authRefresh: Record<string, unknown>;
   };
 }
 const shippedText = readFileSync(
@@ -74,23 +76,10 @@ it("supports a newly added Claude model by changing only the catalog", () => {
   expect(toClaudeRequest(request("claude-test-9", "high"))).toMatchObject({
     output_config: { effort: "high" },
   });
-  expect(new ClaudeAdapter().models()).toContainEqual({
+  expect(catalogModel("claude-test-9")).toMatchObject({
     id: "claude-test-9",
     contextTokens: 50000,
   });
-});
-it("routes helper processes to the catalog roles", async () => {
-  useCatalog((doc) => {
-    doc.roles.utility.codex = { model: "codex:sol", effort: "low" };
-    doc.roles.authRefresh.codex = { model: "codex:astra", effort: "high" };
-    doc.roles.explorer = "codex:sol";
-  });
-  expect(webSummaryRequest("codex", "q", "page").model).toBe("gpt-6.1-sol");
-  const args = refreshArguments("codex", tmpdir());
-  expect(args[args.indexOf("-m") + 1]).toBe("gpt-6-astra");
-  expect(args).toContain('model_reasoning_effort="high"');
-  const config = await loadAgentConfig(tmpdir());
-  expect(config.agents.explorer?.model).toBe("codex:sol");
 });
 it("passes the connection-test role's model and effort as startup arguments", async () => {
   const { connectionTestStartup } = await import("./catalog.js");
@@ -125,19 +114,19 @@ it("passes the connection-test role's model and effort as startup arguments", as
   expect(connectionTestStartup().effort).toBe("high");
 });
 
-it("moves helper requests and executable model lists to the latest generation using only catalog data", () => {
+it("moves official workflow roles and aliases to the latest generation using only catalog data", () => {
   useCatalog((doc) => {
     const old = doc.models.find((m) => m.id === "claude-haiku-5-5")!;
     doc.models.push({ ...old, id: "claude-haiku-test-next" });
     delete old.alias;
     old.enabled = false;
   });
-  expect(webSummaryRequest("claude", "q", "page").model).toBe(
-    "claude-haiku-test-next",
-  );
-  const args = refreshArguments("claude", tmpdir());
-  expect(args[args.indexOf("--model") + 1]).toBe("claude-haiku-test-next");
-  const models = new ClaudeAdapter().models().map((m) => m.id);
+  expect(resolveRole("question", "claude").id).toBe("claude-haiku-test-next");
+  const models = Object.values(catalogAliases());
+  expect(resolveModel("claude:haiku", catalogAliases())).toEqual({
+    provider: "claude",
+    model: "claude-haiku-test-next",
+  });
   expect(models).toContain("claude-haiku-test-next");
   expect(models).not.toContain("claude-haiku-5-5");
   expect(models).not.toContain("claude-haiku-4-5-20251001");

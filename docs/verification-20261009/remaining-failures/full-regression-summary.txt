@@ -1,0 +1,7 @@
+HEAD: b172e7b7977f6b1a73f0c52aa48f7348c3305579
+Command: node node_modules/vitest/vitest.mjs run --exclude=spike/.out/** --exclude=.tools/** --exclude=dist/** --maxWorkers=1 --testTimeout=30000
+Exit: 1
+ Test Files  13 failed | 191 passed | 2 skipped (206)
+      Tests  52 failed | 1757 passed | 15 skipped (1824)
+   Start at  02:58:29
+   Duration  168.40s (tests 67%, import 15%, environment 12%, transform 4%, setup 2%, worker 1%)

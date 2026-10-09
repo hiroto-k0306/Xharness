@@ -99,6 +99,7 @@ function CommandGroup({ tools }: { tools: ToolItem[] }) {
 }
 
 export interface TranscriptProps {
+  officialDefault?: boolean;
   items: TranscriptItem[];
   running: boolean;
   model: string;
@@ -116,6 +117,7 @@ export function Transcript({
   onCommand,
   blocked = false,
   onReply,
+  officialDefault = false,
 }: TranscriptProps) {
   const pane = useFollowScroll(items);
   const [zoom, setZoom] = useState<string | null>(null);
@@ -210,13 +212,19 @@ export function Transcript({
         }
         if (item.kind === "mcp")
           return (
-            <McpStatus
-              key={item.id}
-              servers={item.servers}
-              busy={running}
-              onCommand={onCommand}
-              stale={item.id !== latestMcp}
-            />
+            <div key={item.id}>
+              {officialDefault && (
+                <p role="status">
+                  公式経路は旧MCP操作に未対応です。この記録は閲覧のみです。
+                </p>
+              )}
+              <McpStatus
+                servers={item.servers}
+                busy={running}
+                onCommand={officialDefault ? undefined : onCommand}
+                stale={item.id !== latestMcp}
+              />
+            </div>
           );
         if (item.kind === "notice" && item.presentation !== "assistant")
           return (

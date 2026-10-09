@@ -2,7 +2,7 @@
 
 対象は `feature/official-workflow-single-task`、基準HEAD `a418dcdb9ffa371f49565832e6e2f73f5b3dba7c` からの未コミット変更。ユーザー指示は通常起動・普通の質問と作業依頼を公式SDK / App Serverへ接続すること、その後の「元の方式通りでいいよ」に従ってプロジェクトコピー案を採用しないこと。現行仕様は [SPEC.md](../SPEC.md) §15末尾。
 
-GitHub connectorによる最新main確認は `390819b80835aaa5e19d266e864ea4dff252696f`（`docs/プロンプト`の更新）。ローカルfetchはネットワーク接続失敗。mainをこの作業対象の新版と見なしてcheckout/rebaseはしていない。既存の専用作業領域・ブランチで作業し、他のcheckout、旧バイナリ、ユーザー設定を変更していない。
+GitHub connectorによる最新main確認は `390819b80835aaa5e19d266e864ea4dff252696f`（`Old/docs/プロンプト`の更新）。ローカルfetchはネットワーク接続失敗。mainをこの作業対象の新版と見なしてcheckout/rebaseはしていない。既存の専用作業領域・ブランチで作業し、他のcheckout、旧バイナリ、ユーザー設定を変更していない。
 
 ## 普通の入力からの実行
 

@@ -92,6 +92,43 @@ it("ordinary UI questions use the official bridge and return to idle without a p
   expect(native.mock.calls[0]![0].task).toBeUndefined();
   expect(oldStream).not.toHaveBeenCalled();
 });
+it("official UI keeps legacy stage history readable and disables its operations and slash suggestions", async () => {
+  const { native, oldStream } = await setup();
+  render(<App />);
+  await screen.findByText("+ new session");
+  await userEvent.type(screen.getByLabelText("prompt"), "質問です{Enter}");
+  await screen.findByText("公式の有限回答");
+  await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
+  const sessionId = useStore.getState().app!.currentSessionId!;
+  act(() => {
+    useStore.getState().apply({
+      type: "workflow",
+      sessionId,
+      phase: "implement",
+      reviewRound: 0,
+      items: [{ id: "saved-task", status: "integrated" }],
+      findings: [],
+    });
+  });
+  expect(screen.getByRole("navigation", { name: "タスク段階" })).toBeVisible();
+  expect(screen.queryByLabelText("段階の操作")).toBeNull();
+  expect(
+    screen.getByText(/旧workflow段階の変更は公式経路に未対応/),
+  ).toBeVisible();
+  expect(
+    screen.getByText(/選択中のフォルダーを探索して計画を提案/),
+  ).toBeVisible();
+  await userEvent.type(screen.getByLabelText("prompt"), "/");
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.getByRole("option")).toHaveTextContent("/stop");
+  await userEvent.clear(screen.getByLabelText("prompt"));
+  await userEvent.type(screen.getByLabelText("prompt"), "/stop{Enter}");
+  await screen.findByText(
+    /停止しました。再開するときは新しい指示を入力してください。/,
+  );
+  expect(native).toHaveBeenCalledTimes(1);
+  expect(oldStream).not.toHaveBeenCalled();
+});
 it("ordinary LoopFlow uses workflow state and hides the legacy six-step tabs", async () => {
   await setup();
   render(<App />);

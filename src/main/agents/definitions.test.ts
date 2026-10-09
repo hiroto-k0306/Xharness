@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { expect, it } from "vitest";
 import { loadAgentConfig } from "./definitions.js";
-import { childNeedsAsk } from "./permissions.js";
 it("defaults to five review rounds without explicit settings", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-review-default-"));
   expect((await loadAgentConfig(home)).workflow.reviewRounds).toBe(5);
@@ -64,31 +63,4 @@ it("an untrusted project cannot skip plan approval, but can still require it", a
     "workflow: {planApproval: ask}\n",
   );
   expect((await loadAgentConfig(home, cwd)).workflow.planApproval).toBe("ask");
-});
-it("planned globs cover Windows-relative files, while out-of-plan writes and Bash ask", async () => {
-  const cwd = await mkdtemp(join(tmpdir(), "xh-agent-globs-"));
-  const context = {
-    id: "test",
-    name: "worker",
-    cwd,
-    files: ["src/**/*.{ts,tsx}"],
-  };
-  expect(
-    await childNeedsAsk(
-      { id: "1", name: "Write", input: { path: "src/a.ts" } },
-      context,
-    ),
-  ).toBe(false);
-  expect(
-    await childNeedsAsk(
-      { id: "1", name: "Edit", input: { path: "other.txt" } },
-      context,
-    ),
-  ).toBe(true);
-  expect(
-    await childNeedsAsk(
-      { id: "1", name: "Bash", input: { command: "pnpm test" } },
-      context,
-    ),
-  ).toBe(true);
 });

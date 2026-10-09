@@ -2,7 +2,6 @@
 // electron を import しない。
 import { stat } from "node:fs/promises";
 import { traceJson } from "../core/trace.js";
-import { type Authentication } from "../auth/authentication.js";
 import { join } from "node:path";
 import { type MainConfig, type WebSettings } from "../config/config.js";
 import { type ProjectConfig } from "../config/project.js";
@@ -11,21 +10,12 @@ import { type Receipt as LoopReceipt } from "../core/loop.js";
 import { type Rule } from "../core/permissions.js";
 import { type Message } from "../core/types.js";
 import { type Provider } from "../providers/provider.js";
-import { FileAccess, fileTools } from "../tools/files.js";
 import { type ToolRegistry } from "../tools/registry.js";
-import { type ProviderUsage, type SearchBudget } from "../tools/web-search.js";
 import { type McpConnector, type McpManager } from "../mcp/manager.js";
 import { type McpOAuth, type SecretStore } from "../mcp/oauth.js";
 import { type McpApprovals } from "../mcp/approvals.js";
 import { type McpServerConfig } from "../mcp/config.js";
-import { shellSearchTools } from "../tools/shell-search.js";
-import { lifecycleTools } from "../tools/lifecycle.js";
-import { todoTools } from "../tools/todos.js";
-import { projectHistoryTools } from "../tools/project-history.js";
-import { projectMemoryTools } from "../tools/project-memory.js";
-import { projectSkillTools } from "../tools/project-skills.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
-import { type WorkflowRuntime } from "../workflow/runtime.js";
 import {
   type Effort,
   type PermissionDecision,
@@ -42,6 +32,15 @@ import {
   type StoredSession,
   type WorkspaceStore,
 } from "./store.js";
+
+/** Persisted quota shapes remain readable without registering legacy Web tools. */
+type ProviderUsage = Partial<
+  Record<
+    Provider["id"],
+    import("../providers/provider.js").QuotaUsage["windows"]
+  >
+>;
+type SearchBudget = { used: number; limit: number };
 
 export interface Host {
   pickFolder(): Promise<string | undefined>;
@@ -63,7 +62,6 @@ export interface ControllerOptions {
   /** Offline tests may control quota scheduling without advancing global timers. */
   quotaNow?(): number;
   quotaTimers?: boolean;
-  authentication?: Authentication;
   cliModel?: string;
   cliEffort?: Effort;
   phase4?: boolean;
@@ -105,7 +103,6 @@ export interface Runtime {
   quotaGuard?: () => Promise<boolean>;
   lastStopCause?: string;
   evaluationTaskId?: string;
-  childHandoffs?: import("../agents/handoffs.js").ChildHandoffs;
   llmCalls?: import("../../shared/llm-calls.js").LlmCalls;
   rewindPrompt?: {
     requestId: string;
@@ -117,7 +114,6 @@ export interface Runtime {
     fingerprint: string;
     approve(signal: AbortSignal): Promise<boolean>;
   };
-  workflow?: WorkflowRuntime;
   permissionTail?: Promise<void>;
   asked?: boolean;
   mainConfig?: MainConfig;
@@ -339,59 +335,20 @@ export function checkpointFile(home: string, id: string) {
   );
 }
 
+/** Official agents own their tools. The removed legacy registry stays empty. */
 export function defaultTools(cwd: string, readOnly: boolean): ToolRegistry {
-  const access = new FileAccess(cwd);
-  const all = new Map([
-    ...fileTools(access),
-    ...shellSearchTools(cwd),
-    ...lifecycleTools(),
-    ...todoTools(),
-  ]);
-  if (!readOnly) return all;
-  // 読み取り専用で開いたセッションは plan 相当: 書き込み系ツールを渡さない(§9.1, §18.2)
-  return new Map([...all].filter(([, tool]) => tool.readOnly));
+  void cwd;
+  void readOnly;
+  return new Map();
 }
 
-/** History tools keep the parent's registered project scope, including children. */
+/** Only the explicit isolated connection experiment may register fixed fixture tools. */
 export function sessionTools(
   ctx: ControllerContext,
   session: StoredSession,
   cwd = session.cwd,
 ): ToolRegistry {
-  if (ctx.options.connectionTest)
-    return ctx.options.createTools!(cwd, session.readOnly);
-  return new Map([
-    ...(ctx.options.createTools ?? defaultTools)(cwd, session.readOnly),
-    ...projectHistoryTools({
-      home: ctx.options.home,
-      sessions: ctx.sessions,
-      workspaces: ctx.workspaces,
-      sessionId: session.id,
-      workspaceId: session.workspaceId,
-      cwd,
-      clean: (text) => ctx.clean(text),
-    }),
-    ...projectMemoryTools(
-      {
-        home: ctx.options.home,
-        sessions: ctx.sessions,
-        workspaces: ctx.workspaces,
-        sessionId: session.id,
-        workspaceId: session.workspaceId,
-        cwd,
-        clean: (text) => ctx.clean(text),
-      },
-      !session.readOnly,
-      () => ctx.options.emit({ type: "memory_changed", sessionId: session.id }),
-    ),
-    ...projectSkillTools({
-      home: ctx.options.home,
-      sessions: ctx.sessions,
-      workspaces: ctx.workspaces,
-      sessionId: session.id,
-      workspaceId: session.workspaceId,
-      cwd,
-      clean: (text) => ctx.clean(text),
-    }),
-  ]);
+  return ctx.options.connectionTest
+    ? (ctx.options.createTools?.(cwd, session.readOnly) ?? new Map())
+    : new Map();
 }

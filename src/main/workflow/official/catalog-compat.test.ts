@@ -20,10 +20,7 @@ import type {
   ModelCandidate,
   OfficialAgent,
 } from "./contracts.js";
-import { webSummaryRequest } from "../../tools/web.js";
-import { webSearchTool } from "../../tools/web-search.js";
 import { toClaudeRequest } from "../../providers/claude/convert.js";
-import type { Provider, ProviderRequest } from "../../providers/provider.js";
 
 interface Entry {
   id: string;
@@ -32,7 +29,6 @@ interface Entry {
 interface Doc {
   models: Entry[];
   roles: Record<string, unknown> & {
-    utility: Record<string, unknown>;
     question: Record<string, unknown>;
   };
 }
@@ -245,45 +241,9 @@ it("starts a new task while the legacy-record models are retired", async () => {
 
 it("sends the role effort, changed only in the catalog, in each request", async () => {
   useCatalog((doc) => {
-    doc.roles.utility.codex = { model: "codex:luna", effort: "medium" };
     doc.roles.question.codex = { model: "codex:luna", effort: "high" };
     doc.models.find((m) => m.id === "claude-opus-5-5")!.defaultEffort = "max";
   });
-  // Web summary
-  expect(webSummaryRequest("codex", "q", "p").reasoning).toEqual({
-    effort: "medium",
-  });
-  expect(webSummaryRequest("claude", "q", "p").reasoning).toEqual({
-    effort: "medium",
-  });
-  // Web search
-  const sent: ProviderRequest[] = [];
-  const provider = {
-    id: "codex",
-    models: () => [],
-    async *stream(request: ProviderRequest) {
-      sent.push(request);
-      yield {
-        type: "message_done" as const,
-        usage: { inputTokens: 0, outputTokens: 0 },
-        stopReason: "end_turn" as const,
-        message: {
-          role: "assistant" as const,
-          content: [{ type: "text" as const, text: "answer" }],
-          meta: { sources: [], webSearch: { calls: 1 } },
-        },
-      };
-    },
-  } as unknown as Provider;
-  await webSearchTool(() => provider).execute(
-    { query: "q" },
-    new AbortController().signal,
-  );
-  expect(sent[0]).toMatchObject({
-    model: "gpt-6-luna",
-    reasoning: { effort: "medium" },
-  });
-  // Claude converter default effort comes from the catalog defaultEffort.
   expect(
     toClaudeRequest({
       model: "claude-opus-5-5",

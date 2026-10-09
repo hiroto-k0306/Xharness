@@ -11,11 +11,11 @@ import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { SessionController } from "./controller.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
-import { FileAccess, fileTools } from "../tools/files.js";
+import { FileCheckpointStore } from "../checkpoints/store.js";
 import { SessionStore } from "./store.js";
 import { type UiEvent } from "../../shared/ipc.js";
 
-it("tracks real Write calls, previews locally, cancels safely, and rewinds both without LLM communication", async () => {
+it("rejects retired undo without changing historical checkpoints, files or conversation", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-undo-controller-"));
   await writeFile(join(home, "config.yaml"), "workflow:\n  mode: off\n");
   await mkdir(join(home, "checkpoints", "broken", "turn"), { recursive: true });
@@ -35,38 +35,16 @@ it("tracks real Write calls, previews locally, cancels safely, and rewinds both 
     home,
     fake: true,
     version: "test",
-    model: "fake",
+    model: "claude:opus",
+    officialSession: async () => {
+      request();
+      return { workflowId: "unused", status: "completed", summary: "unused" };
+    },
     provider: new FakeProvider({
       onRequest: request,
-      script: [
-        {
-          type: "message",
-          stopReason: "tool_use",
-          message: {
-            role: "assistant",
-            content: [
-              {
-                type: "tool_use",
-                id: "w",
-                name: "Write",
-                input: { path: "new.txt", content: "created" },
-              },
-            ],
-          },
-        },
-        {
-          type: "message",
-          stopReason: "end_turn",
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: "完了" }],
-          },
-        },
-      ],
     }),
     host: { pickFolder: async () => undefined },
     emit: (event) => events.push(event),
-    createTools: (cwd) => fileTools(new FileAccess(cwd)),
   });
   await controller.init();
   const created = await controller.handle({
@@ -76,95 +54,57 @@ it("tracks real Write calls, previews locally, cancels safely, and rewinds both 
   if (!created.ok || !created.sessionId) throw new Error("Session not created");
   const sessionId = created.sessionId;
   const path = join(home, "scratch", sessionId, "new.txt");
-  const idle = async () =>
-    vi.waitFor(
-      () =>
-        expect(
-          events.some((e) => e.type === "turn" && e.status === "idle"),
-        ).toBe(true),
-      { timeout: 5000 },
-    );
-  expect(
-    await controller.handle({
-      type: "send",
-      sessionId,
-      text: "ファイルを作成",
-    }),
-  ).toMatchObject({ ok: true });
-  await vi.waitFor(
-    () =>
-      expect(events.some((e) => e.type === "permission_request")).toBe(true),
-    { timeout: 5000 },
-  );
-  const permission = events.find(
-    (e) => e.type === "permission_request",
-  )! as Extract<UiEvent, { type: "permission_request" }>;
-  await controller.handle({
-    type: "permission_response",
+  const sessionStore = new SessionStore(home);
+  await sessionStore.load();
+  await sessionStore.append(
     sessionId,
-    requestId: permission.requestId,
-    decision: "allow",
-  });
-  await idle();
+    [{ role: "user", content: [{ type: "text", text: "ファイルを作成" }] }],
+    (s) => s,
+  );
+  const checkpoints = new FileCheckpointStore(home);
+  const hooks = await checkpoints.begin(
+    sessionId,
+    join(home, "scratch", sessionId),
+    0,
+    (s) => s,
+    vi.fn(),
+  );
+  await hooks.beforeWrite(path);
+  await writeFile(path, "created");
+  await hooks.afterWrite(path, Buffer.from("created"));
   expect(await readFile(path, "utf8")).toBe("created");
   expect(await readdir(join(home, "checkpoints", sessionId))).toHaveLength(1);
-  const calls = request.mock.calls.length;
-  const preview = async () => {
-    events.length = 0;
+  const historyPath = join(home, "sessions", sessionId + ".jsonl");
+  const historyBefore = await readFile(historyPath);
+  const checkpointsBefore = await readdir(join(home, "checkpoints", sessionId));
+  const restore = vi.spyOn(FileCheckpointStore.prototype, "restore");
+  const plan = await checkpoints.preview(sessionId, 1);
+  expect(plan.preview.files).toHaveLength(1);
+  expect(plan.preview.files[0]).toMatchObject({ conflict: false });
+  for (const text of ["/undo", "/rewind 1"]) {
     expect(
-      await controller.handle({ type: "send", sessionId, text: "/undo" }),
-    ).toMatchObject({ ok: true });
-    await vi.waitFor(() =>
-      expect(events.some((e) => e.type === "rewind_request")).toBe(true),
-    );
-    return events.find((e) => e.type === "rewind_request")! as Extract<
-      UiEvent,
-      { type: "rewind_request" }
-    >;
-  };
-  const cancelled = await preview();
-  expect(cancelled.preview.files).toHaveLength(1);
-  events.length = 0;
-  await controller.handle({ type: "ready" });
-  expect(events.find((e) => e.type === "rewind_request")).toEqual(cancelled);
-  expect(await readFile(path, "utf8")).toBe("created");
-  expect(request).toHaveBeenCalledTimes(calls);
+      await controller.handle({ type: "send", sessionId, text }),
+    ).toMatchObject({ ok: false });
+  }
   expect(
     await controller.handle({
       type: "rewind_response",
       sessionId,
       requestId: "stale",
-      choice: null,
+      choice: { scope: "both", includeConflicts: [] },
     }),
   ).toMatchObject({ ok: false });
-  await controller.handle({
-    type: "rewind_response",
-    sessionId,
-    requestId: cancelled.requestId,
-    choice: null,
-  });
-  await idle();
+  await controller.handle({ type: "ready" });
+  expect(events.some((event) => event.type === "rewind_request")).toBe(false);
+  expect(request).not.toHaveBeenCalled();
+  expect(restore).not.toHaveBeenCalled();
   expect(await readFile(path, "utf8")).toBe("created");
-  const approved = await preview();
-  await controller.handle({
-    type: "rewind_response",
-    sessionId,
-    requestId: approved.requestId,
-    choice: { scope: "both", includeConflicts: [] },
-  });
-  await idle();
-  expect(request).toHaveBeenCalledTimes(calls);
-  await expect(readFile(path)).rejects.toMatchObject({ code: "ENOENT" });
-  const store = new SessionStore(home);
-  const active = await store.messages(sessionId);
-  expect(active).toHaveLength(1);
-  expect(active[0]!.meta?.rewind).toEqual({ keep: 0 });
-  expect(
-    await readFile(join(home, "sessions", sessionId + ".jsonl"), "utf8"),
-  ).toContain("ファイルを作成");
-  expect(
-    events.some((e) => e.type === "receipt" && e.receipt.tool === "Rewind"),
-  ).toBe(true);
+  expect(await readFile(historyPath)).toEqual(historyBefore);
+  expect(await readdir(join(home, "checkpoints", sessionId))).toEqual(
+    checkpointsBefore,
+  );
+  expect(await sessionStore.messages(sessionId)).toHaveLength(1);
+  restore.mockRestore();
   expect(
     await controller.handle({
       type: "delete_session",

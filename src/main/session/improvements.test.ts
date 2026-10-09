@@ -86,12 +86,14 @@ it("versions fixed inputs, compares quality first and persists explicit adoption
   expect(restored.adopted).toBe(baseline);
   expect(restored.history).toHaveLength(3);
   expect(f.requests).toHaveBeenCalledTimes(calls);
-  expect(f.requests.mock.calls[1]![0].system).toEqual(
-    f.requests.mock.calls[0]![0].system,
-  );
-  expect(f.requests.mock.calls[1]![0].tools).toEqual(
-    f.requests.mock.calls[0]![0].tools,
-  );
+  expect(f.requests.mock.calls[1]![0]).toMatchObject({
+    model: f.requests.mock.calls[0]![0].model,
+    effort: f.requests.mock.calls[0]![0].effort,
+    cwd: f.requests.mock.calls[0]![0].cwd,
+    history: [],
+    automaticWork: true,
+    autoOperations: false,
+  });
 });
 it("failed explicit quality, different input, unfinished records and changed evidence cannot be adopted", async () => {
   const f = await fixture();
@@ -110,6 +112,23 @@ it("failed explicit quality, different input, unfinished records and changed evi
       confirmed: true,
     }),
   ).toMatchObject({ ok: false });
+  const officialPath = join(
+    f.home,
+    "official-workflows",
+    e.results[0]!.taskId,
+    "workflow.json",
+  );
+  const original = await readFile(officialPath, "utf8");
+  const official = JSON.parse(original);
+  official.status = "interrupted";
+  delete official.finishedAt;
+  await writeFile(officialPath, JSON.stringify(official));
+  expect((await f.list()).rows[0]!.valid).toBe(false);
+  await writeFile(officialPath, original);
+  expect((await f.list()).rows[0]).toMatchObject({
+    valid: true,
+    quality: false,
+  });
   const store = new SessionStore(f.home);
   await store.load();
   await store.append(
@@ -122,8 +141,6 @@ it("failed explicit quality, different input, unfinished records and changed evi
     quality: false,
     input: null,
   });
-  await store.recordEvaluationTask(bad.id, e.results[0]!.taskId, false, false);
-  expect((await f.list()).rows[0]!.valid).toBe(false);
   const mismatch = await f.action({
     action: "record",
     id: e.id,

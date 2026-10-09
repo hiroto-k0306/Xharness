@@ -1,143 +1,177 @@
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { SessionController } from "./controller.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
 import { type UiEvent } from "../../shared/ipc.js";
+import type { OfficialSessionSubmission } from "../../shared/official-session.js";
 import { WorkspaceTrust } from "../config/trust.js";
 import { SessionStore } from "./store.js";
 
-async function setup(phase4 = false) {
+const controllers: SessionController[] = [];
+afterEach(async () => {
+  await Promise.all(
+    controllers.splice(0).map((controller) => controller.shutdown()),
+  );
+});
+async function setup(official = true) {
   const home = await mkdtemp(join(tmpdir(), "xh-slash-controller-"));
   const cwd = await mkdtemp(join(tmpdir(), "xh-slash-workspace-"));
   const events: UiEvent[] = [];
+  const provider = new FakeProvider();
+  const legacy = vi.spyOn(provider, "stream").mockImplementation(() => {
+    throw new Error("Legacy execution must not run");
+  });
+  const bridge = vi.fn(async (request: OfficialSessionSubmission) => ({
+    workflowId: `slash-official-${request.sessionId}`,
+    status: "completed",
+    intent: "question" as const,
+    summary: "公式fixture回答",
+    taskRequired: false,
+  }));
   const controller = new SessionController({
     home,
     fake: true,
-    phase4,
-    model: "fake",
+    model: "claude:opus",
     version: "test",
-    provider: new FakeProvider(),
+    provider,
+    ...(official ? { officialSession: bridge } : {}),
     host: { pickFolder: async () => cwd },
     emit: (e) => events.push(e),
   });
+  controllers.push(controller);
   await controller.init();
   const picked = await controller.handle({ type: "pick_folder" });
-  if (!picked.ok || !picked.workspaceId) throw new Error();
+  if (!picked.ok || !picked.workspaceId)
+    throw new Error("Fixture folder unavailable");
   const created = await controller.handle({
     type: "new_session",
     workspaceId: picked.workspaceId,
   });
-  if (!created.ok || !created.sessionId) throw new Error();
+  if (!created.ok || !created.sessionId)
+    throw new Error("Fixture session unavailable");
+  const id = created.sessionId;
   const send = (text: string) =>
-    controller.handle({ type: "send", sessionId: created.sessionId!, text });
-  return { home, cwd, controller, events, send, id: created.sessionId };
+    controller.handle({ type: "send", sessionId: id, text });
+  return { home, cwd, controller, events, send, id, bridge, legacy };
 }
-it("runs local built-ins without LLM calls, preserves old sessions on clear and resumes them", async () => {
+
+// 旧built-inの実行やtrusted command展開は撤去した製品契約。
+// 現行GUI/controllerでは /stop だけを制御として保持し、旧定義を実行しない。
+it.each([true, false])(
+  "rejects legacy slash input without official or legacy calls (official=%s)",
+  async (official) => {
+    const s = await setup(official);
+    const before = (await s.controller.state()).sessions;
+    for (const command of [
+      "/init",
+      "/cost",
+      "/model",
+      "/model codex:sol",
+      "/mode plan",
+      "/resume",
+      `/resume ${s.id}`,
+      "/clear",
+      "/compact",
+      "/review",
+      "/phase plan",
+      "/mcp",
+      "/mcp reconnect saved",
+      "/mcp__saved__task",
+      "/task example",
+    ]) {
+      const result = await s.send(command);
+      expect(result).toMatchObject({ ok: false });
+      if (!result.ok)
+        expect(result.error).toMatch(/未対応|旧slash|旧HTTP|旧経路/);
+    }
+    expect((await s.controller.state()).sessions).toEqual(before);
+    expect(s.bridge).not.toHaveBeenCalled();
+    expect(s.legacy).not.toHaveBeenCalled();
+    const store = new SessionStore(s.home);
+    await store.load();
+    expect(await store.messages(s.id)).toEqual([]);
+  },
+);
+
+it("keeps trusted user/project command files and saved history unchanged on rejected expansion", async () => {
   const s = await setup();
-  expect(await s.send("/init")).toEqual({ ok: true });
-  expect(await readFile(join(s.cwd, "AGENTS.md"), "utf8")).toContain(
-    "秘密情報",
-  );
-  expect(await s.send("/init")).toMatchObject({ ok: false });
-  for (const text of ["/cost", "/model", "/resume"])
-    expect(await s.send(text)).toEqual({ ok: true });
-  expect(s.events.some((e) => e.type === "turn")).toBe(false);
-  const clear = await s.send("/clear");
-  expect(clear).toMatchObject({ ok: true });
-  expect((await s.controller.state()).sessions).toHaveLength(2);
-  expect((await s.controller.state()).currentSessionId).not.toBe(s.id);
-  expect(
-    await s.controller.handle({
-      type: "send",
-      sessionId: (await s.controller.state()).currentSessionId!,
-      text: `/resume ${s.id}`,
-    }),
-  ).toMatchObject({ ok: true, sessionId: s.id });
-  expect(await s.send("/mode plan")).toEqual({ ok: true });
-  expect(await s.send("/init")).toMatchObject({
-    ok: false,
-    error: expect.stringContaining("plan"),
-  });
-});
-it("lists only trusted definitions and sends the expansion as one ordinary user message", async () => {
-  const s = await setup();
+  const projectFile = join(s.cwd, ".xharness", "commands", "task.md");
+  const userFile = join(s.home, "commands", "task.md");
   await mkdir(join(s.cwd, ".xharness", "commands"), { recursive: true });
-  await writeFile(
-    join(s.cwd, ".xharness", "commands", "task.md"),
-    "/clear\n作業: $ARGUMENTS",
-  );
-  expect((await s.controller.state()).commands).toEqual([]);
-  expect(await s.send("/task example")).toMatchObject({ ok: false });
+  await mkdir(join(s.home, "commands"), { recursive: true });
+  await writeFile(projectFile, "/clear\n作業: $ARGUMENTS");
+  await writeFile(userFile, "ユーザー定義: $ARGUMENTS");
   await new WorkspaceTrust(s.home).trust(s.cwd);
-  // Trust is normally recorded by this controller; reinitialize to model an app restart.
-  const restarted = new SessionController({
-    home: s.home,
-    fake: true,
-    model: "fake",
-    version: "test",
-    provider: new FakeProvider(),
-    host: { pickFolder: async () => s.cwd },
-    emit: (e) => s.events.push(e),
-  });
-  await restarted.init();
-  await restarted.handle({ type: "open_session", sessionId: s.id });
-  expect((await restarted.state()).commands?.[0]?.value).toBe("/task");
-  expect(
-    await restarted.handle({
-      type: "send",
-      sessionId: s.id,
-      text: "/task example",
-    }),
-  ).toMatchObject({ ok: true });
+  expect(await s.send("履歴に残す質問")).toMatchObject({ ok: true });
   await vi.waitFor(() =>
-    expect(
-      s.events.some(
-        (e) =>
-          e.type === "turn" &&
-          e.sessionId === s.id &&
-          e.status === "idle" &&
-          e.stopCause === "end_turn",
-      ),
-    ).toBe(true),
+    expect(s.events.some((e) => e.type === "turn" && e.status === "idle")).toBe(
+      true,
+    ),
   );
-  await restarted.shutdown();
   const store = new SessionStore(s.home);
   await store.load();
-  expect((await store.messages(s.id))[0]?.content).toContainEqual({
-    type: "text",
-    text: "/clear\n作業: example",
-  });
-  expect((await restarted.state()).sessions).toHaveLength(1);
+  const before = await store.messages(s.id);
+  const state = await s.controller.state();
+  expect(await s.send("/task example")).toMatchObject({ ok: false });
+  expect(await readFile(projectFile, "utf8")).toBe("/clear\n作業: $ARGUMENTS");
+  expect(await readFile(userFile, "utf8")).toBe("ユーザー定義: $ARGUMENTS");
+  expect(await store.messages(s.id)).toEqual(before);
+  expect((await s.controller.state()).sessions).toEqual(state.sessions);
+  expect(s.bridge).toHaveBeenCalledTimes(1);
+  expect(s.bridge.mock.calls[0]![0].text).toBe("履歴に残す質問");
+  expect(s.legacy).not.toHaveBeenCalled();
 });
-it("asks about project commands even when there are no permission-expanding project settings", async () => {
-  const s = await setup(true);
-  await mkdir(join(s.cwd, ".xharness", "commands"), { recursive: true });
-  await writeFile(
-    join(s.cwd, ".xharness", "commands", "check.md"),
-    "確認 $ARGUMENTS",
-  );
-  await s.send("普通の依頼");
+
+it("sends ordinary text only through the official bridge and preserves IPC history viewing and stop", async () => {
+  const s = await setup();
+  expect(await s.send("普通の質問")).toMatchObject({ ok: true });
   await vi.waitFor(() =>
-    expect(
-      s.events.some(
-        (e) => e.type === "permission_request" && e.tool === "ProjectSettings",
-      ),
-    ).toBe(true),
+    expect(s.events.some((e) => e.type === "turn" && e.status === "idle")).toBe(
+      true,
+    ),
   );
-  const request = s.events.find(
-    (e) => e.type === "permission_request",
-  ) as Extract<UiEvent, { type: "permission_request" }>;
-  await s.controller.handle({
-    type: "permission_response",
+  expect(s.bridge).toHaveBeenCalledTimes(1);
+  expect(s.bridge.mock.calls[0]![0]).toMatchObject({
     sessionId: s.id,
-    requestId: request.requestId,
-    decision: "session",
+    text: "普通の質問",
+    cwd: s.cwd,
   });
-  await vi.waitFor(async () =>
-    expect((await s.controller.state()).commands?.[0]?.value).toBe("/check"),
-  );
-  await s.controller.shutdown();
-  expect(await new WorkspaceTrust(s.home).isTrusted(s.cwd)).toBe(false);
+  expect(s.legacy).not.toHaveBeenCalled();
+  const store = new SessionStore(s.home);
+  await store.load();
+  const saved = await store.messages(s.id);
+  expect(saved[0]?.content).toContainEqual({
+    type: "text",
+    text: "普通の質問",
+  });
+  expect(
+    saved.some((message) =>
+      message.content.some(
+        (block) => block.type === "text" && block.text === "公式fixture回答",
+      ),
+    ),
+  ).toBe(true);
+  expect(
+    await s.controller.handle({ type: "close_session", sessionId: s.id }),
+  ).toMatchObject({ ok: true });
+  expect(
+    await s.controller.handle({ type: "open_session", sessionId: s.id }),
+  ).toMatchObject({ ok: true });
+  expect(
+    s.events.some(
+      (e) =>
+        e.type === "transcript" &&
+        e.sessionId === s.id &&
+        e.items.some(
+          (item) =>
+            item.kind === "assistant" && item.text === "公式fixture回答",
+        ),
+    ),
+  ).toBe(true);
+  expect(await s.send("/stop")).toMatchObject({ ok: true });
+  expect(s.bridge).toHaveBeenCalledTimes(1);
+  expect(s.legacy).not.toHaveBeenCalled();
+  expect(await store.messages(s.id)).toEqual(saved);
 });

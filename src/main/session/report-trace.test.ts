@@ -2,12 +2,9 @@ import { mkdtemp, readFile, appendFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { beginTrace, traceOperation, withSessionTrace } from "../core/trace.js";
+import { beginTrace, withSessionTrace } from "../core/trace.js";
 import { runTurn } from "../core/loop.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
-import { ClaudeAdapter } from "../providers/claude/adapter.js";
-import { CodexAdapter } from "../providers/codex/adapter.js";
-import { type ProviderRequest } from "../providers/provider.js";
 import { runReportDemo } from "./report-demo.js";
 import { readExecutionReport, renderExecutionReport } from "./report.js";
 import { readTraceReplay, renderTraceReplay } from "./report-trace.js";
@@ -80,83 +77,6 @@ it("records all six steps, retries, rejected tools and exact parent-child delega
     new RegExp("^" + raw.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
   );
 });
-
-it.each(["claude", "codex"] as const)(
-  "records the actual %s request body and received fixture SSE without authentication values",
-  async (provider) => {
-    const home = await temp();
-    const fixture = JSON.parse(
-      await readFile(
-        provider === "claude"
-          ? "test/fixtures/claude/phase1-haiku-text.json"
-          : "test/fixtures/codex/x2-gpt-6-luna.json",
-        "utf8",
-      ),
-    ) as { events: { event: string; data: string }[] };
-    let sent: unknown;
-    const fetcher: typeof fetch = async (_url, init) => {
-      sent = JSON.parse(String(init!.body));
-      return new Response(
-        fixture.events
-          .map((e) => `event: ${e.event}\ndata: ${e.data}\n\n`)
-          .join(""),
-      );
-    };
-    const adapter =
-      provider === "claude"
-        ? new ClaudeAdapter({
-            fetcher,
-            getAccessToken: async () => "credential-do-not-save",
-          })
-        : new CodexAdapter({
-            fetcher,
-            getCredentials: async () => ({
-              accessToken: "credential-do-not-save",
-              accountId: "account-do-not-save",
-            }),
-          });
-    const request: ProviderRequest = {
-      model: provider === "claude" ? "claude-haiku-4-5" : "gpt-6-luna",
-      system: "日本語で回答",
-      messages: [
-        { role: "user", content: [{ type: "text", text: "pongと返して" }] },
-      ],
-      tools: [],
-    };
-    await withSessionTrace(
-      home,
-      "fixture",
-      (s) => s,
-      () =>
-        traceOperation("tool", "補助LLM通信", {}, async () => {
-          for await (const event of adapter.stream(
-            request,
-            new AbortController().signal,
-          ))
-            expect(event.type).not.toBe("error");
-        }),
-    );
-    const replay = (await readTraceReplay(home, "fixture", (s) => s))!;
-    const start = replay.records.find(
-      (r) => r.phase === "start" && r.kind === "llm",
-    )!;
-
-    expect(start.parentSpan).toBe(replay.records[0]!.id);
-    const end = replay.records.find(
-      (r) => r.id === start.id && r.phase === "end",
-    )!;
-    expect((end.output as { body: unknown }).body).toEqual(sent);
-    const response = (end.output as { response: unknown[] }).response;
-    expect(response).toContainEqual({ requestDispatched: true });
-    expect(response).toContainEqual({ httpStatus: 200 });
-    expect(response).toContainEqual(fixture.events[0]);
-    const raw = await readFile(join(home, "traces", "fixture.jsonl"), "utf8");
-    expect(raw).not.toMatch(
-      /credential-do-not-save|account-do-not-save|Authorization|chatgpt-account-id/,
-    );
-    expect(renderTraceReplay(replay)).toContain("送信本文");
-  },
-);
 
 it("persists incomplete spans, masks nested secrets before writing, and excludes invalid records", async () => {
   const home = await temp();

@@ -4,24 +4,13 @@ import { mkdirSync } from "node:fs";
 import { fakeUserDataPath } from "./fake-profile.js";
 import { officialProfile, unavailableLegacy } from "./official-profile.js";
 import { acquireHomeWriter } from "./home-writer.js";
-import { loadMainConfig } from "./config/config.js";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseStartupArgs, resolveStartup } from "./config/config.js";
 import { connectionTestStartup } from "./config/catalog.js";
-import { readLocalSecrets } from "./auth/local-secrets.js";
-import { Authentication } from "./auth/authentication.js";
-import { AutoRefresh } from "./auth/auto-refresh.js";
-import { executeRefresh } from "./auth/refresh-cli.js";
-import { refreshCooldown } from "./auth/refresh-cooldown.js";
-import { RefreshingProvider } from "./providers/auth-refresh.js";
-import { launchOfficialLogin } from "./auth/cli-login.js";
-import { ClaudeAdapter } from "./providers/claude/adapter.js";
-import { CodexAdapter } from "./providers/codex/adapter.js";
 import { FakeProvider } from "./providers/fake/fake-provider.js";
 import { SessionController } from "./session/controller.js";
 import { developmentUiConnections } from "./connections/ui-registry.js";
-import { SiwcManager } from "./connections/siwc-manager.js";
 import { SiwcVault } from "./connections/siwc-vault.js";
 import {
   windowsSiwcBackend,
@@ -40,13 +29,7 @@ import { managedClaudeStart } from "./workflow/official/sdk-worker-client.js";
 import { ClaudeWorkflowAgent } from "./workflow/official/claude.js";
 import { verificationMode } from "./workflow/official/fault-injection.js";
 import { registerOfficialWorkflowIpc } from "./official-workflow-ipc.js";
-import { fileSecretStore } from "./mcp/secret-file.js";
-import {
-  confirmAuthentication,
-  createHost,
-  registerIpc,
-  sendEvent,
-} from "./ipc.js";
+import { createHost, registerIpc, sendEvent } from "./ipc.js";
 import {
   devToolsAllowed,
   isDevToolsShortcut,
@@ -179,86 +162,28 @@ async function start() {
     app.exit(1);
     return;
   }
-  let autoRefreshEnabled = main.auth.autoRefresh;
-  const autoRefresh = new AutoRefresh({
-    settings: async () => {
-      const settings = (await loadMainConfig(home)).auth;
-      autoRefreshEnabled = settings.autoRefresh;
-      return settings;
-    },
-    execute: executeRefresh,
-    claim: refreshCooldown(home),
-    changed: async () => {
-      await authentication?.refresh();
-    },
-  });
+  // Non-official startup is restricted to explicit isolated fake fixtures.
+  // There is no desktop HTTP provider, credential reader, or refresh fallback.
   const providers =
     officialOnly || officialDefault
       ? [unavailableLegacy("claude"), unavailableLegacy("codex")]
-      : fake || connectionTest
-        ? [
-            new FakeProvider({ fixturesDir: fixtures, quota: true }),
-            new FakeProvider({
-              provider: "codex",
-              quota: true,
-              fixturesDir: app.isPackaged
-                ? join(process.resourcesPath, "fixtures-codex")
-                : join(app.getAppPath(), "test/fixtures/codex"),
-            }),
-          ]
-        : [
-            new RefreshingProvider(new ClaudeAdapter(), autoRefresh),
-            new RefreshingProvider(
-              new CodexAdapter({
-                toolImageMode: async () =>
-                  (await loadMainConfig(home)).providers.codex.toolImageMode,
-              }),
-              autoRefresh,
-            ),
-          ];
-  const secrets =
-    fake || connectionTest || officialOnly || officialDefault
-      ? []
-      : await readLocalSecrets();
-  const authentication =
-    fake || connectionTest || officialOnly || officialDefault
-      ? undefined
-      : new Authentication({
-          autoRefreshEnabled: () => autoRefreshEnabled,
-          autoRefreshBusy: () => autoRefresh.isBusy(),
-          confirm: (provider) => confirmAuthentication(window, provider),
-          launch: launchOfficialLogin,
-          refreshSecrets: async () => {
-            for (const secret of await readLocalSecrets())
-              if (!secrets.includes(secret)) secrets.push(secret);
-          },
-          changed: () => {
-            void controller
-              ?.state()
-              .then((state) => sendEvent(window, { type: "state", state }))
-              .catch(() => undefined);
-          },
-        });
+      : [
+          new FakeProvider({ fixturesDir: fixtures, quota: true }),
+          new FakeProvider({
+            provider: "codex",
+            quota: true,
+            fixturesDir: app.isPackaged
+              ? join(process.resourcesPath, "fixtures-codex")
+              : join(app.getAppPath(), "test/fixtures/codex"),
+          }),
+        ];
   const vault = new SiwcVault(
     windowsSiwcBackend(home),
     windowsSiwcProtector(safeStorage),
   );
-  const siwc =
-    !officialOnly &&
-    !officialDefault &&
-    !app.isPackaged &&
-    (!fake || siwcFixture)
-      ? siwcFixture
-        ? fixtureSiwcManager(vault)
-        : new SiwcManager(vault, (url) => shell.openExternal(url), {
-            rememberSecrets: (values) => {
-              for (const secret of values)
-                if (!secrets.includes(secret)) secrets.push(secret);
-            },
-          })
-      : undefined;
+  const siwc = siwcFixture ? fixtureSiwcManager(vault) : undefined;
   controller = new SessionController({
-    ...(officialDefault
+    ...(officialDefault || officialOnly
       ? {
           officialSession: (request, signal) =>
             officialWorkflow!.submitSession(request, signal),
@@ -274,7 +199,6 @@ async function start() {
           ),
         }
       : {}),
-    authentication,
     ...(connectionTest
       ? { connectionTest: true, createTools: connectionTestTools }
       : {}),
@@ -296,25 +220,11 @@ async function start() {
     home,
     fake,
     version: app.getVersion(),
-    // --fake では資格情報ファイルを読まない
-    secrets,
+    // Neither ordinary startup nor isolated fake fixtures read credentials.
+    secrets: [],
     host: createHost(() => window),
     localBrowserFactory: createLocalBrowser,
     emit: (event) => sendEvent(window, event),
-    // MCP の OAuth トークンは OS の暗号化(Windows では DPAPI)で保存する。使えなければ OAuth を使わない
-    ...(!fake &&
-    !connectionTest &&
-    !officialOnly &&
-    !officialDefault &&
-    safeStorage.isEncryptionAvailable()
-      ? {
-          mcpSecrets: fileSecretStore(join(home, "secrets"), {
-            encrypt: (text) => safeStorage.encryptString(text),
-            decrypt: (data) => safeStorage.decryptString(data),
-          }),
-          openExternal: (url: string) => void shell.openExternal(url),
-        }
-      : {}),
   });
   await controller.init();
   if (startup.resume) {

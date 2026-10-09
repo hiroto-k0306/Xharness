@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { DEFAULT_IMAGES } from "../../shared/images.js";
-import { type AuthSettings } from "../auth/auto-refresh.js";
 import { type ProviderId } from "../core/types.js";
 import { type ReasoningEffort } from "../providers/provider.js";
 import {
@@ -164,6 +163,13 @@ export function mcpSettings(
     else if (n !== undefined) bad(key);
   }
   return mcp;
+}
+
+/** Preserved legacy configuration only; official SDK/CLI manages authentication. */
+export interface AuthSettings {
+  autoRefresh: boolean;
+  claudeCliPath?: string;
+  codexCliPath?: string;
 }
 
 export interface MainConfig {

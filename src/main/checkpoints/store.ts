@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { createReadStream } from "node:fs";
 import { join, relative, isAbsolute, resolve, dirname } from "node:path";
-import { FileAccess } from "../tools/files.js";
+import { FileAccess } from "../tools/file-access.js";
 import { isSecretPath } from "../core/sensitive-paths.js";
 import { type RewindPreview, type RewindChoice } from "../../shared/rewind.js";
 

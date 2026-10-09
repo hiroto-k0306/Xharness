@@ -1,0 +1,50 @@
+path	test	origin	action	note
+src/main/workflow/official/dag.test.ts	runs independent tasks in parallel, depends on confirmed imports and globally cross-reviews	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/dag.test.ts	runs conflicting writers sequentially from the imported predecessor	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/dag.test.ts	stops new starts on unknown quota and resumes without repeating the approved plan	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/dag.test.ts	resumes a durable import checkpoint without importing a result twice	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	ships a task whose test fails the seed and the injected defect and passes the spec	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	separates X1 quality, X2 injection and X3 fix with fresh tests and reviews against one base	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	does not pass a failed test when the review has no findings	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	does not inject when X1 fails its quality test and follows the natural fix path	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	never injects into outside the allowed folder	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	never injects into a non-synthetic workspace	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	stops before review when the injection is ineffective	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	stops on Node fixture-load exit 1 before any review or repair dispatch	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	never re-injects after an interruption during injection, even with HEAD at X1	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	resumes after the injection without injecting twice and keeps the call reservations	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	refuses a call over the per-phase budget before sending it	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/fault-injection.test.ts	keeps normal runs free of injection and budgets	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/planner-choice.test.ts	plans with a Codex main model through the same validation and approval, and records it	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/prepared-runtime.test.ts	prepares only after saved approval, then implements/tests/reviews in the prepared cwd	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/project-task.test.ts	runs only after scope/test approval, writes the same session directory, tests failures objectively and fixes with cross-company review	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/project-vitest.test.ts	runs exactly one real TypeScript Vitest file from copied dependencies; rejects settings and runner edits	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/project-vitest.test.ts	refuses no-tests without installing dependencies or running an unapproved file	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/project-vitest.test.ts	refuses extra-file without installing dependencies or running an unapproved file	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/project-vitest.test.ts	refuses all-skipped without installing dependencies or running an unapproved file	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/project-vitest.test.ts	refuses unhandled-error without installing dependencies or running an unapproved file	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/project-vitest.test.ts	refuses missing-dependency without installing dependencies or running an unapproved file	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	resumes verify checkpoint without replaying completed model work	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	resumes review checkpoint without replaying completed model work	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	runs claude implementation, other-provider full review, correction and process evidence	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	runs codex implementation, other-provider full review, correction and process evidence	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	shares X task identity and native usage with existing evaluation trace	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	hands the claude fix the review, failed test and diff, then re-reviews the fixed head	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	hands the codex fix the review, failed test and diff, then re-reviews the fixed head	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	fixes a failed independent test even when the review has no findings	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/runtime.test.ts	completes on nit-only findings with passing tests and does not start a fix	linux-failure	run	全回帰52失敗のうちWindows専用実行器34
+src/main/workflow/official/owned-process.test.ts	preserves executable discovery and initializes Windows PowerShell modules after the pwsh supervisor	linux-skip	run	全回帰15skipの一部
+src/main/workflow/official/owned-process.test.ts	skips extensionless and cmd shims and selects an exe without loosening containment	linux-skip	run	全回帰15skipの一部
+src/main/workflow/official/owned-process.test.ts	preserves bidirectional stdio without parsing or logging native messages	linux-skip	run	全回帰15skipの一部
+src/main/workflow/official/owned-process.test.ts	cancellation and timeout stop a detached grandchild	linux-skip	run	全回帰15skipの一部
+src/main/workflow/official/owned-process.test.ts	abrupt owner loss kills its tree without replaying or killing persisted PIDs	linux-skip	run	全回帰15skipの一部
+src/main/workflow/official/owned-process.test.ts	normal parent exit also removes an orphaned descendant and preserves quoting	linux-skip	run	全回帰15skipの一部
+src/main/workflow/official/catalog-compat.test.ts	resumes a planned record whose recorded planner is retired, through implementation and review	linux-skip	run	PR25未確認3と同じ
+src/main/workflow/official/catalog-compat.test.ts	resumes a legacy record needing only its implementer's reviewer company while the other company's former models are retired	linux-skip	run	PR25未確認3と同じ
+src/main/workflow/official/dag.test.ts	corrects an explicit synthetic integration review finding and rechecks both providers	linux-skip	run	PR25未確認3と同じ
+src/main/tools/powershell-command.test.ts	registers Start-Process Hidden in this specific Job before returning	linux-skip	run	限定38ファイルの既存PowerShell3skipと同じ
+src/main/tools/powershell-command.test.ts	registers Start-Process NoNewWindow in this specific Job before returning	linux-skip	run	限定38ファイルの既存PowerShell3skipと同じ
+src/main/tools/powershell-command.test.ts	preserves Start-Process output without PassThru, WhatIf and named arguments	linux-skip	run	限定38ファイルの既存PowerShell3skipと同じ
+src/main/tools/environment.test.ts	finds a fixed PowerShell location with an outdated PATH	linux-skip	run	全回帰15skipの一部
+src/main/local-links.test.ts	checks the real Windows local drive without opening files	linux-skip	run	全回帰15skipの一部
+src/main/connections/siwc-windows.test.ts	protects dedicated temp directory, replaces atomically and refuses a second writer	linux-skip	hold-acl	別途ACL承認が必要（temp専用でもSet-Aclを実行）

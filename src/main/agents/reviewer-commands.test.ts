@@ -1,8 +1,7 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { shellSearchTools } from "../tools/shell-search.js";
 import {
   reviewerCommandAllowed,
   reviewerCommandError,
@@ -24,7 +23,6 @@ function recommendedCommand(hint: string) {
   const match = /defines a test script: run `([^`]+)`/.exec(hint);
   expect(match).not.toBeNull();
   const command = match![1]!;
-  // ChildRunner uses this same predicate before dispatching reviewer Bash.
   expect(reviewerCommandAllowed(command)).toBe(true);
   return command;
 }
@@ -203,38 +201,4 @@ describe("reviewer Bash (test commands only)", () => {
       "defines a test script",
     );
   });
-  it.skipIf(process.platform !== "win32")(
-    "executes the hinted command through the Bash tool and repository wrapper",
-    async () => {
-      const cwd = await workspace();
-      await put(
-        cwd,
-        "package.json",
-        JSON.stringify({ scripts: { test: "vitest run" } }),
-      );
-      await put(
-        cwd,
-        "scripts/pnpm.ps1",
-        await readFile(join(process.cwd(), "scripts/pnpm.ps1"), "utf8"),
-      );
-      // No dependency install or API call: a local executable records forwarded args.
-      await put(
-        cwd,
-        ".tools/node_modules/.bin/pnpm.cmd",
-        "@echo off\r\necho local-pnpm:%*\r\nexit /b 0\r\n",
-      );
-      const command = recommendedCommand(await reviewerTestHint(cwd));
-      const bash = shellSearchTools(cwd).get("Bash")!;
-      expect(await bash.validate({ command })).toBeUndefined();
-      const result = await bash.execute(
-        { command },
-        new AbortController().signal,
-      );
-      expect(result.isError).toBe(false);
-      expect(JSON.parse(String(result.content)).output).toContain(
-        "local-pnpm:test",
-      );
-    },
-    15_000,
-  );
 });

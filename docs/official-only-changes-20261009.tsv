@@ -1,0 +1,196 @@
+status	path_before_or_current	path_after_if_rename
+M	.prettierignore
+M	AGENTS.md
+M	DESIGN.md
+M	FEATURES.md
+A	Old/AGENTS-6370866.md
+A	Old/DESIGN-6370866.md
+A	Old/DESIGN-9a275bc.md
+A	Old/FEATURES-6370866.md
+A	Old/FEATURES-9a275bc.md
+A	Old/README-6370866.md
+A	Old/README.md
+A	Old/SPEC-6370866.md
+A	Old/SPEC-9a275bc.md
+R096	docs/design-websearch.md	Old/docs/design-websearch.md
+R068	docs/feature-list-progress.md	Old/docs/feature-list-progress.md
+R089	docs/phase0-closure-proposal.md	Old/docs/phase0-closure-proposal.md
+R096	docs/phase0-codex-source.md	Old/docs/phase0-codex-source.md
+R098	docs/phase0-findings.md	Old/docs/phase0-findings.md
+R098	docs/phase0-progress.md	Old/docs/phase0-progress.md
+R097	docs/phase0-runbook.md	Old/docs/phase0-runbook.md
+R094	docs/phase0-spikes.md	Old/docs/phase0-spikes.md
+R097	docs/phase1-progress.md	Old/docs/phase1-progress.md
+R097	docs/phase2-local-check.md	Old/docs/phase2-local-check.md
+R098	docs/phase2-local-result.md	Old/docs/phase2-local-result.md
+R097	docs/phase2-progress.md	Old/docs/phase2-progress.md
+R094	docs/phase3-progress.md	Old/docs/phase3-progress.md
+R093	docs/phase4-progress.md	Old/docs/phase4-progress.md
+R096	docs/phase5-local-result.md	Old/docs/phase5-local-result.md
+R097	docs/phase5-progress.md	Old/docs/phase5-progress.md
+R096	docs/phase6-progress.md	Old/docs/phase6-progress.md
+R093	docs/spec-code-review-20261005.md	Old/docs/spec-code-review-20261005.md
+R086	docs/specification-migration.md	Old/docs/specification-migration.md
+R095	docs/プロンプト	Old/docs/プロンプト
+A	Old/release-README-6370866.md
+M	README.md
+M	SPEC.md
+M	docs/claude-refresh-investigation.md
+A	docs/documentation-refresh-20261009.md
+M	docs/gui-testing.md
+M	docs/official-default-session-20261007.md
+A	docs/official-only-changes-20261009.tsv
+A	docs/official-only-consolidation-20261009.md
+M	docs/review-limit-progress.md
+M	docs/stabilize-progress.md
+M	electron-builder.yml
+M	package.json
+M	release/README.md
+D	spike/claude/thinking-binding.test.ts
+D	spike/claude/thinking-binding.ts
+M	src/headless.test.ts
+M	src/headless.ts
+A	src/headless/terminal.ts
+M	src/main/agents/definitions.test.ts
+M	src/main/agents/definitions.ts
+D	src/main/agents/handoffs.test.ts
+D	src/main/agents/handoffs.ts
+D	src/main/agents/permissions.ts
+M	src/main/agents/reviewer-commands.test.ts
+D	src/main/agents/runner.ts
+D	src/main/agents/tasks.test.ts
+D	src/main/agents/tasks.ts
+D	src/main/auth/authentication.test.ts
+D	src/main/auth/authentication.ts
+D	src/main/auth/auto-refresh.test.ts
+D	src/main/auth/auto-refresh.ts
+D	src/main/auth/cli-login.test.ts
+D	src/main/auth/cli-login.ts
+D	src/main/auth/refresh-cli-windows.test.ts
+D	src/main/auth/refresh-cli.test.ts
+D	src/main/auth/refresh-cli.ts
+D	src/main/auth/refresh-cooldown.test.ts
+D	src/main/auth/refresh-cooldown.ts
+M	src/main/checkpoints/store.test.ts
+M	src/main/checkpoints/store.ts
+M	src/main/config/catalog-consumers.test.ts
+M	src/main/config/config.ts
+M	src/main/config/project.ts
+D	src/main/context/provider-compactor.test.ts
+M	src/main/hooks/shell-hooks.test.ts
+M	src/main/index.ts
+M	src/main/mcp/mcp.test.ts
+D	src/main/providers/auth-refresh.test.ts
+D	src/main/providers/auth-refresh.ts
+D	src/main/providers/claude/adapter.test.ts
+D	src/main/providers/claude/adapter.ts
+D	src/main/providers/codex/adapter.test.ts
+D	src/main/providers/codex/adapter.ts
+M	src/main/providers/codex/stream.test.ts
+M	src/main/providers/fake/fake-provider.ts
+D	src/main/providers/llm-budget.test.ts
+M	src/main/providers/provider.ts
+M	src/main/session/authentication.test.ts
+M	src/main/session/context.ts
+M	src/main/session/controller.test.ts
+M	src/main/session/controller.ts
+M	src/main/session/early-send-cancellation.test.ts
+D	src/main/session/h2-environment.test.ts
+M	src/main/session/images.test.ts
+D	src/main/session/mcp-session.test.ts
+D	src/main/session/mcp-session.ts
+M	src/main/session/memory-integration.test.ts
+M	src/main/session/offline-review.test.ts
+D	src/main/session/phase3.test.ts
+M	src/main/session/phase4.test.ts
+M	src/main/session/phase5.test.ts
+D	src/main/session/premises-compact.test.ts
+D	src/main/session/premises.test.ts
+M	src/main/session/project-history-integration.test.ts
+M	src/main/session/quota-capture.ts
+D	src/main/session/quota-resume.test.ts
+M	src/main/session/report-demo.ts
+M	src/main/session/report-trace.test.ts
+M	src/main/session/rewind-command.test.ts
+M	src/main/session/rewind-command.ts
+M	src/main/session/schedules.test.ts
+D	src/main/session/schedules.ts
+M	src/main/session/session-boundaries.test.ts
+M	src/main/session/skills-integration.test.ts
+M	src/main/session/slash-controller.test.ts
+D	src/main/session/stable-prefix.test.ts
+M	src/main/session/storage-consistency.test.ts
+M	src/main/session/system-prompt.test.ts
+M	src/main/session/trust.test.ts
+M	src/main/session/turn-events.ts
+M	src/main/session/turn.ts
+D	src/main/session/workflow-bash-approval.test.ts
+D	src/main/session/workflow-conversation.test.ts
+D	src/main/session/workflow-factory.test.ts
+D	src/main/session/workflow-factory.ts
+D	src/main/session/workflow-usage.test.ts
+D	src/main/tools/background-output.ts
+D	src/main/tools/background-result.test.ts
+D	src/main/tools/background-shells.test.ts
+D	src/main/tools/background-shells.ts
+D	src/main/tools/background-tools.ts
+M	src/main/tools/environment.test.ts
+A	src/main/tools/file-access.test.ts
+A	src/main/tools/file-access.ts
+D	src/main/tools/file-encoding.test.ts
+D	src/main/tools/file-format.test.ts
+D	src/main/tools/files.ts
+D	src/main/tools/h2-search.test.ts
+D	src/main/tools/images.test.ts
+D	src/main/tools/lifecycle.test.ts
+D	src/main/tools/lifecycle.ts
+D	src/main/tools/mcp.ts
+D	src/main/tools/multi-edit.test.ts
+D	src/main/tools/newline-review.test.ts
+D	src/main/tools/project-history.test.ts
+M	src/main/tools/project-history.ts
+D	src/main/tools/project-memory.ts
+D	src/main/tools/shell-search.ts
+D	src/main/tools/todos.test.ts
+D	src/main/tools/todos.ts
+D	src/main/tools/tools.test.ts
+D	src/main/tools/web-fetch.ts
+D	src/main/tools/web-search.test.ts
+D	src/main/tools/web-search.ts
+D	src/main/tools/web-summary.test.ts
+D	src/main/tools/web.test.ts
+D	src/main/tools/web.ts
+D	src/main/workflow/changes.ts
+M	src/main/workflow/official/catalog-compat.test.ts
+M	src/main/workflow/official/service.test.ts
+M	src/main/workflow/official/service.ts
+D	src/main/workflow/plan-schema.ts
+D	src/main/workflow/runtime.test.ts
+D	src/main/workflow/runtime.ts
+D	src/main/workflow/scheduler.test.ts
+D	src/main/workflow/scheduler.ts
+D	src/main/workflow/state.test.ts
+D	src/main/workflow/state.ts
+D	src/main/workflow/tasks-integration.test.ts
+D	src/main/workflow/wave-checks.test.ts
+D	src/main/workflow/wave-checks.ts
+D	src/main/workflow/worker.test.ts
+D	src/main/workflow/worker.ts
+M	src/renderer/App.official.test.tsx
+M	src/renderer/App.test.tsx
+M	src/renderer/App.tsx
+M	src/renderer/components/PromptLine.test.tsx
+M	src/renderer/components/PromptLine.tsx
+A	src/renderer/components/SkillsManager.test.tsx
+M	src/renderer/components/SkillsManager.tsx
+M	src/renderer/components/Transcript.test.tsx
+M	src/renderer/components/Transcript.tsx
+D	src/renderer/workflow-bridge.test.ts
+M	src/shared/project-skills.ts
+A	docs/official-only-review-20261009.md
+A	docs/verification-20261009/baseline-6370866-fixed-resume.log
+A	docs/verification-20261009/baseline-6370866-memory.log
+A	docs/verification-20261009/deleted-test-classification.tsv
+A	docs/verification-20261009/fixed-resume-observation.json
+A	docs/verification-20261009/headless-review-final.log
+A	docs/verification-20261009/scoped-suite-f292b0f.log

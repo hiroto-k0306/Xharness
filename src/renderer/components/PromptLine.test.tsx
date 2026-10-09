@@ -16,6 +16,44 @@ const props = {
   modelLabel: "model",
   modelColor: "red",
 };
+it("official input blocks image paste/drop and legacy command suggestions but keeps stop and text", async () => {
+  const onSubmit = vi.fn();
+  render(
+    <PromptLine
+      {...props}
+      officialDefault
+      onSubmit={onSubmit}
+      suggestions={[
+        { value: "/compact" },
+        { value: "/mcp" },
+        { value: "/stop" },
+      ]}
+    />,
+  );
+  const textbox = screen.getByRole("textbox");
+  fireEvent.paste(textbox, { clipboardData: { files: [file()] } });
+  fireEvent.drop(textbox.parentElement!, { dataTransfer: { files: [file()] } });
+  expect(screen.queryByAltText("添付画像 1")).toBeNull();
+  expect(screen.getByRole("alert")).toHaveTextContent("画像添付に未対応");
+  fireEvent.change(textbox, { target: { value: "/" } });
+  expect(screen.getAllByRole("option")).toHaveLength(1);
+  expect(screen.getByRole("option")).toHaveTextContent("/stop");
+  fireEvent.change(textbox, { target: { value: "/compact" } });
+  fireEvent.keyDown(textbox, { key: "Enter" });
+  expect(onSubmit).not.toHaveBeenCalled();
+  expect(textbox).toHaveValue("/compact");
+  expect(screen.getByRole("alert")).toHaveTextContent("入力は送信していません");
+  fireEvent.change(textbox, { target: { value: "/stop" } });
+  fireEvent.keyDown(textbox, { key: "Enter" });
+  await waitFor(() =>
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("/stop"),
+  );
+  fireEvent.change(textbox, { target: { value: "調査してください" } });
+  fireEvent.keyDown(textbox, { key: "Enter" });
+  await waitFor(() =>
+    expect(onSubmit).toHaveBeenLastCalledWith("調査してください"),
+  );
+});
 it("clears the attachment draft when switching sessions", async () => {
   const view = render(
     <PromptLine {...props} sessionId="first" onSubmit={() => {}} />,

@@ -12,4 +12,4 @@
 - 正式レビューはClaude資格情報の期限切れで失敗していた。旧期限は2026-10-04T11:59:56.532Z。保存済みtraceで2026-10-04T12:00:00.052Z以降に `Claude authentication failed`、`dispatched: false`、HTTP statusなしを確認した（API送信前の失敗）。
 - ユーザー承認を受け、公式CLI `C:\Users\ahwri\.local\bin\claude.exe` をHaiku・短文・toolsなし・max-turns 1・no-session-persistenceで1試行しexit 0。CLI出力は保存していない。更新後の資格情報期限は2026-10-04T20:07:59.352Z、expired=falseを読み取りで確認。資格情報の書き込みは公式CLIのみで、自前refresh・秘密値出力／保存は行っていない。
 - 更新後の正式レビューが実行でき、設計書§20.4の旧既定2の残存がshouldとして指摘されたため5へ修正した。正式再レビューは完了し、must / shouldは0件。出力JSON解析失敗の1回を経て再試行した。
-- 当初はnitとして報告のみだったが、ユーザーの追加指示を受け、DESIGN.md §16.9の表示例を `round 0 / 5` へ更新し、docs/phase5-progress.mdの旧既定2は過去記録だと明示して現行仕様の注記を追加した。
+- 当初はnitとして報告のみだったが、ユーザーの追加指示を受け、DESIGN.md §16.9の表示例を `round 0 / 5` へ更新し、Old/docs/phase5-progress.mdの旧既定2は過去記録だと明示して現行仕様の注記を追加した。

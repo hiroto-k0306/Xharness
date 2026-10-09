@@ -1,8 +1,8 @@
-import { mkdir, mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, expect, it, vi } from "vitest";
-import { SessionController } from "./controller.js";
+import { SessionController, type ControllerOptions } from "./controller.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
 import { type UiEvent } from "../../shared/ipc.js";
 import { parseCommand } from "../../shared/ipc.js";
@@ -12,7 +12,7 @@ import {
   evaluateUiSkillReads,
   renderEvaluation,
 } from "./evaluation.js";
-import { skillLoadPrompt } from "../../shared/project-skills.js";
+import { skillReferenceSubmission } from "../../shared/project-skills.js";
 const fixtures: { c: SessionController; base: string }[] = [];
 afterEach(async () => {
   for (const f of fixtures.splice(0)) {
@@ -34,15 +34,23 @@ async function fixture() {
   );
   const events: UiEvent[] = [];
   let requests = 0;
+  const official = vi.fn<NonNullable<ControllerOptions["officialSession"]>>(
+    async () => ({
+      summary: "参考資料を受領しました。永続登録ではありません。",
+      workflowId: "offline-reference",
+      status: "completed",
+    }),
+  );
   const c = new SessionController({
     home,
     fake: true,
-    model: "fake",
+    model: "claude:opus",
     version: "test",
     phase4: true,
     host: { pickFolder: async () => root },
     emit: (e) => events.push(e),
     provider: new FakeProvider({ onRequest: () => requests++ }),
+    officialSession: official,
   });
   fixtures.push({ c, base });
   await c.init();
@@ -94,6 +102,7 @@ async function fixture() {
     id,
     respond,
     list,
+    official,
     requests: () => requests,
   };
 }
@@ -120,18 +129,30 @@ it("UI list/preview use the gate and real budgets but never send body or model c
   expect(evaluateTrace(trace)).toHaveLength(0);
   expect(evaluateUiSkillReads(trace)).toHaveLength(2);
   expect(renderEvaluation(trace)).toContain("UIのスキル確認");
+  if (!r.ok || r.skills?.operation !== "load")
+    throw new Error("Preview missing");
+  const reference = skillReferenceSubmission(r.skills);
+  if (!("text" in reference)) throw new Error(reference.error);
   await f.c.handle({
     type: "send",
     sessionId: f.id,
-    text: skillLoadPrompt(e.source, e.hash),
+    text: reference.text,
   });
-  await f.respond();
   await vi.waitFor(async () =>
     expect(
       (await f.c.state()).sessions.find((s) => s.id === f.id)?.status,
     ).toBe("idle"),
   );
-  expect(f.requests()).toBe(2);
+  expect(f.official).toHaveBeenCalledTimes(1);
+  expect(f.official.mock.calls[0]![0].text).toBe(reference.text);
+  expect(f.official.mock.calls[0]![0].automaticWork).toBe(false);
+  expect(f.requests()).toBe(0);
+  const history = await readFile(
+    join(f.home, "sessions", `${f.id}.jsonl`),
+    "utf8",
+  );
+  expect(history).toContain("UI ONLY BODY");
+  expect(history).toContain("参考資料を受領しました");
 });
 it("duplicate requests are fenced and denial/cancellation release the runtime, including early cancellation", async () => {
   const f = await fixture();
@@ -167,7 +188,7 @@ it("duplicate requests are fenced and denial/cancellation release the runtime, i
   });
   expect((await f.list()).entries).toHaveLength(1);
 });
-it("renderer reconnect cancels orphaned local reads but replays active task permissions without approval", async () => {
+it("renderer reconnect cancels orphaned local reads but keeps the active official submission without re-sending or granting permission", async () => {
   const f = await fixture();
   const job = f.c.handle({
     type: "project_skills",
@@ -186,29 +207,38 @@ it("renderer reconnect cancels orphaned local reads but replays active task perm
     "idle",
   );
   const e = (await f.list()).entries[0]!;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  f.official.mockImplementationOnce(async (_request, signal) => {
+    entered();
+    return new Promise((_resolve, reject) => {
+      const cancel = () => reject(signal.reason);
+      if (signal.aborted) cancel();
+      else signal.addEventListener("abort", cancel, { once: true });
+    });
+  });
+  f.events.length = 0;
   await f.c.handle({
     type: "send",
     sessionId: f.id,
-    text: skillLoadPrompt(e.source, e.hash),
+    text: `参考資料の出典 ${e.source}、版 ${e.hash} を確認してください。`,
   });
-  await vi.waitFor(() =>
-    expect(f.events.some((e) => e.type === "permission_request")).toBe(true),
-  );
-  const pending = f.events.find((e) => e.type === "permission_request")!;
-  const calls = f.requests();
+  await started;
   f.events.length = 0;
   await f.c.handle({ type: "ready" });
-  expect(f.events.find((e) => e.type === "permission_request")).toEqual(
-    pending,
-  );
+  expect(f.events.some((e) => e.type === "permission_request")).toBe(false);
+  expect(f.events.some((e) => e.type === "permission_resolved")).toBe(false);
   expect(f.events.find((e) => e.type === "transcript")).toMatchObject({
     sessionId: f.id,
   });
   expect(f.events.find((e) => e.type === "turn")).toMatchObject({
     status: "running",
   });
-  expect(f.requests()).toBe(calls);
-  await f.respond("deny");
+  expect(f.official).toHaveBeenCalledTimes(1);
+  expect(f.requests()).toBe(0);
+  await f.c.handle({ type: "send", sessionId: f.id, text: "/stop" });
   await vi.waitFor(async () =>
     expect(
       (await f.c.state()).sessions.find((s) => s.id === f.id)?.status,
@@ -216,7 +246,11 @@ it("renderer reconnect cancels orphaned local reads but replays active task perm
   );
   const trace = await readTraceReplay(f.home, f.id, (s) => s);
   expect(evaluateUiSkillReads(trace)).toHaveLength(2);
-  expect(evaluateTrace(trace)).toHaveLength(1);
+  expect(f.official.mock.calls[0]![1].aborted).toBe(true);
+  expect(f.events.some((event) => event.type === "permission_resolved")).toBe(
+    false,
+  );
+  expect(evaluateTrace(trace)).toHaveLength(0);
 });
 it("a changed or deleted preview fails and a new listing is needed; IPC cannot load or escape paths", async () => {
   const f = await fixture(),
@@ -248,7 +282,7 @@ it("a changed or deleted preview fails and a new listing is needed; IPC cannot l
       parseCommand({ type: "project_skills", sessionId: f.id, request }),
     ).toBeUndefined();
 });
-it("reference UI inspection/preview remain local and actual reference load has separate versioned trace evidence", async () => {
+it("reference UI inspection/preview remain local with versioned trace evidence and attached reference submission is explicitly unsupported", async () => {
   const f = await fixture();
   await writeFile(
     f.path,
@@ -307,23 +341,13 @@ it("reference UI inspection/preview remain local and actual reference load has s
   expect(uiReads).toHaveLength(4);
   expect(JSON.stringify(uiReads)).toContain(referenceSource);
   expect(JSON.stringify(uiReads)).not.toContain("LOCAL DOCUMENT BODY");
-  await f.c.handle({
-    type: "send",
-    sessionId: f.id,
-    text: skillLoadPrompt(e.source, e.hash, inspect.skills.reference),
+  if (!preview.ok || preview.skills?.operation !== "load")
+    throw new Error("Reference missing");
+  expect(skillReferenceSubmission(preview.skills)).toMatchObject({
+    error: expect.stringContaining("付属資料送信は未対応"),
   });
-  await f.respond();
-  await vi.waitFor(async () =>
-    expect(
-      (await f.c.state()).sessions.find((s) => s.id === f.id)?.status,
-    ).toBe("idle"),
-  );
-  expect(f.requests()).toBe(2);
-  const tasks = evaluateTrace(await readTraceReplay(f.home, f.id, (s) => s));
-  expect(JSON.stringify(tasks[0]?.skillReads)).toContain(referenceSource);
-  expect(JSON.stringify(tasks[0]?.skillReads)).not.toContain(
-    "LOCAL DOCUMENT BODY",
-  );
+  expect(f.official).not.toHaveBeenCalled();
+  expect(f.requests()).toBe(0);
   expect(
     parseCommand({
       type: "project_skills",

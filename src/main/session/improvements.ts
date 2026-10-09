@@ -1,4 +1,8 @@
-import { improvementRow, loadImprovementTask } from "./improvement-results.js";
+import {
+  improvementRow,
+  loadImprovementTask,
+  resolveImprovementTaskId,
+} from "./improvement-results.js";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { JsonFile } from "./store.js";
@@ -239,7 +243,7 @@ export class Improvements {
                 a.sessionId === "current" ? this.scope.sessionId : a.sessionId;
               const taskId =
                 a.taskId === "current"
-                  ? (await this.scope.sessions.evaluationTask(sessionId))?.id
+                  ? await resolveImprovementTaskId(this.scope, sessionId)
                   : a.taskId;
               if (!taskId)
                 throw new ImprovementFault("保存済みタスクがありません。");

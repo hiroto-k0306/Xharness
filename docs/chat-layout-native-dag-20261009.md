@@ -55,3 +55,17 @@
 main `f7f7350` との差分ファイルは [変更一覧](change-list-20261009.tsv) に列挙します（この記録自身と一覧も含む）。現行の仕様/設計/入口の正規パスは維持し、旧版6件は [Old対応表](../Old/README.md#最新世代alias追従前の文書f7f7350) に保存しました。既存の旧ソース148件は [移動前後対応](../Old/retired-sources/manifest.tsv) を照合したもので、今回新たに148件を移動したという意味ではありません。利用中ファイル・fixture・配布物・ユーザーデータの一律移動はしていません。
 
 後続の失敗要約/引継ぎ表示修正で、通常作業のファイル比較digestと並列統合の所有Git HEAD/source baseを区別しています。関連証跡テスト3件成功。
+
+## 本番利用の未完了点と次の検証（追加監査）
+
+**通常フローで本番並列を利用可能にする依頼は未完了です。** 最大2件のscheduler/所有Git/明示承認/独立検証契約が実装されたことと、本番のvalidator接続・対応実機での隔離確認は別です。
+
+停止の分類は、production factoryの未実装・未接続と、対象Windows CLIの隔離対応の検証待ちです。ユーザーの権限承認待ちや、この検査を実施済みとする状態ではありません。GUI `src/main/index.ts` とCLI `src/headless.ts` のservice生成では `validateIntegration` を渡さず、`service.ts` はsettingsの検証用注入値だけをrouterへ渡します。`native-dag.ts` のparallel分岐は関数未提供で `independent-validation-unavailable`、個別validatorはverifiedSandboxのcommandExec/restrictedRead/networkDenied/cliVersionが未提供で `validation-unavailable` にします。boolを無根拠にtrueへ変える修正はしません。
+
+cloudの既存CLIは `/opt/codex/bin/codex`、`0.159.0-alpha.3`。ローカル生成schemaのreadOnlyにはnetworkAccessだけがあり、restricted read accessがありません。未知accessフィールドが受理されても、有効な読取制限の証拠にはできません。さらに現行AppServerRpcのowned processはWindows専用で、Linuxでは `owned-process-platform-unsupported` により開始できません。Linuxの一時transport成功をWindowsの実装保証へ流用しません。対象PCのCLI版/同設定の有効性は今回未確認です。
+
+既存 `workspace.runAcceptance` / `spawnOwnedProcess` はWindows Job/leaseにより子孫終了を管理しますが、任意project codeの外部ファイル/資格情報読取・ネットワークを隔離しません。DAGの任意テストへそのまま代用しません。直列nativeは独立validatorを呼ばず、公式SDK/App Serverの既存sandbox/操作承認内で動き、テストはagent-reportedです。新しい未接続停止はparallelだけで、質問と直列へ同じ独立検証要件を追加していません。
+
+必要最小の次作業は、対象Windowsの既存CLIについてschemaを確認し、合成一時領域だけを使う非モデル `command/exec` の制約検査を行うことです。root内読取の成功、root外の合成sentinel読取拒否、内外への書込拒否、localhostの合成listenerへの接続拒否、取消と子孫終了を確認します。モデル通信はこの隔離検査には不要です。CLI/Node/OS/policyと検査証拠に結び付くfactoryを成功時だけ接続し、バイナリ変更で失効させる必要があります。schema非対応なら対象CLIの更新判断が別途必要で、今回勝手にインストール/ACL/認証変更やWindows操作はしていません。factory配線・否定検査のmock/Git検証はcloudで準備できますが、mockだけで対象Windowsの隔離対応を成立させられません。
+
+Codexの選択skill実行も未対応です。`codex.ts` はofficialSkills非空ならdispatched:falseでモデル入力前に停止します。全project/ancestor/user/admin/system由来の未選択skillの自動discoveryを、設定を永続変更せず選択集合だけに制限できることが確認できていません。最小の次手は対象CLIの有効skill集合と一時的allowlist/disable契約の確認です。通常の文書を参照入力へ添付する代案はnative skill実行と別の機能で、対応済みとして読み替えません。

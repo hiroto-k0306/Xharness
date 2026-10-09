@@ -1,0 +1,8 @@
+
+ RUN  v5.0.3 /tmp/xharness-baseline-6370866
+
+
+ Test Files  6 passed (6)
+      Tests  30 passed (30)
+   Start at  03:09:38
+   Duration  10.58s (tests 54%, import 34%, transform 11%)

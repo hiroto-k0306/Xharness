@@ -244,6 +244,8 @@ Claudeは同梱SDKを初期版として、固定の管理フォルダーへSDK�
 
 固定課題の再開完了待ちと手動memoryの異なるcwdでのlist拒否は、864be74でも再現したテスト前提の不一致を修正した。memory fixtureの独立Git identityを明示し、再開テストは非Windowsだけ固定Node課題を実行するテスト用portを注入した。製品のscope検証と非Windowsプロセス拒否は変更していない。直接検証と全回帰1回でこの2件は成功したが、全回帰には52失敗が残る。WindowsのJob実行・実モデル通信を再検証した結果ではない。
 
-改善候補の評価記録は現在も旧evaluationTask/traceを要求し、公式workflow結果の読取adapterが不足している。公式経路で候補課題を送信できることを、結果記録・比較・採用まで検証済みとみなさない。受渡しの公式結果読取とは別の未完了事項である。追加失敗の分類・未確認点は [残存2件の修正と全回帰記録](docs/remaining-failures-regression-20261009.md) を参照。
+後続の公式移行修正で、改善候補の評価記録は保存済み公式workflow UUID・完了状態・最終回答・receipt・固定入力・project境界を照合するadapterを追加した。record/replay/historyの変更で結果を無効化し、旧evaluationTask/traceは旧記録の受動読取に限定する。模擬/送信区分が不明・usage providerが不一致なら登録を拒否し、欠測や累積thread usageを独立呼出しの実測へ昇格しない。品質は明示評価と完了証拠を併用する。
+
+モデル候補は公式経路でenabledかつ提供終了前のcatalogから列挙する。旧provider登録やfake候補で絞らず、列挙時にSDK通信は行わない。共有枠・認証・実際の利用可否の保証ではなく、通常送信時の公式検証を維持する。旧fixtureによる18失敗は同等の公式検証へ移行し、関連9ファイル69件が成功した。全回帰52失敗の過去集計は更新せず、残るWindows依存34件をLinuxで成功扱いしない。修正・未確認点は [公式移行回帰の修復記録](docs/official-migration-regression-fix-20261009.md) を参照。
 
 今回の追加実装・限定検証・既存失敗の比較は [公式共通化記録](docs/official-only-consolidation-20261009.md) を参照。

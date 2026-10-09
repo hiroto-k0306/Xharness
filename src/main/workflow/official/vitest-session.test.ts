@@ -45,15 +45,21 @@ it("normal work does not require a Vitest version, installed dependencies or reg
       record = pending.records[0]!.record;
     expect(record.nativeWork?.validation).toBe("agent-reported");
     expect(record.calls.map((c) => c.phase)).toEqual(["conversation", "plan"]);
-    await service.command({
+    const rejected = await service.command({
       action: "approve",
       id: pending.approval!.id,
+      approvalId: pending.approval!.approvalId,
+      sessionId: "native-vitest",
       digest: "0".repeat(64),
     });
+    expect(rejected.error).toContain("digestが一致しません");
+    expect(rejected.approval?.approvalId).toBe(pending.approval!.approvalId);
     expect(await readFile(join(cwd, "add.mjs"), "utf8")).toContain("a-b");
     await service.command({
       action: "approve",
       id: pending.approval!.id,
+      approvalId: pending.approval!.approvalId,
+      sessionId: "native-vitest",
       digest: pending.approval!.digest,
     });
     expect((await done).status).toBe("completed");

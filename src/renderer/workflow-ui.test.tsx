@@ -338,7 +338,7 @@ it("ModelPicker offers catalog efforts, session apply and default separately", (
   fireEvent.keyDown(window, { key: "Escape" });
   expect(close).toHaveBeenCalled();
 });
-it("ModelPicker resolves an absent session model to the visible catalog option", () => {
+it("ModelPicker requires an explicit catalog choice for an absent session model", () => {
   const apply = vi.fn(async () => {});
   render(
     <ModelPicker
@@ -349,7 +349,17 @@ it("ModelPicker resolves an absent session model to the visible catalog option",
       onClose={() => {}}
     />,
   );
-  expect(screen.getByLabelText("モデル")).toHaveValue("claude-opus-5-5");
+  expect(screen.getByLabelText("モデル")).toHaveValue("");
+  expect(
+    screen.getByRole("option", { name: /現在のモデルは選択できません：fake/ }),
+  ).toBeInTheDocument();
+  expect(screen.queryByLabelText("effort")).not.toBeInTheDocument();
+  expect(screen.getByText("apply · このセッション")).toBeDisabled();
+  fireEvent.click(screen.getByText("apply · このセッション"));
+  expect(apply).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("モデル"), {
+    target: { value: "claude-opus-5-5" },
+  });
   expect(screen.getByLabelText("effort")).toHaveValue("high");
   fireEvent.click(screen.getByText("apply · このセッション"));
   expect(apply).toHaveBeenCalledWith("claude-opus-5-5", "high");

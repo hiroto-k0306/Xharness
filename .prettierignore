@@ -19,3 +19,11 @@ test/fixtures/
 docs/examples/
 # 実アプリから出力した紹介用レシートも原本の形式を保つ
 docs/presentations/20261008/receipts/*.html
+
+# 保存本文を再整形しない（公式専用化前6370866）
+Old/SPEC-6370866.md
+Old/DESIGN-6370866.md
+Old/FEATURES-6370866.md
+Old/README-6370866.md
+Old/AGENTS-6370866.md
+Old/release-README-6370866.md

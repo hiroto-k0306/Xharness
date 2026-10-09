@@ -7,6 +7,14 @@ import { pathToFileURL } from "node:url";
 import { runAcceptance } from "./workspace.js";
 import { spawnOwnedProcess } from "./owned-process.js";
 import { runtimeEnvironment } from "./workspace.js";
+if (process.platform !== "win32")
+  it("refuses execution when the Windows containment platform is unavailable", () => {
+    expect(() =>
+      spawnOwnedProcess(process.execPath, ["-e", "process.exit(0)"], {
+        cwd: tmpdir(),
+      }),
+    ).toThrow("owned-process-platform-unsupported");
+  });
 it.skipIf(process.platform !== "win32")(
   "preserves executable discovery and initializes Windows PowerShell modules after the pwsh supervisor",
   async () => {

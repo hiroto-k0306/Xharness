@@ -239,6 +239,9 @@ async function fixture() {
     root = join(base, "root");
   await mkdir(home);
   await mkdir(root);
+  // Do not inherit a common repository identity from the temporary parent.
+  await mkdir(join(home, ".git"));
+  await mkdir(join(root, ".git"));
   const sessions = new SessionStore(home),
     workspaces = new WorkspaceStore(home);
   await sessions.load();

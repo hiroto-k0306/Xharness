@@ -16,6 +16,8 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { execFile } from "node:child_process";
+import { runtimeEnvironment } from "./workspace.js";
 import { OfficialWorkflowService, pinClaudeModels } from "./service.js";
 import {
   WorkflowFailure,
@@ -248,8 +250,52 @@ it.each(["auto", "flow", "single"] as const)(
   },
 );
 it("persists denied approval across restart, asks again, and finishes without replaying planning", async () => {
+  // This tests durable workflow/checkpoint orchestration, not Windows Job
+  // containment. Linux deliberately refuses production owned processes; inject
+  // only the test-execution port, running the fixed Node fixture for real.
+  // Windows keeps the production port and its supervisor without replacement.
+  const options: Parameters<typeof service>[1] = async (cwd, provider) => {
+    const options = fixtureWorkflowOptions(cwd, {
+      agents: fixtureAgents(provider).agents,
+    });
+    if (process.platform !== "win32")
+      options.workspace.test = (spec, signal) =>
+        new Promise((done) => {
+          expect(spec.program).toBe(process.execPath);
+          expect(spec.args).toEqual(["--test", "acceptance.test.mjs"]);
+          const started = Date.now();
+          execFile(
+            process.execPath,
+            ["--test", "acceptance.test.mjs"],
+            {
+              cwd,
+              signal,
+              shell: false,
+              timeout: spec.timeoutMs,
+              maxBuffer: 30000,
+              env: runtimeEnvironment(),
+            },
+            (error, stdout, stderr) => {
+              const exitCode = error
+                ? typeof error.code === "number"
+                  ? error.code
+                  : null
+                : 0;
+              done({
+                id: spec.id,
+                exitCode,
+                passed: exitCode === 0 && !signal.aborted,
+                elapsedMs: Date.now() - started,
+                output: `${stdout}${stderr}`.slice(0, 30000),
+                source: "process",
+              });
+            },
+          );
+        });
+    return options;
+  };
   const path = await home(),
-    first = service(path);
+    first = service(path, options);
   await first.command({ action: "create", provider: "codex" });
   const planned = await wait(first, (v) => !!v.approval),
     id = planned.approval!.id,
@@ -259,7 +305,7 @@ it("persists denied approval across restart, asks again, and finishes without re
   await first.command({ action: "cancel", id });
   expect(first.view().records[0]!.record.status).toBe("cancelled");
   await first.close();
-  const restored = service(path);
+  const restored = service(path, options);
   expect(
     (await restored.command({ action: "list" })).records[0]!.resumeBlocked,
   ).toBeNull();
@@ -269,12 +315,13 @@ it("persists denied approval across restart, asks again, and finishes without re
   await restored.command({ action: "approve", id, digest });
   const complete = await wait(
     restored,
-    (v) => !v.activeId && v.records[0]?.record.status === "completed",
+    (v) => !v.activeId,
     // This case performs two commits and three independent reviews, with
     // attributes checked before each Git operation; bound the whole cycle.
     20000,
   );
   const record = complete.records[0]!.record;
+  expect(record.status).toBe("completed");
   expect(record.calls.filter((c) => c.phase === "plan")).toHaveLength(1);
   expect(record.calls.map((c) => c.provider)).toEqual([
     "claude",

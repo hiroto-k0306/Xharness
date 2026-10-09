@@ -79,7 +79,10 @@ export const approvalDigest = (
 export interface WorkflowRecord {
   /** Requested pinned native skills. Bodies are never stored in workflow records. */
   officialSkills?: import("../../../shared/official-skills.js").OfficialSkillSelection[];
-  nativeWork?: { validation: "agent-reported"; baseline: "files" };
+  nativeWork?: {
+    validation: "agent-reported" | "independent-process";
+    baseline: "files";
+  };
   nativeValidation?: {
     command: string;
     status: "passed" | "failed" | "not-run";
@@ -136,6 +139,13 @@ export interface WorkflowRecord {
     id: string;
   };
   dag?: import("./dag.js").DagState;
+  nativeDagWorkspace?: ReturnType<
+    Awaited<
+      ReturnType<
+        typeof import("./project-dag-workspace.js").createProjectDagWorkspace
+      >
+    >["snapshots"]
+  >;
   resumed?: number;
   executionDigest?: string;
   /** Verification-only fix-cycle fault injection; absent in normal use. */
@@ -186,6 +196,16 @@ export interface WorkflowOptions {
   /** Official path resolves/rechecks once immediately before each communication. */
   resolveCallModel?: ResolveCallModel;
   nativeWork?: boolean;
+  /** Internal planner/dispatcher handoff; never supplied by IPC or resumed. */
+  nativePlanningOnly?: boolean;
+  nativePlanSchema?: Record<string, unknown>;
+  nativePlanInstruction?: string;
+  preparedNative?: {
+    record: WorkflowRecord;
+    baseline: import("./native-snapshot.js").NativeSnapshot;
+    approved?: boolean;
+    writeScope?: string[];
+  };
   sessionId?: string;
   project?: WorkflowRecord["project"];
   /** Carries the bounded classifier/scope calls into the final workflow evidence. */

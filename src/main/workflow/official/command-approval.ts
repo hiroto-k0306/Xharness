@@ -183,6 +183,8 @@ export async function classifyCommand(
   )
     return reject("envelope", "environment");
   const original = params.command;
+  if (request.nativeWork && request.writeScope !== undefined)
+    return reject("target", "scoped-native-command-unsupported");
   if (request.nativeWork) {
     // Opaque shell text is never classified as safe. The official sandbox is
     // retained; the service asks once or uses this workflow's explicit grant.

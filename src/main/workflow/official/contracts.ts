@@ -31,6 +31,20 @@ const assignment = z
 export const planContract = z
   .object({
     summary: text,
+    parallelization: z
+      .object({
+        mode: z.enum(["serial", "parallel"]),
+        reason: text,
+        maxParallel: z.union([z.literal(1), z.literal(2)]),
+        conditions: z.array(text).max(16).optional(),
+        unresolved: z.array(text).max(16).optional(),
+      })
+      .strict()
+      .optional(),
+    validation: z
+      .object({ testFiles: z.array(relativeFile).min(1).max(10) })
+      .strict()
+      .optional(),
     tasks: z
       .array(
         z
@@ -176,6 +190,8 @@ export interface AgentRequest {
   officialSkills?: import("../../../shared/official-skills.js").OfficialSkillBundle[];
   /** Delegates normal work to the official native agent within its sandbox. */
   nativeWork?: boolean;
+  /** Exact approved write paths for isolated DAG tasks; absent for ordinary native work. */
+  writeScope?: string[];
   /** Only explicitly approved synthetic diagnostics may retain response text. */
   diagnosticText?: boolean;
   requestId: string;

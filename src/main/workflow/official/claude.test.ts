@@ -959,3 +959,37 @@ it("cleans selected snapshots after cancellation without completion evidence", a
     await stat(mock.options().plugins![0]!.path).catch(() => undefined),
   ).toBeUndefined();
 });
+
+it.each(["add.mjs", "other.mjs"])(
+  "DAG Claude direct write scope %s",
+  async (file) => {
+    const root = await cwd();
+    let behavior: string | undefined;
+    const mock = mockStart(async (options) => {
+      const result = await options.canUseTool!(
+        "Write",
+        { file_path: join(root, file) },
+        {
+          toolUseID: "dag-edit",
+          requestId: "dag-edit",
+          signal: new AbortController().signal,
+        },
+      );
+      behavior = result?.behavior;
+    });
+    await new ClaudeWorkflowAgent(mock.start).run(
+      { ...request(root), nativeWork: true, writeScope: ["add.mjs"] },
+      new AbortController().signal,
+    );
+    expect(behavior).toBe(file === "add.mjs" ? "allow" : "deny");
+  },
+);
+it("invalid DAG Claude scope starts no SDK query", async () => {
+  const start = vi.fn();
+  const result = await new ClaudeWorkflowAgent(start).run(
+    { ...request(await cwd()), nativeWork: true, writeScope: ["../outside"] },
+    new AbortController().signal,
+  );
+  expect(result.dispatched).toBe(false);
+  expect(start).not.toHaveBeenCalled();
+});

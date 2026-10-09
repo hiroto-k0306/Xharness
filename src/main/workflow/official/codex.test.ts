@@ -1613,3 +1613,72 @@ it("tells implementation threads exactly the reads XHarness can route to approva
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+it("invalid DAG Codex scope starts no App Server", async () => {
+  const start = vi.fn();
+  const result = await new CodexWorkflowAgent(start).run(
+    { ...request(), nativeWork: true, writeScope: ["../outside"] },
+    new AbortController().signal,
+  );
+  expect(result.dispatched).toBe(false);
+  expect(start).not.toHaveBeenCalled();
+});
+
+it.each(["new.ts", "other.ts"])(
+  "DAG direct file-change requests respect exact scope: %s",
+  async (path) => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-native-file-"));
+    try {
+      const mock = fakeServer(),
+        original = mock.server.request;
+      let decision: unknown;
+      mock.server.request = async (method, raw, signal) => {
+        if (method !== "turn/start") return original(method, raw, signal);
+        queueMicrotask(() => {
+          void (async () => {
+            mock.emit("turn/started", {
+              threadId: "thread-fixture",
+              turn: { id: "turn-fixture" },
+            });
+            mock.emit("item/started", {
+              threadId: "thread-fixture",
+              turnId: "turn-fixture",
+              item: {
+                id: "edit-fixture",
+                type: "fileChange",
+                changes: [{ path }],
+              },
+            });
+            decision = await mock.approval()(
+              "item/fileChange/requestApproval",
+              {
+                threadId: "thread-fixture",
+                turnId: "turn-fixture",
+                itemId: "edit-fixture",
+              },
+            );
+            mock.emit("turn/completed", {
+              threadId: "thread-fixture",
+              turn: { id: "turn-fixture", status: "completed" },
+            });
+          })();
+        });
+        return { turn: { id: "turn-fixture" } };
+      };
+      await new CodexWorkflowAgent(() => mock.server).run(
+        {
+          ...request("implement"),
+          cwd,
+          nativeWork: true,
+          writeScope: ["new.ts"],
+        },
+        new AbortController().signal,
+      );
+      expect(decision).toEqual({
+        decision: path === "new.ts" ? "accept" : "decline",
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+);

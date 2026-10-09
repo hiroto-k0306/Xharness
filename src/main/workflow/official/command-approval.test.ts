@@ -368,3 +368,21 @@ it.each([B + B, B])(
     });
   },
 );
+
+it.each([
+  "node -e \"require('fs').writeFileSync('other.ts','x')\"",
+  "node --test",
+  "rg --files",
+])(
+  "DAG scoped command is rejected before any approval: %s",
+  async (command) => {
+    const result = await classifyCommand(
+      { ...request(), nativeWork: true, writeScope: ["add.mjs"] },
+      params(command),
+    );
+    expect(result).toMatchObject({
+      kind: "rejected",
+      reason: "scoped-native-command-unsupported",
+    });
+  },
+);

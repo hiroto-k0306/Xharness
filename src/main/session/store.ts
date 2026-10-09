@@ -19,7 +19,7 @@ import {
   type WorkspaceSummary,
 } from "../../shared/ipc.js";
 
-/** DESIGN.md §18.4。~/.xharness/ 以下の索引と履歴。electron を使わない。 */
+/** 旧設計 Old/DESIGN-9a275bc.md §18.4。~/.xharness/ 以下の索引と履歴。electron を使わない。 */
 export type StoredSession = Omit<SessionSummary, "status" | "branch"> & {
   /** Explicit next-workflow skill selections. Source pins only; no bodies. */
   officialSkills?: import("../../shared/official-skills.js").OfficialSkillSelection[];

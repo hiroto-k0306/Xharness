@@ -1,33 +1,3 @@
-# 自動モードの名称と許可状態
+# 過去記録の移転案内
 
-2026-10-04。ユーザーの「acceptEditsを自動に名前変えて自動ならユーザー許可状態にして」への対応。
-ブランチ: `codex/windows-shell-session-delete`。DESIGN.md §9.1・§20.6を更新。
-
-- ユーザーの追加指示「他の名前も併せて」により、表示名を「通常」「自動」「計画」に統一。
-  入力欄・一覧・モード変更レシートへ反映する。
-  設定・保存値・IPC値はacceptEditsを保ち、既存セッションを読み直せる。
-- `/mode 通常|自動|計画`で選べる。英語名default・auto・plan・旧acceptEditsも利用できる。
-  設定ファイルで指定する場合は従来どおり`permissions.mode: acceptEdits`。
-- 自動モードの選択を通常のツール実行の許可と扱う。
-  PermissionGateでdenyを先に確認し、askや確認必須指定を自動許可する。
-  workflowの分類・計画段階でもBashの承認待ちにはならない。
-- 明示的denyルール、plan/readOnly、子のreadOnly、ツールのファイル・ネットワーク制限は解除しない。
-  ワークスペースの信頼・プロジェクトフック・MCP接続・プロンプト取り込み・公式CLI認証は
-  別の承認として維持する。レビュー要件やLLM通信予算も変更しない。
-- 旧acceptEditsも新しい自動許可の動作になる。defaultの動作は変更しない。
-- FakeProviderとダミーBashで、自動許可、通常モードの許可・拒否・停止、
-  plan・readOnly・denyルールによる拒否を検証する。
-  実際のインストールやモデル・認証通信は行わない。
-- 新しい配布物は`D:/AIwork/XHarness-release/20261004-auto-mode/XHarness-0.0.0`へ保存する。
-  アプリ・インストーラは自動起動しない。
-
-## 検証
-
-- 自動許可の変更後、全体128ファイル982テスト成功。
-- 他のモード名と日本語コマンドを追加した後、関連3ファイル50テスト成功。
-  全体982件はこの表示名追加前の結果。
-- 承認UIの「今回のみ」はBashの確認必須経路だけに適用し、信頼・MCP等の
-  既存の永続承認操作を維持する。最終調整後の関連4ファイル54テスト成功。
-- 最終状態のtypecheck・lint成功。electron-viteビルド成功。
-- Store版PowerShellを使うWindows環境で検証。実モデル・認証通信なし。
-  インストール後の画面と、実際のインストール作業は利用者側で確認が必要。
+元の記録は[automatic-mode-progress.md](report/automatic-mode-progress.md)へ移動しました。現行仕様は[文書索引](README.md)から参照してください。

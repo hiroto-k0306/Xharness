@@ -14,7 +14,7 @@ import { parseOfficialSkillAction } from "./official-skills.js";
 import { parseHandoffAction } from "./handoffs.js";
 import { parseLocalBrowserAction } from "./local-browser.js";
 import { attachmentInfo, type ImageAttachment } from "./images.js";
-// DESIGN.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
+// 旧設計 Old/DESIGN-9a275bc.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
 // §14.2のローカルリンク専用IPCはpreload内部だけで使用し、公開APIには含めない。
 
 export const EVENT_CHANNEL = "harness:event";
@@ -43,7 +43,7 @@ export const STEP_NODES = [
 ] as const;
 export type StepNode = (typeof STEP_NODES)[number];
 
-/** DESIGN.md §16.5 */
+/** 旧設計 Old/DESIGN-9a275bc.md §16.5 */
 export interface Receipt {
   error?: import("../main/tools/errors.js").ToolFailure;
   agentId?: string;

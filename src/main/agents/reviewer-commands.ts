@@ -1,4 +1,4 @@
-// reviewer の Bash(テスト実行用、DESIGN.md §10.1)で許すコマンドと、reviewer に伝える案内。
+// reviewer の Bash(テスト実行用、旧設計 Old/DESIGN-9a275bc.md §10.1)で許すコマンドと、reviewer に伝える案内。
 import { access, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 

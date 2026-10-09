@@ -74,7 +74,7 @@ export function isEffort(value: unknown): value is ReasoningEffort {
   );
 }
 
-/** DESIGN.md §22.6 の web 設定 */
+/** 旧設計 Old/DESIGN-9a275bc.md §22.6 の web 設定 */
 export interface WebSettings {
   enabled: boolean;
   /** 従来の設定名。codexSearchMode が無いときの Codex の検索モード */
@@ -133,7 +133,7 @@ export function webSettings(
   return web;
 }
 
-/** DESIGN.md §25 の MCP 設定(全体の on/off と上限。サーバーの定義はプロジェクトの .mcp.json) */
+/** 旧設計 Old/DESIGN-9a275bc.md §25 の MCP 設定(全体の on/off と上限。サーバーの定義はプロジェクトの .mcp.json) */
 export interface McpSettings {
   enabled: boolean;
   startupTimeoutSec: number;

@@ -38,6 +38,7 @@ const view = (
   status: string,
   approval?: string,
   sessionId: string | undefined = "session",
+  details: Partial<OfficialWorkflowView["records"][number]["record"]> = {},
 ) =>
   ({
     available: true,
@@ -50,6 +51,7 @@ const view = (
           status,
           goal: "PRIVATE GOAL",
           cwd: "PRIVATE PATH",
+          ...details,
         },
       },
     ],
@@ -127,6 +129,55 @@ it("notifies new plan and operation waits once, then terminal once without dupli
     approvalId: "operation",
   });
 });
+it("work classification is silent while preparation continues and preserves final turn notification", () => {
+  const { n, host } = setup();
+  n.workflow({ ...view("planning"), records: [] });
+  n.event({ type: "turn", sessionId: "session", status: "running" });
+  n.workflow(view("planning"));
+  n.workflow(view("completed", undefined, "session", { inputIntent: "work" }));
+  n.workflow(view("completed", undefined, "session", { inputIntent: "work" }));
+  expect(host.show).not.toHaveBeenCalled();
+  n.event({
+    type: "turn",
+    sessionId: "session",
+    status: "idle",
+    stopCause: "workflow_complete",
+  });
+  expect(host.show).toHaveBeenCalledTimes(1);
+});
+it("native work completion after classification notifies once", () => {
+  const { n, host } = setup();
+  n.workflow({ ...view("planning"), records: [] });
+  n.event({ type: "turn", sessionId: "session", status: "running" });
+  n.workflow(view("planning"));
+  n.workflow(view("completed", undefined, "session", { inputIntent: "work" }));
+  expect(host.show).not.toHaveBeenCalled();
+  const nativeWork = {
+    validation: "agent-reported",
+    baseline: "files",
+  } as const;
+  n.workflow(view("planning", undefined, "session", { nativeWork }));
+  n.workflow(view("completed", undefined, "session", { nativeWork }));
+  n.event({ type: "turn", sessionId: "session", status: "idle" });
+  expect(host.show).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(host.show).mock.calls[0]![1]).toContain("作業が終了");
+});
+it.each(["completed", "failed", "cancelled"])(
+  "question completion or unsuccessful classification %s retains its terminal notification",
+  (status) => {
+    const { n, host } = setup();
+    n.workflow({ ...view("planning"), records: [] });
+    n.event({ type: "turn", sessionId: "session", status: "running" });
+    n.workflow(view("planning"));
+    n.workflow(
+      view(status, undefined, "session", {
+        inputIntent: status === "completed" ? "question" : "work",
+      }),
+    );
+    n.event({ type: "turn", sessionId: "session", status: "idle" });
+    expect(host.show).toHaveBeenCalledTimes(1);
+  },
+);
 it("notifies each fresh live turn once and does not focus a deleted session", () => {
   const { n, host } = setup();
   for (let i = 0; i < 2; i++) {

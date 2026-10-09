@@ -155,7 +155,13 @@ export class UserNotifications {
       if (
         previous &&
         previous !== record.status &&
-        terminal.has(record.status)
+        terminal.has(record.status) &&
+        !(
+          record.status === "completed" &&
+          record.inputIntent === "work" &&
+          !record.nativeWork &&
+          !record.plan
+        )
       ) {
         this.running.delete(sessionId); // One terminal notification, not a second turn/idle toast.
         this.notify(

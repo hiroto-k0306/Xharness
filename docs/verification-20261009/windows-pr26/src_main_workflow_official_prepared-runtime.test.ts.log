@@ -1,0 +1,12 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/workflow/official/prepared-runtime.test.ts (3 tests | 2 skipped) 6684ms
+   ✓ prepares only after saved approval, then implements/tests/reviews in the prepared cwd 6683ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 2 skipped (3)
+   Start at  12:54:47
+   Duration  6.94s (tests 97%, transform 1%, import 1%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_workflow_official_prepared-runtime.test.ts.json

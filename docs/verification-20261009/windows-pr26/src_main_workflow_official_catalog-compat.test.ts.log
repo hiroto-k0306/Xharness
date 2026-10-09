@@ -1,0 +1,13 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/workflow/official/catalog-compat.test.ts (10 tests | 8 skipped) 7298ms
+   ✓ resumes a planned record whose recorded planner is retired, through implementation and review 3812ms
+   ✓ resumes a legacy record needing only its implementer's reviewer company while the other company's former models are retired 3485ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed | 8 skipped (10)
+   Start at  12:51:33
+   Duration  9.74s (tests 76%, import 18%, transform 6%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_workflow_official_catalog-compat.test.ts.json

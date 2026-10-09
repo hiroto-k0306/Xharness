@@ -1,0 +1,13 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/local-links.test.ts (42 tests | 41 skipped) 1028ms
+   ✓ local file links (37)
+     ✓ checks the real Windows local drive without opening files 1027ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 41 skipped (42)
+   Start at  12:51:26
+   Duration  1.51s (tests 93%, transform 3%, worker 2%, import 2%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_local-links.test.ts.json

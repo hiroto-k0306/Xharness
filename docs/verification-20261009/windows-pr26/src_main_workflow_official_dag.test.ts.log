@@ -1,0 +1,16 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/workflow/official/dag.test.ts (11 tests | 6 skipped) 98768ms
+   ✓ corrects an explicit synthetic integration review finding and rechecks both providers 24243ms
+   ✓ runs independent tasks in parallel, depends on confirmed imports and globally cross-reviews 21794ms
+   ✓ runs conflicting writers sequentially from the imported predecessor 13992ms
+   ✓ stops new starts on unknown quota and resumes without repeating the approved plan 19122ms
+   ✓ resumes a durable import checkpoint without importing a result twice 19615ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed | 6 skipped (11)
+   Start at  12:51:43
+   Duration  99.06s (tests 100%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_workflow_official_dag.test.ts.json

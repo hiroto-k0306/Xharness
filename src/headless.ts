@@ -1,192 +1,144 @@
-import {
-  withSessionTrace,
-  withTraceFields,
-  traceOperation,
-} from "./main/core/trace.js";
-import { readLlmCalls, withSessionCalls } from "./main/session/llm-calls.js";
-import {
-  costSummary,
-  expandCommand,
-  initAgents,
-  userCommands,
-} from "./main/session/slash-commands.js";
-import { reservedCommand } from "./shared/commands.js";
-import { ReceiptStore } from "./main/session/receipts.js";
-import { pad, toReceipt } from "./main/session/context.js";
-import { type Receipt } from "./shared/ipc.js";
-import { loadModelCatalog } from "./main/config/model-catalog.js";
-import { LlmBudgetError } from "./main/core/llm-budget.js";
-import { projectHookApproval } from "./main/hooks/shell-hooks.js";
-import { createInterface } from "node:readline/promises";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { resolve } from "node:path";
-import { stat, rm } from "node:fs/promises";
-import { FileCheckpointStore } from "./main/checkpoints/store.js";
-import { headlessRewind } from "./main/session/headless-rewind.js";
-import { rewindTurns } from "./shared/rewind.js";
-import { randomUUID } from "node:crypto";
-import {
-  SessionStore,
-  WorkspaceStore,
-  JsonFile,
-  type StoredSession,
-  RECOVERY_NOTICE,
-} from "./main/session/store.js";
-import {
-  loadProjectConfig,
-  projectMemory,
-  saveRule,
-} from "./main/config/project.js";
-import {
-  decidePermission,
-  grantFor,
-  normalizeCall,
-  type Rule,
-  permissionModes,
-} from "./main/core/permissions.js";
-import { estimateTokens, type Checkpoint } from "./main/context/compactor.js";
-import { WorkflowRuntime } from "./main/workflow/runtime.js";
-import { prepareProviderHistory } from "./main/context/provider-compactor.js";
-import { loadAgentConfig } from "./main/agents/definitions.js";
-import { waveChecks } from "./main/workflow/wave-checks.js";
-import { defaultTools } from "./main/session/controller.js";
-import { childNeedsAsk } from "./main/agents/permissions.js";
-import { type Message } from "./main/core/types.js";
-import { redact } from "./main/core/redact.js";
-import { projectHistoryTools } from "./main/tools/project-history.js";
-import { projectMemoryTools } from "./main/tools/project-memory.js";
-import { projectSkillTools } from "./main/tools/project-skills.js";
-import { WorkspaceTrust } from "./main/config/trust.js";
-import { McpApprovals } from "./main/mcp/approvals.js";
-import {
-  displayServer,
-  loadMcpConfig,
-  type McpServerConfig,
-} from "./main/mcp/config.js";
-import { McpManager } from "./main/mcp/manager.js";
-import {
-  MCP_PROMPT_COMMAND,
-  mcpChangeNote,
-  mcpLogger,
-  parseMcpPrompt,
-} from "./main/session/mcp-session.js";
-import { mcpTools } from "./main/tools/mcp.js";
-import { readLocalSecrets } from "./main/auth/local-secrets.js";
-import { FakeProvider } from "./main/providers/fake/fake-provider.js";
-import { ClaudeAdapter } from "./main/providers/claude/adapter.js";
-import { CodexAdapter } from "./main/providers/codex/adapter.js";
-import { Router } from "./main/core/router.js";
-import {
-  isEffort,
-  resolveModel,
-  loadMainConfig,
-} from "./main/config/config.js";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { type ReasoningEffort } from "./main/providers/provider.js";
-import { FileAccess, fileTools } from "./main/tools/files.js";
-import { shellSearchTools } from "./main/tools/shell-search.js";
-import { todoTools } from "./main/tools/todos.js";
-import { diagnoseEnvironment } from "./main/tools/environment.js";
-import { webTools } from "./main/tools/web.js";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { stat } from "node:fs/promises";
+import type { Readable, Writable } from "node:stream";
+import { Terminal } from "./headless/terminal.js";
+import { acquireHomeWriter } from "./main/home-writer.js";
+import { SessionController } from "./main/session/controller.js";
+import { SessionStore } from "./main/session/store.js";
+import { unavailableLegacy } from "./main/official-profile.js";
+import { OfficialWorkflowService } from "./main/workflow/official/service.js";
+import { ClaudeSdkManager } from "./main/workflow/official/sdk-manager.js";
+import { managedClaudeStart } from "./main/workflow/official/sdk-worker-client.js";
+import { ClaudeWorkflowAgent } from "./main/workflow/official/claude.js";
+import {
+  loadMainConfig,
+  resolveModel,
+  isEffort,
+} from "./main/config/config.js";
+import { loadModelCatalog } from "./main/config/model-catalog.js";
+import { catalogUnavailableReason } from "./main/config/catalog.js";
+import { resolvePermissionMode } from "./shared/permission-modes.js";
+import { redact } from "./main/core/redact.js";
+import { exportExecutionReport } from "./main/session/report.js";
 import {
   readReceiptReplay,
   compareReplayPermissions,
 } from "./main/session/replay.js";
-import { exportExecutionReport } from "./main/session/report.js";
-import { acquireHomeWriter, HomeWriterBusy } from "./main/home-writer.js";
+import { loadProjectConfig } from "./main/config/project.js";
+import { WorkspaceTrust } from "./main/config/trust.js";
+import type { UiEvent, Effort } from "./shared/ipc.js";
+import type { OfficialWorkflowView } from "./shared/official-workflow.js";
 
-export async function headless(args = process.argv.slice(2)) {
-  if (["--help", "--report", "--replay"].some((arg) => args.includes(arg)))
-    return headlessUnlocked(args);
-  const home =
-    process.env.XHARNESS_HOME ??
-    join(homedir(), args.includes("--fake") ? ".xharness-fake" : ".xharness");
-  const writer = await acquireHomeWriter(home);
-  try {
-    await headlessUnlocked(args);
-  } finally {
-    await writer.release();
+const HELP = `XHarness official headless\nnode dist/headless.js [--model provider:model] [--effort level] [--cwd path] [--resume sessionId] [--mode 通常|自動|計画] [--fake] [--codex-path executable]\n--report sessionId --output new-report.html / --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path]\n/help /exit /stop /model [provider:model] [effort] /mode 通常|自動|計画 /resume [sessionId] /clear /history /workflow\nGUIと同じ公式Claude SDK / Codex App Server・計画承認・実装・テスト・レビューを使います。TTYでのみ計画/操作を承認できます。\n旧HTTP・Task・MCP・画像・/compact・旧実行slashは使用しません。旧履歴は閲覧できますが公式へ自動転送しません。\n終了コード: 0=正常、1=拒否/失敗/承認不能、130=Ctrl+C/実行中のEOF取消。\n`;
+const FLAGS = new Set(["--help", "--fake"]);
+const VALUES = new Set([
+  "--model",
+  "--effort",
+  "--cwd",
+  "--resume",
+  "--mode",
+  "--codex-path",
+  "--report",
+  "--output",
+  "--replay",
+  "--replay-parent",
+  "--replay-mode",
+]);
+function argumentsOf(args: string[]) {
+  const options = new Map<string, string>();
+  for (let i = 0; i < args.length; i++) {
+    const name = args[i]!;
+    if (options.has(name)) throw new Error(`Duplicate option: ${name}`);
+    if (FLAGS.has(name)) options.set(name, "true");
+    else if (VALUES.has(name)) {
+      const value = args[++i];
+      if (!value || value.startsWith("--"))
+        throw new Error(`Missing option value: ${name}`);
+      options.set(name, value);
+    } else
+      throw new Error(
+        `未対応の起動オプション: ${name}。旧HTTP/fixture指定へ切り替えません。`,
+      );
   }
+  return options;
 }
-async function headlessUnlocked(args: string[]) {
-  if (args.includes("--help")) {
-    process.stdout.write(
-      "XHarness Phase 6\nnode dist/headless.js [--model provider:model] [--cwd path] [--resume id] [--fake [--fixtures dir]]\nnode dist/headless.js --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path] [--fake]\nnode dist/headless.js --report sessionId --output new-report.html [--fake]\n/model provider:model [effort] /mode default|acceptEdits|plan /phase plan|implement|review /review /compact /exit /clear · Ctrl+C interrupts a turn\n",
-    );
-    return;
-  }
-  const option = (name: string, fallback: string) => {
-    const index = args.indexOf(name);
-    return index < 0 ? fallback : (args[index + 1] ?? fallback);
-  };
-  const fake = args.includes("--fake");
-  const home =
-    process.env.XHARNESS_HOME ??
-    join(homedir(), fake ? ".xharness-fake" : ".xharness");
-  if (args.includes("--report")) {
-    const id = option("--report", "");
-    const output = option("--output", "");
-    if (!id || id.startsWith("--") || !output || output.startsWith("--"))
-      throw new Error("Report needs --report sessionId --output new-file.html");
+export interface HeadlessPorts {
+  input?: Readable;
+  output?: Writable;
+  error?: Writable;
+  /** Tests only: production always checks both terminal streams. */
+  interactive?: boolean;
+  home?: string;
+  /** Offline service seam; production constructs the shared official service. */
+  service?: Pick<
+    OfficialWorkflowService,
+    "submitSession" | "command" | "view" | "close"
+  >;
+}
+
+/** Read-only compatibility commands never initialize agents or read credentials. */
+async function readOnly(
+  options: Map<string, string>,
+  home: string,
+  write: (s: string) => void,
+) {
+  if (options.has("--report")) {
     if (
+      !options.has("--output") ||
       [
         "--resume",
         "--model",
         "--effort",
+        "--mode",
         "--replay",
         "--replay-mode",
         "--replay-parent",
-      ].some((name) => args.includes(name))
+        "--codex-path",
+      ].some((k) => options.has(k))
     )
-      throw new Error("Report cannot resume or call a model");
-    const secrets = fake ? [] : await readLocalSecrets();
-    await exportExecutionReport(home, id, resolve(output), (text) =>
-      redact(text, secrets),
+      throw new Error(
+        "Report needs --report sessionId --output new-file.html; cannot execute or resume a model",
+      );
+    await exportExecutionReport(
+      home,
+      options.get("--report")!,
+      resolve(options.get("--output")!),
+      redact,
     );
-    process.stdout.write("HTML report saved\n");
-    return;
+    write("HTML report saved\n");
+    return true;
   }
-  if (args.includes("--output")) throw new Error("--output requires --report");
-  if (args.includes("--replay")) {
-    const value = (name: string) => {
-      const result = option(name, "");
-      if (!result || result.startsWith("--"))
-        throw new Error("Missing replay option value");
-      return result;
-    };
-    if (["--resume", "--model", "--effort"].some((name) => args.includes(name)))
+  if (options.has("--output")) throw new Error("--output requires --report");
+  if (options.has("--replay")) {
+    if (
+      ["--resume", "--model", "--effort", "--mode", "--codex-path"].some((k) =>
+        options.has(k),
+      )
+    )
       throw new Error("Replay cannot resume or call a model");
-    const secrets = fake ? [] : await readLocalSecrets();
-    const replay = await readReceiptReplay(home, value("--replay"), {
-      parentId: args.includes("--replay-parent")
-        ? value("--replay-parent")
-        : undefined,
-      clean: (text) => redact(text, secrets),
+    const replay = await readReceiptReplay(home, options.get("--replay")!, {
+      parentId: options.get("--replay-parent"),
+      clean: redact,
     });
     let comparisons;
-    if (args.includes("--replay-mode")) {
-      const mode = value("--replay-mode");
-      if (
-        !permissionModes.includes(mode as (typeof permissionModes)[number]) ||
-        !args.includes("--cwd")
-      )
+    if (options.has("--replay-mode")) {
+      const mode = resolvePermissionMode(options.get("--replay-mode"));
+      if (!mode || !options.has("--cwd"))
         throw new Error("Replay comparison needs a permission mode and --cwd");
-      const cwd = resolve(value("--cwd"));
+      const cwd = resolve(options.get("--cwd")!);
       const project = await loadProjectConfig(home, cwd, {
         trusted: await new WorkspaceTrust(home).isTrusted(cwd),
       });
       comparisons = await compareReplayPermissions(
         replay,
-        {
-          ...project.permissions,
-          mode: mode as (typeof permissionModes)[number],
-        },
+        { ...project.permissions, mode },
         cwd,
         new AbortController().signal,
       );
     }
-    process.stdout.write(
+    write(
       JSON.stringify(
         {
           ...replay,
@@ -196,911 +148,487 @@ async function headlessUnlocked(args: string[]) {
         2,
       ) + "\n",
     );
-    return;
+    return true;
   }
-  if (args.includes("--replay-mode") || args.includes("--replay-parent"))
+  if (options.has("--replay-mode") || options.has("--replay-parent"))
     throw new Error("Replay options require --replay");
-  const sessions = new SessionStore(home);
-  await sessions.load();
-  const resume = args.includes("--resume")
-    ? sessions.get(option("--resume", ""))
-    : undefined;
-  if (args.includes("--resume") && !resume) throw new Error("Unknown session");
-  if (resume && (await sessions.evaluationTask(resume.id))?.recoveryRequired)
-    throw new Error(RECOVERY_NOTICE);
-  const cwd = resume?.cwd ?? resolve(option("--cwd", process.cwd()));
-  if (!(await stat(cwd)).isDirectory())
-    throw new Error("Working directory unavailable");
-  const config = await loadMainConfig(home, undefined, cwd);
-  // headless は信頼の確認を出さない。アプリで信頼したワークスペースだけ、設定の許可ルールを適用する
-  const project = await loadProjectConfig(home, cwd, {
-    trusted: await new WorkspaceTrust(home).isTrusted(cwd),
-  });
-  if (project.untrusted)
-    process.stderr.write(
-      "Project settings in this folder grant extra permissions but the folder is not trusted; those entries are ignored (trust it from the app).\n",
-    );
-  let model =
-    fake && !args.includes("--model")
-      ? "fake"
-      : resolveModel(
-          option("--model", resume?.model ?? config.choice.model),
-          config.aliases,
-        )?.model;
-  if (resume && !args.includes("--model")) model = resume.model;
-  if (!model) throw new Error("Unknown model");
-  const cliEffort = option("--effort", resume?.effort ?? config.choice.effort);
-  if (!isEffort(cliEffort)) throw new Error("Unknown effort");
-  let effort: ReasoningEffort = cliEffort;
-  const providers = fake
-    ? [
-        new FakeProvider({
-          fixturesDir: option(
-            "--fixtures",
-            fileURLToPath(new URL("../test/fixtures/claude", import.meta.url)),
-          ),
-        }),
-        new FakeProvider({
-          provider: "codex",
-          fixturesDir: fileURLToPath(
-            new URL("../test/fixtures/codex", import.meta.url),
-          ),
-        }),
-      ]
-    : [
-        new ClaudeAdapter(),
-        new CodexAdapter({
-          toolImageMode: async () =>
-            (await loadMainConfig(home)).providers.codex.toolImageMode,
-        }),
-      ];
-  const router = new Router(providers, config?.fallback, config?.aliases);
-  router.provider(model);
-  const access = new FileAccess(cwd);
-  const tools = new Map([
-    ...fileTools(access),
-    ...shellSearchTools(cwd),
-    ...todoTools(),
-  ]);
-  // 検索回数の上限は、子エージェントを含むセッション全体で数える(§22.6)
-  const searchBudget = {
-    used: 0,
-    limit: config?.web.maxSearchesPerSession ?? 100,
-  };
-  if (config?.web.enabled !== false)
-    for (const [name, tool] of webTools(
-      () => router.provider(model!),
-      config?.web.searchMode ?? "live",
-      fake,
-      undefined,
-      {
-        settings: config?.web,
-        providers: () => providers,
-        budget: searchBudget,
-      },
-    ))
-      tools.set(name, tool);
-  // --fake は通信も資格情報の読み取りも行わない。
-  const secrets = fake ? [] : await readLocalSecrets();
-  const clean = (text: string) => redact(text, secrets);
-  let system = `You are a coding agent working in ${cwd}. Use Read before modifying existing files. Bash executes PowerShell 7 and already runs in this working directory, so do not prefix commands with cd or Set-Location. Tool dates use ISO 8601. Respect project instructions.`;
-  const environment = resume?.environment ?? (await diagnoseEnvironment(cwd));
-  if (!resume?.environment)
-    for (const warning of environment.warnings) console.error(warning);
-  system += "\n" + environment.summary;
-  system +=
-    "\n\n" + clean(await projectMemory(home, cwd, project.context.memoryFiles));
-  const workspaces = new WorkspaceStore(home);
-  await workspaces.load();
-  const workspaceId = resume?.workspaceId ?? (await workspaces.add(cwd));
-  let session: StoredSession = resume ?? {
-    environment,
-    id: randomUUID().slice(0, 8),
-    title: "Headless session",
-    cwd,
-    workspaceId,
-    readOnly: false,
-    model,
-    effort,
-    permissionMode: project.permissions.mode,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    providers: [],
-  };
-  session = { ...session, environment };
-  await sessions.save(session);
-  for (const [name, tool] of new Map([
-    ...projectHistoryTools({
-      home,
-      sessions,
-      workspaces,
-      sessionId: session.id,
-      workspaceId: session.workspaceId,
-      cwd,
-      clean,
-    }),
-    ...projectMemoryTools({
-      home,
-      sessions,
-      workspaces,
-      sessionId: session.id,
-      workspaceId: session.workspaceId,
-      cwd,
-      clean,
-    }),
-    ...projectSkillTools({
-      home,
-      sessions,
-      workspaces,
-      sessionId: session.id,
-      workspaceId: session.workspaceId,
-      cwd,
-      clean,
-    }),
-  ]))
-    tools.set(name, tool);
-  let messages: Message[] = resume ? await sessions.messages(session.id) : [];
-  let persisted = messages.length;
-  const fileCheckpoints = new FileCheckpointStore(home);
-  await fileCheckpoints.purge(
-    project.checkpoints?.retentionDays ?? 30,
-    Date.now(),
-    true,
-  );
-  let checkpoint: Checkpoint | undefined;
-  const checkpointFile = () =>
-    new JsonFile<Checkpoint | undefined>(
-      join(home, "context", `${session.id}.json`),
-      (v): v is Checkpoint | undefined =>
-        v === undefined ||
-        (!!v &&
-          typeof v === "object" &&
-          Number.isSafeInteger((v as Checkpoint).covered) &&
-          (v as Checkpoint).covered >= 0 &&
-          typeof (v as Checkpoint).summary === "string"),
-    );
-  checkpoint = await checkpointFile().read(undefined);
-  const sessionRules: Rule[] = [];
-  const rl = createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: !!process.stdin.isTTY,
-  });
-  let controller: AbortController | undefined;
-  let workflow: WorkflowRuntime | undefined;
-  let closed = false;
-  let resumeNext: string | undefined;
-  const receiptStore = new ReceiptStore(home);
-  let receiptSeq = Math.max(
-    0,
-    ...(await receiptStore.read(session.id)).map(
-      (r) => Number(r.id.slice(1)) || 0,
-    ),
-  );
-  const childReceipts: Receipt[] = [];
-  const interrupt = () => {
-    if (controller) controller.abort();
-    else {
-      closed = true;
-      rl.close();
-    }
-  };
-  rl.on("SIGINT", interrupt);
-  rl.on("close", () => {
-    closed = true;
-    controller?.abort();
-  });
-  process.on("SIGINT", interrupt);
-  process.stdout.write(
-    `XHarness · ${model} · ${cwd} · session ${session.id}\n/exit to quit, /clear starts a new session.\n`,
-  );
-  // MCP(§25): 起動時に1回だけ準備し、tools をセッション中に変えない。--fake では起動しない
-  let mcp: McpManager | undefined;
-  const mcpConfig =
-    !fake && config.mcp.enabled ? await loadMcpConfig(cwd) : undefined;
-  if (mcpConfig?.exists) {
-    for (const warning of mcpConfig.warnings)
-      process.stderr.write(clean(warning) + "\n");
-    mcp = new McpManager({
-      cwd,
-      startupTimeoutMs: config.mcp.startupTimeoutSec * 1000,
-      toolTimeoutMs: config.mcp.toolTimeoutSec * 1000,
-      redact: clean,
-      log: await mcpLogger(home, cwd),
-    });
-    if (!(await new WorkspaceTrust(home).isTrusted(cwd)))
-      process.stderr.write(
-        "This folder is not trusted; MCP servers in .mcp.json are not started (trust it from the app).\n",
-      );
-    else {
-      const approvals = await McpApprovals.open(home, cwd);
-      const approved: McpServerConfig[] = [];
-      for (const server of mcpConfig.servers) {
-        const saved = await approvals.get(server.name, server.hash);
-        if (saved === "rejected") continue;
-        if (saved !== "approved") {
-          const answer = (
-            await rl.question(
-              `Start MCP server ${clean(JSON.stringify(displayServer(server)))}? [y: this session / a: always / N] `,
-            )
-          )
-            .trim()
-            .toLowerCase();
-          if (answer === "a")
-            await approvals.set(server.name, server.hash, "approved");
-          else if (answer !== "y") continue;
-        }
-        approved.push(server);
-      }
-      await mcp.connect(approved, AbortSignal.timeout(600_000));
-      for (const state of mcp.states())
-        process.stdout.write(
-          `MCP ${state.name}: ${state.status}${state.error ? ` (${state.error})` : ""}\n`,
-        );
-    }
-    for (const [name, tool] of mcpTools(mcp)) tools.set(name, tool);
+  return false;
+}
+
+export async function headless(
+  args = process.argv.slice(2),
+  ports: HeadlessPorts = {},
+): Promise<number> {
+  const options = argumentsOf(args);
+  const output = ports.output ?? process.stdout;
+  const error = ports.error ?? process.stderr;
+  const write = (text: string) => output.write(redact(text));
+  if (options.has("--help")) {
+    write(HELP);
+    return 0;
   }
+  const fake = options.has("--fake");
+  const home = resolve(
+    ports.home ??
+      process.env.XHARNESS_HOME ??
+      join(homedir(), fake ? ".xharness-fake" : ".xharness"),
+  );
+  if (await readOnly(options, home, write)) return 0;
+  if (
+    options.has("--resume") &&
+    ["--cwd", "--model", "--effort", "--mode"].some((k) => options.has(k))
+  )
+    throw new Error(
+      "--resumeは保存済みcwd/model/modeを保持します。変更指定は新規セッションに使ってください。",
+    );
+  const cwd = options.has("--cwd") ? resolve(options.get("--cwd")!) : undefined;
+  if (cwd && !(await stat(cwd)).isDirectory())
+    throw new Error("--cwd requires an existing directory");
+  const mode = options.has("--mode")
+    ? resolvePermissionMode(options.get("--mode"))
+    : undefined;
+  if (options.has("--mode") && !mode)
+    throw new Error("Unknown permission mode");
+  const config = await loadMainConfig(home);
+  const model =
+    options.get("--model") ??
+    `${config.choice.provider}:${config.choice.model}`;
+  const resolved = resolveModel(model, config.aliases);
+  const reason = resolved
+    ? catalogUnavailableReason(resolved.model)
+    : "Unknown model";
+  if (!resolved || reason)
+    throw new Error(`モデルを変更せず停止しました: ${reason}`);
+  const effort = options.get("--effort") ?? config.choice.effort;
+  const catalog = loadModelCatalog().find((m) => m.id === resolved.model);
+  if (!isEffort(effort) || (catalog?.efforts && !catalog.efforts[effort]))
+    throw new Error("Unavailable model effort");
+  const writer = await acquireHomeWriter(home);
+  let terminal: Terminal | undefined;
+  let controller: SessionController | undefined;
+  let service: HeadlessPorts["service"];
+  let sdk: ClaudeSdkManager | undefined;
+  let activeSession: string | undefined;
+  let turnSignal: AbortController | undefined;
+  let exitCode = 0;
+  let interrupted = false;
+  const lifetime = new AbortController();
+  const cancel = () => {
+    exitCode = 130;
+    turnSignal?.abort();
+    if (activeSession)
+      void controller?.handle({ type: "abort", sessionId: activeSession });
+  };
+  const interrupt = () => {
+    cancel();
+    if (!activeSession) {
+      interrupted = true;
+      lifetime.abort();
+    }
+  };
+  process.on("SIGINT", interrupt);
   try {
-    while (!closed) {
-      let input: string;
-      try {
-        input = await rl.question("❯ ");
-      } catch {
-        break;
+    const input = ports.input ?? process.stdin;
+    terminal = new Terminal(
+      input,
+      output,
+      ports.interactive ?? !!(process.stdin.isTTY && process.stdout.isTTY),
+    );
+    terminal.onEnd = () => {
+      if (activeSession) cancel();
+    };
+    terminal.onLine = (line) => {
+      if (activeSession && line.trim() === "/stop") {
+        cancel();
+        return true;
       }
-      if (input.trim() === "/exit") break;
-      if (/^\/resume(?:\s|$)/.test(input.trim())) {
-        const [, id, extra] = input.trim().split(/\s+/);
-        if (!id)
-          process.stdout.write(
-            "再開する会話（/resume <sessionId>）：\n" +
-              clean(
-                sessions
-                  .list()
-                  .map((s) => `${s.id} · ${s.title}`)
-                  .join("\n"),
-              ) +
-              "\n",
+      return false;
+    };
+    // Record-only resume does not start or update a runtime until a native request is sent.
+    service = ports.service;
+    let sdkStarted = false;
+    const ensureService = async () => {
+      if (service) return service;
+      if (!fake) {
+        sdk = new ClaudeSdkManager(join(home, "runtimes", "claude-sdk"));
+      }
+      service = new OfficialWorkflowService({
+        home,
+        fake,
+        codexPath: options.get("--codex-path") ?? config.auth.codexCliPath,
+        ...(sdk
+          ? {
+              claudeRuntime: {
+                agent: () =>
+                  new ClaudeWorkflowAgent(
+                    managedClaudeStart(sdk!.selectedEntry()),
+                    sdk!.view().version,
+                  ),
+                view: () => sdk!.view(),
+              },
+            }
+          : {}),
+      });
+      await service.command({ action: "list" });
+      // Explicit command-line override wins over the saved connection file, using its validated path policy.
+      if (options.has("--codex-path")) {
+        const view = await service.command({
+          action: "configure",
+          codexPath: options.get("--codex-path")!,
+        });
+        if (view.error) throw new Error(view.error);
+      }
+      return service;
+    };
+    const seen = new Set<string>();
+    const emit = (event: UiEvent) => {
+      if (event.type === "error") {
+        error.write(redact(event.message) + "\n");
+        exitCode ||= 1;
+      }
+      if (event.type === "notice") write(event.message + "\n");
+      if (event.type === "transcript")
+        for (const item of event.items) {
+          const key = `${event.sessionId}:${item.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          if (item.kind === "assistant" || item.kind === "user")
+            write(`${item.kind}: ${item.text}\n`);
+        }
+      if (
+        event.type === "turn" &&
+        event.status === "idle" &&
+        event.stopCause &&
+        !["end_turn", "workflow_complete", "awaiting_user"].includes(
+          event.stopCause,
+        )
+      )
+        exitCode ||= 1;
+    };
+    controller = new SessionController({
+      home,
+      model: `${resolved.provider}:${resolved.model}`,
+      effort: effort as Effort,
+      cliModel: options.has("--model")
+        ? `${resolved.provider}:${resolved.model}`
+        : undefined,
+      cliEffort: options.get("--effort") as Effort | undefined,
+      fake,
+      phase4: true,
+      version: "headless",
+      provider: unavailableLegacy("claude"),
+      providers: [unavailableLegacy("claude"), unavailableLegacy("codex")],
+      fallback: {},
+      aliases: config.aliases,
+      officialSession: async (request, signal) => {
+        const connected = await ensureService();
+        if (sdk && !sdkStarted) {
+          await sdk.start();
+          sdkStarted = true;
+        }
+        signal.throwIfAborted();
+        return connected.submitSession(request, signal);
+      },
+      host: { pickFolder: async () => cwd },
+      emit,
+    });
+    await controller.init();
+    const store = new SessionStore(home);
+    let sessionId = "";
+    let legacy = false;
+    let workspaceId: string | null = null;
+    const open = async (id: string) => {
+      await store.load();
+      const saved = store.get(id);
+      if (!saved) throw new Error("Unknown session");
+      const messages = await store.messages(id);
+      legacy =
+        saved.model === "fake" ||
+        (messages.length > 0 &&
+          !messages.some(
+            (m) => m.role === "assistant" && m.meta?.officialWorkflow,
+          )) ||
+        messages.some(
+          (m) => m.role === "assistant" && !m.meta?.officialWorkflow,
+        );
+      const result = await controller!.handle({
+        type: "open_session",
+        sessionId: id,
+      });
+      if (!result.ok) throw new Error(result.error);
+      sessionId = id;
+      workspaceId = saved.workspaceId;
+      write(`${saved.cwd} · session ${id} · ${saved.model}\n`);
+      if (legacy)
+        write(
+          "旧会話は閲覧専用です。モデル/履歴/権限を変更せず保持します。/clearで新しい公式会話を開始してください。\n",
+        );
+    };
+    const fresh = async () => {
+      const result = await controller!.handle({
+        type: "new_session",
+        workspaceId,
+      });
+      if (!result.ok || !result.sessionId)
+        throw new Error(result.ok ? "Missing session" : result.error);
+      sessionId = result.sessionId;
+      legacy = false;
+      if (mode) await controller!.handle({ type: "set_mode", sessionId, mode });
+      const saved = (await controller!.state()).sessions.find(
+        (s) => s.id === sessionId,
+      )!;
+      write(`${saved.cwd} · session ${sessionId} · ${saved.model}\n`);
+    };
+    if (options.has("--resume")) await open(options.get("--resume")!);
+    else {
+      if (cwd) {
+        const selected = await controller.handle({ type: "pick_folder" });
+        if (!selected.ok || !selected.workspaceId)
+          throw new Error(selected.ok ? "Missing workspace" : selected.error);
+        workspaceId = selected.workspaceId;
+      }
+      await fresh();
+    }
+    write("公式headless。旧HTTPへ切替なし。/helpで対応操作を確認できます。\n");
+    const printView = (view: OfficialWorkflowView) => {
+      for (const { record } of view.records)
+        write(`workflow ${record.id} · ${record.status} · ${record.goal}\n`);
+    };
+    while (!interrupted) {
+      const line = await terminal.read("❯ ", lifetime.signal);
+      if (line === undefined) break;
+      const text = line.trim();
+      if (!text) continue;
+      if (text === "/exit") break;
+      if (text === "/help") {
+        write(HELP);
+        continue;
+      }
+      if (text === "/history") {
+        for (const message of await store.messages(sessionId))
+          write(
+            `${message.role}: ${message.content
+              .filter((b) => b.type === "text")
+              .map((b) => b.text)
+              .join("\n")}\n`,
           );
-        else if (extra || !sessions.get(id))
-          process.stdout.write("会話が見つかりません。\n");
-        else {
-          resumeNext = id;
+        continue;
+      }
+      if (text === "/resume") {
+        await store.load();
+        for (const saved of store.list())
+          write(`${saved.id} · ${saved.title} · ${saved.model}\n`);
+        continue;
+      }
+      if (text.startsWith("/resume ")) {
+        await open(text.slice(8).trim());
+        continue;
+      }
+      if (text === "/clear") {
+        await fresh();
+        continue;
+      }
+      if (text === "/workflow") {
+        printView(await (await ensureService()).command({ action: "list" }));
+        continue;
+      }
+      if (legacy) {
+        error.write(
+          "旧会話へ送信・設定変更できません。/clearで新しい公式会話を開始してください。\n",
+        );
+        exitCode ||= 1;
+        continue;
+      }
+      const pieces = text.split(/\s+/);
+      if (pieces[0] === "/model") {
+        if (pieces.length === 1) {
+          for (const m of loadModelCatalog().filter((m) => m.enabled))
+            write(`${m.provider}:${m.id}\n`);
+          continue;
+        }
+        if (pieces.length > 3 || (pieces[2] && !isEffort(pieces[2]))) {
+          error.write("Usage: /model provider:model [effort]\n");
+          exitCode ||= 1;
+          continue;
+        }
+        const result = await controller.handle({
+          type: "set_model",
+          sessionId,
+          model: pieces[1]!,
+          effort: pieces[2] as Effort | undefined,
+        });
+        if (!result.ok) {
+          error.write(redact(result.error) + "\n");
+          exitCode ||= 1;
+        }
+        continue;
+      }
+      if (pieces[0] === "/mode") {
+        const chosen = resolvePermissionMode(pieces[1]);
+        if (!chosen || pieces.length !== 2) {
+          error.write("Usage: /mode 通常|自動|計画\n");
+          exitCode ||= 1;
+          continue;
+        }
+        const result = await controller.handle({
+          type: "set_mode",
+          sessionId,
+          mode: chosen,
+        });
+        if (!result.ok) {
+          error.write(redact(result.error) + "\n");
+          exitCode ||= 1;
+        }
+        continue;
+      }
+      if (text.startsWith("/") && text !== "/stop") {
+        error.write(
+          "旧実行slash・Task・MCP・圧縮・巻き戻しは公式headlessで非対応です。/helpを確認してください。\n",
+        );
+        exitCode ||= 1;
+        continue;
+      }
+      turnSignal = new AbortController();
+      activeSession = sessionId;
+      try {
+        if (terminal.ended) {
+          write("stdinが終了したため新しい実行を開始しません。\n");
+          exitCode ||= 130;
           break;
         }
-        continue;
-      }
-      if (input.trim() === "/cost") {
-        process.stdout.write(
-          costSummary(
-            await readLlmCalls(home, session.id),
-            await new ReceiptStore(home).read(session.id),
-          ) + "\n",
-        );
-        continue;
-      }
-      if (input.trim() === "/init") {
-        const result = await initAgents(
-          cwd,
-          session.readOnly || session.permissionMode === "plan",
-        );
-        process.stdout.write(
-          result.ok ? "AGENTS.mdの雛形を作成しました。\n" : result.error + "\n",
-        );
-        continue;
-      }
-      if (/^\/(?:undo|rewind)(?:\s|$)/.test(input.trim())) {
-        controller = new AbortController();
-        try {
-          const count = rewindTurns(input.trim());
-          if (!count) throw new Error();
-          const scope = await headlessRewind(
-            fileCheckpoints,
-            sessions,
-            session.id,
-            count,
-            (prompt) => rl.question(prompt, { signal: controller!.signal }),
-            (text) => process.stdout.write(text),
-            clean,
-            controller.signal,
-          );
-          if (scope) {
-            messages = await sessions.messages(session.id);
-            persisted = messages.length;
-            access.reads.clear();
-            workflow = undefined;
-            if (scope !== "code") {
-              checkpoint = undefined;
-              await rm(join(home, "context", session.id + ".json"), {
-                force: true,
-              });
+        const sent = await controller.handle({ type: "send", sessionId, text });
+        if (!sent.ok) {
+          error.write(redact(sent.error) + "\n");
+          exitCode ||= 1;
+          continue;
+        }
+        let lastStatus = "";
+        while (
+          (await controller.state()).sessions.find((s) => s.id === sessionId)
+            ?.status !== "idle"
+        ) {
+          const view = service?.view();
+          const record = view?.records.find(
+            (r) => r.record.id === view.activeId,
+          )?.record;
+          const status = record
+            ? `${record.id}:${record.status}:${record.calls.length}:${record.correctionRounds}`
+            : "";
+          if (record && status !== lastStatus) {
+            write(
+              `workflow ${record.id} · ${record.status} · calls ${record.calls.length} · fix ${record.correctionRounds}\n`,
+            );
+            lastStatus = status;
+          }
+          const plan = view?.approval;
+          const operation = view?.operationApproval;
+          if (plan || operation) {
+            const id = plan?.id ?? operation!.workflowId;
+            write(
+              plan
+                ? `計画 ${id}\n${JSON.stringify(record?.plan ?? view?.records.find((r) => r.record.id === id)?.record.plan, null, 2)}\n`
+                : `操作承認\n${JSON.stringify(operation, null, 2)}\n`,
+            );
+            if (plan?.autoOperations)
+              write(
+                "自動モード: この計画を承認すると、この実行の操作確認も許可されます。\n",
+              );
+            if (!terminal.interactive) {
+              error.write(
+                "非TTYでは計画/操作を承認できません。無断許可せず記録を保全して停止しました。\n",
+              );
+              exitCode ||= 1;
+              await service!.command({ action: "cancel", id });
+            } else {
+              // A native timeout/cancellation must also release the terminal prompt.
+              const expired = new AbortController();
+              const invalidation = setInterval(() => {
+                const current = service!.view();
+                const pending = plan
+                  ? current.approval
+                  : current.operationApproval;
+                if (
+                  !pending ||
+                  pending.digest !== (plan?.digest ?? operation!.digest) ||
+                  (operation && Date.now() >= operation.expiresAt)
+                )
+                  expired.abort();
+              }, 20);
+              let answer: string | undefined;
+              try {
+                answer = await terminal.read(
+                  "承認しますか？ [y/N] ",
+                  AbortSignal.any([turnSignal.signal, expired.signal]),
+                );
+              } finally {
+                clearInterval(invalidation);
+              }
+              if (answer?.trim().toLowerCase() === "y") {
+                await service!.command(
+                  plan
+                    ? { action: "approve", id, digest: plan.digest }
+                    : {
+                        action: "tool_decision",
+                        id,
+                        approvalId: operation!.approvalId,
+                        digest: operation!.digest,
+                        allow: true,
+                      },
+                );
+              } else {
+                exitCode ||=
+                  terminal.ended || turnSignal.signal.aborted ? 130 : 1;
+                await service!.command(
+                  operation && answer !== undefined && !expired.signal.aborted
+                    ? {
+                        action: "tool_decision",
+                        id,
+                        approvalId: operation.approvalId,
+                        digest: operation.digest,
+                        allow: false,
+                      }
+                    : { action: "cancel", id },
+                );
+              }
             }
           }
-        } catch {
-          process.stdout.write(
-            "巻き戻しを完了できませんでした。指定・期限・アクセス権限を確認してください。\n",
-          );
-        } finally {
-          controller = undefined;
+          await new Promise((resolve) => setTimeout(resolve, 20));
         }
-        continue;
+      } finally {
+        activeSession = undefined;
+        turnSignal = undefined;
       }
-      if (/^\/(?:phase|review)(?:\s|$)/.test(input.trim())) {
-        const [command, phase, extra] = input.trim().split(/\s+/);
-        const requested = command === "/review" ? "review" : (phase ?? "");
-        try {
-          if (!workflow || extra || (command === "/review" && phase))
-            throw new Error();
-          workflow.manualPhase(requested);
-        } catch {
-          process.stdout.write("No workflow or invalid phase transition\n");
-          continue;
-        }
-        if (requested !== "review") continue;
-      }
-      if (input.trim() === "/clear") {
-        workflow = undefined;
-        messages = [];
-        persisted = 0;
-        checkpoint = undefined;
-        sessionRules.length = 0;
-        session = {
-          ...session,
-          id: randomUUID().slice(0, 8),
-          title: "Headless session",
-          model,
-          effort,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        await sessions.save(session);
-        process.stdout.write(`Session: ${session.id}\n`);
-        access.reads.clear();
-        continue;
-      }
-      if (input.trim() === "/compact") {
-        const compactAbort = new AbortController();
-        try {
-          const evaluationTask = await sessions.evaluationTask(session.id);
-          if (evaluationTask?.recoveryRequired) {
-            process.stdout.write(RECOVERY_NOTICE + "\n");
-            continue;
-          }
-          const operationId = evaluationTask?.id ?? randomUUID();
-          await sessions.recordEvaluationTask(
-            session.id,
-            operationId,
-            evaluationTask?.active ?? false,
-            false,
-          );
-          const prepared = await withSessionCalls(
-            {
-              home,
-              id: session.id,
-              limits: project.limits,
-              abort: compactAbort,
-            },
-            async (budget) => {
-              const value = await withSessionTrace(
-                home,
-                session.id,
-                clean,
-                () =>
-                  withTraceFields(
-                    {
-                      taskId: evaluationTask?.active
-                        ? evaluationTask.id
-                        : undefined,
-                    },
-                    () =>
-                      traceOperation("step", "manual_compact", {}, () =>
-                        prepareProviderHistory(messages, {
-                          provider: router.provider(model!),
-                          model: model!,
-                          system,
-                          tools: [...tools.values()].map((t) => t.spec),
-                          signal: AbortSignal.any([
-                            compactAbort.signal,
-                            AbortSignal.timeout(60000),
-                          ]),
-                          checkpoint,
-                          force: true,
-                          threshold: project.context.compactThreshold,
-                        }),
-                      ),
-                  ),
-                {
-                  onWarning: (message) => process.stderr.write(message + "\n"),
-                },
-              );
-              if (budget.stopCause) throw new LlmBudgetError(budget.stopCause);
-              return value;
-            },
-          );
-          checkpoint = prepared.checkpoint;
-          if (checkpoint) await checkpointFile().write(checkpoint);
-          await sessions.recordEvaluationTask(
-            session.id,
-            operationId,
-            evaluationTask?.active ?? false,
-            true,
-          );
-          process.stdout.write(
-            prepared.compacted
-              ? "History compacted; original retained\n"
-              : "No older history to compact\n",
-          );
-        } catch (error) {
-          if (!(error instanceof LlmBudgetError)) throw error;
-          process.stdout.write(`[stopped: ${error.reason}]\n`);
-        }
-        continue;
-      }
-      if (/^\/mode(?:\s|$)/.test(input.trim())) {
-        const [, mode, extra] = input.trim().split(/\s+/);
-        if (
-          !extra &&
-          permissionModes.includes(mode as (typeof permissionModes)[number]) &&
-          (!session.readOnly || mode === "plan")
-        ) {
-          session.permissionMode = mode as (typeof permissionModes)[number];
-          await sessions.save(session);
-        } else process.stdout.write("Usage: /mode default|acceptEdits|plan\n");
-        continue;
-      }
-      if (/^\/model(?:\s|$)/.test(input.trim())) {
-        const [, spec, level, extra] = input.trim().split(/\s+/);
-        if (!spec) {
-          process.stdout.write(
-            `Model: ${model} · ${effort}\n/model <provider:model> [effort]\n` +
-              loadModelCatalog()
-                .filter((m) => m.enabled)
-                .map((m) => m.id)
-                .join("\n") +
-              "\n",
-          );
-          continue;
-        }
-        const choice = spec && resolveModel(spec, config?.aliases);
-        if (!choice || extra || (level !== undefined && !isEffort(level))) {
-          process.stdout.write("Usage: /model provider:model [effort]\n");
-          continue;
-        }
-        try {
-          router.provider(choice.model);
-        } catch {
-          process.stdout.write("Unknown model\n");
-          continue;
-        }
-        model = choice.model;
-        if (isEffort(level)) effort = level;
-        process.stdout.write(`Model: ${model} · ${effort}\n`);
-        continue;
-      }
-      if (!input.trim()) continue;
-      if (input.trim() === "/mcp") {
-        // MCP の状態(§25.8)。操作(承認の取り消し・ログアウト)はアプリの /mcp で行う
-        const states = mcp?.states() ?? [];
-        if (!states.length) process.stdout.write("MCP: no servers\n");
-        for (const state of states)
-          process.stdout.write(
-            `MCP ${state.name} (${state.type}): ${state.status}` +
-              (state.status === "connected"
-                ? ` · tools ${state.tools} · resources ${state.resources ?? 0} · prompts ${state.prompts ?? 0}`
-                : "") +
-              (state.error ? ` (${clean(state.error)})` : "") +
-              "\n",
-          );
-        for (const prompt of mcp?.prompts() ?? [])
-          process.stdout.write(
-            `  /mcp__${prompt.server}__${prompt.name} ${prompt.arguments
-              .map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`))
-              .join(" ")}\n`,
-          );
-        continue;
-      }
-      let mcpExpanded = false;
-      if (MCP_PROMPT_COMMAND.test(input.trim())) {
-        // MCP のプロンプト(§25.6): 展開した内容を見せ、y で通常の発言として送る
-        const parsed = parseMcpPrompt(mcp, input);
-        let expanded = "";
-        if ("error" in parsed) process.stdout.write(parsed.error + "\n");
-        else
-          try {
-            expanded = await mcp!.prompt(
-              parsed.server,
-              parsed.name,
-              parsed.args,
-              AbortSignal.timeout(60_000),
-            );
-          } catch {
-            process.stdout.write("MCP のプロンプトを取得できませんでした\n");
-          }
-        if (!expanded.trim()) continue;
-        const ok = await rl.question(
-          `\n${clean(expanded.slice(0, 4000))}\n\nSend this MCP prompt? [y/N] `,
-        );
-        if (ok.trim().toLowerCase() !== "y") continue;
-        input = expanded;
-        mcpExpanded = true;
-      }
-      const customName = mcpExpanded
-        ? undefined
-        : /^\/([^\s]+)/.exec(input.trim())?.[1];
-      if (customName && !reservedCommand(customName)) {
-        const expanded = expandCommand(
-          input,
-          await userCommands(
-            home,
-            cwd,
-            await new WorkspaceTrust(home).isTrusted(cwd),
-          ),
-        );
-        if (expanded === undefined) {
-          process.stdout.write(
-            "コマンドが見つからないか、プロジェクトが未信頼です。\n",
-          );
-          continue;
-        }
-        input = expanded;
-      } else if (
-        customName &&
-        ["clear", "resume", "cost", "init", "stop", "compact", "exit"].includes(
-          customName,
-        )
-      ) {
-        process.stdout.write(
-          customName === "stop"
-            ? "現在は実行していません。実行中はCtrl+Cで停止できます。\n"
-            : "コマンドの引数を確認してください。\n",
-        );
-        continue;
-      }
-      controller = new AbortController();
-      let fileCheckpoint;
-      try {
-        await fileCheckpoints.purge(project.checkpoints?.retentionDays ?? 30);
-        fileCheckpoint = await fileCheckpoints.begin(
-          session.id,
-          cwd,
-          messages.length,
-          clean,
-          (message) => process.stdout.write(clean(message) + "\n"),
-        );
-      } catch {
-        controller = undefined;
-        process.stdout.write(
-          "チェックポイントを準備できませんでした。保存先・アクセス権限を確認してください。\n",
-        );
-        continue;
-      }
-      let bufferedText = "";
-      // MCP の一覧の変化は、モデルにだけ注記で伝える(tools は変えない。§25.4)
-      const note = mcpChangeNote(mcp);
-      messages.push({
-        role: "user",
-        content: [
-          { type: "text", text: clean(input) },
-          ...(note ? [{ type: "text" as const, text: clean(note) }] : []),
-        ],
-      });
-      const ask = async (
-        call: { name: string; input: unknown },
-        signal: AbortSignal,
-        directory = cwd,
-        force = false,
-      ) => {
-        signal.throwIfAborted();
-        const fullCall = { ...call, id: "headless" };
-        const decision = force
-          ? "ask"
-          : await decidePermission(
-              fullCall,
-              {
-                ...project.permissions,
-                mode: session.permissionMode ?? project.permissions.mode,
-              },
-              directory,
-              { readOnly: session.readOnly, sessionRules },
-            );
-        if (decision !== "ask") return decision === "allow";
-        const answer = await rl.question(
-          `\nAllow ${clean(call.name + " " + JSON.stringify(call.input))}? [y: once / s: session / a: always / N] `,
-          { signal },
-        );
-        signal.throwIfAborted();
-        const choice = answer.trim().toLowerCase();
-        // cwd への cd・McpCall は、判定と同じ形にそろえてから保存する
-        const normalized = await normalizeCall(fullCall, directory);
-        if (choice === "s" && !force) sessionRules.push(grantFor(normalized));
-        if (choice === "a" && !force) {
-          const grant = grantFor({
-            ...normalized,
-            input: JSON.parse(
-              clean(JSON.stringify(normalized.input)),
-            ) as unknown,
-          });
-          await saveRule(home, grant, cwd);
-          project.permissions.rules.push(grant);
-        }
-        return ["y", "s", "a"].includes(choice);
-      };
-      if ((await sessions.evaluationTask(session.id))?.recoveryRequired) {
-        process.stdout.write(RECOVERY_NOTICE + "\n");
-        continue;
-      }
-      if (
-        !workflow ||
-        (!workflow.manualReview &&
-          ["off", "complete", "attention"].includes(workflow.state.phase))
-      ) {
-        const agentConfig = await loadAgentConfig(home, cwd);
-        const approveHooks = projectHookApproval(
-          agentConfig.hooks ?? [],
-          (hooks, signal) =>
-            ask({ name: "ProjectHooks", input: { hooks } }, signal, cwd, true),
-        );
-        const previousTask = await sessions.evaluationTask(session.id);
-        workflow = new WorkflowRuntime({
-          evaluationTaskId: previousTask?.active
-            ? previousTask.id
-            : randomUUID(),
-          approveHooks: (_hooks, signal) => approveHooks(signal),
-          home,
-          cwd,
-          parentId: session.id,
-          config: agentConfig,
-          aliases: config.aliases,
-          router,
-          createTools: (directory) => {
-            const available = defaultTools(directory, false);
-            for (const [name, tool] of new Map([
-              ...projectHistoryTools({
-                home,
-                sessions,
-                workspaces,
-                sessionId: session.id,
-                workspaceId: session.workspaceId,
-                cwd: directory,
-                clean,
-              }),
-              ...projectMemoryTools({
-                home,
-                sessions,
-                workspaces,
-                sessionId: session.id,
-                workspaceId: session.workspaceId,
-                cwd: directory,
-                clean,
-              }),
-              ...projectSkillTools({
-                home,
-                sessions,
-                workspaces,
-                sessionId: session.id,
-                workspaceId: session.workspaceId,
-                cwd: directory,
-                clean,
-              }),
-            ]))
-              available.set(name, tool);
-            if (config.web.enabled)
-              for (const [name, tool] of webTools(
-                () => router.provider(model!),
-                config.web.searchMode,
-                fake,
-                undefined,
-                {
-                  settings: config.web,
-                  providers: () => providers,
-                  budget: searchBudget,
-                },
-              ))
-                available.set(name, tool);
-            if (mcp)
-              for (const [name, tool] of mcpTools(mcp))
-                available.set(name, tool);
-            return available;
-          },
-          permission: async (call, context, signal) =>
-            call.name === "ReportDone"
-              ? true
-              : ask(
-                  call,
-                  signal,
-                  context.cwd,
-                  await childNeedsAsk(call, context),
-                ),
-          approve: (items, notes, warnings, signal) =>
-            ask(
-              { name: "SubmitPlan", input: { items, notes, warnings } },
-              signal,
-              cwd,
-              true,
-            ),
-          waveChecks: waveChecks(
-            agentConfig.waveChecks,
-            shellSearchTools(cwd).get("Bash")!,
-            (_hooks, signal) => approveHooks(signal),
-          ),
-          onStatus: (context, model, status) =>
-            process.stdout.write(`\n${context.name} · ${model} · ${status}\n`),
-          onEvent: (context, event) => {
-            if (event.type === "receipt")
-              childReceipts.push({
-                ...toReceipt(event.receipt, session.id, pad(++receiptSeq)),
-                agentId: context.id,
-              });
-          },
-          redact: clean,
-          onTraceWarning: (message) => process.stderr.write(message + "\n"),
-          onPhase: (state) =>
-            process.stdout.write(
-              `\nWorkflow ${state.phase} · review ${state.reviewRound}\n`,
-            ),
-        });
-      }
-      let compactionFailure: string | undefined;
-      await sessions.recordEvaluationTask(
-        session.id,
-        workflow.evaluationTaskId,
-        true,
-        false,
-      );
-      await sessions.append(session.id, messages.slice(persisted), clean);
-      persisted = messages.length;
-      const turnAbort = controller;
-      const result = await withSessionCalls(
-        { home, id: session.id, limits: project.limits, abort: controller },
-        async (budget) => {
-          const value = await workflow!.run(
-            {
-              provider: router.provider(model!),
-              sessionId: session.id,
-              async prepareContext(history, route, _signal, context) {
-                const prepared = await prepareProviderHistory(history, {
-                  provider: route.provider,
-                  model: route.model,
-                  signal: _signal,
-                  system: context?.system ?? system,
-                  tools:
-                    context?.tools ?? [...tools.values()].map((t) => t.spec),
-                  checkpoint,
-                  skipCompaction: !!compactionFailure,
-                  limit: route.provider
-                    .models()
-                    .find((m) => m.id === route.model)?.contextTokens,
-                  threshold: project.context.compactThreshold,
-                  overhead:
-                    estimateTokens({
-                      system: context?.system ?? system,
-                      tools:
-                        context?.tools ??
-                        [...tools.values()].map((t) => t.spec),
-                    }) + 4096,
-                });
-                if (prepared.compacted && prepared.checkpoint) {
-                  checkpoint = prepared.checkpoint;
-                  await checkpointFile().write(checkpoint);
-                }
-                if (prepared.failure && !compactionFailure) {
-                  compactionFailure = prepared.failure;
-                  process.stdout.write(
-                    `\nAuto-compaction skipped (${route.model}): ${clean(prepared.failure)}\n`,
-                  );
-                }
-                return {
-                  messages: prepared.messages,
-                  ...(!prepared.fits ? { stop: "context_overflow" } : {}),
-                };
-              },
-              router,
-              current: () => ({ model: model!, reasoning: { effort } }),
-              onFallback: (route) => {
-                model = route.model;
-                process.stdout.write(`\n↻ fallback: ${model}\n`);
-              },
-              reasoning: { effort },
-              model: model!,
-              system,
-              messages,
-              tools,
-              redact: clean,
-              checkpoint: fileCheckpoint,
-              permission: (call, signal) => ask(call, signal),
-              onEvent(event) {
-                if (event.type === "text_delta") {
-                  bufferedText += event.text;
-                  const boundary = Math.max(
-                    bufferedText.lastIndexOf(" "),
-                    bufferedText.lastIndexOf("\n"),
-                    bufferedText.lastIndexOf("\t"),
-                  );
-                  if (boundary >= 0) {
-                    process.stdout.write(
-                      clean(bufferedText.slice(0, boundary + 1)),
-                    );
-                    bufferedText = bufferedText.slice(boundary + 1);
-                  }
-                } else if (event.type === "message_done") {
-                  process.stdout.write(clean(bufferedText));
-                  bufferedText = "";
-                } else if (event.type === "step")
-                  process.stdout.write(`\n[${event.round} ${event.step}] `);
-                else if (event.type === "error")
-                  process.stdout.write(clean(event.error.message));
-                else if (event.type === "rate_limited")
-                  process.stdout.write(
-                    `Rate limited; wait ${event.retryAfterSec ?? "unknown"} seconds`,
-                  );
-              },
-            },
-            turnAbort.signal,
-          );
-          return { ...value, stopCause: budget.stopCause ?? value.stopCause };
-        },
-      );
-      messages = result.messages;
-      await receiptStore.append(
-        session.id,
-        [
-          ...childReceipts.splice(0),
-          ...result.receipts.map((r) =>
-            toReceipt(r, session.id, pad(++receiptSeq)),
-          ),
-        ],
-        clean,
-      );
-      await sessions.append(session.id, messages.slice(persisted), clean);
-      persisted = messages.length;
-      session = { ...session, model, effort, updatedAt: Date.now() };
-      await sessions.save(session);
-      await sessions.recordEvaluationTask(
-        session.id,
-        workflow.evaluationTaskId,
-        !(
-          result.stopCause === "workflow_complete" ||
-          result.stopCause === "reported_done" ||
-          (result.stopCause === "end_turn" &&
-            ["off", "complete"].includes(workflow.state.phase))
-        ),
-        true,
-      );
-      if (bufferedText) process.stdout.write(clean(bufferedText));
-      controller = undefined;
-      process.stdout.write(
-        `\n[stopped: ${result.stopCause}; receipts: ${result.receipts.length}]\n`,
-      );
-      if (result.stopCause === "rate_limited")
-        process.stdout.write(
-          "[quota resume: manual only; headless does not restore an automatic quota-wait schedule]\n",
-        );
     }
+    return exitCode;
   } finally {
-    controller?.abort();
-    await mcp?.close();
-    rl.close();
-    process.removeListener("SIGINT", interrupt);
-  }
-  if (resumeNext) {
-    const next = args.filter(
-      (_, i) =>
-        !["--resume", "--cwd", "--model", "--effort"].includes(args[i]!) &&
-        !["--resume", "--cwd", "--model", "--effort"].includes(args[i - 1]!),
-    );
-    await headlessUnlocked([...next, "--resume", resumeNext]);
+    process.off("SIGINT", interrupt);
+    const closed = await Promise.allSettled([
+      controller?.shutdown(),
+      service?.close(),
+      sdk?.close(),
+    ]);
+    terminal?.close();
+    await writer.release();
+    for (const result of closed)
+      if (result.status === "rejected") throw result.reason;
   }
 }
 if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  headless().catch((error) => {
-    process.stderr.write(
-      error instanceof HomeWriterBusy
-        ? error.message + "\n"
-        : "Headless failed; check workspace, credentials and installed tools\n",
-    );
-    process.exitCode = 1;
-  });
+  headless()
+    .then((code) => {
+      process.exitCode = code;
+    })
+    .catch((error: unknown) => {
+      process.stderr.write(
+        redact(
+          error instanceof Error
+            ? error.message
+            : "公式headlessを開始できません。旧HTTPへ切り替えません。",
+        ) + "\n",
+      );
+      process.exitCode = 1;
+    });
 }

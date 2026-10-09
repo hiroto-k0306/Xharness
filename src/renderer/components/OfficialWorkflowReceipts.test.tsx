@@ -166,9 +166,17 @@ it("preparation cancellation uses trusted conversation ownership", async () => {
     screen.queryByRole("button", { name: "接続確認を中断" }),
   ).not.toBeInTheDocument();
   rerender(<OfficialWorkflowReceipts sessionId="chat" />);
-  fireEvent.click(
-    await screen.findByRole("button", { name: "接続確認を中断" }),
+  const cancel = await screen.findByRole("button", { name: "接続確認を中断" });
+  const details = screen.getByLabelText("公式workflow receipts");
+  expect(details.querySelector("summary")).toHaveTextContent(
+    "公式の計画・検証・レビュー・保存証跡（0件）",
   );
+  expect(
+    details.querySelector("summary")?.querySelector("p, button"),
+  ).toBeNull();
+  expect(cancel.closest("summary, details")).toBeNull();
+  expect(details).not.toHaveAttribute("open");
+  fireEvent.click(cancel);
   await waitFor(() =>
     expect(api).toHaveBeenCalledWith({
       action: "cancel",
@@ -176,6 +184,7 @@ it("preparation cancellation uses trusted conversation ownership", async () => {
       sessionId: "chat",
     }),
   );
+  expect(details).not.toHaveAttribute("open");
 });
 it("saved parallel decision and validation targets remain explicit in receipts", async () => {
   const { record } = fixture();

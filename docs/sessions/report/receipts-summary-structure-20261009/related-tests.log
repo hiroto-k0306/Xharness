@@ -1,0 +1,9 @@
+
+ RUN  v5.0.3 /workspace/Xharness
+
+
+ Test Files  3 passed (3)
+      Tests  17 passed (17)
+   Start at  07:30:25
+   Duration  7.30s (tests 39%, environment 25%, transform 20%, import 10%, setup 5%)
+

@@ -17,3 +17,5 @@
 - [task-handoff-validation-20261005.md](task-handoff-validation-20261005.md)
 - [transcript-ui-progress.md](transcript-ui-progress.md)
 - [windows-shell-session-delete-progress.md](windows-shell-session-delete-progress.md)
+
+- [Receipts準備中のsummary構造修正](receipts-summary-structure-20261009.md)

@@ -45,7 +45,7 @@
 
 別の「公式スキル」画面で、Claudeはuser/projectの.claude/skills、Codexはuser/projectの.agents/skillsだけから候補を確認します。既存読取許可と所有範囲/hash/bundleHashを確認して選択を保存し、次のworkflow/各callで同じ版を再確認します。公式機構への接続は提供元の作成・監修や安全性認定ではありません。
 
-Claudeの通常native plan/implement/review/fixに限り、選択bundleだけを一時pluginとしてSDKのSkill機構へ渡します。Codexは候補の列挙・プレビュー・選択までで、native実行は隔離未確認のためApp Server起動前に停止します。両社でskill実行対応とは表示しません。質問・固定scope・DAGも未対応です。
+Claudeの通常native plan/implement/review/fixに限り、選択bundleだけを一時pluginとしてSDKのSkill機構へ渡します。Codexは候補の列挙・プレビュー・選択までで、native実行は隔離未確認のためApp Server起動前に停止します。両社でskill実行対応とは表示しません。質問・固定scope・模擬DAGも未対応です。
 
 md/txt/rst最大20ファイル・全量16KiB、script/binary/hooks/agent/context fork/動的commandは未対応で、省略読込をしません。選択・送信済み・実際のSkill要求/許可/完了/拒否を別々に表示し、初期化やusageから使用成功を推測しません。実モデル/実CLI/GUI配布確認は未実施。[対応範囲と記録](docs/official-skills-20261009.md)。4000文字の参考資料送信は従来の別操作のままです。
 
@@ -83,6 +83,10 @@ CLI履歴resume/report/replayは、関係のない既定モデルが無効でも
 
 ## チャット内の承認とWindows通知（第1段階）
 
-計画/操作の確認は対応する現在の会話チャットへ集約します。同じ作業場所でも別会話から承認できません。計画も会話・UUID・digest・10分期限付きで、拒否/期限切れ/二重応答を許可へ変換しません。既存permission/plan確認もチャット内です。旧rewind確認は会話画面内の別領域に残り、通常公式の巻き戻しを追加しません。
+計画/操作の確認は対応する現在の会話チャットへ集約します。同じ作業場所でも別会話から承認できません。計画も会話・UUID・digest・10分期限付きで、拒否/期限切れ/二重応答を許可へ変換しません。既存permission/plan確認もチャット内です。rewind確認もTranscript内で、通常公式の巻き戻しを追加しません。
 
-Windows通知は承認/入力待ちと終了/停止を固定文面で知らせ、クリックで該当会話/確認へ移動します。本文や操作全文を通知せず、非対応/失敗でも実行を止めません。OS設定は変更せず、実Windows表示は未確認。[記録](docs/chat-approvals-notifications-20261009.md)。通常詳細の撤去/設定・証跡移設、native DAG、評価機能/既存手動比較の削除は別段階です。新しい評価案では「実績不足」表示を設けず、内部でsample件数/欠測を考慮する設計とします。
+Windows通知は承認/入力待ちと終了/停止を固定文面で知らせ、クリックで該当会話/確認へ移動します。本文や操作全文を通知せず、非対応/失敗でも実行を止めません。OS設定は変更せず、実Windows表示は未確認。[記録](docs/chat-approvals-notifications-20261009.md)。通常workflow専用画面は通常UIから撤去し、SDK接続設定を設定、全保存証跡を会話のReceiptsへ移します。verificationOnlyの開発確認は残します。評価機能/既存手動比較の削除は未実装です。新しい評価案では「実績不足」表示を設けず、内部でsample件数/欠測を考慮する設計とします。
+
+## 通常計画の並列判断と限定DAG
+
+質問はDAGを通りません。全作業計画は直列/並列の理由と条件を決めます。直列は1統合task、並列はclean Git・exact files/依存・最大2並行・所有worktreeに限定し、元checkoutへ自動反映しません。並列scheduler/worktreeは実装しましたが、本番独立検証の安全なApp Server portが未確認のため計画承認/実装前に停止します。fake公式agents+real Git+固定Node fixtureの検証を実モデル/Windows sandbox成功と扱いません。推定時間の数値は表示せず、モデル履歴評価feedbackは設計のみ。[第2段階記録](docs/chat-layout-native-dag-20261009.md)。

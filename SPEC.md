@@ -121,9 +121,9 @@ Codexは列挙・プレビュー・選択を保存できるが、選択skillだ�
 
 desktopは会話、model/effort、作業場所、計画/native操作承認、停止、Transcript/LoopFlow、公式記録の詳細を表示する。停止ボタンと `/stop` を使い、旧slashのモデル実行・画像添付・旧履歴のphase/MCP操作を許可しない。headlessの旧会話は閲覧専用とし、GUIの完了済み保存会話への新規送信は公式入口と参考履歴の境界を使う。
 
-通常会話の計画/native操作承認は、その保存会話IDと一致する現在のチャット内だけに表示する。同じcwdの別会話や通常詳細パネルから承認しない。既存permission/plan確認もTranscript内に置く。旧rewind確認は既存の会話画面内の別領域に残り、通常公式の巻き戻し操作を新設しない。計画承認はworkflow・会話・digest・新しいUUID・10分期限を照合して許可/拒否を一度だけ受理する。操作のnative session/thread IDは保持し、アプリのconversationSessionIdと混同しない。期限後・停止後・会話不一致・二重応答を許可へ変換せず、自動再送しない。
+通常会話の計画/native操作承認は、その保存会話IDと一致する現在のチャット内だけに表示する。同じcwdの別会話や通常詳細パネルから承認しない。既存permission/plan/rewind確認もTranscript内に置く。通常公式の巻き戻し操作を新設するものではない。計画承認はworkflow・会話・digest・新しいUUID・10分期限を照合して許可/拒否を一度だけ受理する。操作のnative session/thread IDは保持し、アプリのconversationSessionIdと混同しない。期限後・停止後・会話不一致・二重応答を許可へ変換せず、自動再送しない。
 
-Windows通知は承認/入力待ちと終了/停止の新しい状態遷移を固定文面で知らせる。依頼本文・操作全文・cwd・秘密を通知に含めない。クリックは既知の保存会話を開き、該当承認へ誘導するだけで許可しない。初期履歴からの通知と同じapproval ID/digestの重複を抑え、OS非対応/通知失敗でも実行を妨げない。OS設定の変更を行わず、実Windows表示は未確認。第1段階では通常詳細は参照表示として残す。通常詳細パネル撤去・固有設定/記録の移設とnative DAGは別段階で、完了とは扱わない。[チャット承認・通知記録](docs/chat-approvals-notifications-20261009.md)。
+Windows通知は承認/入力待ちと終了/停止の新しい状態遷移を固定文面で知らせる。依頼本文・操作全文・cwd・秘密を通知に含めない。クリックは既知の保存会話を開き、該当承認へ誘導するだけで許可しない。初期履歴からの通知と同じapproval ID/digestの重複を抑え、OS非対応/通知失敗でも実行を妨げない。OS設定の変更を行わず、実Windows表示は未確認。通常workflow専用画面を通常UIから撤去し、SDK接続設定は設定、承認はチャット、保存証跡は会話のReceiptsへ配置する。verificationOnlyの開発確認パネルは残す。[チャット承認・通知記録](docs/chat-approvals-notifications-20261009.md)。
 
 HTML出力・旧レシート/トレースの読取再生を維持する。再生は記録の閲覧であり、モデル・旧ツール・shellの再実行ではない。学習用指示/応答・公開イベント・nativeValidation・固定課題checksは出典を分け、秘密除去・省略・欠測を表示する。非公開思考・全HTTP往復の録画ではない。保存失敗は公式phase停止対象（§15）。
 
@@ -175,6 +175,14 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 ## 15. desktop/headless共通公式経路の現行仕様
 
+### 通常計画の直列/並列判断と限定DAG
+
+質問は通常どおり判別/回答だけで終える。作業の計画にはparallelizationを必須とし、直列または並列の理由・実際に確認できた資源/調整コスト/未解決条件を説明する。根拠のない所要時間・速度向上の数値を作らない。直列は依存なしの統合task1件・maxParallel1で、従来の直接編集経路を使う。
+
+並列はclean Git（untrackedも含む）・2〜16件の非循環task・maxParallel2・独立taskの重ならないexact files・明示依存・担当alias/effortと別会社reviewerに限定する。承認digestへ結合したハーネス所有のdetached task/integration worktreeを使い、元checkout/branchへ自動反映しない。依存成果を統合して後続taskへ渡し、scope外変更・競合・不確定副作用で停止して証跡/worktreeを保全する。
+
+初期の独立検証契約はtask filesに含まれるexact `.test.js` / `.test.mjs` を固定Node `--test` で統合後に検証し、project code実行は別承認とする。ただし本番の公式App Server command/execをrestricted read・networkAccess:falseで安全に使う独立検証portは未確認で、validateIntegrationを接続していない。並列が選ばれた本番workflowは計画出力後、計画承認・worktree作成・実装の前に `independent-validation-unavailable` で停止する。直列へ黙って変更しない。実装されたscheduler/worktreeとfake公式agents+real Git+固定Node fixture検証を、本番DAGの実行成功と扱わない。各node/統合工程のmodel aliasとskillをcall直前に再検証する。Claude skillは元sourceに固定した選択bundleだけをworktree側の一時pluginへ渡す。Codex選択skillは既存の隔離未確認停止を維持する。固定合成の模擬DAGのskill未対応とは別契約。[第2段階・DAG記録](docs/chat-layout-native-dag-20261009.md)。
+
 ### 通常作業の公式ツール探索（2026-10-09、利用者承認）
 
 通常作業の操作確認に「このフローのみ許可」を追加する。表示中のworkflow・操作ID・digest・期限が一致する許可のみ受理し、以後そのworkflowとcwdの操作を自動許可する。自動モード（内部acceptEdits）では計画承認後に同じフロー許可を有効化する。通常モードは個別承認を維持し、plan／読み取り専用では作業を開始しない。フロー許可はメモリ内のみで終了・停止・再起動時に失効し、別のフローへ引き継がない。公式側のsandbox、禁止操作、範囲・要求の整合検査は維持する。工程の120秒上限は変更せず、承認待ちのみ時間を止める（今回の実装timeout記録では計画成功、実装約674秒の壁時計時間）。この項の利用者承認は2026-10-09の直接依頼に基づく。
@@ -185,7 +193,7 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 通常入力は選択メインモデルと同じ会社の `roles.question`（Claude Haiku / Codex Luna）で、直近10メッセージを参考データとして、ツールなし1回・60秒まで判別する。無効な判別・取消・失敗は再試行せず停止する。質問はその回答で終了し、作業なら対象自動提案の追加queryを行わず、選択中のメインモデルが公式ツールで読み取り探索して計画する。対象ファイルの事前列挙、既存テスト1件、clean Git、特定のVitest版・Nodeテスト形式を開始条件にしない。計画は単一課題、変更対象の目安、検証方針、利用可能な実装モデルと別会社のレビュー担当を含む。ファイルの目安は編集の許可リストではない。空・無効な計画は再試行せず止める。
 
-通常作業は選択したsession.cwd／既存worktreeで実行する。自動的なworktree・プロジェクトコピー・Git初期化・コミットは行わない。Git管理外も選択フォルダーへ直接変更する。既存の無関係な変更を保全するよう指示し、reset/clean・自動反映・マージを行わない。これは元ファイルを変更しない旧コピー方式とは異なるため、計画承認画面に実行場所と直接編集を表示する。未知の副作用を自動で巻き戻す保証はない。
+直列の通常作業は選択したsession.cwd／既存worktreeで実行する。自動的なworktree・プロジェクトコピー・Git初期化・コミットは行わない。Git管理外も選択フォルダーへ直接変更する。既存の無関係な変更を保全するよう指示し、reset/clean・自動反映・マージを行わない。これは元ファイルを変更しない旧コピー方式とは異なるため、計画承認画面に実行場所と直接編集を表示する。未知の副作用を自動で巻き戻す保証はない。
 
 ハーネスは開始時のファイル内容を比較基準にし、依頼・cwd・基準digestと計画を承認へ結び付ける。承認待ちに内容が変われば止める。リンク・秘密の名前・依存物・生成物等を除外し、上限は10,000ファイル、1ファイル8 MiB、合計128 MiB、深さ40。上限・読めない対象・リンクされた作業ルートは明示停止する。基準digestはGit HEADではない。レビューには開始時からの変更ファイルの固定before/after内容とhashを渡す（合計4 MiBまで）。既存変更は比較基準に含め、無関係な既存差分を今回の成果としない。除外領域の変更や実行の全副作用を網羅する記録ではない。
 
@@ -193,7 +201,7 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 操作承認は既存のrequest/native session/turn/item・内容digest・nonce・10分期限に結び付け、保存会話のconversationSessionIdも照合する。計画承認もworkflow・会話・digest・承認UUID・10分期限に結び付ける。待機中はphaseタイマーを止め（重なる待機時間は一度だけ除外し、最後の応答後に再開）、取消・期限後・内容変更・二重要求の許可を再利用しない。再起動でpending許可を復元しない。拒否後はその操作を許可へ変換しない。
 
-通常作業のテストは公式エージェントの実行報告であり、ハーネスによる独立プロセス検証ではない。コマンド・passed/failed/not-run・説明を別項目へ保存し、既存checksへ合格を捏造しない。実行報告なしでも別会社レビューが問題なしなら完了できるが、未テストと表示する。別会社レビューは固定差分・報告の出典を確認し、failedの報告または重大指摘があれば最大2回修正・再レビューする。変更なしは成功扱いにしない。計画以降最大7回・各120秒（承認待ちを除く）と判別1回の上限を維持する。native DAG・通常作業の自動再開は無効。保存履歴とHTML・LoopFlowで通常作業と固定課題の独立テストを区別する。結果受け渡しでも通常作業の承認・最終比較digestのレビューと失敗なしの報告を照合し、独立テスト成功とは表示しない。
+通常作業のテストは公式エージェントの実行報告であり、ハーネスによる独立プロセス検証ではない。コマンド・passed/failed/not-run・説明を別項目へ保存し、既存checksへ合格を捏造しない。実行報告なしでも別会社レビューが問題なしなら完了できるが、未テストと表示する。別会社レビューは固定差分・報告の出典を確認し、failedの報告または重大指摘があれば最大2回修正・再レビューする。変更なしは成功扱いにしない。直列作業は計画以降最大7回・各120秒（承認待ちを除く）と判別1回の上限を維持する。限定native DAGの判断/scheduler/worktreeは上記の契約を使うが、本番並列は独立検証未接続で承認前停止する。通常作業の自動再開は無効。保存履歴とHTML・LoopFlowで通常作業と固定課題の独立テストを区別する。結果受け渡しでも通常作業の承認・最終比較digestのレビューと失敗なしの報告を照合し、独立テスト成功とは表示しない。
 
 公式SDK/App Serverが利用不能なら止め、旧HTTPへ暗黙fallbackしない。正規認証・通常枠・追加課金禁止の確認は従来どおり。初期実装のオフライン検証と当時の未確認事項は [通常作業の境界変更](docs/native-workflow-boundary-20261009.md) を参照する。
 
@@ -214,7 +222,7 @@ Claudeのモデル証跡は指定alias/解決済みID、SDK初期化、parent=nu
 
 公式phaseの診断はrequest IDに結び付け、送信モデル・phase・cwd・sandbox・承認設定・ツール名と状態・終了理由を保存する。ClaudeはSDK初期モデル、assistantモデルとparent_tool_use_id（欠測はunknown）、resultのモデル別トークン値を別々に保持する。モデル名の集合から主応答や補助処理の役割を推測しない。診断用finalAnswerは明示的な合成課題だけで最大8000文字を保存し、認証情報をマスクする。思考ブロック・rawイベント・認証応答は保存しない。一般のAgentRequestの診断本文は既定で無効にする。通常の入力・構造化応答と公開イベント本文は、下記の学習用記録として別に制限する。
 
-2026-10-08の利用者依頼により、通常の単一タスクと質問には、これとは別にXHarness→公式エージェント境界の学習用記録を追加する。request IDごとに送信前の指示・参考履歴/差分・対象・テスト定義・応答schemaと、エージェントが返した構造化結果を保存する。資格情報名/値の既知形式・思考ブロックを除去し、入力/応答それぞれ24,000文字まで。末尾省略・応答欠測・旧記録の本文なしを明示する。LoopFlow、詳細パネル、HTMLに番号ごとの折りたたみと日本語の役割説明を表示する。英語の実指示を日本語に翻訳したものと偽らず、原文を安全化して表示する。SDK内部の追加system/ツール定義・非公開イベント・HTTPヘッダ・全往復は含まない。診断用finalAnswer保存の制限とnative DAG無効を維持し、過去の未保存本文を補完しない。
+2026-10-08の利用者依頼により、通常の単一タスクと質問には、これとは別にXHarness→公式エージェント境界の学習用記録を追加する。request IDごとに送信前の指示・参考履歴/差分・対象・テスト定義・応答schemaと、エージェントが返した構造化結果を保存する。資格情報名/値の既知形式・思考ブロックを除去し、入力/応答それぞれ24,000文字まで。末尾省略・応答欠測・旧記録の本文なしを明示する。LoopFlow、会話のReceipts、HTMLに番号ごとの折りたたみと日本語の役割説明を表示する。英語の実指示を日本語に翻訳したものと偽らず、原文を安全化して表示する。SDK内部の追加system/ツール定義・非公開イベント・HTTPヘッダ・全往復は含まない。診断用finalAnswer保存の制限とnative DAG無効を維持し、過去の未保存本文を補完しない。
 
 同日の追加依頼により、公開された途中応答・ツール要求/結果・開始/終了をrequest ID内の受信順で保存する。Claudeはassistantのtext/tool_use、userのtool_result、PostToolUse/Failure、resultを選別し、parent_tool_use_idを欠測とnullで区別する。Codexは同じthread/turnのitem・turn通知からagentMessage、commandExecution、fileChangeを選別する。ツールの許可/拒否とphaseの結果保存はハーネスの記録として分ける。思考・認証・画像/音声本体は除去し、本文4,000文字、1呼出128イベントかつ64,000 UTF-8バイトまで。重複する完了通知・hook結果を除き、省略を表示する。未知のツール終了状態を成功へ補完しない。公開イベントの追加取得のためにモデル通信・再送・partial streamingを有効にしない。従来の完成メッセージとhookから記録し、非公開の送信内容・思考・基盤内部の全往復を復元したとは表示しない。保存に失敗したらphaseを停止する。旧記録は「未取得・未保存」と表示する。
 
@@ -230,9 +238,9 @@ Windows子プロセスの環境は許可リストで構成する。PATHEXTを引
 
 新しいalias対応の公式sessionでも、不確定なquery・commit・test・副作用を自動再送しない。再開は既存の安全checkpointで許される境界だけとし、再開直前/次call直前のpolicy再解決はその安全条件を緩めない。旧sessionの履歴を一括移行・書換えない。通常作業は履歴の再表示が可能でも自動再開しない。再起動時の進行中記録はinterruptedにし、pending承認や不確定なquery/副作用を復元・再送しない。旧HTTP記録の読取、固定課題checkpoint、通常作業の履歴再表示を同じresumeと扱わない。
 
-### 独立パネル・検証用の経路
+### verificationOnlyパネル・検証用の経路
 
-- 公式workflowパネルと開発CLIには固定合成単一課題があり、計画承認、scope内コミット、独立テスト、固定base/head別会社レビュー、最大2修正、安全checkpoint再開を行う。[単一タスク仕様](docs/official-workflow-single-task.md)。通常作業の直接編集とは別経路。
+- verificationOnlyの公式workflowパネルと開発CLIには固定合成単一課題があり、計画承認、scope内コミット、独立テスト、固定base/head別会社レビュー、最大2修正、安全checkpoint再開を行う。[単一タスク仕様](docs/official-workflow-single-task.md)。通常作業の直接編集とは別経路。
 - DAGはfixture/model模擬実行に限定し、最大並列2、detached worktree、直列cherry-pickと統合テストを扱う。native DAG・実案件の並列隔離・native会話resumeは無効/未対応。[DAGとJob](docs/official-workflow-dag.md)。
 - providerを起動しない非破壊preflightはGit/scope/link/configを調べるが、native実行許可や完全OS隔離の証明ではない。[preflight](docs/official-workflow-preflight.md)。
 - typed-add-v1の障害注入は専用home・official-only・verify-fix-cycle・環境flagが揃う専用fixtureのみ。X1実装品質、X2注入、X3修正を別記録とし、不確定な注入は再開しない。[障害注入仕様/検証](docs/fix-cycle-fault-injection-20261007.md)。

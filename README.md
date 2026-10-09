@@ -6,11 +6,15 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 ## チャット承認と通知
 
-計画/操作の承認は対応する会話のチャットで行います。Windowsでは承認/入力待ちと終了/停止を固定文面で通知し、クリックで該当会話へ移動します。通知は許可操作ではなく、非対応/失敗でも処理を妨げません。実Windows表示は未確認。第1段階では通常詳細は参照表示として残します。[範囲と検証記録](docs/chat-approvals-notifications-20261009.md)。
+計画/操作の承認は対応する会話のチャットで行います。Windowsでは承認/入力待ちと終了/停止を固定文面で通知し、クリックで該当会話へ移動します。通知は許可操作ではなく、非対応/失敗でも処理を妨げません。実Windows表示は未確認。通常workflow専用画面は通常UIから撤去し、接続設定は設定、全保存証跡は会話のReceipts、rewind確認もチャット内へ配置します。[範囲と検証記録](docs/chat-approvals-notifications-20261009.md)。
+
+## 並列判断と限定DAG
+
+通常作業の計画は直列/並列の理由と条件を決めます。並列の実装はclean Git・exact scope・所有worktree・最大2並行に限定しますが、本番の安全な独立検証portが未確認のため計画承認/実装前に停止します。模擬agents+real Git+固定Node検証は本番実行成功ではありません。質問はこの判断経路を通りません。[現在の範囲](docs/chat-layout-native-dag-20261009.md)。
 
 ## 公式スキルと参考資料
 
-「公式スキル」は固定provider rootの候補を既存許可でプレビュー・明示選択します。Claude通常nativeのplan/implement/review/fixだけを選択bundle限定のSDK Skill機構へ接続します。Codexは列挙/選択可能ですがnative実行は隔離未確認のためApp Server起動前に停止します。質問/固定scope/DAGは未対応。md/txt/rst最大20ファイル・全量16KiBのみで、script/hooks/agents/動的command等は停止します。4000文字参考資料sendとは別で、自動置換・権限緩和をしません。実モデル/実CLI成功は未確認。[詳細と証跡](docs/official-skills-20261009.md)。
+「公式スキル」は固定provider rootの候補を既存許可でプレビュー・明示選択します。Claude通常nativeのplan/implement/review/fixだけを選択bundle限定のSDK Skill機構へ接続します。Codexは列挙/選択可能ですがnative実行は隔離未確認のためApp Server起動前に停止します。質問/固定scope/模擬DAGは未対応。md/txt/rst最大20ファイル・全量16KiBのみで、script/hooks/agents/動的command等は停止します。4000文字参考資料sendとは別で、自動置換・権限緩和をしません。実モデル/実CLI成功は未確認。[詳細と証跡](docs/official-skills-20261009.md)。
 
 ## モデルaliasの最新追従
 

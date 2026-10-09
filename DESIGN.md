@@ -25,6 +25,10 @@ rendererは会話・モデル選択・計画/操作承認・履歴/LoopFlowを�
 
 snapshotは秘密名・リンク・依存物・生成物等を除き、10,000ファイル、8 MiB/ファイル、128 MiB合計、深さ40で制限します。レビュー内容は合計4 MiBまでです。Git HEADとは異なり、開始前の編集を比較基準に含めます。除外領域や外部shell副作用の完全追跡・自動復元ではありません。
 
+通常作業の計画は [native-dag.ts](src/main/workflow/official/native-dag.ts) の必須parallelizationで直列/並列と理由を決めます。直列1taskは既存直接編集へ戻ります。並列はclean Git・exact scope・最大2並行を条件に [project-dag-workspace](src/main/workflow/official/project-dag-workspace.ts) の所有detached worktreeへ限定し、元checkoutを変更しません。未解決条件/競合/範囲外変更は停止します。
+
+独立検証は統合後のexact Node testと別のコード実行承認が必要です。本番の安全なApp Server command/exec検証portは未確認なのでvalidateIntegration未接続で、並列計画は計画承認/実装前に停止します。fake公式agents・real Git・固定Node fixtureでの実装検証と、本番sandbox/Windows/実モデル成功を分けます。各node/統合callのalias/skillを再検証し、Claudeは元sourceへ固定した選択bundleだけをworktreeの一時pluginへ渡します。Codex選択skillは既存の隔離未確認停止を維持します。推定時間を作らず、履歴評価feedbackは設計だけです。
+
 ## 3. ツール・承認・OS境界
 
 | 境界            | 実装                                                                                                                                                                                  |
@@ -39,9 +43,9 @@ snapshotは秘密名・リンク・依存物・生成物等を除き、10,000フ
 
 根拠: [claude.ts](src/main/workflow/official/claude.ts)、[codex.ts](src/main/workflow/official/codex.ts)、[operation-approval.ts](src/main/workflow/official/operation-approval.ts)、[phase-timer.ts](src/main/workflow/official/phase-timer.ts)、[owned-process.ts](src/main/workflow/official/owned-process.ts)、[workspace.ts](src/main/workflow/official/workspace.ts)。
 
-通常の承認UIは [ChatOfficialApprovals](src/renderer/components/ChatOfficialApprovals.tsx) を現在のTranscript内へ置き、recordの保存会話IDと一致する承認だけを表示します。mainも会話/UUID/digest/10分期限を照合し、native threadとアプリ会話のIDを別々に保持します。通常詳細パネルは第1段階では参照表示を維持し、承認は行いません。
+通常の承認UIは [ChatOfficialApprovals](src/renderer/components/ChatOfficialApprovals.tsx) を現在のTranscript内へ置き、recordの保存会話IDと一致する承認だけを表示します。mainも会話/UUID/digest/10分期限を照合し、native threadとアプリ会話のIDを別々に保持します。通常workflow専用画面を通常UIから撤去し、SDK接続設定はOfficialRuntimeSettings、保存された全証跡は会話のOfficialWorkflowReceipts、rewind確認もTranscript内へ移します。verificationOnlyの開発確認パネルは残します。
 
-[UserNotifications](src/main/notifications.ts) は固定文面とlive transitionだけを使い、初期履歴/重複通知を抑えます。Electron接続はWindowsかつOS対応時だけ表示し、クリックは既知会話へ移動する操作です。通知失敗は非阻害で、許可・再送・OS設定変更をしません。実Windows未確認。[第1段階記録](docs/chat-approvals-notifications-20261009.md)。通常詳細の撤去/設定・証跡の移設、native DAGは次段階です。
+[UserNotifications](src/main/notifications.ts) は固定文面とlive transitionだけを使い、初期履歴/重複通知を抑えます。Electron接続はWindowsかつOS対応時だけ表示し、クリックは既知会話へ移動する操作です。通知失敗は非阻害で、許可・再送・OS設定変更をしません。実Windows未確認。[第1段階記録](docs/chat-approvals-notifications-20261009.md)。現行の第2段階は [画面整理・限定DAG記録](docs/chat-layout-native-dag-20261009.md) を参照します。
 
 ## 4. モデルと公式runtime
 
@@ -67,7 +71,7 @@ workspace選択時のメモリ・受渡し・改善・ローカルブラウザ�
 
 SkillsManagerの明示送信は、mainのpreview IPCでsource/hashを再確認して既存許可を通し、非信頼JSONの本文/出典情報を通常sendへ渡します。全量4000文字以内・非省略に限定し、超過を切り詰めません。SDK skills/MCP/権限・scriptを有効化せず、永続登録ではありません。成功表示は通常sendの受付であり、旧LoadProjectSkillレシート成功とは区別します。付属資料は版確認/プレビューのみで送信未対応です。セッション切替/取消後の遅延previewは無効化します。
 
-公式スキルの明示選択は参考資料sendと別に、固定provider rootと既存PermissionGateから本文/hash/bundleHashを検査して保存します。関連資料はmd/txt/rst最大20ファイル・全量16KiBのみ。選択・送信準備・各工程callで再検証し、変更/未対応を省略・別版置換しません。Claude通常nativeのplan/implement/review/fixでは選択bundleだけの一時local pluginとSkill gateを使い、settingSourcesや未選択plugin/MCP/agents/hooksを有効化しません。質問/固定scope/DAGは未対応です。
+公式スキルの明示選択は参考資料sendと別に、固定provider rootと既存PermissionGateから本文/hash/bundleHashを検査して保存します。関連資料はmd/txt/rst最大20ファイル・全量16KiBのみ。選択・送信準備・各工程callで再検証し、変更/未対応を省略・別版置換しません。Claude通常nativeのplan/implement/review/fixでは選択bundleだけの一時local pluginとSkill gateを使い、settingSourcesや未選択plugin/MCP/agents/hooksを有効化しません。質問/固定scope/模擬DAGは未対応です。
 
 Codexは候補列挙/プレビュー/選択だけを扱います。未選択skill discoveryを隔離できる保証が未確認なので、Codex選択を含むworkflowはserviceのpreflightで分類通信・planner・App Server起動前に停止recordを保存します。adapterにも起動前の拒否を残します。requested/dispatched/observedのrequested・allowed・completed・deniedを分け、初期化/usageを実使用証跡へ昇格しません。提供元の作成認定・安全認定とは別です。詳細は [公式スキル](docs/official-skills-20261009.md)。
 
@@ -79,6 +83,6 @@ Windows配布はNSIS/portable exe、利用者READMEとSHA256SUMSをリポジト�
 
 最新記録では環境修正後の文書課題が実機で完了しましたが、全回帰は模擬DAG1件timeoutです。PR #25はその1件だけ60秒に変更し、Linux限定117件成功・当時Windows必須3件未確認でした。後続Windows48件結果は下記の別記録です。今回の公式専用化・headless移行・参考スキル連携は実機再実行ではありません。過去の117件成功を今回変更の検証結果へ読み替えません。
 
-native DAG、通常作業の自動再開、全shell副作用の復元、全モデル/effort互換性、他PC/Store版pwsh、最新main Windows配布の成功は保証しません。旧設計のフェーズ順・将来案は採用済み要件にしません。分類promptは今回の探索方式へ更新しました。Codex読取phase設定の意図・経緯などの要確認事項はSPEC §16に記録します。
+本番native DAGの実行成功、通常作業の自動再開、全shell副作用の復元、全モデル/effort互換性、他PC/Store版pwsh、最新main Windows配布の成功は保証しません。旧設計のフェーズ順・将来案は採用済み要件にしません。分類promptは今回の探索方式へ更新しました。Codex読取phase設定の意図・経緯などの要確認事項はSPEC §16に記録します。
 
 [Windows48件の記録](docs/windows-pr26-validation-20261009.md)はfce9ebaの限定結果で、今回のalias対応をWindows/実モデル/GUI/配布で検証した記録ではありません。変更前設計は [DESIGN-f7f7350](Old/DESIGN-f7f7350.md)。

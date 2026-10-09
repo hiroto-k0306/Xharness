@@ -45,7 +45,14 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 
 - 通常計画/操作の承認は現在の保存会話チャットだけ。cwd一致から会話一致を推測せず、mainで会話/承認UUID/digest/期限を照合する。native thread IDとconversationSessionIdを混同しない。
 - 通知は固定文面・既知会話へのfocusだけ。本文/操作/秘密を含めず、クリックで承認しない。OS設定変更や実Windows成功の推定をしない。
-- 通常詳細は第1段階の参照表示。撤去/設定・証跡移設、native DAG、評価表示や手動改善整理は別段階として扱う。[記録](docs/chat-approvals-notifications-20261009.md)。
+- 通常workflow専用画面は通常UIから撤去。設定/全保存証跡/承認は各設定/Receipts/チャットへ移す。verificationOnly開発確認を通常機能へ混ぜない。[記録](docs/chat-approvals-notifications-20261009.md)。
+
+## 通常計画・限定DAG
+
+- 質問を除く通常作業はparallelizationの直列/並列判断と理由/条件を必須とする。根拠のない時間数値を作らない。
+- 並列はclean Git・exact scope/依存・最大2並行・ハーネス所有detached worktreeのみ。元checkoutへ自動反映せず、競合/不確定副作用を保全する。
+- 本番の安全な独立App Server command/exec検証portは未確認。validateIntegration未接続の並列計画は承認/実装前STOPで、黙って直列へ変えない。fake agents/real Git/固定Node fixtureの成功を本番sandbox・Windows・実モデル成功と扱わない。
+- モデル履歴評価feedbackは設計のみ。新評価案のUIに「実績不足」ラベルは設けず、内部sample/欠測は考慮する。[第2段階記録](docs/chat-layout-native-dag-20261009.md)。
 
 ## 公式スキルの限定境界
 

@@ -152,3 +152,52 @@ it("gives a person ten minutes by default", async () => {
   expect(await late).toBe("expired");
   expect(approvals.view()).toBeUndefined();
 });
+
+it("keeps native thread identity separate and binds decisions/flow grants to the app conversation", async () => {
+  const approvals = new OperationApprovals();
+  const signal = new AbortController().signal;
+  const first = approvals.ask("workflow", operation, signal, "chat-a");
+  const pending = approvals.view()!;
+  expect(pending.sessionId).toBe("session");
+  expect(pending.conversationSessionId).toBe("chat-a");
+  approvals.decide(
+    "workflow",
+    pending.approvalId,
+    pending.digest,
+    true,
+    true,
+    "chat-b",
+  );
+  expect(approvals.view()).toEqual(pending);
+  approvals.decide(
+    "workflow",
+    pending.approvalId,
+    pending.digest,
+    true,
+    true,
+    "chat-a",
+  );
+  expect(await first).toBe(true);
+  expect(await approvals.ask("workflow", operation, signal, "chat-a")).toBe(
+    true,
+  );
+  const other = approvals.ask("workflow", operation, signal, "chat-b");
+  expect(approvals.view()).toBeDefined();
+  approvals.cancel();
+  expect(await other).toBe("cancelled");
+});
+it("notification exceptions never alter the approval outcome", async () => {
+  const changed = vi.fn(() => {
+    throw new Error("notification failure");
+  });
+  const approvals = new OperationApprovals(600000, changed);
+  const result = approvals.ask(
+    "workflow",
+    operation,
+    new AbortController().signal,
+  );
+  const pending = approvals.view()!;
+  approvals.decide("workflow", pending.approvalId, pending.digest, false);
+  expect(await result).toBe("declined");
+  expect(changed).toHaveBeenCalledTimes(2);
+});

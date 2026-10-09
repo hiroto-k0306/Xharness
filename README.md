@@ -4,6 +4,10 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 このファイルは**開発者向け**。アプリを使う人向けの説明(インストール・起動・使い方)は [release/README.md](release/README.md) にあり、配布物に同梱する。
 
+## チャット承認と通知
+
+計画/操作の承認は対応する会話のチャットで行います。Windowsでは承認/入力待ちと終了/停止を固定文面で通知し、クリックで該当会話へ移動します。通知は許可操作ではなく、非対応/失敗でも処理を妨げません。実Windows表示は未確認。第1段階では通常詳細は参照表示として残します。[範囲と検証記録](docs/chat-approvals-notifications-20261009.md)。
+
 ## 公式スキルと参考資料
 
 「公式スキル」は固定provider rootの候補を既存許可でプレビュー・明示選択します。Claude通常nativeのplan/implement/review/fixだけを選択bundle限定のSDK Skill機構へ接続します。Codexは列挙/選択可能ですがnative実行は隔離未確認のためApp Server起動前に停止します。質問/固定scope/DAGは未対応。md/txt/rst最大20ファイル・全量16KiBのみで、script/hooks/agents/動的command等は停止します。4000文字参考資料sendとは別で、自動置換・権限緩和をしません。実モデル/実CLI成功は未確認。[詳細と証跡](docs/official-skills-20261009.md)。

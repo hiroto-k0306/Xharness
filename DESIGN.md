@@ -39,6 +39,10 @@ snapshotは秘密名・リンク・依存物・生成物等を除き、10,000フ
 
 根拠: [claude.ts](src/main/workflow/official/claude.ts)、[codex.ts](src/main/workflow/official/codex.ts)、[operation-approval.ts](src/main/workflow/official/operation-approval.ts)、[phase-timer.ts](src/main/workflow/official/phase-timer.ts)、[owned-process.ts](src/main/workflow/official/owned-process.ts)、[workspace.ts](src/main/workflow/official/workspace.ts)。
 
+通常の承認UIは [ChatOfficialApprovals](src/renderer/components/ChatOfficialApprovals.tsx) を現在のTranscript内へ置き、recordの保存会話IDと一致する承認だけを表示します。mainも会話/UUID/digest/10分期限を照合し、native threadとアプリ会話のIDを別々に保持します。通常詳細パネルは第1段階では参照表示を維持し、承認は行いません。
+
+[UserNotifications](src/main/notifications.ts) は固定文面とlive transitionだけを使い、初期履歴/重複通知を抑えます。Electron接続はWindowsかつOS対応時だけ表示し、クリックは既知会話へ移動する操作です。通知失敗は非阻害で、許可・再送・OS設定変更をしません。実Windows未確認。[第1段階記録](docs/chat-approvals-notifications-20261009.md)。通常詳細の撤去/設定・証跡の移設、native DAGは次段階です。
+
 ## 4. モデルと公式runtime
 
 [catalog/models.yaml](catalog/models.yaml) と [catalog.ts](src/main/config/catalog.ts) のnormalizeModelPolicy/resolveModelPolicyを使います。保存選択はprovider:aliasと別のeffort、送信IDは開始/安全再開/各call直前の現カタログで解決します。有効aliasはopus/sonnet/haiku/astra/sol/luna。解決した実ID/effort/catalogは1通信中固定し、次callで再解決します。未知/競合/無効/effort非対応/公式利用不能なら停止し、別モデル/会社/HTTPへfallbackしません。

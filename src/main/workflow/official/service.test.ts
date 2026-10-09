@@ -138,6 +138,7 @@ it.each([true, false])(
       action: "tool_decision",
       id: pending.workflowId,
       approvalId: pending.approvalId,
+      sessionId: pending.conversationSessionId,
       digest: "0".repeat(64),
       allow: true,
     });
@@ -146,6 +147,7 @@ it.each([true, false])(
       action: "tool_decision" as const,
       id: pending.workflowId,
       approvalId: pending.approvalId,
+      sessionId: pending.conversationSessionId,
       digest: pending.digest,
       allow,
     };
@@ -223,6 +225,7 @@ it.each(["auto", "flow", "single"] as const)(
         action: "tool_decision",
         id: pending.workflowId,
         approvalId: pending.approvalId,
+        sessionId: pending.conversationSessionId,
         digest: pending.digest,
         allow: true,
         ...(mode === "flow" ? { scope: "flow" as const } : {}),
@@ -239,6 +242,7 @@ it.each(["auto", "flow", "single"] as const)(
           action: "tool_decision",
           id: next.workflowId,
           approvalId: next.approvalId,
+          sessionId: next.conversationSessionId,
           digest: next.digest,
           allow: true,
         });

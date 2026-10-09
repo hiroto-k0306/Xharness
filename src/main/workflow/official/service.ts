@@ -60,7 +60,10 @@ import {
   resolveCodexOverride,
   type CodexInstallation,
 } from "./codex-installation.js";
-import { OperationApprovals } from "./operation-approval.js";
+import {
+  OperationApprovals,
+  OPERATION_APPROVAL_MS,
+} from "./operation-approval.js";
 import {
   WorkflowFailure,
   planContract,
@@ -118,7 +121,10 @@ function verificationOptions(
   options.callBudget = { ...FIX_CYCLE_BUDGET };
 }
 export class OfficialWorkflowService {
-  private operationApprovals = new OperationApprovals();
+  private operationApprovals = new OperationApprovals(
+    OPERATION_APPROVAL_MS,
+    () => this.changed(),
+  );
   private root: string;
   private records = new Map<string, WorkflowRecord>();
   private active?: {
@@ -128,8 +134,11 @@ export class OfficialWorkflowService {
   };
   private approval?: {
     id: string;
+    approvalId: string;
+    sessionId?: string;
+    expiresAt: number;
     digest: string;
-    accept: (accepted: boolean) => void;
+    accept: (accepted: boolean, expired?: boolean) => void;
     autoOperations?: boolean;
   };
   private error?: string;
@@ -145,6 +154,8 @@ export class OfficialWorkflowService {
     private settings: {
       home: string;
       fake: boolean;
+      /** State-only signal. Notification failures never affect workflow persistence. */
+      onChange?: () => void | Promise<void>;
       codexPath?: string;
       /** Metadata-only test seam; never starts a CLI. */
       discoverCodex?: () => Promise<CodexInstallation>;
@@ -388,6 +399,9 @@ export class OfficialWorkflowService {
       approval: this.approval
         ? {
             id: this.approval.id,
+            approvalId: this.approval.approvalId,
+            sessionId: this.approval.sessionId,
+            expiresAt: this.approval.expiresAt,
             digest: this.approval.digest,
             autoOperations: this.approval.autoOperations,
           }
@@ -526,6 +540,26 @@ export class OfficialWorkflowService {
       await rename(temporary, target);
     }
     this.records.set(record.id, structuredClone(record));
+    this.changed();
+  }
+  private changed() {
+    try {
+      void Promise.resolve(this.settings.onChange?.()).catch(() => {});
+    } catch {
+      /* Notifications do not change workflow outcomes. */
+    }
+  }
+  private matchesConversation(id: string, sessionId?: string) {
+    const record = this.records.get(id);
+    if (record?.sessionId) return sessionId === record.sessionId;
+    return (
+      sessionId === undefined &&
+      (((this.settings.fake ||
+        (!!this.settings.options && record?.simulated === true)) &&
+        !record?.nativeWork &&
+        !record?.project) ||
+        !!this.settings.verification)
+    );
   }
   private configureOfficialSkills(
     options: WorkflowOptions,
@@ -713,24 +747,54 @@ export class OfficialWorkflowService {
     options.approveTool = (name, input, signal) =>
       name === "item/commandExecution/requestApproval" ||
       name === "native/operation"
-        ? this.operationApprovals.ask(id, input, signal)
+        ? this.operationApprovals.ask(
+            id,
+            input,
+            signal,
+            this.records.get(id)?.sessionId,
+          )
         : Promise.resolve(false);
     options.approve = async (_plan, digest, signal) =>
-      new Promise<boolean>((accept) => {
-        const finish = (yes: boolean) => {
+      new Promise<boolean>((accept, reject) => {
+        let settled = false;
+        const approvalId = randomUUID();
+        const expiresAt = Date.now() + OPERATION_APPROVAL_MS;
+        const finish = (yes: boolean, expired = false) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           signal.removeEventListener("abort", cancel);
-          this.approval = undefined;
-          if (yes && !signal.aborted && options.nativeWork && autoOperations)
-            this.operationApprovals.allowFlow(id, options.cwd);
-          accept(yes);
+          if (this.approval?.approvalId === approvalId)
+            this.approval = undefined;
+          this.changed();
+          if (expired) {
+            reject(new WorkflowFailure("plan-approval-expired"));
+            return;
+          }
+          const granted = yes && !signal.aborted && Date.now() < expiresAt;
+          if (granted && options.nativeWork && autoOperations)
+            this.operationApprovals.allowFlow(
+              id,
+              options.cwd,
+              this.records.get(id)?.sessionId,
+            );
+          accept(granted);
         };
         const cancel = () => finish(false);
+        const timer = setTimeout(
+          () => finish(false, true),
+          OPERATION_APPROVAL_MS,
+        );
         this.approval = {
           id,
+          approvalId,
+          sessionId: this.records.get(id)?.sessionId,
           digest,
+          expiresAt,
           accept: finish,
           autoOperations: !!options.nativeWork && autoOperations,
         };
+        this.changed();
         signal.addEventListener("abort", cancel, { once: true });
         if (signal.aborted) cancel();
       });
@@ -770,6 +834,7 @@ export class OfficialWorkflowService {
         this.active = undefined;
         this.approval = undefined;
         this.operationApprovals.cancel();
+        this.changed();
       });
     this.active = { id, controller, done };
   }
@@ -1137,6 +1202,7 @@ export class OfficialWorkflowService {
       })
       .finally(() => {
         this.active = undefined;
+        this.changed();
       });
     this.active = { id: record.id, controller, done };
   }
@@ -1438,6 +1504,14 @@ export class OfficialWorkflowService {
     if (command.action === "list") return this.view();
     if (command.action === "tool_decision") {
       if (
+        !this.matchesConversation(command.id, command.sessionId) ||
+        this.active?.id !== command.id
+      )
+        return {
+          ...this.view(),
+          error: "承認の会話または実行が一致しません。許可していません。",
+        };
+      if (
         command.scope === "flow" &&
         (this.active?.id !== command.id ||
           !this.records.get(command.id)?.nativeWork ||
@@ -1450,10 +1524,16 @@ export class OfficialWorkflowService {
         command.digest,
         command.allow,
         command.scope === "flow",
+        command.sessionId,
       );
       return this.view();
     }
     if (command.action === "cancel") {
+      if (!this.matchesConversation(command.id, command.sessionId))
+        return {
+          ...this.view(),
+          error: "取消の会話が一致しません。実行を変更していません。",
+        };
       if (this.preparing?.id === command.id) this.preparing.controller.abort();
       if (this.active?.id === command.id) {
         this.active.controller.abort();
@@ -1462,11 +1542,23 @@ export class OfficialWorkflowService {
       return this.view();
     }
     if (command.action === "approve") {
+      const pending = this.approval;
       if (
-        this.approval?.id === command.id &&
-        this.approval.digest === command.digest
+        !pending ||
+        this.active?.id !== command.id ||
+        !this.matchesConversation(command.id, command.sessionId) ||
+        pending.id !== command.id ||
+        pending.digest !== command.digest ||
+        (command.approvalId !== undefined
+          ? command.approvalId !== pending.approvalId
+          : !!pending.sessionId)
       )
-        this.approval.accept(true);
+        return {
+          ...this.view(),
+          error: "計画承認の会話・ID・digestが一致しません。許可していません。",
+        };
+      if (Date.now() >= pending.expiresAt) pending.accept(false, true);
+      else pending.accept(command.allow ?? true);
       return this.view();
     }
     if (command.action === "resume" && this.records.get(command.id)?.project)

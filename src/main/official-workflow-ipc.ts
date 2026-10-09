@@ -47,14 +47,25 @@ const command = z.discriminatedUnion("action", [
     .object({
       action: z.literal("approve"),
       id,
+      approvalId: id.optional(),
+      sessionId: z.string().min(1).max(200).optional(),
+      allow: z.boolean().optional(),
       digest: z.string().regex(/^[a-f0-9]{64}$/),
     })
     .strict(),
-  z.object({ action: z.enum(["cancel", "resume"]), id }).strict(),
+  z
+    .object({
+      action: z.literal("cancel"),
+      id,
+      sessionId: z.string().min(1).max(200).optional(),
+    })
+    .strict(),
+  z.object({ action: z.literal("resume"), id }).strict(),
   z
     .object({
       action: z.literal("tool_decision"),
       id,
+      sessionId: z.string().min(1).max(200).optional(),
       approvalId: id,
       digest: z.string().regex(/^[a-f0-9]{64}$/),
       allow: z.boolean(),

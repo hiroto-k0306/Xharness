@@ -3,6 +3,7 @@ import { DEFAULT_IMAGES } from "../shared/images.js";
 import { builtinCommands } from "../shared/commands.js";
 import { AgentsPanel } from "./components/AgentsPanel.js";
 import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
+import { ChatOfficialApprovals } from "./components/ChatOfficialApprovals.js";
 import { OfficialWorkflowPanel } from "./components/OfficialWorkflowPanel.js";
 import { WorkflowFlow } from "./components/WorkflowFlow.js";
 import { PhaseBar } from "./components/PhaseBar.js";
@@ -10,7 +11,7 @@ import { ModelPicker } from "./components/ModelPicker.js";
 import { ConnectionPicker } from "./components/ConnectionPicker.js";
 import { PlanApproval } from "./components/PlanApproval.js";
 import { RewindApproval } from "./components/RewindApproval.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   setUiModelCatalog,
   uiSendsEffort,
@@ -54,6 +55,15 @@ export function App() {
     return () => window.removeEventListener("resize", resize);
   }, []);
   const [modelOpen, setModelOpen] = useState(false);
+  const [approvalFocus, setApprovalFocus] = useState<{
+    sessionId: string;
+    workflowId?: string;
+    approvalId?: string;
+    sequence: number;
+  }>();
+  const permissionSent = useRef(new Set<string>());
+  const focusSequence = useRef(0);
+  const [permissionBusy, setPermissionBusy] = useState(false);
   const [officialError, setOfficialError] = useState("");
   const [officialOpenSignal, setOfficialOpenSignal] = useState(0);
   const [skillsOpen, setSkillsOpen] = useState(false);
@@ -74,6 +84,19 @@ export function App() {
   setUiModelCatalog(app?.models);
 
   const current = app?.currentSessionId ?? null;
+  useEffect(
+    () =>
+      window.harness.onEvent((event) => {
+        if (event.type !== "notification_focus") return;
+        const state = useStore.getState();
+        if (!state.app?.sessions.some((item) => item.id === event.sessionId))
+          return;
+        setPane("transcript");
+        setApprovalFocus({ ...event, sequence: ++focusSequence.current });
+        state.openSession(event.sessionId);
+      }),
+    [],
+  );
   const scopeRequest = current ? views[current]?.officialScopeText : undefined;
   useEffect(() => {
     setOfficialError("");
@@ -84,6 +107,37 @@ export function App() {
   const session = app?.sessions.find((x) => x.id === current);
   const workspace = app?.workspaces.find((w) => w.id === session?.workspaceId);
   const waiting = !!view?.pending;
+  const respondPending = (
+    decision: import("../shared/ipc.js").PermissionDecision,
+  ) => {
+    if (!current || !view?.pending) return;
+    const state = useStore.getState();
+    const requestId = view.pending.requestId;
+    if (
+      state.app?.currentSessionId !== current ||
+      state.views[current]?.pending?.requestId !== requestId ||
+      permissionSent.current.has(requestId)
+    )
+      return;
+    permissionSent.current.add(requestId);
+    setPermissionBusy(true);
+    void window.harness
+      .command({
+        type: "permission_response",
+        sessionId: current,
+        requestId,
+        decision,
+      })
+      .then((result) => {
+        if (!result.ok)
+          state.apply({
+            type: "error",
+            sessionId: current,
+            message: result.error,
+          });
+      })
+      .finally(() => setPermissionBusy(false));
+  };
   const selected = current ? (selectedAgents[current] ?? "auto") : "auto";
   const agentId =
     selected === "auto" ? (view?.activeAgent ?? "main") : selected;
@@ -459,7 +513,67 @@ export function App() {
                   waiting || !!view?.rewind || session?.status !== "idle"
                 }
                 onReply={selected === "auto" || !agent ? s.send : undefined}
-              />
+              >
+                {view?.pending?.plan && current ? (
+                  <PlanApproval
+                    key={view.pending.requestId}
+                    plan={view.pending.plan}
+                    models={app.models ?? []}
+                    onApprove={async (items) => {
+                      const result = await window.harness.command({
+                        type: "plan_response",
+                        sessionId: current,
+                        requestId: view.pending!.requestId,
+                        items,
+                      });
+                      if (!result.ok)
+                        s.apply({
+                          type: "error",
+                          sessionId: current,
+                          message: result.error,
+                        });
+                    }}
+                    onDeny={() => respondPending("deny")}
+                    onRevise={() => {
+                      respondPending("deny");
+                      s.apply({
+                        type: "notice",
+                        sessionId: current,
+                        tone: "dim",
+                        message: "計画への修正指示を入力してください",
+                      });
+                    }}
+                  />
+                ) : (
+                  view?.pending &&
+                  !skillsOpen &&
+                  !improvementsOpen && (
+                    <PermissionInline
+                      oneTime={view.pending.oneTime}
+                      persistent={app.phase4}
+                      tool={view.pending.tool}
+                      summary={view.pending.summary}
+                      onRespond={respondPending}
+                      disabled={
+                        permissionBusy ||
+                        permissionSent.current.has(view.pending.requestId)
+                      }
+                    />
+                  )
+                )}
+
+                {current && app.officialDefault && (
+                  <ChatOfficialApprovals
+                    key={current}
+                    sessionId={current}
+                    focus={
+                      approvalFocus?.sessionId === current
+                        ? approvalFocus
+                        : undefined
+                    }
+                  />
+                )}
+              </Transcript>
               {app.phase4 &&
                 (app.officialDefault ? (
                   <WorkflowFlow
@@ -480,49 +594,6 @@ export function App() {
               sessionId={current ?? undefined}
               running={session?.status !== "idle"}
             />
-          )}
-          {view?.pending?.plan && current ? (
-            <PlanApproval
-              key={view.pending.requestId}
-              plan={view.pending.plan}
-              models={app.models ?? []}
-              onApprove={async (items) => {
-                const result = await window.harness.command({
-                  type: "plan_response",
-                  sessionId: current,
-                  requestId: view.pending!.requestId,
-                  items,
-                });
-                if (!result.ok)
-                  s.apply({
-                    type: "error",
-                    sessionId: current,
-                    message: result.error,
-                  });
-              }}
-              onDeny={() => s.respond("deny")}
-              onRevise={() => {
-                s.respond("deny");
-                s.apply({
-                  type: "notice",
-                  sessionId: current,
-                  tone: "dim",
-                  message: "計画への修正指示を入力してください",
-                });
-              }}
-            />
-          ) : (
-            view?.pending &&
-            !skillsOpen &&
-            !improvementsOpen && (
-              <PermissionInline
-                oneTime={view.pending.oneTime}
-                persistent={app.phase4}
-                tool={view.pending.tool}
-                summary={view.pending.summary}
-                onRespond={s.respond}
-              />
-            )
           )}
           {view?.rewind && current && (
             <RewindApproval

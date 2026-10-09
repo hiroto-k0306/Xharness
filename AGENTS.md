@@ -41,6 +41,12 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - モデル実行: 公式Claude Agent SDK / Codex App Server。GUIとheadlessで同じ認証・通常枠・sandbox・承認境界を使い、旧HTTPへfallbackしない
 - MCP SDKや旧検索の依存が互換処理に残っていても、通常の公式モデルへ旧ツールを公開する根拠にはしない
 
+## チャット承認・通知の境界
+
+- 通常計画/操作の承認は現在の保存会話チャットだけ。cwd一致から会話一致を推測せず、mainで会話/承認UUID/digest/期限を照合する。native thread IDとconversationSessionIdを混同しない。
+- 通知は固定文面・既知会話へのfocusだけ。本文/操作/秘密を含めず、クリックで承認しない。OS設定変更や実Windows成功の推定をしない。
+- 通常詳細は第1段階の参照表示。撤去/設定・証跡移設、native DAG、評価表示や手動改善整理は別段階として扱う。[記録](docs/chat-approvals-notifications-20261009.md)。
+
 ## 公式スキルの限定境界
 
 - 4000文字参考資料送信と公式スキル選択を混同しない。固定provider root・登録workspace/会話所有範囲・既存PermissionGate・source/hash/bundleHashを選択/次workflow/各callで再検証する。

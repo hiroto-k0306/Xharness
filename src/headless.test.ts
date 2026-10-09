@@ -92,6 +92,7 @@ function mockService(cwd: string, approvals = false) {
         digest: "b".repeat(64),
         requestId: "33333333-3333-4333-8333-333333333333",
         sessionId: "session",
+        conversationSessionId: record.sessionId,
         turnId: "turn",
         itemId: "task",
         command: "node --test",
@@ -126,7 +127,17 @@ function mockService(cwd: string, approvals = false) {
         ...view,
         activeId: id,
         records: [{ record, resumeBlocked: null, reportHref: "" }],
-        ...(approvals ? { approval: { id, digest: "a".repeat(64) } } : {}),
+        ...(approvals
+          ? {
+              approval: {
+                id,
+                digest: "a".repeat(64),
+                approvalId: "44444444-4444-4444-8444-444444444444",
+                sessionId: request.sessionId,
+                expiresAt: Date.now() + 60000,
+              },
+            }
+          : {}),
       };
       await new Promise<void>((resolve) => {
         finish = resolve;
@@ -222,11 +233,18 @@ it("passes the selected model/cwd to the common controller and requests explicit
     autoOperations: false,
   });
   expect(service.command.mock.calls.map(([c]) => c)).toEqual([
-    expect.objectContaining({ action: "approve", digest: "a".repeat(64) }),
+    expect.objectContaining({
+      action: "approve",
+      digest: "a".repeat(64),
+      approvalId: "44444444-4444-4444-8444-444444444444",
+      sessionId: service.submitSession.mock.calls[0]![0].sessionId,
+      allow: true,
+    }),
     expect.objectContaining({
       action: "tool_decision",
       digest: "b".repeat(64),
       allow: true,
+      sessionId: service.submitSession.mock.calls[0]![0].sessionId,
     }),
   ]);
   expect(io.result().output).toContain("Independent test");

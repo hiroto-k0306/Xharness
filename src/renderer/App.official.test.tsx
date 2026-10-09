@@ -78,7 +78,7 @@ async function setup() {
       pickerOpen: false,
     },
   });
-  return { cwd, native, oldStream };
+  return { cwd, native, oldStream, listeners };
 }
 it("ordinary UI questions use the official bridge and return to idle without a planning loop", async () => {
   const { native, oldStream } = await setup();
@@ -202,4 +202,46 @@ it("work uses the original request and selected directory with automatic discove
   expect(screen.queryByLabelText("公式作業の変更対象")).toBeNull();
   expect(screen.queryByLabelText("公式作業の独立テスト")).toBeNull();
   expect(oldStream).not.toHaveBeenCalled();
+});
+
+it("notification focus selects only existing conversations without approving", async () => {
+  const { listeners } = await setup();
+  render(<App />);
+  await screen.findByText("+ new session");
+  await userEvent.type(screen.getByLabelText("prompt"), "質問です{Enter}");
+  await screen.findByText("公式の有限回答");
+  const target = useStore.getState().app!.currentSessionId!;
+  const command = vi.spyOn(window.harness, "command");
+  act(() => {
+    for (const listener of listeners)
+      listener({
+        type: "notification_focus",
+        sessionId: "unknown",
+        workflowId: "workflow",
+        approvalId: "grant",
+      });
+  });
+  expect(command.mock.calls.some(([c]) => c.type === "open_session")).toBe(
+    false,
+  );
+  act(() => {
+    for (const listener of listeners)
+      listener({
+        type: "notification_focus",
+        sessionId: target,
+        workflowId: "workflow",
+        approvalId: "grant",
+      });
+  });
+  await waitFor(() =>
+    expect(command).toHaveBeenCalledWith({
+      type: "open_session",
+      sessionId: target,
+    }),
+  );
+  expect(
+    command.mock.calls.some(
+      ([c]) => c.type === "permission_response" || c.type === "plan_response",
+    ),
+  ).toBe(false);
 });

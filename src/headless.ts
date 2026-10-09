@@ -541,6 +541,10 @@ export async function headless(
           const operation = view?.operationApproval;
           if (plan || operation) {
             const id = plan?.id ?? operation!.workflowId;
+            const conversationSessionId =
+              plan?.sessionId ??
+              operation?.conversationSessionId ??
+              view?.records.find((r) => r.record.id === id)?.record.sessionId;
             write(
               plan
                 ? `計画 ${id}\n${JSON.stringify(record?.plan ?? view?.records.find((r) => r.record.id === id)?.record.plan, null, 2)}\n`
@@ -556,7 +560,11 @@ export async function headless(
                 "非TTYでは計画/操作を承認できません。無断許可せず記録を保全して停止しました。\n",
               );
               exitCode ||= 1;
-              await service!.command({ action: "cancel", id });
+              await service!.command({
+                action: "cancel",
+                id,
+                sessionId: conversationSessionId,
+              });
             } else {
               // A native timeout/cancellation must also release the terminal prompt.
               const expired = new AbortController();
@@ -568,7 +576,9 @@ export async function headless(
                 if (
                   !pending ||
                   pending.digest !== (plan?.digest ?? operation!.digest) ||
-                  (operation && Date.now() >= operation.expiresAt)
+                  pending.approvalId !==
+                    (plan?.approvalId ?? operation!.approvalId) ||
+                  Date.now() >= pending.expiresAt
                 )
                   expired.abort();
               }, 20);
@@ -584,12 +594,20 @@ export async function headless(
               if (answer?.trim().toLowerCase() === "y") {
                 await service!.command(
                   plan
-                    ? { action: "approve", id, digest: plan.digest }
+                    ? {
+                        action: "approve",
+                        id,
+                        digest: plan.digest,
+                        approvalId: plan.approvalId,
+                        sessionId: conversationSessionId,
+                        allow: true,
+                      }
                     : {
                         action: "tool_decision",
                         id,
                         approvalId: operation!.approvalId,
                         digest: operation!.digest,
+                        sessionId: conversationSessionId,
                         allow: true,
                       },
                 );
@@ -603,9 +621,23 @@ export async function headless(
                         id,
                         approvalId: operation.approvalId,
                         digest: operation.digest,
+                        sessionId: conversationSessionId,
                         allow: false,
                       }
-                    : { action: "cancel", id },
+                    : plan && answer !== undefined && !expired.signal.aborted
+                      ? {
+                          action: "approve",
+                          id,
+                          digest: plan.digest,
+                          approvalId: plan.approvalId,
+                          sessionId: conversationSessionId,
+                          allow: false,
+                        }
+                      : {
+                          action: "cancel",
+                          id,
+                          sessionId: conversationSessionId,
+                        },
                 );
               }
             }

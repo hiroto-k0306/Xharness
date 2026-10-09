@@ -52,6 +52,21 @@ export const planContract = z
             id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
             title: text,
             instructions: text,
+            classification: z
+              .object({
+                kind: z.enum([
+                  "bug-fix",
+                  "feature",
+                  "refactor",
+                  "documentation",
+                  "testing",
+                  "other",
+                  "unknown",
+                ]),
+                difficulty: z.enum(["easy", "moderate", "hard", "unknown"]),
+              })
+              .strict()
+              .optional(),
             files: z.array(relativeFile).min(1).max(30),
             dependsOn: z.array(z.string()).max(16),
             acceptance: z.array(z.string()).min(1).max(20),
@@ -216,6 +231,7 @@ export interface AgentRequest {
   ): Promise<boolean | "declined" | "expired" | "cancelled">;
 }
 export interface AgentResult {
+  timing?: import("./model-feedback.js").CallTiming;
   /** Provider dispatch/observation facts, distinct from the requested selection. */
   officialSkillsEvidence?: import("../../../shared/official-skills.js").OfficialSkillEvidence;
   diagnostics?: import("./diagnostics.js").AgentDiagnostics;

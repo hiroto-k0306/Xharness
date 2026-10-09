@@ -77,6 +77,10 @@ export const approvalDigest = (
     ? digest({ plan: record.plan, executionDigest: record.executionDigest })
     : digest(record.plan);
 export interface WorkflowRecord {
+  modelPerformance?: {
+    version: 1;
+    samples: import("./model-feedback.js").ModelPerformanceSample[];
+  };
   /** Requested pinned native skills. Bodies are never stored in workflow records. */
   officialSkills?: import("../../../shared/official-skills.js").OfficialSkillSelection[];
   nativeWork?: {
@@ -191,6 +195,9 @@ export interface WorkflowRecord {
   error?: string;
 }
 export interface WorkflowOptions {
+  modelFeedback?: ReturnType<
+    typeof import("./model-feedback.js").plannerModelFeedback
+  >;
   officialSkills?: import("../../../shared/official-skills.js").OfficialSkillSelection[];
   resolveOfficialSkills?: ResolveOfficialSkills;
   /** Official path resolves/rechecks once immediately before each communication. */
@@ -663,6 +670,9 @@ export async function runOfficialSingleTask(
         plannerChoice!.effort,
         {
           role: "read-only planner",
+          modelFeedback: options.modelFeedback,
+          taskClassification:
+            "Include task classification.kind (bug-fix/feature/refactor/documentation/testing/other/unknown) and difficulty (easy/moderate/hard/unknown), judged independently of model choice. These are planner judgments, not measured facts.",
           goal: options.goal,
           allowedFiles: options.files,
           acceptanceTests: options.tests.map((t) => ({

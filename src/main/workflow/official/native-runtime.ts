@@ -274,6 +274,9 @@ export async function runNativeTask(
             goal: options.goal,
             cwd: options.cwd,
             availableModels: options.models,
+            modelFeedback: options.modelFeedback,
+            taskClassification:
+              "For each task include classification.kind (bug-fix/feature/refactor/documentation/testing/other/unknown) and difficulty (easy/moderate/hard/unknown). This is a planner judgment, not measured fact; judge independently of the chosen model.",
             instruction:
               options.nativePlanInstruction ??
               "Explore this workspace read-only using native tools. Return one task with Japanese summary, instructions, proposed files and acceptance criteria (plain text, not registered IDs). Select an implementer and a reviewer from different companies using availableModels. Existing tests are not required: choose suitable validation, or explicitly explain what cannot be tested. Do not edit or run project code until user approves the plan. Do not access credentials or delegate.",

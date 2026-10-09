@@ -1,3 +1,8 @@
+import {
+  measuredAgent,
+  modelPerformance,
+  plannerModelFeedback,
+} from "./model-feedback.js";
 import { OfficialSkills } from "../../session/official-skills.js";
 import {
   parseSkillSelections,
@@ -546,6 +551,11 @@ export class OfficialWorkflowService {
     await rename(temporary, join(this.root, "connection.json"));
   }
   private async save(record: WorkflowRecord) {
+    if (record.status === "completed" && !record.simulated)
+      record.modelPerformance = {
+        version: 1,
+        samples: modelPerformance(record),
+      };
     const directory = join(this.root, record.id);
     await mkdir(directory, { recursive: true });
     if (
@@ -795,6 +805,14 @@ export class OfficialWorkflowService {
     autoOperations = false,
   ) {
     const controller = new AbortController();
+    options.modelFeedback = plannerModelFeedback(
+      this.records.values(),
+      options.models,
+    );
+    options.agents = {
+      claude: measuredAgent(options.agents.claude),
+      codex: measuredAgent(options.agents.codex),
+    };
     options.id = id;
     options.resume = resume;
     options.save = (r) => this.save(r);

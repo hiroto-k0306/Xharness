@@ -1,7 +1,7 @@
 /** Confirmed scope is required before planning; inferred intent never grants write permission. */
 export interface OfficialTaskScope {
   files: string[];
-  /** One existing, immutable Node test file. No shell, installation or generated tests. */
+  /** One existing immutable Node/Vitest test. No shell, installation or generated tests. */
   testFile: string;
 }
 export function parseOfficialTaskScope(
@@ -31,9 +31,14 @@ export interface OfficialSessionSubmission {
   effort: "low" | "medium" | "high" | "xhigh" | "max";
   text: string;
   task?: OfficialTaskScope;
+  /** Main-only permission boundary for automatic discovery/preparation; absent in legacy callers. */
+  automaticWork?: boolean;
+  /** Effective main-process permission mode; never a model-provided grant. */
+  autoOperations?: boolean;
   history: { role: "user" | "assistant"; text: string }[];
 }
 export interface OfficialSessionResult {
+  intent?: "question" | "work";
   taskRequired?: boolean;
   summary: string;
   workflowId: string;

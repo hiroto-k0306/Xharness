@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { spawnOwnedProcess } from "./owned-process.js";
 import { lstat, realpath, readFile } from "node:fs/promises";
 import { resolve, relative, isAbsolute, dirname } from "node:path";
+import { assertSafeGitAttributes } from "./git-attributes.js";
 import {
   relativeFile,
   normalizeFile,
@@ -18,6 +19,7 @@ export function runtimeEnvironment(source = process.env): NodeJS.ProcessEnv {
   for (const key of [
     "PATH",
     "Path",
+    "PATHEXT",
     "SystemRoot",
     "WINDIR",
     "TEMP",
@@ -86,6 +88,7 @@ export async function scopedPath(cwd: string, path: string) {
 export function gitWorkspace(
   cwd: string,
   redact: (s: string) => string,
+  dependencyIntegrity?: () => Promise<void>,
 ): WorkspacePort {
   const execute = (
     args: string[],
@@ -127,12 +130,30 @@ export function gitWorkspace(
     );
     if (unsafe.trim())
       throw new WorkflowFailure("local-git-execution-configuration");
+    if (["status", "add", "diff", "check-attr"].includes(args[0]!)) {
+      const [tracked, common] = await Promise.all([
+        execute(["ls-files", "-z"], signal),
+        execute(["rev-parse", "--git-common-dir"], signal),
+      ]);
+      await assertSafeGitAttributes(
+        cwd,
+        tracked.split("\0"),
+        common.trim(),
+        signal,
+      );
+    }
     return execute(args, signal);
   };
   const changes = async (signal: AbortSignal) => {
     const tokens = (
       await git(
-        ["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+        [
+          "status",
+          "--porcelain=v1",
+          "-z",
+          "--untracked-files=all",
+          ...(dependencyIntegrity ? ["--", ".", ":(exclude)node_modules"] : []),
+        ],
         signal,
       )
     ).split("\0");
@@ -153,6 +174,7 @@ export function gitWorkspace(
   };
   return {
     async inspect(signal) {
+      await dependencyIntegrity?.();
       if (normalizeFile(await realpath(cwd)) !== normalizeFile(resolve(cwd)))
         throw new WorkflowFailure("linked-workspace");
       const root = (await git(["rev-parse", "--show-toplevel"], signal)).trim();
@@ -164,6 +186,7 @@ export function gitWorkspace(
       };
     },
     async commit(allowed, signal, as) {
+      await dependencyIntegrity?.();
       const files = await changes(signal);
       if (
         !files.length ||
@@ -238,6 +261,7 @@ export function gitWorkspace(
       return { root, gitDir, digests };
     },
     async snapshot(base, head, signal) {
+      await dependencyIntegrity?.();
       if (
         ![base, head].every((h) => /^[a-f0-9]{40,64}$/.test(h)) ||
         (await hash(signal)) !== head ||
@@ -280,7 +304,12 @@ export function gitWorkspace(
         throw new WorkflowFailure("unsafe-review-diff");
       return { base, head, files, diff };
     },
-    test: (spec, signal) => runAcceptance(cwd, spec, signal, redact),
+    test: async (spec, signal) => {
+      await dependencyIntegrity?.();
+      const result = await runAcceptance(cwd, spec, signal, redact);
+      await dependencyIntegrity?.();
+      return result;
+    },
   };
 }
 export function runAcceptance(

@@ -26,6 +26,30 @@ const params = (command: string) => ({
   turnId: "turn",
   itemId: "item",
 });
+it.each(["rg --files", "node --test", "pnpm test; pnpm lint", "npm install"])(
+  "native command is always an explicit one-time operation: %s",
+  async (command) => {
+    const decision = await classifyCommand(
+      { ...request(), nativeWork: true },
+      params(command),
+      { localEnvironmentOnly: true },
+    );
+    expect(decision.kind).toBe("operation");
+    if (decision.kind === "operation")
+      expect(decision.operation.command).toBe(command);
+  },
+);
+it.each([
+  "Get-Content ../private",
+  "Get-Content .env",
+  "git reset --hard",
+  "Get-Content auth.json",
+])("native protected operation remains denied: %s", async (command) => {
+  expect(
+    (await classifyCommand({ ...request(), nativeWork: true }, params(command)))
+      .kind,
+  ).toBe("rejected");
+});
 it("separates registered tests and a concrete scoped operation", async () => {
   expect(
     await commandApproval(request(), params("node --test add.test.mjs")),

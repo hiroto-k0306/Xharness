@@ -1,4 +1,11 @@
-import { act, render, screen, within, cleanup } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  within,
+  cleanup,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { WorkflowRecord } from "../../main/workflow/official/runtime.js";
 import type { OfficialWorkflowView } from "../../shared/official-workflow.js";
@@ -48,6 +55,23 @@ const props = {
   scopeRequired: false,
   enabled: true,
 };
+it("labels native validation as model-reported without claiming an independent process", async () => {
+  setup(
+    snapshot(
+      record({
+        status: "completed",
+        next: "complete",
+        nativeWork: { validation: "agent-reported", baseline: "files" },
+        nativeValidation: [
+          { command: "pnpm test", status: "passed", summary: "agent report" },
+        ],
+      }),
+    ),
+  );
+  render(<WorkflowFlow {...props} />);
+  expect(await screen.findByText("モデルのテスト実行報告")).toBeInTheDocument();
+  expect(screen.queryByText("ハーネスがローカルプロセスを実行")).toBeNull();
+});
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -214,8 +238,10 @@ it("does not fetch when closed, and treats retrieval failure as unknown", async 
   expect(read).not.toHaveBeenCalled();
   read.mockRejectedValueOnce(new Error("unavailable"));
   ui.rerender(<WorkflowFlow {...props} />);
-  expect(await screen.findByRole("status")).toHaveTextContent(
-    "状態を取得できません",
+  await waitFor(() =>
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "状態を取得できません",
+    ),
   );
   expect(screen.getAllByText("状態不明")).toHaveLength(7);
 });

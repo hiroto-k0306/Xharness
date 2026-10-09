@@ -78,10 +78,12 @@ export async function officialHandoffSource(
     last?.role !== "assistant" ||
     last.content.some((b) => b.type !== "text") ||
     last.content.map((b) => (b.type === "text" ? b.text : "")).join("\n") !==
-      scope.clean(officialSessionSummary(record, !!record.project))
+      scope.clean(
+        officialSessionSummary(record, !!record.project || !!record.nativeWork),
+      )
   )
     reject();
-  if (record.project) {
+  if (record.project || record.nativeWork) {
     if (
       typeof record.cwd !== "string" ||
       resolve(record.cwd).toLowerCase() !== resolve(scope.cwd).toLowerCase() ||
@@ -94,11 +96,21 @@ export async function officialHandoffSource(
     const review = record.reviews.findLast(
       (r) => r.head === record.head && r.base === record.base,
     );
+    const validated = record.nativeWork
+      ? record.nativeWork.validation === "agent-reported" &&
+        record.nativeWork.baseline === "files" &&
+        Array.isArray(record.nativeValidation) &&
+        record.nativeValidation.every((t) =>
+          ["passed", "not-run"].includes(t.status),
+        ) &&
+        typeof record.answer === "string" &&
+        !!record.answer.trim()
+      : !!check?.tests.length &&
+        check.tests.every(
+          (t) => t.passed && t.exitCode === 0 && t.source === "process",
+        );
     if (
-      !check?.tests.length ||
-      check.tests.some(
-        (t) => !t.passed || t.exitCode !== 0 || t.source !== "process",
-      ) ||
+      !validated ||
       !review ||
       !Array.isArray(review.findings) ||
       review.findings.some((f) => f.severity !== "nit")

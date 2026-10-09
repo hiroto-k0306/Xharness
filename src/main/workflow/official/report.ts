@@ -3,6 +3,7 @@ import { workflowUsage } from "./runtime.js";
 import { normalizeTokens } from "../../providers/token-usage.js";
 import { phaseExplanation } from "./communication.js";
 import { publicActors, publicKinds } from "./public-events.js";
+import { officialFailureMessage } from "./session-result.js";
 const escape = (value: unknown) =>
   String(value ?? "不明")
     .replaceAll("&", "&amp;")
@@ -15,6 +16,7 @@ function publicTimeline(c: import("./communication.js").WorkflowCommunication) {
   return `<details><summary>公開イベントの時系列（${events.length}件）</summary><p>取得した順序。全内部往復・完全な送信JSONの再現ではありません。</p>${c.eventsOmitted ? "<p>保存上限のため一部のイベントを省略しました。</p>" : ""}${!events.length ? "<p>公開イベントは未取得・未保存です。処理がなかったとは判断しません。</p>" : ""}<ol>${events.map((e, i) => `<li style="border-left:3px solid ${e.actor === "llm" ? "#9cbbfc" : e.actor === "tool" ? "#8cccaa" : "#e3b45b"};padding-left:12px"><b>#${escape(e.sequence ?? i + 1)} ${escape(publicActors[e.actor])} — ${escape(publicKinds[e.kind])}</b><p>${escape(e.at)} / ${escape(e.name ?? e.model)} / ${escape(e.status)}</p><p>項目ID ${escape(e.itemId)} / 親ツールID ${e.parentId === null ? "主系列" : escape(e.parentId)}</p>${e.body ? `<pre style="overflow-wrap:anywhere">${escape(e.body.text)}</pre>${e.body.truncated ? "<p>本文の末尾を省略しています。</p>" : ""}` : e.kind === "response" || e.kind === "tool_result" ? "<p>本文は提供されていません。</p>" : ""}</li>`).join("")}</ol></details>`;
 }
 export function officialWorkflowReport(record: WorkflowRecord) {
+  record = { ...record, error: officialFailureMessage(record) };
   const usage = workflowUsage(record),
     cells = (values: unknown[]) =>
       values.map((v) => `<td>${escape(v)}</td>`).join("");
@@ -105,6 +107,9 @@ export function officialWorkflowReport(record: WorkflowRecord) {
     ? `<h3>DAG / 最大2並列 / native会話resume未対応</h3><p>固定合成課題の模擬実行。実provider並行実行は未検証。</p><table><tr><th>node</th><th>状態</th><th>base</th><th>取込HEAD</th></tr>${record.dag.nodes.map((n) => `<tr>${cells([n.id, n.state, n.base, n.integratedHead])}</tr>`).join("")}</table>`
     : "";
   const reviews =
+    (record.nativeWork
+      ? `<h3>通常作業の検証報告</h3><p>base/headはファイル比較digestです。Gitコミットではありません。作業場所: ${escape(record.cwd)}。以下はモデルの実行報告で、ハーネス独立検証ではありません。</p>${record.nativeValidation?.length ? record.nativeValidation.map((t) => `<p>${escape(t.command)}: ${escape(t.status)} / ${escape(t.summary)}</p>`).join("") : "<p>テスト実行報告なし</p>"}`
+      : "") +
     dagSummary +
     record.reviews
       .map(

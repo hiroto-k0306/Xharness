@@ -39,17 +39,21 @@ it("keeps global filters disabled from preflight through inspect and refuses fil
   await utimes(join(cwd, "add.mjs"), new Date(1000000), new Date(1000000));
   expect(
     (await projectPreflight(cwd, ["add.mjs"], signal())).inspectionPassed,
-  ).toBe(true);
+  ).toBe(false);
   const git = gitWorkspace(cwd, (s) => s),
-    initial = await git.inspect(signal());
+    inspect = () => git.inspect(signal());
+  await expect(inspect()).rejects.toThrow("git-attributes-not-supported");
+  await writeFile(join(cwd, ".git/info/attributes"), "");
+  const initial = await inspect();
   expect(initial.clean).toBe(true);
   await writeFile(join(cwd, "add.mjs"), "export const add=(a,b)=>a+b;\n");
+  await writeFile(join(cwd, ".git/info/attributes"), "add.mjs filter=probe\n");
   await expect(git.commit(["add.mjs"], signal())).rejects.toThrow(
-    "git-filter-not-supported",
+    "git-attributes-not-supported",
   );
-  expect((await git.inspect(signal())).head).toBe(initial.head);
   await expect(readFile(marker)).rejects.toMatchObject({ code: "ENOENT" });
   await writeFile(join(cwd, ".git/info/attributes"), "");
+  expect((await git.inspect(signal())).head).toBe(initial.head);
   const head = await git.commit(["add.mjs"], signal());
   expect((await git.snapshot(initial.head, head, signal())).files).toEqual([
     "add.mjs",
@@ -127,10 +131,12 @@ it("strips provider keys and process injection from helper environment", () => {
   expect(
     runtimeEnvironment({
       PATH: "allowed",
+      PATHEXT: ".EXE;.CMD",
+      PSModulePath: "untrusted-shell-modules",
       ANTHROPIC_API_KEY: "untrusted",
       OPENAI_API_KEY: "untrusted",
       NODE_OPTIONS: "--require injection",
       GIT_CONFIG_COUNT: "1",
     }),
-  ).toEqual({ PATH: "allowed" });
+  ).toEqual({ PATH: "allowed", PATHEXT: ".EXE;.CMD" });
 });

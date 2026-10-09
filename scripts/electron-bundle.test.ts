@@ -47,6 +47,10 @@ describe("Electron runtime bundles", () => {
         const worker = chunks.find(
           (chunk) => chunk.name === "sdk-worker" && chunk.isEntry,
         );
+        const main = chunks.find(
+          (chunk) => chunk.name === "index" && chunk.isEntry,
+        );
+        expect(main?.code).toContain('import.meta.filename.endsWith("sys.js")');
         expect(worker?.fileName).toBe("sdk-worker.js");
         const client = chunks.find((chunk) =>
           chunk.code.includes('new URL("./sdk-worker.js", import.meta.url)'),

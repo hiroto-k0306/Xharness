@@ -8,6 +8,7 @@ import {
   scopedPath,
 } from "./workspace.js";
 import { relativeFile, normalizeFile } from "./contracts.js";
+import { assertSafeGitAttributes } from "./git-attributes.js";
 
 /** Read-only inspection, not a sandbox or permission to dispatch a native task. */
 export async function projectPreflight(
@@ -137,13 +138,7 @@ export async function projectPreflight(
     }
   }
   // Inspect metadata only; never read settings, credentials, or execute project hooks.
-  for (const path of [
-    ".claude",
-    ".codex",
-    ".mcp.json",
-    ".gitattributes",
-    ".gitmodules",
-  ])
+  for (const path of [".claude", ".codex", ".mcp.json", ".gitmodules"])
     if (await exists(join(root, path)))
       blockers.add(`project-configuration:${path}`);
   const git = (args: string[]) =>
@@ -192,13 +187,18 @@ export async function projectPreflight(
     /(^|\0)(120000|160000) /.test(await git(["ls-files", "--stage", "-z"]))
   )
     blockers.add("tracked-link-or-submodule");
-  if (
-    !unsafeGit &&
-    (await git(["ls-files", "-z"]))
-      .split("\0")
-      .some((file) => /(^|[\\/])\.gitattributes$/i.test(file))
-  )
-    blockers.add("project-configuration:.gitattributes");
+  if (!unsafeGit) {
+    try {
+      await assertSafeGitAttributes(
+        root,
+        (await git(["ls-files", "-z"])).split("\0"),
+        configDirectory,
+        signal,
+      );
+    } catch {
+      blockers.add("project-configuration:.gitattributes");
+    }
+  }
   if (
     !unsafeGit &&
     normalizeFile((await git(["rev-parse", "--show-toplevel"])).trim()) !==

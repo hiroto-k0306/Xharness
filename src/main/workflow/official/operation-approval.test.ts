@@ -13,6 +13,52 @@ const operation = {
   targets: ["add.mjs"],
   reason: "Inspect source",
 };
+
+it("flow grant requires a current matching decision, stays in its cwd and expires on cancel/restart", async () => {
+  const approvals = new OperationApprovals();
+  const signal = new AbortController().signal;
+  const first = approvals.ask("workflow", operation, signal);
+  const pending = approvals.view()!;
+  approvals.decide("workflow", pending.approvalId, "changed", true, true);
+  expect(approvals.view()).toEqual(pending);
+  approvals.decide("workflow", pending.approvalId, pending.digest, true, true);
+  expect(await first).toBe(true);
+  expect(
+    await approvals.ask("workflow", { ...operation, itemId: "next" }, signal),
+  ).toBe(true);
+  const outside = approvals.ask(
+    "workflow",
+    { ...operation, cwd: "other" },
+    signal,
+  );
+  expect(approvals.view()).toBeTruthy();
+  approvals.cancel();
+  expect(await outside).toBe("cancelled");
+  const again = approvals.ask("workflow", operation, signal);
+  expect(approvals.view()).toBeTruthy();
+  approvals.cancel();
+  expect(await again).toBe("cancelled");
+  expect(new OperationApprovals().view()).toBeUndefined();
+});
+it("an expired flow decision grants nothing and aborted operations never inherit a grant", async () => {
+  vi.useFakeTimers();
+  const approvals = new OperationApprovals(100);
+  const controller = new AbortController();
+  const first = approvals.ask("workflow", operation, controller.signal);
+  const pending = approvals.view()!;
+  vi.setSystemTime(pending.expiresAt);
+  approvals.decide("workflow", pending.approvalId, pending.digest, true, true);
+  expect(await first).toBe("expired");
+  const second = approvals.ask("workflow", operation, controller.signal);
+  expect(approvals.view()).toBeTruthy();
+  approvals.cancel();
+  expect(await second).toBe("cancelled");
+  approvals.allowFlow("workflow", operation.cwd);
+  controller.abort();
+  expect(await approvals.ask("workflow", operation, controller.signal)).toBe(
+    "cancelled",
+  );
+});
 afterEach(() => vi.useRealTimers());
 it.each([true, false])(
   "consumes a matching decision once (%s)",

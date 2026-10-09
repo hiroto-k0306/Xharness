@@ -48,8 +48,6 @@ export function App() {
     return () => window.removeEventListener("resize", resize);
   }, []);
   const [modelOpen, setModelOpen] = useState(false);
-  const [officialFiles, setOfficialFiles] = useState("");
-  const [officialTest, setOfficialTest] = useState("");
   const [officialError, setOfficialError] = useState("");
   const [officialOpenSignal, setOfficialOpenSignal] = useState(0);
   const [skillsOpen, setSkillsOpen] = useState(false);
@@ -72,9 +70,6 @@ export function App() {
   const current = app?.currentSessionId ?? null;
   const scopeRequest = current ? views[current]?.officialScopeText : undefined;
   useEffect(() => {
-    // Scope fields belong to the current session only.
-    setOfficialFiles("");
-    setOfficialTest("");
     setOfficialError("");
   }, [current, scopeRequest]);
   useEffect(() => setSkillsOpen(false), [current]);
@@ -682,62 +677,32 @@ export function App() {
               </p>
               <p>
                 質問・作業を同じ会社のHaiku /
-                Lunaで自動判別します。質問はその場で回答し、作業は対象確認と計画承認を待ちます。
+                Lunaで自動判別します。質問はその場で回答し、作業は対象・既存テスト・作業場所を自動提案して計画の承認を待ちます。
               </p>
               {view?.officialScopeText && (
                 <>
                   <p>作業依頼：{view.officialScopeText}</p>
                   <p>
-                    現在のセッションの作業場所を使います。既存worktreeの有無や完了時の反映操作は従来どおりです。最初はcleanなGit作業場所と、既存Nodeテストで検証できる単一課題のみ対応します。
+                    公式エージェントが作業場所を調べ、計画を提案します。承認後は選択中のフォルダー／worktreeで実装とテストを行い、別会社が変更をレビューします。
                   </p>
-                  <label>
-                    変更対象（相対パス、1行1件）
-                    <textarea
-                      aria-label="公式作業の変更対象"
-                      value={officialFiles}
-                      onChange={(e) => setOfficialFiles(e.target.value)}
-                      disabled={!!view?.running}
-                    />
-                  </label>
-                  <label>
-                    独立テスト（既存の相対パス）
-                    <input
-                      aria-label="公式作業の独立テスト"
-                      placeholder="test/acceptance.test.mjs"
-                      value={officialTest}
-                      onChange={(e) => setOfficialTest(e.target.value)}
-                      disabled={!!view?.running}
-                    />
-                  </label>
                   <p>
-                    依存インストール・任意shell・自動再開は行いません。ローカルNodeテストの副作用をOSで完全隔離する機能ではありません。計画で対象とテスト実行を確認してから承認します。
+                    既存テストの事前指定やcleanなGit状態は必須ではありません。追加の操作許可は個別に確認します。テスト結果はモデルの実行報告として区別し、追加課金や自動再開は行いません。
                   </p>
                   <button
                     disabled={!!view.running || waiting}
                     onClick={() => {
-                      const files = officialFiles
-                        .split(/\r?\n/)
-                        .map((f) => f.trim())
-                        .filter(Boolean);
-                      if (
-                        !files.length ||
-                        !officialTest.trim() ||
-                        !session?.workspaceId
-                      ) {
+                      if (!session?.workspaceId) {
                         setOfficialError(
-                          "プロジェクト、変更対象、既存の独立テストを指定してください。対象未確認のまま計画へ進みません。",
+                          "対象フォルダーを選択してください。対象未確認のまま計画へ進みません。",
                         );
                         return;
                       }
                       setOfficialError("");
                       setOfficialOpenSignal((n) => n + 1);
-                      void s.send(view.officialScopeText!, undefined, {
-                        files,
-                        testFile: officialTest.trim(),
-                      });
+                      void s.send(view.officialScopeText!);
                     }}
                   >
-                    対象を確認して計画を作成
+                    作業対象を自動確認して計画を作成
                   </button>
                 </>
               )}

@@ -295,11 +295,11 @@ export async function runOfficialSessionTurn(
     const projectRoot = ctx.workspaceRoot(session);
     const config = await loadProjectConfig(
       ctx.options.home,
-      task ? projectRoot : undefined,
+      task || session.workspaceId ? projectRoot : undefined,
     );
     const agents = await loadAgentConfig(
       ctx.options.home,
-      task ? projectRoot : undefined,
+      task || session.workspaceId ? projectRoot : undefined,
     );
     if (
       config.limits.llmCallsPerTurn ||
@@ -328,6 +328,14 @@ export async function runOfficialSessionTurn(
         effort: session.effort,
         text: ctx.clean(text),
         history,
+        automaticWork:
+          !!session.workspaceId &&
+          !session.readOnly &&
+          (session.permissionMode ?? config.permissions.mode) !== "plan" &&
+          !config.permissions.rules.length &&
+          !config.untrusted,
+        autoOperations:
+          (session.permissionMode ?? config.permissions.mode) === "acceptEdits",
         ...(task ? { task } : {}),
         ...(session.worktree && projectRoot
           ? { worktreeSource: projectRoot }
@@ -346,7 +354,8 @@ export async function runOfficialSessionTurn(
       durationMs: Math.round(performance.now() - startedAt),
       input: {
         workflowId: result.workflowId,
-        intent: task || result.taskRequired ? "work" : "question",
+        intent:
+          result.intent ?? (task || result.taskRequired ? "work" : "question"),
       },
       summary: `公式workflow ${result.workflowId} / ${result.status}。詳細のusage・テスト・レビューは公式workflowの保存記録を参照。`,
     });
@@ -377,7 +386,7 @@ export async function runOfficialSessionTurn(
       : result.status === "completed"
         ? result.taskRequired
           ? "awaiting_user"
-          : task
+          : task || result.intent === "work"
             ? "workflow_complete"
             : "end_turn"
         : result.status === "cancelled" || abort.signal.aborted

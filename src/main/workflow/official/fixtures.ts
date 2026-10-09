@@ -159,8 +159,15 @@ export function fixtureAgents(
       signal.throwIfAborted();
       requests.push(request);
       let output: unknown;
-      if (request.phase === "plan") output = fixturePlan(implementation);
-      else if (request.phase === "implement" || request.phase === "fix") {
+      if (request.phase === "plan") {
+        const plan = fixturePlan(implementation);
+        const registered = JSON.parse(request.prompt).acceptanceTests;
+        if (Array.isArray(registered))
+          plan.tasks[0]!.acceptance = registered.map(
+            (t: { id: string }) => t.id,
+          );
+        output = plan;
+      } else if (request.phase === "implement" || request.phase === "fix") {
         const content =
           implementations++ === 0 && failFirst && request.phase !== "fix"
             ? "export const add = (a,b) => a-b; // intentionally incorrect first mock attempt\n"
@@ -180,6 +187,7 @@ export function fixtureAgents(
         });
         output = {
           summary: "Model claims success; X must run the actual tests.",
+          ...(request.nativeWork ? { tests: [] } : {}),
         };
       } else {
         const input = JSON.parse(request.prompt),

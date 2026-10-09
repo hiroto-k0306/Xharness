@@ -9,6 +9,7 @@ import { OfficialCommunication } from "./OfficialCommunication.js";
 import { OfficialPlanAssignments } from "./OfficialPlanAssignments.js";
 import { ClaudeSdkStatus } from "./ClaudeSdkStatus.js";
 import { CodexRuntimeSettings } from "./CodexRuntimeSettings.js";
+import { officialFailureMessage } from "../../main/workflow/official/session-result.js";
 export function OfficialWorkflowPanel({
   mainModel,
   mainEffort,
@@ -31,6 +32,7 @@ export function OfficialWorkflowPanel({
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [question, setQuestion] = useState("");
   const sending = useRef(false);
+  const openedApproval = useRef("");
   useEffect(() => {
     if (openSignal) setOpen(true);
   }, [openSignal]);
@@ -38,13 +40,21 @@ export function OfficialWorkflowPanel({
   const questionProvider =
     mainProvider ?? (view?.simulated ? provider : undefined);
   useEffect(() => {
-    if (!open) return;
     let live = true;
     const poll = () =>
       void window.harness
         .officialWorkflow?.({ action: "list" })
         .then((v) => {
-          if (live) setView(v);
+          if (live) {
+            setView(v);
+            const key = v.approval
+              ? `${v.approval.id}:${v.approval.digest}`
+              : "";
+            if (key && openedApproval.current !== key) {
+              openedApproval.current = key;
+              setOpen(true);
+            }
+          }
         })
         .catch(() => {
           if (live) setError("保存状態を取得できません");
@@ -55,7 +65,7 @@ export function OfficialWorkflowPanel({
       live = false;
       clearInterval(timer);
     };
-  }, [open]);
+  }, []);
   const send = async (command: OfficialWorkflowCommand) => {
     if (sending.current) return;
     sending.current = true;
@@ -88,12 +98,12 @@ export function OfficialWorkflowPanel({
             </button>
           </header>
           <p>
-            通常入力の限定作業の計画・結果と、固定合成課題を確認します。 計画 →
-            実装 → 独立テスト → 別会社全差分レビューを行います。
+            通常入力の計画・実装・テスト実行報告・別会社レビューと、固定合成課題を確認します。
+            ハーネスによる独立テストは固定合成課題の経路です。
           </p>
           <p>
             {view?.simulated
-              ? "FAKE：モデルは模擬、受入テストは実プロセスです。"
+              ? "FAKE：モデルは模擬です。通常作業のテスト報告も模擬で、固定合成課題の受入テストだけ実プロセスです。"
               : "公式SDK / App Serverの既存サブスクを使用します。計画生成も枠を使用します。追加課金へ切り替えません。"}
           </p>
           <CodexRuntimeSettings
@@ -142,7 +152,7 @@ export function OfficialWorkflowPanel({
             >
               <h3>操作の許可が必要です</h3>
               <p>
-                今回の読み取り操作だけを許可します。10分以内に回答がなければ拒否します。承認待ちの間はphaseの制限時間を止めます。
+                今回の操作だけ、またはこのフローの残りの操作を許可できます。フロー許可は終了・停止時に失効し、禁止操作は許可しません。10分以内に回答がなければ拒否します。承認待ちの間はphaseの制限時間を止めます。
               </p>
               <p>操作：{view.operationApproval.command}</p>
               <p>対象：{view.operationApproval.targets.join(", ")}</p>
@@ -175,6 +185,27 @@ export function OfficialWorkflowPanel({
                   {allow ? "今回の操作だけ許可" : "拒否"}
                 </button>
               ))}
+              {view.records.some(
+                ({ record }) =>
+                  record.id === view.operationApproval!.workflowId &&
+                  record.nativeWork,
+              ) && (
+                <button
+                  disabled={pending}
+                  onClick={() =>
+                    void send({
+                      action: "tool_decision",
+                      id: view.operationApproval!.workflowId,
+                      approvalId: view.operationApproval!.approvalId,
+                      digest: view.operationApproval!.digest,
+                      allow: true,
+                      scope: "flow",
+                    })
+                  }
+                >
+                  このフローのみ許可
+                </button>
+              )}
             </section>
           )}
           <p>
@@ -345,28 +376,96 @@ export function OfficialWorkflowPanel({
                 task {r.id} / 次の段階 {r.next} / 再開 {r.resumed ?? 0}回
               </small>
               <p>
-                base {r.base.slice(0, 12)} → head {r.head.slice(0, 12)}
+                {r.nativeWork &&
+                  "ファイル内容の比較digest（Git HEADではありません）："}
+                base {/^0+$/.test(r.base) ? "未測定" : r.base.slice(0, 12)} →
+                head {/^0+$/.test(r.head) ? "未測定" : r.head.slice(0, 12)}
               </p>
               {r.plan && (
                 <>
                   <h4>確認する計画</h4>
                   <p>{r.plan.summary}</p>
+                  {r.nativeWork && (
+                    <section aria-label="実案件の承認範囲">
+                      <p>
+                        公式エージェントに対象探索・編集・テスト選択を任せます。作業場所：
+                        {r.cwd}
+                        （選択中のフォルダー／worktree）。既存の変更を保全し、自動commit・reset・mergeは行いません。
+                      </p>
+                      <p>
+                        ファイル一覧は計画時点の候補です。公式sandboxを維持します。通常モードでは操作ごとに確認し、「このフローのみ許可」も選べます。追加課金は禁止のままです。
+                      </p>
+                      {view.approval?.id === r.id &&
+                        view.approval.autoOperations && (
+                          <p>
+                            自動モード：計画承認後、このフローの操作は自動許可します。禁止操作と作業範囲の検査は維持します。
+                          </p>
+                        )}
+                      <p>
+                        テスト結果はモデルの実行報告です。ハーネスの独立プロセス検証ではありません。別会社レビューと最大2回の修正を行います。
+                      </p>
+                    </section>
+                  )}
                   {r.project && (
                     <section aria-label="実案件の承認範囲">
                       <p>
-                        セッションの作業場所：{r.project.source} / 開始HEAD：
+                        セッションの作業場所：{r.project.source} /
+                        {r.project.preparation?.kind === "local-copy"
+                          ? "元ファイルの検査digest："
+                          : "開始HEAD："}
                         {r.project.sourceHead}
                       </p>
                       <p>
                         変更対象：{r.project.files.join(", ")}
-                        。この作業場所で変更とコミットを行います。既存worktreeの反映は従来の完了操作を使います。
+                        。元フォルダーへの反映・mainへのマージは自動で行いません。
                       </p>
+                      {r.project.preparation && (
+                        <p>
+                          作業方式：
+                          {r.project.preparation.kind === "local-copy"
+                            ? "対象フォルダー内に作業用コピーを作成"
+                            : r.project.preparation.kind === "reuse-worktree"
+                              ? "管理済みworktreeを再利用"
+                              : "専用ブランチのworktreeを作成"}
+                          。 作業領域：{r.project.preparation.destination}
+                          （新規作成はこの計画の承認後）。
+                        </p>
+                      )}
                       <p>
-                        独立テスト：node --test {r.project.testFile}
+                        独立テスト：
+                        {r.project.testSetup?.command ??
+                          `node --test ${r.project.testFile}`}
                         （既存テストは変更しません）。
                       </p>
+                      {r.project.testSetup && (
+                        <p>
+                          Vitest {r.project.testSetup.version} / 設定：
+                          {r.project.testSetup.config ?? "既定"}
+                          。設定・依存の指紋を承認に固定します。既存依存{" "}
+                          {r.project.testSetup.dependencies.packages.length}
+                          パッケージ・{r.project.testSetup.dependencies.files}
+                          ファイル（
+                          {Math.ceil(
+                            r.project.testSetup.dependencies.bytes / 1048576,
+                          )}{" "}
+                          MiB）を作業領域にコピーし、元のnode_modulesは共有しません。設定ファイル：
+                          {r.project.testSetup.settings
+                            .map((f) => f.path)
+                            .join(", ")}
+                        </p>
+                      )}
+                      {r.project.testSetup && (
+                        <details>
+                          <summary>コピーする依存のバージョン</summary>
+                          <p>
+                            {r.project.testSetup.dependencies.packages
+                              .map((p) => `${p.name}@${p.version}`)
+                              .join(", ")}
+                          </p>
+                        </details>
+                      )}
                       <p>
-                        承認すると現在の作業場所で実装・ローカルNodeテスト・別会社レビューを行います。テストコードのworkspace外の副作用をOSで完全隔離する機能ではありません。依存のインストールや任意shellは実行しません。
+                        承認すると表示した作業領域で実装・ローカルテスト・別会社レビューを行います。設定・plugin・setup・テストコードのworkspace外の副作用をOSで完全隔離する機能ではありません。依存のインストールや任意shellは実行しません。
                       </p>
                       <p>
                         実行するNodeの実体：
@@ -380,7 +479,8 @@ export function OfficialWorkflowPanel({
                       <strong>{t.title}</strong>
                       <p>{t.instructions}</p>
                       <p>
-                        対象 {t.files.join(", ")} / テスト{" "}
+                        対象 {t.files.join(", ")} /{" "}
+                        {r.nativeWork ? "検証方針" : "テスト"}{" "}
                         {t.acceptance.join(", ")} / 依存{" "}
                         {t.dependsOn.join(", ") || "なし"}
                       </p>
@@ -435,7 +535,17 @@ export function OfficialWorkflowPanel({
                   </>
                 )
               )}
-              <h4>実テストとレビューの証跡</h4>
+              <h4>
+                {r.nativeWork
+                  ? "モデルの検証報告と別会社レビュー"
+                  : "実テストとレビューの証跡"}
+              </h4>
+              {r.nativeValidation?.map((test, index) => (
+                <p key={index}>
+                  {test.command || "未実行"}: {test.status} / {test.summary}
+                  （モデル報告）
+                </p>
+              ))}
               {r.checks.map((c, i) => (
                 <p key={i}>
                   {c.head.slice(0, 12)}：
@@ -487,7 +597,9 @@ export function OfficialWorkflowPanel({
                   )}
                 </pre>
               </details>
-              {r.error && <p role="status">停止理由：{r.error}</p>}
+              {r.error && (
+                <p role="status">停止理由：{officialFailureMessage(r)}</p>
+              )}
             </article>
           ))}
           {view?.activeId &&

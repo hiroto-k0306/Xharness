@@ -54,6 +54,24 @@ const result = {
   workflowId: "offline-workflow",
   status: "completed",
 };
+it.each(["default", "acceptEdits", "plan"] as const)(
+  "passes only the effective user mode as an automatic operation grant: %s",
+  async (mode) => {
+    const { c, id, official } = await setup(
+      async () => result,
+      "permissions: {mode: acceptEdits}\n",
+    );
+    await c.handle({ type: "set_mode", sessionId: id, mode });
+    await c.handle({ type: "send", sessionId: id, text: "question" });
+    await idle(c, id);
+    expect(official).toHaveBeenCalledTimes(1);
+    expect(official.mock.calls[0]![0].autoOperations).toBe(
+      mode === "acceptEdits",
+    );
+    if (mode === "plan")
+      expect(official.mock.calls[0]![0].automaticWork).toBe(false);
+  },
+);
 it("official model selection uses the enabled catalog without invoking legacy providers", async () => {
   const { c, id, official, oldStream } = await setup(async () => result);
   expect(

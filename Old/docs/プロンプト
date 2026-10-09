@@ -1,3 +1,4 @@
-個人用の悟空Modの接続確認をお願いします。hiroto-k0306/dragon-deckのmainを取得し、コミットc45808a以降でdocs/mod/Windows-Handoff.mdを読んで進めてください。既存変更は保護してください。
+個人用の悟空Modの接続確認をお願いします。DドライブのAIWorkフォルダに新規フォルダを作成して、以下リポジトリと紐づけてください。
+hiroto-k0306/dragon-deckのmainを取得し、コミットc45808a以降でdocs/mod/Windows-Handoff.mdを読んで進めてください。既存変更は保護してください。
 環境はSteam通常版v0.107.1、Build23811903、BaseLib v3.4.7。ゲーム場所はE:\SteamLibrary\steamapps\common\Slay the Spire 2です。
 DLLの実配置を読み取り、ローカル参照・型照合・独立ビルドを行ってください。ゲームDLLのアップロードは不要です。まだゲーム内登録は0枚なので、ビルド成功とプレイ可能を区別し、実効果・気・保存の未接続部分を報告してください。今回はゲーム起動・セーブ変更・新規インストール・pushは行わないでください。

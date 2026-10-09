@@ -1,0 +1,23 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/workflow/official/fault-injection.test.ts (20 tests | 8 skipped) 64020ms
+   ✓ ships a task whose test fails the seed and the injected defect and passes the spec 4094ms
+   ✓ separates X1 quality, X2 injection and X3 fix with fresh tests and reviews against one base 7959ms
+   ✓ does not pass a failed test when the review has no findings 7882ms
+   ✓ does not inject when X1 fails its quality test and follows the natural fix path 6189ms
+   ✓ never injects into outside the allowed folder 2806ms
+   ✓ never injects into a non-synthetic workspace 2961ms
+   ✓ stops before review when the injection is ineffective 3493ms
+   ✓ stops on Node fixture-load exit 1 before any review or repair dispatch 2552ms
+   ✓ never re-injects after an interruption during injection, even with HEAD at X1 2993ms
+   ✓ resumes after the injection without injecting twice and keeps the call reservations 8808ms
+   ✓ refuses a call over the per-phase budget before sending it 8209ms
+   ✓ keeps normal runs free of injection and budgets 6073ms
+
+ Test Files  1 passed (1)
+      Tests  12 passed | 8 skipped (20)
+   Start at  12:53:22
+   Duration  64.73s (tests 99%, import 1%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_workflow_official_fault-injection.test.ts.json

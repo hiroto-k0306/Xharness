@@ -1,0 +1,12 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/workflow/official/project-task.test.ts (7 tests | 6 skipped) 6672ms
+   ✓ runs only after scope/test approval, writes the same session directory, tests failures objectively and fixes with cross-company review 6671ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 6 skipped (7)
+   Start at  12:54:54
+   Duration  7.41s (tests 91%, import 5%, transform 4%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_workflow_official_project-task.test.ts.json

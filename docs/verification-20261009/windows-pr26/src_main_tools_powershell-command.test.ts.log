@@ -1,0 +1,14 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/tools/powershell-command.test.ts (3 tests) 3750ms
+   ✓ registers Start-Process Hidden in this specific Job before returning 1042ms
+   ✓ registers Start-Process NoNewWindow in this specific Job before returning 860ms
+   ✓ preserves Start-Process output without PassThru, WhatIf and named arguments 1848ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  12:51:28
+   Duration  3.88s (tests 99%, transform 1%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_tools_powershell-command.test.ts.json

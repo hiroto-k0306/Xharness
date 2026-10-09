@@ -2,7 +2,7 @@
 
 このフォルダーは履歴保存用です。現行仕様は [SPEC.md](../SPEC.md)、現行設計は [DESIGN.md](../DESIGN.md)。旧版の未実装案・古い検証成功を現在の要件・成功として扱わないでください。
 
-整理基準：main `9a275bc99272b34f0c418a59a8fcc63dcabd20fe`。削除はせず、初期フェーズ・過去の文書更新記録・統合済み原稿・完了済み依頼の20ファイルを移動しました。移動元への固定参照なし（任意設定や汎用ツール参照は除く）という調査結果に基づく整理です。最近の障害/実機記録、test/archived、fixtures、spike、mockup、release、brand、resources、docs/examples、紹介資料は維持しています。
+整理基準：main `9a275bc99272b34f0c418a59a8fcc63dcabd20fe`。削除はせず、初期フェーズ・過去の文書更新記録・統合済み原稿・完了済み依頼の20ファイルを移動しました。移動元への固定参照なし（任意設定や汎用ツール参照は除く）という調査結果に基づく整理です。初回の文書整理では最近の障害/実機記録、test/archived、fixtures、spike、mockup、release、brand、resources、docs/examples、紹介資料を維持しました。その後の追加依頼による旧実行器・直結テストの撤去は、Git履歴を残す別の整理です。[変更記録](../docs/official-only-consolidation-20261009.md)を参照してください。
 
 ## 移動前後の対応
 

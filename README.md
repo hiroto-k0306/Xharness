@@ -8,15 +8,17 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 作業前に [SPEC.md](SPEC.md) の担当節と [AGENTS.md](AGENTS.md) を読む。現行仕様はSPEC.md、現行設計はDESIGN.mdへ集約する。更新前の仕様・設計・機能一覧と初期履歴は [Old索引](Old/README.md) に保存する。過去のフェーズ順や未実装案を、そのまま現在の実装要件にはしない。
 
-通常desktopは公式Claude Agent SDK / Codex App Serverで質問判別、探索・計画、承認、実装・テスト報告、別会社レビューと修正を行う。旧HTTP/headlessに残るMCP・巻き戻し・画像・子委託・予約等は経路ごとに対応が異なる。旧認証reader・アプリ内CLIログイン/自動更新は通常起動へ接続しない。動作・設定・未確認事項は [SPEC.md](SPEC.md) を参照する。
+GUIとheadlessは同じSessionController / OfficialWorkflowServiceから、公式Claude Agent SDK / Codex App Serverで質問判別、探索・計画、承認、実装・テスト報告、別会社レビューと修正を行う。旧HTTPモデル通信・独自ツール実行・アプリ内の資格情報読込/ログイン/自動更新は通常の実行経路から撤去する。旧MCP・Web・子委託・画像送信・巻き戻し・予約の操作を公式モデルへ転送しない。保存済み履歴の閲覧とレポート出力は残す。動作・設定・未確認事項は [SPEC.md](SPEC.md) を参照する。
 
-最新の参照は [文書照合記録](docs/documentation-refresh-20261009.md)、[環境修正後の実アプリ](docs/workflow-environment-fix-live-20261009.md)、[全回帰（1件timeout）](docs/full-regression-20261009.md)、[PR #25の限定確認](docs/catalog-timeout-fix-20261009.md)。最新mainのWindows配布を今回再検証したものではない。
+変更前の使い方・開発指示は [旧README](Old/README-6370866.md)、[旧AGENTS](Old/AGENTS-6370866.md)、[旧配布README](Old/release-README-6370866.md) に保存する。旧資料は過去の対応範囲であり、現行の操作手順ではない。
 
-過去のWindowsのexe作成・fake GUIの記録は [20261004配布記録](docs/release-20261004-integrated.md)。その後の [認証更新記録](docs/auth-refresh-progress.md) は型・lint・buildと150ファイル / 1445テストの成功を記録しているが、実際の期限切れでの更新は未確認。以前の配布物に最新ソースの変更が入っているとは限らない。
+最新の参照は [公式共通化・旧実行器整理](docs/official-only-consolidation-20261009.md)、[文書照合記録](docs/documentation-refresh-20261009.md)、[環境修正後の実アプリ](docs/workflow-environment-fix-live-20261009.md)、[全回帰（1件timeout）](docs/full-regression-20261009.md)、[PR #25の限定確認](docs/catalog-timeout-fix-20261009.md)。最新mainのWindows配布を今回再検証したものではない。
+
+過去のWindowsのexe作成・fake GUIの記録は [20261004配布記録](docs/release-20261004-integrated.md)。以前の配布物に今回のGUI/headless共通化や旧経路撤去が入っているとは限らない。今回のWindows配布・インストール・実モデル通信の再検証は未実施。
 
 ## 資料
 
-できることを一覧で探す場合は [機能一覧（FEATURES.md）](FEATURES.md) を参照する。用途・操作方法・デスクトップとheadlessの違いをまとめている。
+できることを一覧で探す場合は [機能一覧（FEATURES.md）](FEATURES.md) を参照する。対応範囲・操作方法・検証の限界をまとめている。
 
 実画面入りの [紹介資料（PowerPoint／HTMLプレビュー）](docs/presentations/20261008/README.md) も用意している。保存済みのテスト画面を使い、対応範囲と未確認事項を含めて紹介する。
 
@@ -35,9 +37,9 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 ## 開発環境
 
 - Node.js 24 LTS（基準24.16.0、`.node-version`）、pnpm 10(`packageManager`)。Node 22.20以降も互換確認対象
-- Windowsのシェル実行にはPowerShell 7(`pwsh`)、リポジトリ操作にはGitが必要。ripgrep(`rg`)は推奨だが、省略時もGrep / GlobはNode検索へ切り替わる
+- Windowsの公式ヘルパー起動にはPowerShell 7(`pwsh`)、リポジトリ操作にはGitが必要。モデルの探索・編集・コマンド実行は公式基盤のツールを使う。旧独自Grep/GlobのNode代替検索を通常経路の保証にしない
 - Windowsの検証ではNodeとpwshの版・実体を確認する（`node --version`、`Get-Command node,pwsh`、`pwsh -NoProfile -Command '$PSVersionTable.PSVersion'`）。Codex同梱pwshとWindowsApps版は子プロセスのJob継承が異なる場合があるため、ユーザーと同じpwshをPATHの先頭に指定する。切り分けは [docs/h3-job-investigation.md](docs/h3-job-investigation.md)
-- 通常の検証はFakeProvider・モック・`test/fixtures/`を使う。実モデル・認証CLI・spikeの実行は別途承認された範囲のみ。公式CLIのログインが必要な実試験や、更新によるモデル通信を無断で行わない。クラウド(Linux)では実APIを呼ばない([AGENTS.md](AGENTS.md))
+- 通常の検証はFakeProvider・モック・`test/fixtures/`を使う。実モデル・公式CLIによる認証操作は別途承認された範囲のみ。過去の認証更新・spikeの成功記録を新たな実通信の許可にしない。クラウド(Linux)では実APIを呼ばない([AGENTS.md](AGENTS.md))
 
 ### この Windows 作業環境のローカル pnpm
 
@@ -66,6 +68,12 @@ pnpm headless      # 画面なしの REPL(tsx)
 ```
 
 通常の `pnpm test` は、Windows の PowerShell / Git 系テストで並列実行時のタイムアウトが再発したため、直列（`--maxWorkers=1`）・各テスト30秒制限を既定とする（模擬DAGの統合レビュー修正1ケースのみ60秒）。既定の並列実行が安定したという意味ではない。
+
+## Headless（公式経路）
+
+`pnpm headless -- --cwd <作業フォルダー> --codex-path <codex実行ファイル>`、または `pnpm build:headless` 後の `node dist/headless.js` で起動する。公式Claude SDK / Codex App Server、モデルカタログ、計画・操作承認、直接編集、別会社レビューはGUIと同じサービスを使う。承認はTTYでのみ受け付け、非対話入力で承認が必要なら停止する。非WindowsでWindowsのプロセス隔離まで動作確認したとは扱わない。
+
+`--help` で最新の引数を確認する。`/help`、`/exit`、`/stop`、`/model`、`/mode`、`/resume`、`/clear`、`/history`、`/workflow` は端末操作であり、旧独自ツールをモデルへ公開するものではない。GUI入力の旧slash対応とは異なる。旧履歴を公式会話へ自動転送しない。`--report <sessionId> --output <新規HTML>` と `--replay <sessionId>` は読み取り専用でモデルを起動しない。
 
 ## GUI を操作して確認する(開発用)
 
@@ -102,14 +110,14 @@ pnpm release
 
 ## リポジトリの構成
 
-| 場所                          | 内容                                                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------------------- |
-| `src/main/`                   | main プロセス(エージェント・プロバイダ・ツール・MCP・セッション)                            |
-| `src/renderer/`               | 画面(React)                                                                                 |
-| `src/preload/`、`src/shared/` | IPC の受け渡しと共通の型                                                                    |
-| `src/headless.ts`             | 画面なしの REPL                                                                             |
-| `test/fixtures/`              | 実通信の録画(秘密値は除去済み)と試験用の MCP サーバー                                       |
-| `spike/`                      | 実通信の確認スクリプト(Phase 0 の記録は [docs/phase0-spikes.md](Old/docs/phase0-spikes.md)) |
-| `scripts/`                    | アイコン生成・配布物の収集                                                                  |
-| `release/`                    | 配布物に同梱するファイル                                                                    |
-| `brand/`、`resources/`        | ロゴ・アイコン                                                                              |
+| 場所                          | 内容                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------ |
+| `src/main/`                   | 公式workflow・セッション・保存・認証境界と互換用の実装                         |
+| `src/renderer/`               | 画面(React)                                                                    |
+| `src/preload/`、`src/shared/` | IPC の受け渡しと共通の型                                                       |
+| `src/headless.ts`             | 公式経路の画面なしREPL（GUIと同じworkflow）                                    |
+| `test/fixtures/`              | 実通信の録画(秘密値は除去済み)と試験用の MCP サーバー                          |
+| `spike/`                      | 過去の調査資源。現行の実行手順ではない([旧Phase 0](Old/docs/phase0-spikes.md)) |
+| `scripts/`                    | アイコン生成・配布物の収集                                                     |
+| `release/`                    | 配布物に同梱するファイル                                                       |
+| `brand/`、`resources/`        | ロゴ・アイコン                                                                 |

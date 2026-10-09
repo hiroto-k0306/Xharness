@@ -70,3 +70,53 @@ it("distinguishes confirmed communications from incomplete records and leaves pu
   r.answer = "exact public answer";
   expect(officialSessionSummary(r, false)).toBe(r.answer);
 });
+
+it("distinguishes native DAG owned Git integration HEAD from source base and pre-integration digests", () => {
+  const r = record();
+  r.nativeWork = { validation: "agent-reported", baseline: "files" };
+  r.base = "c".repeat(64);
+  r.head = "d".repeat(64);
+  r.nativeDagWorkspace = {
+    source: "D:/source",
+    sourceBase: "a".repeat(40),
+    sourceBranch: "main",
+    approvalDigest: "e".repeat(64),
+    ownedDirectory: "D:/owned",
+    tasks: [],
+  };
+  const before = JSON.stringify(r);
+  expect(executionEvidence(r)).toMatchObject({
+    measuredHead: null,
+    sourceCwd: "D:/source",
+    sourceBaseHead: "a".repeat(40),
+    ownedIntegrationHead: null,
+  });
+  expect(officialSessionSummary(r, true)).toContain(
+    `ファイル比較digest ${r.head}`,
+  );
+  expect(officialSessionSummary(r, true)).toContain(
+    "元リポジトリのsource base",
+  );
+  expect(JSON.stringify(r)).toBe(before);
+  r.nativeDagWorkspace.integration = {
+    cwd: "D:/owned/integration",
+    head: "b".repeat(40),
+    status: "completed",
+  };
+  r.base = "a".repeat(40);
+  r.head = "b".repeat(40);
+  r.cwd = "D:/owned/integration";
+  r.nativeWork.validation = "independent-process";
+  expect(executionEvidence(r)).toMatchObject({
+    measuredHead: "b".repeat(40),
+    sourceBaseHead: "a".repeat(40),
+    ownedIntegrationHead: "b".repeat(40),
+  });
+  const summary = officialSessionSummary(r, true);
+  expect(summary).toContain(`統合HEAD ${r.head}`);
+  expect(summary).toContain(`source base ${r.base}`);
+  expect(summary).toContain("利用者ブランチ未変更");
+  expect(summary).not.toContain("ファイル比較digest");
+  r.answer = "saved public answer";
+  expect(officialSessionSummary(r, true)).toBe("saved public answer");
+});

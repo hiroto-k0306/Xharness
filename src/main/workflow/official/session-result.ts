@@ -35,16 +35,20 @@ export function officialSessionSummary(record: WorkflowRecord, task: boolean) {
   record = { ...record, error: officialFailureMessage(record) };
   const preparation = record.project?.preparation;
   const evidence = executionEvidence(record);
-  const head = record.nativeWork
-    ? `ファイル比較digest ${record.head}（Git HEADではありません）`
-    : (evidence.measuredHead ??
-      "未測定（初期値からGitの有無は判断できません）");
+  const head = evidence.ownedIntegrationHead
+    ? `所有する隔離Git worktreeの統合HEAD ${evidence.ownedIntegrationHead} / 元リポジトリのsource base ${evidence.sourceBaseHead ?? "未測定"}（利用者ブランチ未変更）`
+    : record.nativeWork
+      ? `ファイル比較digest ${record.head}（Git HEADではありません）`
+      : (evidence.measuredHead ??
+        "未測定（初期値からGitの有無は判断できません）");
   const calls = `通信確認済み：${evidence.confirmedDispatches}回 / 送信有無未測定：${evidence.unmeasuredDispatches}件`;
-  const location = preparation
-    ? preparation.destination === record.cwd
-      ? "作業領域を準備しました。元フォルダーへの反映・mainへのマージは別途確認してください。"
-      : `作業領域の準備完了は確認できていません。予定先：${preparation.destination}。元フォルダーへの反映は行っていません。`
-    : "既存worktreeの場合は、従来の完了操作で変更を確認・反映してください。";
+  const location = record.nativeDagWorkspace
+    ? `所有する隔離Git worktreesを保全しました。元リポジトリのsource base：${evidence.sourceBaseHead ?? "未測定"}。利用者のブランチへの反映・マージは行っていません。`
+    : preparation
+      ? preparation.destination === record.cwd
+        ? "作業領域を準備しました。元フォルダーへの反映・mainへのマージは別途確認してください。"
+        : `作業領域の準備完了は確認できていません。予定先：${preparation.destination}。元フォルダーへの反映は行っていません。`
+      : "既存worktreeの場合は、従来の完了操作で変更を確認・反映してください。";
   return (
     record.answer ??
     (task

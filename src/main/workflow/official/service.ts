@@ -94,6 +94,8 @@ import {
   type ResolvedModel,
 } from "../../config/catalog.js";
 import { impliedRecordModels } from "./record-compat.js";
+import { createValidationRuntime } from "./validation-runtime.js";
+import { projectNode } from "./project-task.js";
 import { prepareProjectTask } from "./project-task.js";
 import type { ProjectInventory } from "./project-inventory.js";
 import { runNativePlannedWork, type NativeDagOptions } from "./native-dag.js";
@@ -181,6 +183,8 @@ export class OfficialWorkflowService {
       };
       /** Explicit offline test/verified sandbox seam. Absent in production until isolation is verified. */
       validateIntegration?: NativeDagOptions["validateIntegration"];
+      /** Internal offline seam for capability factory routing. */
+      validationRuntime?: typeof createValidationRuntime;
       options?: (
         cwd: string,
         provider: "claude" | "codex",
@@ -893,6 +897,52 @@ export class OfficialWorkflowService {
           taskId: id,
         },
         async () => {
+          let validateIntegration = this.settings.validateIntegration;
+          let validationUnavailableReason: string | undefined;
+          let checkValidationRuntime: NativeDagOptions["checkValidationRuntime"];
+          if (
+            options.nativeWork &&
+            !validateIntegration &&
+            (!this.settings.fake || this.settings.validationRuntime)
+          ) {
+            try {
+              const executable =
+                this.codexExecutable ??
+                (this.settings.fake && this.settings.validationRuntime
+                  ? this.settings.codexPath
+                  : undefined);
+              if (!executable)
+                validationUnavailableReason = "validation-cli-unconfigured";
+              else {
+                const nodeExecutable = process.versions.electron
+                  ? await projectNode(
+                      options.cwd,
+                      process.env.PATH ?? "",
+                      options.cwd,
+                    )
+                  : process.execPath;
+                const runtime = await (
+                  this.settings.validationRuntime ?? createValidationRuntime
+                )({
+                  executable,
+                  nodeExecutable,
+                  signal: controller.signal,
+                });
+                if (runtime.available) {
+                  validateIntegration = runtime.validateIntegration;
+                  checkValidationRuntime = runtime.checkIdentity;
+                } else validationUnavailableReason = runtime.reason;
+              }
+            } catch (error) {
+              if (
+                error instanceof WorkflowFailure &&
+                error.code === "validation-cleanup-unverified"
+              )
+                throw error;
+              validationUnavailableReason = "validation-runtime-unverified";
+            }
+          }
+          controller.signal.throwIfAborted();
           const record =
             "worktrees" in options
               ? await runOfficialDag(options as DagOptions, controller.signal)
@@ -900,7 +950,9 @@ export class OfficialWorkflowService {
                 ? await runNativePlannedWork(
                     {
                       ...options,
-                      validateIntegration: this.settings.validateIntegration,
+                      validateIntegration,
+                      validationUnavailableReason,
+                      checkValidationRuntime,
                       prepareDag: (approved, signal) =>
                         createProjectDagWorkspace({
                           cwd: options.cwd,
@@ -925,7 +977,25 @@ export class OfficialWorkflowService {
       ),
     )
       .then(() => {})
-      .catch(() => {
+      .catch(async (error: unknown) => {
+        const record = this.records.get(id);
+        if (
+          options.nativeWork &&
+          record?.inputIntent === "work" &&
+          !record.nativeWork &&
+          !record.plan
+        ) {
+          record.status = controller.signal.aborted ? "cancelled" : "failed";
+          if (!controller.signal.aborted)
+            record.error =
+              error instanceof WorkflowFailure &&
+              error.code === "validation-cleanup-unverified"
+                ? "validation-cleanup-unverified"
+                : "native-preparation-failed-no-retry";
+          record.finishedAt = new Date().toISOString();
+          delete record.answer;
+          await this.save(record);
+        }
         this.error =
           "安全に継続できません。保存状態と作業を保全し、再送を停止しました。";
       })

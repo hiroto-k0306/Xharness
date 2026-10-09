@@ -12,7 +12,11 @@ import {
   independentlyPassed,
   type NativeDagOptions,
 } from "./native-dag.js";
-import type { OfficialPlan, AgentRequest } from "./contracts.js";
+import {
+  WorkflowFailure,
+  type OfficialPlan,
+  type AgentRequest,
+} from "./contracts.js";
 import type { WorkflowRecord } from "./runtime.js";
 const exec = promisify(execFile);
 const isIntegrationReview = (request: AgentRequest) =>
@@ -474,4 +478,26 @@ it("overall integration review findings prevent completion after passing indepen
     expect(result.status).toBe("attention");
     expect(result.error).toBe("integration-review-blocking");
     expect(result.checks[0]?.tests[0]?.passed).toBe(true);
+  }));
+
+it("runtime identity lost during approval stops before worktree creation or implementation", async () =>
+  fixture(async (o, _p, requests, saved) => {
+    let checks = 0;
+    let prepared = 0;
+    const prepare = o.prepareDag;
+    o.checkValidationRuntime = async () => {
+      if (++checks === 2)
+        throw new WorkflowFailure("validation-runtime-identity-changed");
+    };
+    o.prepareDag = async (...args) => {
+      prepared++;
+      return prepare(...args);
+    };
+    const result = await runNativePlannedWork(o, new AbortController().signal);
+    expect(result.status).toBe("attention");
+    expect(result.error).toBe("validation-runtime-identity-changed");
+    expect(checks).toBe(2);
+    expect(prepared).toBe(0);
+    expect(requests.filter((r) => r.phase === "implement")).toHaveLength(0);
+    expect(saved.some((r) => r.pendingEffect?.kind === "worktree")).toBe(false);
   }));

@@ -24,6 +24,7 @@ export interface AppServerPort {
 /** Dedicated official stdio process. No daemon attachment, token extraction, stdout or stderr logging. */
 export class AppServerRpc implements AppServerPort {
   #child: ChildProcessWithoutNullStreams;
+  #closedProcess: Promise<void>;
   #sequence = 0;
   #buffer = "";
   #closed = false;
@@ -71,6 +72,9 @@ export class AppServerRpc implements AppServerPort {
         windowsHide: true,
         env: runtimeEnvironment(),
       },
+    );
+    this.#closedProcess = new Promise((accept) =>
+      this.#child.once("close", () => accept()),
     );
     this.#child.stdout.setEncoding("utf8");
     this.#child.stdout.on("data", (chunk: string) => {
@@ -199,6 +203,9 @@ export class AppServerRpc implements AppServerPort {
     ) => Promise<unknown>,
   ) {
     this.#handler = handler;
+  }
+  waitClosed() {
+    return this.#closedProcess;
   }
   close() {
     if (this.#closed) return;

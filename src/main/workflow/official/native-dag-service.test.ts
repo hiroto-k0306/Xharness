@@ -7,9 +7,18 @@ import { promisify } from "node:util";
 import { fixturePlan, fixtureWorkflowOptions } from "./fixtures.js";
 import { OfficialWorkflowService } from "./service.js";
 import { createIndependentValidator } from "./independent-validation.js";
+import { WorkflowFailure } from "./contracts.js";
 import type { AgentRequest, OfficialPlan } from "./contracts.js";
 const exec = promisify(execFile);
-it.each(["parallel", "unavailable", "question"] as const)(
+it.each([
+  "parallel",
+  "unavailable",
+  "question",
+  "factory-parallel",
+  "factory-unavailable",
+  "factory-cancel",
+  "factory-cleanup",
+] as const)(
   "service automatic work routes %s with explicit integration consent and retained records",
   async (mode) => {
     const root = await mkdtemp(join(tmpdir(), "xh-dag-service-"));
@@ -149,11 +158,33 @@ it.each(["parallel", "unavailable", "question"] as const)(
         });
       }
     };
+    const requestAbort = new AbortController();
     instance = new OfficialWorkflowService({
       home,
       fake: true,
       options: async () => options,
-      validateIntegration: mode === "unavailable" ? undefined : validator,
+      validateIntegration:
+        mode === "parallel" || mode === "question" ? validator : undefined,
+      ...(mode.startsWith("factory-")
+        ? {
+            codexPath: "fixture-cli.exe",
+            validationRuntime: async () => {
+              if (mode === "factory-cancel") requestAbort.abort();
+              if (mode === "factory-cleanup")
+                throw new WorkflowFailure("validation-cleanup-unverified");
+              return mode === "factory-parallel"
+                ? {
+                    available: true as const,
+                    checkIdentity: async () => {},
+                    validateIntegration: validator,
+                  }
+                : {
+                    available: false as const,
+                    reason: "validation-schema-unverified",
+                  };
+            },
+          }
+        : {}),
       onChange: () => queueMicrotask(drain),
     });
     try {
@@ -168,20 +199,34 @@ it.each(["parallel", "unavailable", "question"] as const)(
           automaticWork: true,
           autoOperations: true,
         },
-        new AbortController().signal,
+        requestAbort.signal,
       );
       const record = instance.view().records[0]!.record;
-      if (mode === "question") {
+      if (mode === "factory-cleanup") {
+        expect(result.status).toBe("failed");
+        expect(record.error).toBe("validation-cleanup-unverified");
+        expect(requests).toHaveLength(0);
+        expect(plans).toBe(0);
+        expect(independent).toBe(0);
+      } else if (mode === "factory-cancel") {
+        expect(result.status).toBe("cancelled");
+        expect(record.status).toBe("cancelled");
+        expect(requests).toHaveLength(0);
+        expect(plans).toBe(0);
+        expect(independent).toBe(0);
+      } else if (mode === "question") {
         expect(result.status).toBe("completed");
         expect(requests).toHaveLength(0);
         expect(plans).toBe(0);
         expect(independent).toBe(0);
-      } else if (mode === "unavailable") {
+      } else if (mode === "unavailable" || mode === "factory-unavailable") {
         expect(record.error).toBe("independent-validation-unavailable");
         expect(plans).toBe(0);
         expect(independent).toBe(0);
         expect(requests.map((r) => r.phase)).toEqual(["plan"]);
         expect(requests[0]!.prompt).toContain("unavailable in this runtime");
+        if (mode === "factory-unavailable")
+          expect(requests[0]!.prompt).toContain("validation-schema-unverified");
       } else {
         expect(record.error).toBeUndefined();
         expect(result.status).toBe("completed");

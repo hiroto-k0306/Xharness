@@ -33,6 +33,10 @@ export type NativeDagWorkspace = Awaited<
   ReturnType<typeof createProjectDagWorkspace>
 >;
 export interface NativeDagOptions extends WorkflowOptions {
+  /** Fixed diagnostic from the runtime gate; never raw CLI output. */
+  validationUnavailableReason?: string;
+  /** Invalidate a previously proven runtime before approved side effects. */
+  checkValidationRuntime?: (signal: AbortSignal) => Promise<void>;
   validateIntegration?: (
     spec: TestSpec,
     cwd: string,
@@ -156,7 +160,7 @@ export async function runNativePlannedWork(
       nativePlanSchema: z.toJSONSchema(nativeDecisionContract, {
         target: "draft-7",
       }),
-      nativePlanInstruction: `${decisionInstruction} Harness independent validation availability: ${options.validateIntegration ? "an explicit validator is configured; OS isolation verification is its own contract, never infer it from agent output" : "unavailable in this runtime; consider parallelization but propose serial with this constraint as a reason. A parallel plan will stop before approval and implementation"}.`,
+      nativePlanInstruction: `${decisionInstruction} Harness independent validation diagnostic: ${/^[a-z0-9-]{1,80}$/.test(options.validationUnavailableReason ?? "") ? options.validationUnavailableReason : "unverified"}. Harness independent validation availability: ${options.validateIntegration ? "an explicit validator is configured; OS isolation verification is its own contract, never infer it from agent output" : "unavailable in this runtime; consider parallelization but propose serial with this constraint as a reason. A parallel plan will stop before approval and implementation"}.`,
     },
     signal,
   );
@@ -188,6 +192,7 @@ export async function runNativePlannedWork(
     }
     if (!options.validateIntegration)
       throw new WorkflowFailure("independent-validation-unavailable");
+    await options.checkValidationRuntime?.(stop.signal);
     if ((await nativeSnapshot(options.cwd, signal)).head !== baseline.head)
       throw new WorkflowFailure("workspace-changed-before-approval");
     record.status = "approval";
@@ -201,6 +206,7 @@ export async function runNativePlannedWork(
       (await nativeSnapshot(options.cwd, signal)).head !== baseline.head
     )
       throw new WorkflowFailure("workspace-changed-before-approval");
+    await options.checkValidationRuntime?.(stop.signal);
     record.approvedDigest = approved;
     record.pendingEffect = { kind: "worktree", id: randomUUID() };
     await save();
@@ -220,6 +226,8 @@ export async function runNativePlannedWork(
       stop.signal.throwIfAborted();
     };
     const runNode = async (id: string) => {
+      assertApproved();
+      await options.checkValidationRuntime?.(stop.signal);
       assertApproved();
       const task = plan.tasks.find((t) => t.id === id)!;
       const node = record.dag!.nodes.find((n) => n.id === id)!;

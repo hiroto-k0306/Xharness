@@ -351,7 +351,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /**
- * 通信しない Provider。fixtures の SSE を ClaudeAdapter と同じデコーダで再生する。
+ * 通信しない Provider。過去fixturesの SSE を保持した共通デコーダで再生する。
  * 認証情報は読まない・要求しない。DESIGN.md §6 の Provider に準拠。
  */
 export class FakeProvider implements Provider {

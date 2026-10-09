@@ -45,16 +45,14 @@ export async function captureQuotaPause(
     ? "保存が未確定です。レポートを確認してください。"
     : evidence.unsafe
       ? "途中応答・ツール・fallback・エラーの結果を確認してください。自動復元しません。"
-      : rt.workflow?.state.phase !== "off"
-        ? "workflow途中の自動復元は未対応です。段階と成果物を手動で確認してください。"
-        : rt.always.size ||
-            rt.sessionRules?.length ||
-            rt.trustedSession ||
-            rt.trustDeclined
-          ? "一時的な権限・信頼の復元は未対応です。手動で確認してください。"
-          : rt.mcp?.states().length || (rt.searchBudget?.used ?? 0) > 0
-            ? "MCP・Web検索の状態復元は未対応です。手動で確認してください。"
-            : undefined;
+      : rt.always.size ||
+          rt.sessionRules?.length ||
+          rt.trustedSession ||
+          rt.trustDeclined
+        ? "一時的な権限・信頼の復元は未対応です。手動で確認してください。"
+        : rt.mcp?.states().length || (rt.searchBudget?.used ?? 0) > 0
+          ? "MCP・Web検索の状態復元は未対応です。手動で確認してください。"
+          : undefined;
   let conditionsHash = "unavailable";
   try {
     const agents = await loadAgentConfig(
@@ -100,7 +98,7 @@ export async function captureQuotaPause(
     snapshot: {
       taskId: rt.evaluationTaskId,
       originalTask: { userMessageIndex: rt.messages.length - 1 },
-      phase: rt.workflow?.state.phase ?? "unknown",
+      phase: "connection-experiment",
       unfinished: ["last accepted user request"],
       effort: session.effort,
       premiseHash: session.premiseHash,

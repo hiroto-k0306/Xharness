@@ -11,7 +11,7 @@ import {
 } from "../core/permissions.js";
 import { localRulesPath } from "./trust.js";
 import { randomUUID } from "node:crypto";
-import { FileAccess } from "../tools/files.js";
+import { FileAccess } from "../tools/file-access.js";
 export interface ProjectConfig {
   limits: import("../../shared/llm-calls.js").LlmLimits;
   checkpoints?: { retentionDays: number };

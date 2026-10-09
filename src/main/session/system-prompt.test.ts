@@ -9,10 +9,6 @@ import {
   CHILD_REPORT_GUIDANCE,
   FILE_LINK_GUIDANCE,
 } from "../core/output-guidance.js";
-import { ChildRunner } from "../agents/runner.js";
-import { Router } from "../core/router.js";
-import { FakeProvider } from "../providers/fake/fake-provider.js";
-import { type ProviderRequest } from "../providers/provider.js";
 
 const directories: string[] = [];
 async function setup() {
@@ -78,70 +74,3 @@ it("preserves custom memory and scratch isolation while retaining common guidanc
   expect(scratch).toContain("home instructions");
   expect(scratch).not.toContain("workspace instructions");
 });
-it.each(["explorer", "reviewer", "worker"])(
-  "sends common and structured-output guidance to %s and preserves JSON path fields",
-  async (role) => {
-    const { home, cwd } = await setup();
-    const requests: ProviderRequest[] = [];
-    // 構造化出力の非改変と実際に送る指示を確認する。モデルの遵守保証ではない。
-    const report = JSON.stringify({
-      findings: [{ file: "src/main/example.ts", message: "offline finding" }],
-    });
-    const prompt =
-      "Return only JSON with findings. Keep each file field as a relative path.";
-    const provider = new FakeProvider({
-      onRequest: (request) => requests.push(request),
-      script: [
-        {
-          type: "message",
-          message: {
-            role: "assistant",
-            content: [{ type: "text", text: report }],
-          },
-          stopReason: "end_turn",
-        },
-      ],
-    });
-    const runner = new ChildRunner({
-      home,
-      parentId: "parent",
-      router: new Router([provider]),
-      createTools: () => new Map(),
-      permission: async () => false,
-    });
-    const result = await runner.run(
-      role,
-      { model: "claude:sonnet", tools: [] },
-      prompt,
-      cwd,
-      new AbortController().signal,
-      role === "worker" ? { files: [], reportTool: new Map() } : undefined,
-    );
-    expect(requests).toHaveLength(1);
-    expect(requests[0]!.system).toContain(FILE_LINK_GUIDANCE);
-    const system = requests[0]!.system;
-    expect(system.split(FILE_LINK_GUIDANCE)).toHaveLength(2);
-    expect(system).toContain(CHILD_REPORT_GUIDANCE);
-    expect(system.split(CHILD_REPORT_GUIDANCE)).toHaveLength(2);
-    expect(system).toContain(
-      "takes precedence over file-link handoffs for structured output",
-    );
-    expect(system).toContain(
-      "return only that format, without Markdown fences or extra prose",
-    );
-    expect(system).toContain("a review finding's file field");
-    expect(system).toContain("required literal or relative paths");
-    expect(system).toContain("omit progress narration");
-    expect(system).toContain(
-      "does not suppress required tool calls or the worker's ReportDone requirement",
-    );
-    expect(requests[0]!.messages[0]!.content).toEqual([
-      { type: "text", text: prompt },
-    ]);
-    expect(result.text).toBe(report);
-    expect(JSON.parse(result.text).findings[0].file).toBe(
-      "src/main/example.ts",
-    );
-  },
-  30_000,
-);

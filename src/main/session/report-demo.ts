@@ -1,9 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { ChildRunner } from "../agents/runner.js";
 import { runTurn } from "../core/loop.js";
-import { Router } from "../core/router.js";
-import { withSessionTrace } from "../core/trace.js";
+import { beginTrace, traceOperation, withSessionTrace } from "../core/trace.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
 import { type Tool, type ToolRegistry } from "../tools/registry.js";
 import { SessionStore } from "./store.js";
@@ -68,19 +66,6 @@ export async function runReportDemo(home: string) {
           content: [
             {
               type: "text",
-              text: "LLMは次の操作を提案し、ハーネスは検証・権限確認・実行・記録を担当します。",
-            },
-          ],
-        },
-      },
-      {
-        type: "message",
-        stopReason: "end_turn",
-        message: {
-          role: "assistant",
-          content: [
-            {
-              type: "text",
               text: "READMEの読み取りと子の説明が完了しました。不明なツールは検証で止まり、書き込みは権限で拒否されました。",
             },
           ],
@@ -88,16 +73,7 @@ export async function runReportDemo(home: string) {
       },
     ],
   });
-  const router = new Router([provider]);
   const tools: ToolRegistry = new Map();
-  const runner = new ChildRunner({
-    home,
-    redact: clean,
-    parentId: id,
-    router,
-    createTools: () => new Map(),
-    permission: async () => false,
-  });
   const add = (name: string, tool: Omit<Tool, "spec">) =>
     tools.set(name, {
       ...tool,
@@ -124,17 +100,57 @@ export async function runReportDemo(home: string) {
   add("Task", {
     readOnly: false,
     validate: async () => undefined,
-    execute: async (input, signal) => ({
-      content: (
-        await runner.run(
-          "explainer",
-          { model: "claude:haiku", tools: [] },
-          (input as { prompt: string }).prompt,
-          cwd,
-          signal,
-        )
-      ).text,
-    }),
+    execute: async (input) => {
+      // Historical child-report fixture only: no child executor or model request.
+      const childId = "explainer-fixture";
+      const prompt = (input as { prompt: string }).prompt;
+      const text =
+        "LLMは次の操作を提案し、ハーネスは検証・権限確認・実行・記録を担当します。";
+      return traceOperation(
+        "delegation",
+        "explainer",
+        { childId, prompt },
+        async () => {
+          const childHome = join(home, "agents", id);
+          const store = new SessionStore(childHome);
+          await store.load();
+          await store.save({
+            id: childId,
+            title: "explainer（静的履歴fixture）",
+            workspaceId: null,
+            cwd,
+            model: "claude-haiku-4-5",
+            effort: "high",
+            readOnly: true,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            providers: ["claude"],
+          });
+          const messages = [
+            {
+              role: "user" as const,
+              content: [{ type: "text" as const, text: prompt }],
+            },
+            {
+              role: "assistant" as const,
+              content: [{ type: "text" as const, text }],
+            },
+          ];
+          await store.append(childId, messages, clean);
+          await withSessionTrace(childHome, childId, clean, async () => {
+            const span = beginTrace(
+              "llm",
+              "静的子履歴fixture（通信なし）",
+              { messages: [messages[0]] },
+              true,
+            );
+            span.end({ message: messages[1] }, "完了");
+          });
+          return { content: text };
+        },
+        { agentId: childId },
+      );
+    },
   });
   const result = await withSessionTrace(home, id, clean, () =>
     runTurn(

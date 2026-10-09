@@ -9,7 +9,6 @@ import {
   grantFor,
   normalizeCall,
 } from "../core/permissions.js";
-import { mcpTools } from "../tools/mcp.js";
 import { McpApprovals } from "./approvals.js";
 import {
   displayServer,
@@ -230,65 +229,6 @@ describe("result formatting", () => {
   });
 });
 
-describe("McpSearch / McpCall (§25.4)", () => {
-  let manager: McpManager | undefined;
-  afterEach(async () => {
-    await manager?.close();
-    manager = undefined;
-  });
-  it("searches tools, validates input and wraps results as external content", async () => {
-    manager = new McpManager({ cwd: process.cwd() });
-    await manager.connect([fixtureServer("fx")], signal());
-    const tools = new Map(mcpTools(manager));
-    expect(tools.get("McpSearch")!.spec.description).toContain(
-      "Connected servers at session start: fx",
-    );
-    const all = JSON.parse(
-      (await tools.get("McpSearch")!.execute({}, signal())).content,
-    );
-    expect(all.kind).toBe("external_content");
-    expect(all.tools).toHaveLength(6);
-    const found = JSON.parse(
-      (await tools.get("McpSearch")!.execute({ query: "numbers" }, signal()))
-        .content,
-    );
-    expect(found.tools.map((t: { name: string }) => t.name)).toEqual([
-      "mcp__fx__add",
-    ]);
-    expect(found.tools[0].inputSchema.required).toEqual(["a", "b"]);
-    const call = tools.get("McpCall")!;
-    expect(await call.validate({ server: "fx", tool: "nope" })).toContain(
-      "McpSearch",
-    );
-    expect(
-      await call.validate({ server: "fx", tool: "add", input: { a: 1 } }),
-    ).toContain("b");
-    expect(
-      await call.validate({ server: "fx", tool: "add", input: [] }),
-    ).toBeDefined();
-    expect(
-      await call.validate({ server: "fx", tool: "add", input: { a: 1, b: 2 } }),
-    ).toBeUndefined();
-    const ok = await call.execute(
-      { server: "fx", tool: "add", input: { a: 1, b: 2 } },
-      signal(),
-    );
-    expect(ok.isError).toBeUndefined();
-    expect(JSON.parse(ok.content)).toMatchObject({
-      kind: "external_content",
-      server: "fx",
-      tool: "add",
-    });
-    const failed = await call.execute({ server: "fx", tool: "fail" }, signal());
-    expect(failed.isError).toBe(true);
-    const big = JSON.parse(
-      (await call.execute({ server: "fx", tool: "big" }, signal())).content,
-    );
-    expect(big.truncated).toBe(true);
-    expect(big.content.length).toBeLessThan(30000);
-  }, 30_000);
-});
-
 describe("MCP permissions (§25.5)", () => {
   const mcpCall = (server: string, tool: string) => ({
     id: "t",
@@ -446,31 +386,6 @@ describe("resources, prompts and list_changed (§25 M2)", () => {
     expect(
       await manager.prompt("fx", "review", { file: "a.ts" }, signal()),
     ).toBe("Review a.ts");
-    const tools = new Map(mcpTools(manager));
-    const listed = JSON.parse(
-      (await tools.get("ListMcpResources")!.execute({}, signal())).content,
-    );
-    expect(listed.kind).toBe("external_content");
-    expect(listed.resources[1]).toMatchObject({
-      uri: "fixture://readme",
-      description: "Fixture README".replace("README", "readme"),
-    });
-    const read = tools.get("ReadMcpResource")!;
-    expect(await read.validate({ server: "nope", uri: "x" })).toBeDefined();
-    expect(
-      JSON.parse(
-        (
-          await read.execute(
-            { server: "fx", uri: "fixture://readme" },
-            signal(),
-          )
-        ).content,
-      ),
-    ).toMatchObject({ kind: "external_content", content: "Fixture README" });
-    const missing = await read
-      .execute({ server: "fx", uri: "fixture://none" }, signal())
-      .catch((e: Error) => ({ content: e.message, isError: true }));
-    expect(missing.isError).toBe(true);
   }, 30_000);
   it("refreshes lists on list_changed and reports what changed once", async () => {
     const changed: string[] = [];

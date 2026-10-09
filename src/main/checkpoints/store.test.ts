@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, expect, it, vi } from "vitest";
 import { FileCheckpointStore } from "./store.js";
-import { FileAccess, fileTools } from "../tools/files.js";
+import { FileAccess } from "../tools/file-access.js";
 import { SessionStore } from "../session/store.js";
 import { rewindRecord } from "../session/rewind-command.js";
 import { headlessRewind } from "../session/headless-rewind.js";
@@ -36,20 +36,15 @@ async function change(path: string, content: string, messages = 0) {
   await hooks.afterWrite(canonical, Buffer.from(content));
   return canonical;
 }
-it("captures once per turn through real tools and restores exact BOM/CRLF bytes", async () => {
+it("captures once per turn through checkpoint hooks and restores exact BOM/CRLF bytes", async () => {
   const original = Buffer.from("\ufeffbefore\r\n");
   await writeFile(join(cwd, "a"), original);
-  const tools = fileTools(access);
   const hooks = await store.begin("s", cwd, 0, clean, vi.fn());
+  const path = await access.path("a");
   for (const content of ["second", "third"]) {
-    await tools.get("Read")!.execute({ path: "a" }, signal());
-    expect(
-      (
-        await tools
-          .get("Write")!
-          .execute({ path: "a", content }, signal(), { checkpoint: hooks })
-      ).isError,
-    ).toBeFalsy();
+    await hooks.beforeWrite(path);
+    await writeFile(path, content);
+    await hooks.afterWrite(path, Buffer.from(content));
   }
   const plan = await store.preview("s", 1);
   expect(plan.entries).toHaveLength(1);
@@ -162,16 +157,17 @@ it("refuses hard links and tampered backup data without preventing other restore
   expect(await readFile(join(cwd, "b"), "utf8")).toBe("after");
 });
 it("never writes when backup fails and excludes all files after cancellation", async () => {
-  const tools = fileTools(access);
   await expect(
-    tools.get("Write")!.execute({ path: "new", content: "x" }, signal(), {
-      checkpoint: {
+    (async () => {
+      const checkpoint = {
         beforeWrite: async () => {
           throw new Error("failed");
         },
-        afterWrite: async () => undefined,
-      },
-    }),
+      };
+      const path = await access.path("new");
+      await checkpoint.beforeWrite();
+      await writeFile(path, "x");
+    })(),
   ).rejects.toThrow("failed");
   await expect(readFile(join(cwd, "new"))).rejects.toMatchObject({
     code: "ENOENT",

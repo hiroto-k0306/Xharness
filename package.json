@@ -34,7 +34,6 @@
     "spike:codex:abort": "tsx spike/codex/r2-abort.ts",
     "spike:codex:encrypted-replay": "tsx spike/codex/x3-encrypted-replay.ts",
     "spike:cli:refresh": "tsx spike/cli-refresh.ts",
-    "spike:claude:thinking-binding": "tsx spike/claude/thinking-binding.ts",
     "dev": "electron-vite dev",
     "dev:fake": "electron-vite dev -- --fake",
     "build": "electron-vite build",

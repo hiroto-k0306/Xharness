@@ -6,12 +6,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { type Message } from "../core/types.js";
 import { type Provider } from "../providers/provider.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
-import { WorkspaceTrust } from "../config/trust.js";
+import { SessionStore } from "./store.js";
 import { decidePermission } from "../core/permissions.js";
 import { reserveLlmCall } from "../core/llm-budget.js";
 import { type UiEvent } from "../../shared/ipc.js";
 import { SessionController } from "./controller.js";
-import { SessionStore } from "./store.js";
 import { readLlmCalls, withSessionCalls } from "./llm-calls.js";
 import { Repository, runGit } from "./repository.js";
 
@@ -38,9 +37,18 @@ const answer: Message = {
   role: "assistant",
   content: [{ type: "text", text: "offline answer" }],
 };
-async function setup(provider: Provider, model = "fake", workspace?: string) {
+async function setup(
+  provider: Provider,
+  model = "claude:opus",
+  workspace?: string,
+) {
   const home = await mkdtemp(join(tmpdir(), "xh-review-test-"));
   const events: UiEvent[] = [];
+  const official = vi.fn(async () => ({
+    workflowId: "offline",
+    status: "completed" as const,
+    summary: "offline answer",
+  }));
   const controller = new SessionController({
     provider,
     model,
@@ -48,7 +56,7 @@ async function setup(provider: Provider, model = "fake", workspace?: string) {
     fake: true,
     version: "test",
     host: { pickFolder: async () => workspace },
-    createTools: () => new Map(),
+    officialSession: official,
     emit: (e) => events.push(e),
   });
   await controller.init();
@@ -61,7 +69,7 @@ async function setup(provider: Provider, model = "fake", workspace?: string) {
   });
   if (!created.ok || !created.sessionId)
     throw new Error("fixture session failed");
-  return { controller, home, events, sessionId: created.sessionId };
+  return { controller, home, events, official, sessionId: created.sessionId };
 }
 
 it.each(["abort", "close_session", "shutdown"] as const)(
@@ -74,15 +82,17 @@ it.each(["abort", "close_session", "shutdown"] as const)(
         script: [{ type: "message", message: answer, stopReason: "end_turn" }],
         onRequest,
       }),
-      "fake",
+      "claude:opus",
       workspace,
     );
     const entered = deferred<void>();
-    const release = deferred<boolean>();
-    vi.spyOn(WorkspaceTrust.prototype, "isTrusted").mockImplementationOnce(
-      () => {
+    const release = deferred<void>();
+    const state = SessionStore.prototype.evaluationTask;
+    vi.spyOn(SessionStore.prototype, "evaluationTask").mockImplementationOnce(
+      async function (this: SessionStore, id) {
         entered.resolve();
-        return release.promise;
+        await release.promise;
+        return state.call(this, id);
       },
     );
     const send = c.controller.handle({
@@ -91,122 +101,26 @@ it.each(["abort", "close_session", "shutdown"] as const)(
       text: "offline test",
     });
     await entered.promise;
-    expect(c.events).toContainEqual({
-      type: "turn",
-      sessionId: c.sessionId,
-      status: "running",
-    });
     const stopped =
       action === "shutdown"
         ? c.controller.shutdown()
         : c.controller.handle({ type: action, sessionId: c.sessionId });
-    release.resolve(true);
+    release.resolve();
     expect(await send).toMatchObject({
       ok: false,
       error: "送信を中断しました。",
     });
     await stopped;
     expect(onRequest).not.toHaveBeenCalled();
-    expect(c.events).toContainEqual({
-      type: "turn",
-      sessionId: c.sessionId,
-      status: "idle",
-      stopCause: "aborted",
-    });
+    expect(c.official).not.toHaveBeenCalled();
+    await expect(
+      readFile(join(c.home, "sessions", c.sessionId + ".jsonl")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
     expect((await c.controller.state()).sessions[0]?.status).toBe("idle");
     expect((await readLlmCalls(c.home, c.sessionId)).session).toBe(0);
     await c.controller.shutdown();
   },
 );
-
-it("rejects overlapping compact and send, and preserves the session cap after restart", async () => {
-  const entered = deferred<void>();
-  const release = deferred<void>();
-  let calls = 0;
-  const provider: Provider = {
-    id: "codex",
-    models: () => [{ id: "gpt-6-luna", contextTokens: 272000 }],
-    async *stream(_request, signal) {
-      reserveLlmCall(signal, true);
-      calls++;
-      entered.resolve();
-      await release.promise;
-      yield {
-        type: "message_done",
-        message: answer,
-        stopReason: "end_turn",
-        usage: { inputTokens: 0, outputTokens: 0 },
-      };
-    },
-  };
-  const c = await setup(provider, "gpt-6-luna");
-  await writeFile(
-    join(c.home, "config.yaml"),
-    "limits: {llmCallsPerTurn: 1, llmCallsPerSession: 1}\n",
-  );
-  const messages: Message[] = Array.from({ length: 4 }, (_, i) => [
-    {
-      role: "user" as const,
-      content: [{ type: "text" as const, text: "turn " + i }],
-    },
-    answer,
-  ]).flat();
-  await new SessionStore(c.home).append(c.sessionId, messages, (s) => s);
-  await c.controller.handle({ type: "close_session", sessionId: c.sessionId });
-  await c.controller.handle({ type: "open_session", sessionId: c.sessionId });
-  const first = c.controller.handle({
-    type: "send",
-    sessionId: c.sessionId,
-    text: "/compact",
-  });
-  const second = c.controller.handle({
-    type: "send",
-    sessionId: c.sessionId,
-    text: "/compact",
-  });
-  await entered.promise;
-  expect(await second).toMatchObject({
-    ok: false,
-    error: "Turn already running",
-  });
-  expect(
-    await c.controller.handle({
-      type: "send",
-      sessionId: c.sessionId,
-      text: "normal",
-    }),
-  ).toMatchObject({ ok: false });
-  release.resolve();
-  expect(await first).toEqual({ ok: true });
-  expect(calls).toBe(1);
-  expect((await readLlmCalls(c.home, c.sessionId)).session).toBe(1);
-  await c.controller.shutdown();
-  await new SessionStore(c.home).append(
-    c.sessionId,
-    messages.slice(0, 4),
-    (s) => s,
-  );
-  const resumed = new SessionController({
-    provider,
-    model: "gpt-6-luna",
-    home: c.home,
-    fake: true,
-    version: "test",
-    host: { pickFolder: async () => undefined },
-    createTools: () => new Map(),
-    emit: () => {},
-  });
-  await resumed.init();
-  expect(
-    await resumed.handle({
-      type: "send",
-      sessionId: c.sessionId,
-      text: "/compact",
-    }),
-  ).toMatchObject({ ok: false });
-  expect(calls).toBe(1);
-  await resumed.shutdown();
-}, 15000); // Windows full-suite contention includes filesystem setup and reload.
 
 it("rejects overlapping budget scopes even before their initial counter write", async () => {
   const home = await mkdtemp(join(tmpdir(), "xh-review-budget-"));

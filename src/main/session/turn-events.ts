@@ -23,7 +23,7 @@ export function updateQuota(ctx: ControllerContext, event: UsageEvent) {
     (ctx.options.quotaNow ?? Date.now)(),
     !!ctx.options.fake ||
       !!(ctx.options.providers ?? [ctx.options.provider]).find(
-        (p) => p.id === event.provider,
+        (p) => p?.id === event.provider,
       )?.offline,
   );
   // 枠ごとに最新の値を残す(イベントに一部の枠しか無いときも、ほかの枠を消さない)
@@ -130,7 +130,10 @@ export class TurnEvents {
     private readonly session: StoredSession,
     private readonly rt: Runtime,
   ) {
-    this.activeProvider = ctx.options.provider.id;
+    this.activeProvider =
+      resolveModel(session.model, ctx.options.aliases)?.provider ??
+      ctx.options.provider?.id ??
+      "claude";
   }
 
   private get sessionId() {
@@ -276,10 +279,8 @@ export class TurnEvents {
           sessionId,
           receiptId,
           provider:
-            resolveModel(
-              this.rt.workflow?.mainModel ??
-                (ctx.sessions.get(sessionId) ?? this.session).model,
-            )?.provider ?? this.activeProvider,
+            resolveModel((ctx.sessions.get(sessionId) ?? this.session).model)
+              ?.provider ?? this.activeProvider,
           tool: event.name,
           input: safeInput(event.input, clean),
         });

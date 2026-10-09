@@ -3,7 +3,6 @@ import { mkdtemp, mkdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import * as mainConfig from "../config/config.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
 import { SessionController } from "./controller.js";
 import { SessionStore } from "./store.js";
@@ -33,11 +32,18 @@ async function fixture() {
   const events: UiEvent[] = [];
   const options = {
     home,
-    model: "fake",
+    model: "claude:opus",
     fake: true,
     version: "test",
     host: { pickFolder: async () => root },
-    createTools: () => new Map(),
+    officialSession: async () => {
+      onRequest();
+      return {
+        workflowId: "offline",
+        status: "completed" as const,
+        summary: "offline",
+      };
+    },
     emit: (e: UiEvent) => events.push(e),
     provider: new FakeProvider({
       onRequest,
@@ -69,7 +75,7 @@ async function fixture() {
 }
 
 it.each(
-  (["config", "history"] as const).flatMap((stage) =>
+  (["task state", "history"] as const).flatMap((stage) =>
     (["abort", "stop", "close_session", "shutdown"] as const).map(
       (action) => [stage, action] as const,
     ),
@@ -78,13 +84,13 @@ it.each(
   const c = await fixture();
   const entered = deferred(),
     release = deferred();
-  if (stage === "config") {
-    const load = mainConfig.loadMainConfig;
-    vi.spyOn(mainConfig, "loadMainConfig").mockImplementationOnce(
-      async (...args) => {
+  if (stage === "task state") {
+    const load = SessionStore.prototype.evaluationTask;
+    vi.spyOn(SessionStore.prototype, "evaluationTask").mockImplementationOnce(
+      async function (this: SessionStore, id) {
         entered.resolve();
         await release.promise;
-        return load(...args);
+        return load.call(this, id);
       },
     );
   } else {

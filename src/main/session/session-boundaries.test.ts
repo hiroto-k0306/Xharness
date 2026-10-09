@@ -39,7 +39,7 @@ async function fixture(worktree = false) {
   const events: UiEvent[] = [];
   const options = {
     home,
-    model: "fake",
+    model: "claude:opus",
     fake: true,
     version: "test",
     provider: new FakeProvider({
@@ -57,7 +57,14 @@ async function fixture(worktree = false) {
     }),
     host: { pickFolder: async () => root },
     emit: (e: UiEvent) => events.push(e),
-    createTools: () => new Map(),
+    officialSession: async () => {
+      onRequest();
+      return {
+        workflowId: "offline",
+        status: "completed" as const,
+        summary: "offline",
+      };
+    },
   };
   const first = new SessionController(options);
   await first.init();
@@ -308,41 +315,5 @@ it("rechecks the root when a different session starts worktree removal during hi
   expect(c.onRequest).not.toHaveBeenCalled();
   removeRelease.resolve();
   await remove;
-  await c.controller.shutdown();
-});
-
-it("keeps due scheduled work pending while send preparation holds the shared reservation", async () => {
-  const c = await fixture();
-  vi.useFakeTimers();
-  expect(
-    await c.controller.handle({
-      type: "send",
-      sessionId: c.id,
-      text: "/schedule after 1 queued",
-    }),
-  ).toMatchObject({ ok: true });
-  const entered = deferred(),
-    release = deferred();
-  vi.spyOn(SessionStore.prototype, "messages").mockImplementationOnce(
-    async () => {
-      entered.resolve();
-      await release.promise;
-      return [];
-    },
-  );
-  const send = c.controller.handle({
-    type: "send",
-    sessionId: c.id,
-    text: "offline",
-  });
-  await entered.promise;
-  await vi.advanceTimersByTimeAsync(1100);
-  expect(c.onRequest).not.toHaveBeenCalled();
-  expect(JSON.stringify(c.events)).not.toContain("送信を開始できなかった");
-  release.resolve();
-  await send;
-  await vi.waitFor(() => expect(c.onRequest).toHaveBeenCalledTimes(2), {
-    timeout: 10000,
-  });
   await c.controller.shutdown();
 });

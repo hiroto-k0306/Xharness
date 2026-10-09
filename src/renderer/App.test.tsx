@@ -1,37 +1,63 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import image from "../../test/fixtures/images/pixel.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { beforeEach, describe, expect, it } from "vitest";
-import { FakeProvider } from "../main/providers/fake/fake-provider.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SessionController } from "../main/session/controller.js";
-import { type Tool } from "../main/tools/registry.js";
-import { lifecycleTools } from "../main/tools/lifecycle.js";
-import { parseCommand, type HarnessApi, type UiEvent } from "../shared/ipc.js";
+import { FakeProvider } from "../main/providers/fake/fake-provider.js";
+import {
+  parseCommand,
+  type HarnessApi,
+  type UiEvent,
+  type TranscriptItem,
+} from "../shared/ipc.js";
 import { App } from "./App.js";
 import { useStore } from "./state/store.js";
 
 // main の SessionController をそのまま使い、IPC の代わりにメモリ内で繋ぐ。
 // parseCommand を必ず通すので、実際の IPC と同じ検証を受ける。
-const readTool: Tool = {
-  spec: { name: "Read", description: "Read", inputSchema: {} },
-  readOnly: true,
-  validate: async () => undefined,
-  execute: async () => ({ content: "file body" }),
-};
+type OfficialBridge = NonNullable<
+  ConstructorParameters<typeof SessionController>[0]["officialSession"]
+>;
 let controller: SessionController;
+let fixtureProvider: FakeProvider;
+const completed = () => ({
+  workflowId: "app-official-fixture",
+  status: "completed",
+  intent: "question" as const,
+  summary: "pong",
+  taskRequired: false,
+});
 
-async function setup(provider = new FakeProvider(), config?: string) {
+async function setup(
+  bridge: OfficialBridge = vi.fn(async () => completed()),
+  config?: string,
+  savedItems: TranscriptItem[] = [],
+) {
+  await controller?.shutdown();
   // テストごとに独立した配線にする(前のテストの遅れたイベントを混ぜない)
-  const bus: { listener?: (e: UiEvent) => void } = {};
+  const listeners = new Set<(e: UiEvent) => void>();
   const home = await mkdtemp(join(tmpdir(), "xh-app-"));
   if (config) await writeFile(join(home, "config.yaml"), config);
   const folder = await mkdtemp(join(tmpdir(), "xh-folder-"));
+  // 互換状態のモデル情報だけに使い、旧HTTP/独自ループが呼ばれたら失敗させる。
+  fixtureProvider = new FakeProvider();
+  vi.spyOn(fixtureProvider, "stream").mockImplementation(() => {
+    throw new Error("Legacy model execution is unavailable in this fixture");
+  });
   controller = new SessionController({
-    provider,
-    model: "fake",
+    provider: fixtureProvider,
+    model: "claude:opus",
+    officialSession: bridge,
     home,
     fake: true,
     version: "0.0.1",
@@ -39,9 +65,19 @@ async function setup(provider = new FakeProvider(), config?: string) {
     // Electron のイベントチャネルは invoke の返答と独立して届く。
     // new_session の空の transcript が返答より後に届く順序も再現する。
     emit: (e) => {
-      setTimeout(() => act(() => bus.listener?.(e)), 0);
+      setTimeout(
+        () =>
+          act(() => {
+            for (const listener of listeners)
+              listener(
+                e.type === "transcript"
+                  ? { ...e, items: [...savedItems, ...e.items] }
+                  : e,
+              );
+          }),
+        0,
+      );
     },
-    createTools: () => new Map([...lifecycleTools(), ["Read", readTool]]),
   });
   await controller.init();
   const api: HarnessApi = {
@@ -51,8 +87,10 @@ async function setup(provider = new FakeProvider(), config?: string) {
       return controller.handle(parsed);
     },
     onEvent(l) {
-      bus.listener = l;
-      return () => (bus.listener = undefined);
+      listeners.add(l);
+      return () => {
+        listeners.delete(l);
+      };
     },
   };
   window.harness = api;
@@ -70,6 +108,10 @@ async function setup(provider = new FakeProvider(), config?: string) {
   });
 }
 beforeEach(() => setup());
+afterEach(async () => {
+  await controller?.shutdown();
+  expect(fixtureProvider.stream).not.toHaveBeenCalled();
+});
 
 describe("App wired to the real SessionController", () => {
   it("requires confirmation to delete a session and removes its history through the controller", async () => {
@@ -99,28 +141,29 @@ describe("App wired to the real SessionController", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
   it("warns when saved session images exceed the configured threshold without blocking", async () => {
-    await setup(
-      new FakeProvider(),
-      "images: {maxPerMessage: 2, warnSessionBytes: 1}",
-    );
+    await setup(undefined, "images: {maxPerMessage: 2, warnSessionBytes: 1}");
     render(<App />);
     await screen.findByText("+ new session");
     await userEvent.type(screen.getByLabelText("prompt"), "hello{Enter}");
     await screen.findByText("pong");
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
-    await act(async () => {
-      expect(
-        await window.harness.command({
-          type: "send",
-          sessionId: useStore.getState().app!.currentSessionId!,
-          text: "",
-          images: [image],
-        }),
-      ).toMatchObject({ ok: true });
+    const id = useStore.getState().app!.currentSessionId!;
+    // 保存済み旧画像の表示fixture。公式モデルへの画像送信は行わない。
+    act(() => {
+      useStore.setState((state) => ({
+        app: state.app
+          ? {
+              ...state.app,
+              sessions: state.app.sessions.map((session) =>
+                session.id === id ? { ...session, imageBytes: 2 } : session,
+              ),
+            }
+          : null,
+      }));
     });
     expect(
       await screen.findByText(/セッションの画像合計が警告値/),
-    ).toHaveTextContent("/compact");
+    ).toHaveTextContent("旧 /compact に未対応");
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
   });
   it("keeps image zoom focused when a running turn completes without typing into the prompt", async () => {
@@ -128,14 +171,15 @@ describe("App wired to the real SessionController", () => {
     const ready = new Promise<void>((resolve) => {
       finish = resolve;
     });
-    // ターンの終了を画像を開いた後まで待たせ、時間に依存せず遷移を再現する。
-    class WaitingProvider extends FakeProvider {
-      override async *stream(...args: Parameters<FakeProvider["stream"]>) {
+    // 保存画像の閲覧中に公式テキスト応答が終了するUI遷移を再現する。
+    await setup(
+      async () => {
         await ready;
-        yield* super.stream(...args);
-      }
-    }
-    await setup(new WaitingProvider());
+        return completed();
+      },
+      undefined,
+      [{ kind: "user", id: "saved-image", text: "保存画像", images: [image] }],
+    );
     render(<App />);
     await screen.findByText("+ new session");
     await userEvent.click(screen.getByRole("button", { name: /new session/ }));
@@ -152,7 +196,6 @@ describe("App wired to the real SessionController", () => {
             type: "send",
             sessionId: id,
             text: "see",
-            images: [image],
           }),
         ).toMatchObject({ ok: true });
       });
@@ -178,7 +221,7 @@ describe("App wired to the real SessionController", () => {
       expect(thumb).toHaveFocus();
       expect(
         useStore.getState().views[id]!.items.filter((i) => i.kind === "user"),
-      ).toHaveLength(1);
+      ).toHaveLength(2);
       expect(prompt).toHaveValue("draft");
       await userEvent.clear(prompt);
       await userEvent.type(prompt, "after");
@@ -187,54 +230,47 @@ describe("App wired to the real SessionController", () => {
       finish();
     }
   });
-  it("answers AskUserQuestion through the normal send command and provider history", async () => {
+  it("keeps superseded saved question choices readable and accepts a new official text reply", async () => {
     const requests: string[] = [];
     await setup(
-      new FakeProvider({
-        script: [
-          {
-            type: "message",
-            stopReason: "tool_use",
-            message: {
-              role: "assistant",
-              content: [
-                {
-                  type: "tool_use",
-                  id: "q",
-                  name: "AskUserQuestion",
-                  input: {
-                    question: "どちらで進めますか？",
-                    options: ["修正する", "調査する"],
-                  },
-                },
-              ],
-            },
+      async (request) => {
+        requests.push(request.text);
+        return completed();
+      },
+      undefined,
+      [
+        {
+          kind: "tool",
+          id: "saved-question",
+          tool: "AskUserQuestion",
+          summary: "保存された質問",
+          status: "ok",
+          question: {
+            question: "どちらで進めますか？",
+            options: ["修正する", "調査する"],
           },
-        ],
-        onRequest: (request) => {
-          requests.push(
-            request.messages
-              .at(-1)!
-              .content.flatMap((b) => (b.type === "text" ? [b.text] : []))
-              .join("\n"),
-          );
         },
-      }),
+      ],
     );
     render(<App />);
     await screen.findByText("+ new session");
     await userEvent.type(screen.getByLabelText("prompt"), "質問して{Enter}");
+    await screen.findByText("pong");
+    await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
     const button = await screen.findByRole("button", { name: "1. 修正する" });
-    await waitFor(() => expect(button).toBeEnabled());
-    await userEvent.click(button);
-    expect(
-      await within(screen.getByTestId("transcript")).findByText("修正する"),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("pong")).toBeInTheDocument();
+    expect(button).toBeDisabled();
+    expect(screen.getByText("どちらで進めますか？")).toBeVisible();
+    await userEvent.type(screen.getByLabelText("prompt"), "修正する{Enter}");
+    await waitFor(() =>
+      expect(
+        within(screen.getByTestId("transcript")).getByText("修正する"),
+      ).toBeInTheDocument(),
+    );
+    await waitFor(() => expect(requests).toEqual(["質問して", "修正する"]));
     expect(requests).toEqual(["質問して", "修正する"]);
     expect(button).toBeDisabled();
   });
-  it("boots, creates a session on first send, streams a reply", async () => {
+  it("boots, creates a session on first send and receives an official reply", async () => {
     render(<App />);
     expect(await screen.findByText("+ new session")).toBeInTheDocument();
     expect(screen.getByText("FAKE")).toBeInTheDocument();
@@ -247,33 +283,36 @@ describe("App wired to the real SessionController", () => {
     expect(screen.getByTestId("group-other")).toHaveTextContent("hello");
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
   });
-  it("asks inline for a tool call and continues after pressing y", async () => {
+  // 旧Readのy/n許可は廃止した独自ToolRegistryの契約。公式操作の承認は
+  // OfficialWorkflowPanel.test.tsxと公式serviceの境界テストで検証する。
+  it("refuses direct image sends through the official controller without dispatch", async () => {
+    const bridge = vi.fn(async () => completed());
+    await setup(bridge);
     render(<App />);
     await screen.findByText("+ new session");
-    await userEvent.type(screen.getByLabelText("prompt"), "read a.txt{Enter}");
-    const dialog = await screen.findByRole("alertdialog");
-    expect(dialog).toHaveTextContent("Read");
-    expect(screen.getByTestId("step-gate")).toHaveAttribute(
-      "data-state",
-      "waiting",
-    );
-    expect(screen.getByLabelText("prompt")).toBeDisabled();
-    await userEvent.keyboard("y");
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(await screen.findByText("pong")).toBeInTheDocument();
-    expect(document.querySelector("[data-status='ok']")).not.toBeNull();
-  });
-  it("denies with n and shows the card as denied", async () => {
-    render(<App />);
-    await screen.findByText("+ new session");
-    await userEvent.type(screen.getByLabelText("prompt"), "read a.txt{Enter}");
-    await screen.findByRole("alertdialog");
-    await userEvent.keyboard("n");
+    await userEvent.click(screen.getByRole("button", { name: /new session/ }));
     await waitFor(() =>
-      expect(document.querySelector("[data-status='denied']")).not.toBeNull(),
+      expect(useStore.getState().app!.currentSessionId).toBeTruthy(),
     );
+    const result = await window.harness.command({
+      type: "send",
+      sessionId: useStore.getState().app!.currentSessionId!,
+      text: "see",
+      images: [image],
+    });
+    expect(result).toMatchObject({ ok: false });
+    if (!result.ok) expect(result.error).toContain("画像");
+    expect(bridge).not.toHaveBeenCalled();
   });
   it("Esc does not stop a turn; the button immediately left of the model picker does", async () => {
+    await setup(async (_request, signal) => {
+      await new Promise<void>((_resolve, reject) =>
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        }),
+      );
+      return completed();
+    });
     render(<App />);
     await screen.findByText("+ new session");
     await userEvent.type(screen.getByLabelText("prompt"), "slow one{Enter}");
@@ -340,21 +379,22 @@ describe("App wired to the real SessionController", () => {
       screen.getByRole("button", { name: /^first(?: |$)/ }),
     ).not.toHaveAttribute("aria-current", "true");
   });
-  it("keeps the message in the input and shows one notice when the session folder is gone", async () => {
-    const { rm } = await import("node:fs/promises");
+  // フォルダー存在の事前選別は旧HTTP契約。現在の公式サービスが実行時に検査する。
+  // 送信拒否でdraftを戻し単一理由を表示するUI契約は、現役の入力上限で保護する。
+  it("keeps rejected official text in the input and displays one reason", async () => {
     render(<App />);
     await screen.findByText("+ new session");
     await userEvent.type(screen.getByLabelText("prompt"), "first{Enter}");
     await screen.findByText("pong");
     await waitFor(() => expect(screen.getByLabelText("prompt")).toBeEnabled());
-    const cwd = useStore.getState().app!.sessions[0]!.cwd;
-    await rm(cwd, { recursive: true, force: true });
-    await userEvent.type(screen.getByLabelText("prompt"), "second{Enter}");
+    const text = "x".repeat(4001);
+    fireEvent.change(screen.getByLabelText("prompt"), {
+      target: { value: text },
+    });
+    fireEvent.keyDown(screen.getByLabelText("prompt"), { key: "Enter" });
     await waitFor(() =>
-      expect(screen.getByLabelText("prompt")).toHaveValue("second"),
+      expect(screen.getByLabelText("prompt")).toHaveValue(text),
     );
-    const notices = screen.getAllByText(/作業フォルダが見つかりません/);
-    expect(notices).toHaveLength(1);
-    expect(screen.queryByText(/Working directory not found/)).toBeNull();
+    expect(screen.getAllByText(/公式経路の入力は1〜4000文字/)).toHaveLength(1);
   });
 });

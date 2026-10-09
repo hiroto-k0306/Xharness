@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isConnectionChoice } from "../../shared/connections.js";
 import { unavailableConnections } from "../connections/ui-registry.js";
-import { resolvePermissionMode } from "../../shared/permission-modes.js";
-import { SessionSchedules } from "./schedules.js";
 import { QuotaPauses, type QuotaPause } from "./quota-pause.js";
 import { ProjectMemory } from "./project-memory.js";
 import { Improvements, ImprovementFault } from "./improvements.js";
@@ -20,10 +18,8 @@ import { resumeConditions, resumeHash } from "./resume-conditions.js";
 import { checkpointFile } from "./context.js";
 import { readLlmCalls } from "./llm-calls.js";
 import {
-  attachmentInfo,
   sessionImageBytes,
   DEFAULT_IMAGES,
-  IMAGE_ERROR,
   type ImageAttachment,
 } from "../../shared/images.js";
 import { mkdir } from "node:fs/promises";
@@ -51,7 +47,7 @@ import {
 import { PermissionGate } from "./permission-gate.js";
 import { ReceiptStore } from "./receipts.js";
 import { Repository } from "./repository.js";
-import { compactNow, saveDefaultModel, setMode } from "./settings-commands.js";
+import { saveDefaultModel, setMode } from "./settings-commands.js";
 import {
   SessionStore,
   WorkspaceStore,
@@ -59,27 +55,16 @@ import {
   type StoredSession,
 } from "./store.js";
 import { itemsFromMessages } from "./transcript.js";
-import {
-  runMcpCommand,
-  runSessionTurn,
-  runOfficialSessionTurn,
-} from "./turn.js";
-import { runRewind } from "./rewind-command.js";
-import { rewindTurns, parseRewindChoice } from "../../shared/rewind.js";
+import { runSessionTurn, runOfficialSessionTurn } from "./turn.js";
+import { parseRewindChoice } from "../../shared/rewind.js";
 import { FileCheckpointStore } from "../checkpoints/store.js";
 import {
   finishWorktree,
   RepositoryOpener,
   restoreWorktree,
 } from "./worktree-commands.js";
-import { emitMcpState, MCP_COMMAND } from "./mcp-session.js";
 import { exportExecutionReport } from "./report.js";
-import {
-  costSummary,
-  expandCommand,
-  initAgents,
-  userCommands,
-} from "./slash-commands.js";
+import { userCommands } from "./slash-commands.js";
 
 export { defaultTools } from "./context.js";
 export type { ControllerOptions, Host } from "./context.js";
@@ -91,7 +76,6 @@ export type { ControllerOptions, Host } from "./context.js";
  * - context.ts            共有の型(Runtime など)と小さな関数
  * - turn.ts               1ターンの実行と保存
  * - turn-events.ts        Agent Loop のイベント → 画面イベント・レシート
- * - workflow-factory.ts   タスク段階(WorkflowRuntime)の組み立て
  * - permission-gate.ts    権限確認(STEP 4)
  * - worktree-commands.ts  repository / worktree の操作
  * - settings-commands.ts  権限モード・既定モデル・/compact
@@ -120,7 +104,6 @@ export class SessionController {
     { requestId: string; abort: AbortController }
   >();
   private readonly quotaPauses: QuotaPauses;
-  private readonly schedules: SessionSchedules;
   private readonly runtimes = new Map<string, Runtime>();
   private readonly sessions: SessionStore;
   private readonly workspaces: WorkspaceStore;
@@ -150,41 +133,6 @@ export class SessionController {
       options.localBrowserTimeoutMs,
     );
     this.handoffs = new Handoffs(options.home);
-    this.schedules = new SessionSchedules({
-      now: () => Date.now(),
-      busy: (id) =>
-        this.ctx.sessionBusy.has(id) ||
-        (this.runtimes.get(id)?.status ?? "idle") !== "idle",
-      send: (id, text, signal) => this.send(id, text, undefined, signal),
-      notice: (sessionId, message) =>
-        this.options.emit({
-          type: "notice",
-          sessionId,
-          message: this.ctx.clean(message),
-          tone: "dim",
-        }),
-    });
-    const emit = options.emit;
-    options = {
-      ...options,
-      emit: (event) => {
-        emit(event);
-        if (
-          event.type === "turn" &&
-          event.status === "idle" &&
-          event.stopCause
-        ) {
-          if (
-            ["end_turn", "workflow_complete", "reported_done"].includes(
-              event.stopCause,
-            )
-          )
-            this.schedules.idle(event.sessionId);
-          else this.schedules.cancel(event.sessionId);
-        }
-      },
-    };
-    this.options = options;
     this.sessions = new SessionStore(options.home);
     this.workspaces = new WorkspaceStore(options.home);
     this.model = options.model;
@@ -243,7 +191,6 @@ export class SessionController {
 
   async init() {
     this.imageSettings = (await loadMainConfig(this.options.home)).images;
-    if (!this.options.fake) await this.options.authentication?.refresh();
     await Promise.all([this.sessions.load(), this.workspaces.load()]);
     this.sessions.fillDefaults({ model: this.model, effort: this.effort });
     await new FileCheckpointStore(this.options.home).purge(
@@ -309,9 +256,6 @@ export class SessionController {
         ? { connections: this.options.connections.views() }
         : {}),
       images: this.imageSettings,
-      authentication: this.options.fake
-        ? undefined
-        : this.options.authentication?.snapshot(),
       models: loadModelCatalog()
         .filter((m) => m.enabled)
         .map((m) => ({
@@ -794,7 +738,7 @@ export class SessionController {
                   session.id,
                   "明示モデル選択により以前の自動再開を取り消しました。",
                 );
-                this.schedules.cancel(session.id);
+
                 abort.signal.throwIfAborted();
                 const applied = await this.setModel(
                   session.id,
@@ -1003,7 +947,6 @@ export class SessionController {
             };
           this.ctx.sessionBusy.add(command.sessionId);
           try {
-            this.schedules.cancel(command.sessionId);
             await this.quotaPauses.cancel(
               command.sessionId,
               "会話を削除したため取消しました。",
@@ -1022,31 +965,12 @@ export class SessionController {
           }
         }
         case "refresh_auth":
-          this.candidatePreviews.clear();
-          this.ctx.candidateQuotas?.clear("claude");
-          this.ctx.candidateQuotas?.clear("codex");
-          if (!this.options.fake) await this.options.authentication?.refresh();
-          await this.emitState();
-          return { ok: true };
         case "authenticate":
-          if (this.stopped) return { ok: false, error: "Shutting down" };
-          if (this.options.fake || !this.options.authentication)
-            return { ok: false, error: "この起動では認証操作を利用できません" };
-          if (this.options.authentication.isAutoRefreshing())
-            return {
-              ok: false,
-              error: "認証の自動更新が終了してからログインしてください",
-            };
-          if ([...this.runtimes.values()].some((rt) => rt.status !== "idle"))
-            return {
-              ok: false,
-              error: "すべての実行が終了してから認証してください",
-            };
-          this.candidatePreviews.clear();
-          this.ctx.candidateQuotas?.clear(command.provider);
-          await this.options.authentication.authenticate(command.provider);
-          await this.emitState();
-          return { ok: true };
+          return {
+            ok: false,
+            error:
+              "この認証操作は廃止されました。公式CLI（claude / codex）で認証・更新してから再試行してください。現行ワークフローは資格情報の読取や自動更新を行いません。",
+          };
         case "restore_worktree":
           return await restoreWorktree(this.ctx, command);
         case "open_repository":
@@ -1370,7 +1294,6 @@ export class SessionController {
             command.sessionId,
             command.text,
             command.images,
-            undefined,
             command.officialTask,
           );
         case "abort": {
@@ -1379,7 +1302,7 @@ export class SessionController {
           this.browserJobs.get(command.sessionId)?.abort();
           await this.localBrowser.stop(command.sessionId);
           this.preparations.get(command.sessionId)?.abort.abort();
-          this.schedules.cancel(command.sessionId);
+
           const rt = this.runtimes.get(command.sessionId);
           if (rt) this.release(rt);
           await this.quotaPauses.cancel(
@@ -1535,7 +1458,6 @@ export class SessionController {
     sessionId: string,
     text: string,
     images?: ImageAttachment[],
-    scheduled?: AbortSignal,
     officialTask?: import("../../shared/official-session.js").OfficialTaskScope,
   ): Promise<CommandResult> {
     // Stop must remain usable while preparation/compact is awaiting I/O.
@@ -1569,9 +1491,6 @@ export class SessionController {
       return { ok: false, error: "Turn already running" };
     this.ctx.sessionBusy.add(sessionId);
     const abort = new AbortController();
-    const cancelScheduled = () => abort.abort();
-    scheduled?.addEventListener("abort", cancelScheduled, { once: true });
-    if (scheduled?.aborted) abort.abort();
     let finish!: () => void;
     const preparation = {
       abort,
@@ -1586,7 +1505,6 @@ export class SessionController {
         sessionId,
         text,
         images,
-        scheduled,
         abort,
         officialTask,
       );
@@ -1595,7 +1513,6 @@ export class SessionController {
         return { ok: false, error: "送信を中断しました。" };
       throw error;
     } finally {
-      scheduled?.removeEventListener("abort", cancelScheduled);
       this.preparations.delete(sessionId);
       this.ctx.sessionBusy.delete(sessionId);
       finish();
@@ -1606,7 +1523,6 @@ export class SessionController {
     sessionId: string,
     text: string,
     images: ImageAttachment[] | undefined,
-    scheduled: AbortSignal | undefined,
     abort: AbortController,
     officialTask?: import("../../shared/official-session.js").OfficialTaskScope,
   ): Promise<CommandResult> {
@@ -1642,8 +1558,17 @@ export class SessionController {
       if (!text.trim() || text.length > 4000)
         return { ok: false, error: "公式経路の入力は1〜4000文字です。" };
       const rt = await this.load(sessionId);
+      // History I/O may overlap a worktree operation in another session.
+      const root = this.ctx.workspaceRoot(session);
+      if (
+        (root && this.ctx.worktreeBusy.has(root)) ||
+        this.otherWriterRunning(session)
+      )
+        return { ok: false, error: "Workspace writer busy" };
       if (rt.status !== "idle")
         return { ok: false, error: "Turn already running" };
+      if (await this.reportMissingCwd(session))
+        return { ok: false, error: "Working directory not found" };
       abort.signal.throwIfAborted();
       rt.abort = abort;
       rt.status = "running";
@@ -1712,324 +1637,38 @@ export class SessionController {
           error: "選択したアカウントのモデル一覧からモデルを選択してください。",
         };
     }
-    const imageSettings = (await loadMainConfig(this.options.home)).images;
-    abort.signal.throwIfAborted();
-    this.imageSettings = imageSettings;
-    if (scheduled?.aborted)
-      return { ok: false, error: "予約を取り消しました。" };
-    if ((images?.length ?? 0) > imageSettings.maxPerMessage)
+    if (selected === "legacy")
       return {
         ok: false,
-        error: `画像の添付は1メッセージ${imageSettings.maxPerMessage}枚までです。`,
+        error:
+          "旧HTTP・旧workflow実行は廃止されました。公式ワークフローを使用してください。",
       };
-    try {
-      images?.forEach(attachmentInfo);
-    } catch {
-      return { ok: false, error: IMAGE_ERROR };
-    }
-    if (images?.length && text.trim().startsWith("/"))
-      return {
-        ok: false,
-        error: "画像は通常のメッセージと一緒に送信してください。",
-      };
-    if (
-      /^(?:\/stop|(?:一旦)?(?:停止|中断)(?:して)?|止めて)[。！!]?$/u.test(
-        text.trim(),
-      )
-    ) {
-      if (!this.sessions.get(sessionId))
-        return { ok: false, error: "Unknown session" };
-      const rt = this.runtimes.get(sessionId);
-      this.schedules.cancel(sessionId);
-      if (rt) this.release(rt);
-      this.options.emit({
-        type: "notice",
-        sessionId,
-        tone: "dim",
-        message: "停止しました。再開するときは新しい指示を入力してください。",
-      });
-      return { ok: true };
-    }
-    if (!this.options.fake && this.options.authentication?.isBusy())
-      return { ok: false, error: "認証完了後に送信してください" };
-    const session = this.sessions.get(sessionId);
-    if (!session) return { ok: false, error: "Unknown session" };
-    if (this.stopped) return { ok: false, error: "Shutting down" };
+    const session = this.sessions.get(sessionId)!;
     const root = this.ctx.workspaceRoot(session);
-    if (root && this.ctx.worktreeBusy.has(root))
-      return { ok: false, error: "Workspace writer busy" };
-    const command = text.trim();
-    if (/^\/quota-resume(?:\s|$)/.test(command)) {
-      const [, action, extra] = command.split(/\s+/);
-      if (!extra && ["enable", "cancel", "now"].includes(action ?? ""))
-        return this.handle({
-          type: "quota_resume",
-          sessionId,
-          action: action as "enable" | "cancel" | "now",
-        });
-      this.options.emit({
-        type: "notice",
-        sessionId,
-        tone: "dim",
-        message:
-          "枠待ち: UIで自動再開・取消・手動再確認を選択できます。/quota-resume enable|cancel|now。通常会話(off)のツール実行前だけ対象です。",
-      });
-      return { ok: true };
-    }
-    if (/^\/(?:schedule|signal)(?:\s|$)/.test(command))
-      return this.schedules.command(sessionId, command);
-    const notice = (message: string): CommandResult => {
-      this.options.emit({
-        type: "notice",
-        sessionId,
-        tone: "dim",
-        message: this.ctx.clean(message),
-      });
-      return { ok: true };
-    };
-    if (/^\/(?:clear|resume|cost|init)(?:\s|$)/.test(command)) {
-      const [name, argument, extra] = command.split(/\s+/);
-      const rt = await this.load(sessionId);
-      abort.signal.throwIfAborted();
-      if (rt.status !== "idle")
-        return { ok: false, error: "実行終了後にコマンドを使用してください。" };
-      if (extra || (name !== "/resume" && argument))
-        return { ok: false, error: "コマンドの引数を確認してください。" };
-      if (name === "/clear")
-        return this.newSession(
-          session.workspaceId,
-          session.readOnly,
-          !!session.worktree,
-        );
-      if (name === "/resume") {
-        if (argument)
-          return this.handle({ type: "open_session", sessionId: argument });
-        return notice(
-          "再開する会話（/resume <sessionId>）：\n" +
-            this.sessions
-              .list()
-              .map((s) => `${s.id} · ${s.title}`)
-              .join("\n"),
-        );
-      }
-      if (name === "/cost")
-        return notice(
-          costSummary(
-            await readLlmCalls(this.options.home, sessionId),
-            rt.receipts ?? [],
-          ),
-        );
-      if (this.otherWriterRunning(session))
-        return { ok: false, error: "Workspace writer busy" };
-      rt.status = "running";
-      try {
-        const config = await loadProjectConfig(this.options.home, root, {
-          trusted:
-            !root ||
-            !!rt.trustedSession ||
-            (await this.ctx.trust.isTrusted(root)),
-        });
-        abort.signal.throwIfAborted();
-        const result = await initAgents(
-          session.cwd,
-          session.readOnly ||
-            (session.permissionMode ?? config.permissions.mode) === "plan",
-        );
-        if (result.ok)
-          notice(
-            "AGENTS.mdの雛形を作成しました。プロジェクトに合わせて編集してください。",
-          );
-        return result;
-      } finally {
-        rt.status = "idle";
-      }
-    }
-    if (/^\/mode(?:\s|$)/.test(command)) {
-      const [, mode, extra] = command.split(/\s+/);
-      const permissionMode = resolvePermissionMode(mode);
-      if (extra || !permissionMode)
-        return { ok: false, error: "Usage: /mode 通常|自動|計画" };
-      return setMode(this.ctx, {
-        type: "set_mode",
-        sessionId,
-        mode: permissionMode,
-      });
-    }
-    if (command === "/compact")
-      return this.authenticationRequired(session)
-        ? {
-            ok: false,
-            error:
-              "認証欄で公式CLIの認証・更新を許可してから再送信してください",
-          }
-        : compactNow(this.ctx, sessionId);
-    if (/^\/model(?:\s|$)/.test(command)) {
-      const [, model, effort, extra] = command.split(/\s+/);
-      if (!model)
-        return notice(
-          "モデル（/model <provider:model> [effort]）：\n" +
-            loadModelCatalog()
-              .filter((m) => m.enabled)
-              .map((m) => m.id)
-              .join("\n"),
-        );
-      if (!model || extra || (effort !== undefined && !isEffort(effort)))
-        return { ok: false, error: "Usage: /model provider:model [effort]" };
-      return this.setModel(sessionId, model, effort as Effort | undefined);
-    }
     const rt = await this.load(sessionId);
     abort.signal.throwIfAborted();
-    // Another session's worktree operation can claim the root while history
-    // loads. Our own session reservation prevents same-session deletion.
     if (root && this.ctx.worktreeBusy.has(root))
       return { ok: false, error: "Workspace writer busy" };
-    if (/^\/(?:undo|rewind)(?:\s|$)/.test(command)) {
-      const count = rewindTurns(command);
-      if (!count)
-        return { ok: false, error: "使い方：/undo または /rewind <正の整数>" };
-      if (rt.status !== "idle" || this.otherWriterRunning(session))
-        return {
-          ok: false,
-          error: "書き込み処理の終了後に巻き戻してください。",
-        };
-      rt.status = "running";
-      rt.closing = false;
-      rt.done = runRewind(this.ctx, session, rt, count);
-      return { ok: true, sessionId };
-    }
-    if (MCP_COMMAND.test(command)) {
-      // /mcp はモデルに送らない。状態の表示は実行中でもできるが、操作は待機中だけ(§25.8)
-      if (rt.status !== "idle") {
-        if (command !== "/mcp")
-          return { ok: false, error: "Turn already running" };
-        emitMcpState(this.ctx, session, rt, true);
-        return { ok: true };
-      }
-      rt.status = "running";
-      rt.closing = false;
-      rt.done = runMcpCommand(this.ctx, this.gate, session, rt, command).catch(
-        () => undefined,
-      );
-      return { ok: true, sessionId };
-    }
-    const phaseCommand = /^\/(?:phase|review)(?:\s|$)/.test(command);
-    if (rt.status !== "idle") {
-      if (phaseCommand && rt.workflow) {
-        const [name, phase, extra] = command.split(/\s+/);
-        if (extra || (name === "/review" && phase))
-          return { ok: false, error: "Invalid phase command" };
-        rt.workflow.queuePhase(name === "/review" ? "review" : (phase ?? ""));
-        this.options.emit({
-          type: "notice",
-          sessionId,
-          tone: "dim",
-          message: "段階の変更を次の STEP 6 終了時に反映します",
-        });
-        return { ok: true };
-      }
+    if (rt.status !== "idle")
       return { ok: false, error: "Turn already running" };
-    }
-    if (phaseCommand) {
-      const [name, phase, extra] = command.split(/\s+/);
-      if (!rt.workflow || extra || (name === "/review" && phase))
-        return { ok: false, error: "No workflow or invalid phase command" };
-      const requested = name === "/review" ? "review" : (phase ?? "");
-      rt.workflow.manualPhase(requested);
-      if (requested !== "review") return { ok: true };
-    }
-    if (this.otherWriterRunning(session)) {
-      this.options.emit({
-        type: "error",
-        sessionId,
-        message:
-          "同じワークスペースで書き込みセッションが実行中です。読み取り専用か worktree を使ってください",
-      });
+    if (this.otherWriterRunning(session))
       return { ok: false, error: "Workspace writer busy" };
-    }
-    // 確認より前に同期的に予約する(次の await の間に届いた二重送信を弾く)
-    if (this.authenticationRequired(session))
-      return {
-        ok: false,
-        error: "認証欄で公式CLIの認証・更新を許可してから再送信してください",
-      };
-    if (scheduled?.aborted)
-      return { ok: false, error: "予約を取り消しました。" };
+    if (await this.reportMissingCwd(session))
+      return { ok: false, error: "Working directory not found" };
+    abort.signal.throwIfAborted();
+    rt.abort = abort;
     rt.status = "running";
     rt.closing = false;
-    const cancelScheduled = () => abort.abort();
-    scheduled?.addEventListener("abort", cancelScheduled, { once: true });
-    rt.abort = abort;
-    let finish!: () => void;
-    rt.done = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    let launched = false;
-    this.options.emit({ type: "turn", sessionId, status: "running" });
-    // Resolve user definitions once. The expansion is a user message, never a second command.
-    try {
-      if ((await this.sessions.evaluationTask(sessionId))?.recoveryRequired)
-        return { ok: false, error: RECOVERY_NOTICE };
-      const expanded = expandCommand(
-        text,
-        await userCommands(
-          this.options.home,
-          session.cwd,
-          !root ||
-            !!rt.trustedSession ||
-            (await this.ctx.trust.isTrusted(root)),
-        ),
-      );
-      abort.signal.throwIfAborted();
-      if (expanded !== undefined) text = expanded;
-      else if (
-        /^\/[\p{L}\p{N}_-]+(?:\s|$)/u.test(command) &&
-        !phaseCommand &&
-        !command.startsWith("/mcp__")
-      ) {
-        return {
-          ok: false,
-          error: "コマンドが見つからないか、プロジェクトが未信頼です。",
-        };
-      }
-      // The reservation covers preparation too, so stop/close/shutdown can cancel it.
-      if (await this.reportMissingCwd(session))
-        return { ok: false, error: "Working directory not found" };
-      await this.quotaPauses.cancel(
-        sessionId,
-        "新しい指示を受けたため、以前の自動再開を取り消しました。",
-      );
-      abort.signal.throwIfAborted();
-      launched = true;
-      void runSessionTurn(this.ctx, this.gate, session, rt, text, images, abort)
-        .catch(() => undefined)
-        .finally(() => {
-          scheduled?.removeEventListener("abort", cancelScheduled);
-          finish();
-        });
-      return { ok: true, sessionId };
-    } catch {
-      return {
-        ok: false,
-        error: abort.signal.aborted
-          ? "送信を中断しました。"
-          : "ユーザー定義コマンドを読み込めませんでした。",
-      };
-    } finally {
-      if (!launched) {
-        scheduled?.removeEventListener("abort", cancelScheduled);
-        rt.status = "idle";
-        rt.abort = undefined;
-        this.options.emit({
-          type: "turn",
-          sessionId,
-          status: "idle",
-          ...(abort.signal.aborted ? { stopCause: "aborted" } : {}),
-        });
-        if (rt.closing) this.ctx.dropRuntime(sessionId);
-        finish();
-        await this.emitState();
-      }
-    }
+    rt.done = runSessionTurn(
+      this.ctx,
+      this.gate,
+      session,
+      rt,
+      text,
+      undefined,
+      abort,
+    );
+    return { ok: true, sessionId };
   }
 
   /** Testable clock tick; the desktop timer uses the same durable lease path. */
@@ -2063,18 +1702,6 @@ export class SessionController {
     signal.addEventListener("abort", cancel, { once: true });
     let rt: Runtime | undefined;
     try {
-      if (
-        this.authenticationRequired(session) ||
-        this.options.authentication?.isBusy() ||
-        (!this.options.fake &&
-          this.options.authentication
-            ?.snapshot()
-            .some(
-              (auth) =>
-                auth.provider === pause.provider && auth.status !== "available",
-            ))
-      )
-        return "認証の確認が必要です。枠待ちとは別に認証欄で確認してください。";
       const task = await this.sessions.evaluationTask(id);
       if (
         !task?.active ||
@@ -2143,25 +1770,6 @@ export class SessionController {
       this.ctx.sessionBusy.delete(id);
       await this.emitState();
     }
-  }
-
-  private authenticationRequired(session: StoredSession) {
-    if (session.connection && session.connection !== "legacy") return false;
-    if (this.options.fake || !this.options.authentication) return false;
-    const provider = resolveModel(
-      session.model,
-      this.runtimes.get(session.id)?.mainConfig?.aliases ??
-        this.options.aliases,
-    )?.provider;
-    const auth = this.options.authentication
-      .snapshot()
-      .find((v) => v.provider === provider);
-    if (
-      auth?.status === "expired" &&
-      this.options.authentication.canAutoRefresh()
-    )
-      return false;
-    return !!auth && auth.status !== "available";
   }
 
   /** §18.3: worktree を使わない書き込みセッションは、同じワークスペースで同時に1つまで */
@@ -2267,7 +1875,7 @@ export class SessionController {
   private async closeSession(sessionId: string): Promise<CommandResult> {
     this.candidatePreviews.delete(sessionId);
     this.preparations.get(sessionId)?.abort.abort();
-    this.schedules.cancel(sessionId);
+
     await this.quotaPauses.cancel(
       sessionId,
       "会話を閉じたため、自動再開を取り消しました。",
@@ -2303,7 +1911,7 @@ export class SessionController {
     this.handoffs.clear();
     this.candidatePreviews.clear();
     const quotaClosed = this.quotaPauses.close();
-    this.schedules.close();
+
     this.repositories.abort();
     const running: Promise<void>[] = [];
     for (const preparation of this.preparations.values()) {

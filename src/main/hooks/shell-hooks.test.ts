@@ -1,7 +1,4 @@
 import { it, expect, vi } from "vitest";
-import { mkdtemp, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   shellHooks,
   parseShellHooks,
@@ -15,7 +12,6 @@ import {
   type StepName,
 } from "../core/loop.js";
 import { type Tool } from "../tools/registry.js";
-import { shellSearchTools } from "../tools/shell-search.js";
 import { FakeProvider } from "../providers/fake/fake-provider.js";
 
 const signal = () => new AbortController().signal;
@@ -223,65 +219,3 @@ it.each([
 ])("rejects invalid configuration %j", (extra) => {
   expect(() => hooks([{ id: "invalid", step: "act", ...extra }])).toThrow();
 });
-it.skipIf(process.platform !== "win32")(
-  "PowerShell file expansion cannot execute filename content",
-  async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "xh-hook-ps-"));
-    const bash = shellSearchTools(cwd).get("Bash")!;
-    const receipts: Receipt[] = [];
-    const h = shellHooks({
-      hooks: hooks([
-        {
-          id: "args",
-          step: "act",
-          timing: "after",
-          command: "Write-Output {{files}}",
-        },
-      ]),
-      cwd,
-      agent: "main",
-      phase: () => "off",
-      bash,
-      approve: async () => true,
-      onReceipt: (r) => receipts.push(r),
-    });
-    await h.afterStep(
-      "act",
-      ctx("a'; Set-Content hacked.txt yes; #.ts"),
-      signal(),
-    );
-    expect(receipts[0]?.output).toContain("Set-Content hacked.txt");
-    await expect(readFile(join(cwd, "hacked.txt"))).rejects.toThrow();
-  },
-);
-it.skipIf(process.platform !== "win32")(
-  "PowerShell timeout becomes inject and abort stops the hook",
-  async () => {
-    const cwd = await mkdtemp(join(tmpdir(), "xh-hook-timeout-"));
-    const h = shellHooks({
-      hooks: hooks([
-        {
-          id: "slow",
-          step: "model",
-          timing: "before",
-          command: "Start-Sleep -Seconds 30",
-          timeoutSec: 1,
-          onFailure: "inject",
-        },
-      ]),
-      cwd,
-      agent: "main",
-      phase: () => "off",
-      bash: shellSearchTools(cwd).get("Bash")!,
-      approve: async () => true,
-    });
-    expect(await h.beforeStep("model", ctx(), signal())).toMatchObject({
-      kind: "inject",
-    });
-    const abort = new AbortController();
-    const pending = h.beforeStep("model", ctx(), abort.signal);
-    setTimeout(() => abort.abort(), 100);
-    expect(await pending).toEqual({ kind: "stop", reason: "aborted" });
-  },
-  10000,
-);

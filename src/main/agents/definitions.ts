@@ -9,9 +9,11 @@ import { parse } from "yaml";
 import { isEffort } from "../config/config.js";
 import { resolveRole } from "../config/catalog.js";
 import { type ReasoningEffort } from "../providers/provider.js";
-import { HISTORY_TOOLS } from "../tools/project-history.js";
-import { MEMORY_READ_TOOLS } from "../tools/project-memory.js";
 import { SKILL_TOOLS } from "../tools/project-skills.js";
+
+/** Legacy config names remain parseable; official agents never register these tools. */
+const HISTORY_TOOLS = ["SearchProjectHistory", "ReadProjectHistory"];
+const MEMORY_READ_TOOLS = ["SearchProjectMemory"];
 
 export interface AgentDefinition {
   model: string;

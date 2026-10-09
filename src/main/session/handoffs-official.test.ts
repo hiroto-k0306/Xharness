@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { fixture } from "./improvements.fixture.js";
+import { fixture } from "./official-session.fixture.js";
 import { SessionStore } from "./store.js";
 import {
   communicationInput,

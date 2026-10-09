@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { vi } from "vitest";
-import { fixture as sessionFixture } from "./improvements.fixture.js";
+import { fixture as sessionFixture } from "./official-session.fixture.js";
 import { officialSessionSummary } from "../workflow/official/session-result.js";
 import type { WorkflowRecord } from "../workflow/official/runtime.js";
 import type { ControllerOptions } from "./controller.js";

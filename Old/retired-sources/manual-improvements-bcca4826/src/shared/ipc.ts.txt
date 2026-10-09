@@ -11,6 +11,7 @@ import {
 import { parseMemoryAction } from "./project-memory.js";
 import { parseSkillUiRequest } from "./project-skills.js";
 import { parseOfficialSkillAction } from "./official-skills.js";
+import { parseImprovementAction } from "./improvements.js";
 import { parseHandoffAction } from "./handoffs.js";
 import { parseLocalBrowserAction } from "./local-browser.js";
 import { attachmentInfo, type ImageAttachment } from "./images.js";
@@ -362,6 +363,12 @@ export type HarnessCommand =
       request: import("./handoffs.js").HandoffAction;
     }
   | {
+      type: "improvements";
+      sessionId: string;
+      operationId: string;
+      request: import("./improvements.js").ImprovementAction;
+    }
+  | {
       type: "project_skills";
       sessionId: string;
       request: import("./project-skills.js").SkillUiRequest;
@@ -468,9 +475,11 @@ export type CommandResult =
       workspaceId?: string;
       sessionId?: string;
       memory?: import("./project-memory.js").MemoryList;
+      improvements?: import("./improvements.js").ImprovementView;
       handoffs?: import("./handoffs.js").HandoffView;
       localBrowser?: import("./local-browser.js").LocalBrowserView;
       preparedPrompt?: string;
+      modelCandidates?: import("./model-candidates.js").ModelCandidateView;
       officialSkills?: import("./official-skills.js").OfficialSkillsView;
       skills?:
         | import("./project-skills.js").SkillListing
@@ -564,6 +573,21 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
       const request = parseOfficialSkillAction(c.request);
       return str(c.sessionId) && /^[\w-]{1,128}$/.test(c.sessionId) && request
         ? { type: "official_skills", sessionId: c.sessionId, request }
+        : undefined;
+    }
+    case "improvements": {
+      const request = parseImprovementAction(c.request);
+      return str(c.sessionId) &&
+        str(c.operationId) &&
+        /^[\w-]{1,128}$/.test(c.operationId) &&
+        request &&
+        jsonFits(c.request)
+        ? {
+            type: "improvements",
+            sessionId: c.sessionId,
+            operationId: c.operationId,
+            request,
+          }
         : undefined;
     }
     case "project_memory": {

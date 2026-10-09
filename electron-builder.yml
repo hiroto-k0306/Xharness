@@ -1,4 +1,4 @@
-# DESIGN.md §17.2。exe の作成は手元(Windows)で行う: Old/docs/phase2-local-check.md
+# 配布設計: DESIGN.md。旧方式の履歴: Old/DESIGN-9a275bc.md §17.2。exe の作成は手元(Windows)で行う: Old/docs/phase2-local-check.md
 appId: local.xharness.app
 productName: XHarness
 beforePack: ./scripts/prepare-sdk-runtime.mjs

@@ -6,11 +6,13 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 ## 現在の仕様と状態
 
-作業前に [SPEC.md](SPEC.md) の担当節と [AGENTS.md](AGENTS.md) を読む。現行仕様はSPEC.mdへ集約し、DESIGN.mdは過去の設計資料として保存する。過去のフェーズ順や未実装案を、そのまま現在の実装要件にはしない。
+作業前に [SPEC.md](SPEC.md) の担当節と [AGENTS.md](AGENTS.md) を読む。現行仕様はSPEC.md、現行設計はDESIGN.mdへ集約する。更新前の仕様・設計・機能一覧と初期履歴は [Old索引](Old/README.md) に保存する。過去のフェーズ順や未実装案を、そのまま現在の実装要件にはしない。
 
-デスクトップ・headless、workflow、MCP、実行レポート、巻き戻し、画像、子の引き継ぎ・予約などを実装済み。デスクトップには公式CLIによる認証自動更新もあるが、headlessとは機能差がある。動作・設定・未確認事項は [SPEC.md](SPEC.md) を参照する。
+通常desktopは公式Claude Agent SDK / Codex App Serverで質問判別、探索・計画、承認、実装・テスト報告、別会社レビューと修正を行う。旧HTTP/headlessに残るMCP・巻き戻し・画像・子委託・予約等は経路ごとに対応が異なる。旧認証reader・アプリ内CLIログイン/自動更新は通常起動へ接続しない。動作・設定・未確認事項は [SPEC.md](SPEC.md) を参照する。
 
-Windowsのexe作成・fake GUIの記録は [20261004配布記録](docs/release-20261004-integrated.md)。その後の [認証更新記録](docs/auth-refresh-progress.md) は型・lint・buildと150ファイル / 1445テストの成功を記録しているが、実際の期限切れでの更新は未確認。以前の配布物に最新ソースの変更が入っているとは限らない。
+最新の参照は [文書照合記録](docs/documentation-refresh-20261009.md)、[環境修正後の実アプリ](docs/workflow-environment-fix-live-20261009.md)、[全回帰（1件timeout）](docs/full-regression-20261009.md)、[PR #25の限定確認](docs/catalog-timeout-fix-20261009.md)。最新mainのWindows配布を今回再検証したものではない。
+
+過去のWindowsのexe作成・fake GUIの記録は [20261004配布記録](docs/release-20261004-integrated.md)。その後の [認証更新記録](docs/auth-refresh-progress.md) は型・lint・buildと150ファイル / 1445テストの成功を記録しているが、実際の期限切れでの更新は未確認。以前の配布物に最新ソースの変更が入っているとは限らない。
 
 ## 資料
 
@@ -21,7 +23,8 @@ Windowsのexe作成・fake GUIの記録は [20261004配布記録](docs/release-2
 | 資料                                          | 内容                                                         |
 | --------------------------------------------- | ------------------------------------------------------------ |
 | [SPEC.md](SPEC.md)                            | 現行仕様・既定値・機能差・検証範囲(作業前に担当節を読む)     |
-| [DESIGN.md](DESIGN.md)                        | 過去の設計と検討経緯。現行仕様として使わない                 |
+| [DESIGN.md](DESIGN.md)                        | 現行アーキテクチャと経路・保存・承認境界                     |
+| [Old索引](Old/README.md)                      | 更新前仕様・設計・機能一覧、過去資料の移動対応               |
 | [AGENTS.md](AGENTS.md)                        | 作業の規則(セキュリティ・コミット・クラウドでの制約)         |
 | [release/README.md](release/README.md)        | 利用者向けの README(配布物に同梱)                            |
 | [docs/](docs/)                                | 日付・対象リビジョンごとの進捗と検証記録                     |
@@ -62,7 +65,7 @@ pnpm build         # electron-vite でビルド
 pnpm headless      # 画面なしの REPL(tsx)
 ```
 
-通常の `pnpm test` は、Windows の PowerShell / Git 系テストで並列実行時のタイムアウトが再発したため、直列（`--maxWorkers=1`）・各テスト30秒制限を既定とする。既定の並列実行が安定したという意味ではない。
+通常の `pnpm test` は、Windows の PowerShell / Git 系テストで並列実行時のタイムアウトが再発したため、直列（`--maxWorkers=1`）・各テスト30秒制限を既定とする（模擬DAGの統合レビュー修正1ケースのみ60秒）。既定の並列実行が安定したという意味ではない。
 
 ## GUI を操作して確認する(開発用)
 
@@ -99,14 +102,14 @@ pnpm release
 
 ## リポジトリの構成
 
-| 場所                          | 内容                                                                                    |
-| ----------------------------- | --------------------------------------------------------------------------------------- |
-| `src/main/`                   | main プロセス(エージェント・プロバイダ・ツール・MCP・セッション)                        |
-| `src/renderer/`               | 画面(React)                                                                             |
-| `src/preload/`、`src/shared/` | IPC の受け渡しと共通の型                                                                |
-| `src/headless.ts`             | 画面なしの REPL                                                                         |
-| `test/fixtures/`              | 実通信の録画(秘密値は除去済み)と試験用の MCP サーバー                                   |
+| 場所                          | 内容                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/main/`                   | main プロセス(エージェント・プロバイダ・ツール・MCP・セッション)                            |
+| `src/renderer/`               | 画面(React)                                                                                 |
+| `src/preload/`、`src/shared/` | IPC の受け渡しと共通の型                                                                    |
+| `src/headless.ts`             | 画面なしの REPL                                                                             |
+| `test/fixtures/`              | 実通信の録画(秘密値は除去済み)と試験用の MCP サーバー                                       |
 | `spike/`                      | 実通信の確認スクリプト(Phase 0 の記録は [docs/phase0-spikes.md](Old/docs/phase0-spikes.md)) |
-| `scripts/`                    | アイコン生成・配布物の収集                                                              |
-| `release/`                    | 配布物に同梱するファイル                                                                |
-| `brand/`、`resources/`        | ロゴ・アイコン                                                                          |
+| `scripts/`                    | アイコン生成・配布物の収集                                                                  |
+| `release/`                    | 配布物に同梱するファイル                                                                    |
+| `brand/`、`resources/`        | ロゴ・アイコン                                                                              |

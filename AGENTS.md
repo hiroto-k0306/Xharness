@@ -7,15 +7,15 @@
 XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を直接使う、Windows 向けデスクトップ(Electron)の汎用コーディングエージェント。
 
 - 現行仕様: [SPEC.md](SPEC.md)。**作業を始める前に、担当する節を必ず読むこと**
-- 過去資料: [DESIGN.md](DESIGN.md)。旧仕様・未実装案を含むため、現行の実装要件として扱わない
+- 現行設計: [DESIGN.md](DESIGN.md)。旧仕様・未実装案は [Old索引](Old/README.md) に保存し、現行の実装要件として扱わない
 - UI の見本: [mockup/index.html](mockup/index.html)(ブラウザで開くだけで見られる)
 - モデル一覧: [catalog/models.yaml](catalog/models.yaml)
 - ロゴ・アイコン: [brand/](brand/)
-- 状態: デスクトップ・headless、workflow、MCP、レポート、汎用ツール、予約、認証自動更新まで実装が進んでいる。機能差・未確認事項は [SPEC.md](SPEC.md) を参照する。Windows配布物の作成記録は [docs/release-20261004-integrated.md](docs/release-20261004-integrated.md)、その後の認証更新の検証は [docs/auth-refresh-progress.md](docs/auth-refresh-progress.md)。過去の成功を現在のリビジョンで再検証したものと扱わない
+- 状態: デスクトップ通常入力は公式Claude SDK/Codex App Server。旧HTTP/headlessに残るMCP・汎用ツール・予約・認証自動更新を通常desktopの対応機能と混同しない。機能差・未確認事項は [SPEC.md](SPEC.md) を参照する。Windows配布物の作成記録は [docs/release-20261004-integrated.md](docs/release-20261004-integrated.md)、その後の認証更新の検証は [docs/auth-refresh-progress.md](docs/auth-refresh-progress.md)。過去の成功を現在のリビジョンで再検証したものと扱わない
 
 ## 作業の進め方
 
-1. 現行仕様と依頼の対象を照合し、最新コードでも課題が残っているか確認してから作業する。DESIGN.mdの旧フェーズ順を現在の作業制約にしない
+1. 現行仕様と依頼の対象を照合し、最新コードでも課題が残っているか確認してから作業する。Oldの旧設計のフェーズ順を現在の作業制約にしない
 2. 1つの作業は小さく区切る(目安: 1コミット = 1つの目的、差分 400 行以内)
 3. SPEC.mdと違うことをしたくなったら、**実装する前に**理由と影響を書いて人間に確認する。確認が取れたらSPEC.mdも更新する。コードとの不一致を見つけても、無条件に仕様をコードへ合わせない
 4. 調べて分かった事実(ヘッダ名、エラー形式など)は推測で埋めず、実際の通信結果を記録してから使う
@@ -38,14 +38,14 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - Vitest / Playwright / ESLint / Prettier
 - 実行シェル: PowerShell 7(Windows)
 - Windows検証はユーザーが使うpwshの実体・配布形態まで合わせる。Codex同梱版だけで成功しても、WindowsApps / Store版での成功とみなさない。使用したNode・pwshの版と実体をdocs/へ記録する
-- MCP クライアント: 公式 `@modelcontextprotocol/sdk`(ユーザー承認済み。SPEC.md §9。モデルの API 呼び出しには引き続き SDK を使わない)
+- MCP クライアント: 公式 `@modelcontextprotocol/sdk`(ユーザー承認済み。SPEC.md §9。旧HTTP Adapterのモデル API 呼び出しは標準fetch。desktop通常経路は公式Claude Agent SDK/Codex App Serverを使う（SPEC.md §15）)
 - Node代替検索: `ignore` と `node:path.matchesGlob` は採用承認済み。rgがない場合も動作を確認する
 
 ## コードのルール
 
 - `src/main/` の core・providers・auth・tools・workflow・hooks は **electron を import しない**(UI なしでテストできるようにするため。SPEC.md §2)
 - プロバイダごとの違い(HTTP・SSE・形式変換)は `src/main/providers/<provider>/` の中に閉じ込める。Agent Loop は `ProviderEvent` だけを見る(SPEC.md §2)
-- 外部 API の呼び出しには Node 標準の `fetch` を使う。SDK は使わない(サブスクの OAuth で呼ぶため)
+- 旧HTTP Adapterのモデル API 呼び出しには Node 標準の `fetch` を使う。通常desktopの公式Claude Agent SDK/Codex App Serverと、公式MCP SDKは承認済みの別経路（SPEC.md §2・§9・§15）。旧HTTPへ暗黙fallbackしない
 - 変換処理(内部形式 ⇄ 各 API)には必ず単体テストを書く。テストには `test/fixtures/` の実レスポンスを使う
 
 ## 絶対に守ること(セキュリティ)
@@ -53,7 +53,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - **アクセストークン・リフレッシュトークン・アカウント ID を、ログ・標準出力・ファイル・コミット・エラーメッセージに出さない**。出す必要があるときは先頭 6 文字 + `…` にマスクする
 - `test/fixtures/` に保存するときは、リクエストヘッダの `Authorization` と `chatgpt-account-id` を必ず取り除く。保存前にマスク処理を通す
 - `~/.claude/.credentials.json` と `~/.codex/auth.json` はXHarness・開発用スクリプトからは**読むだけ**。自前refresh、資格情報編集、期限の改変、秘密値の保存は禁止
-  - 承認済みの製品動作: アプリの許可操作を経た公式CLIログイン、およびSPEC.md §8の期限切れ・401時の公式CLI自動更新。書き込みは公式CLIのみ。自動更新CLIはモデル通信を伴う
+  - 旧HTTP開発経路で承認済みの製品動作（通常desktopには接続しない）: アプリの許可操作を経た公式CLIログイン、およびSPEC.md §8の期限切れ・401時の公式CLI自動更新。書き込みは公式CLIのみ。自動更新CLIはモデル通信を伴う
   - 製品機能の承認を、開発中の任意の実通信試験の許可に読み替えない。通常の検証はFakeProvider・モック・fixtureを使う。実通信は依頼で承認された範囲・回数だけ行い、結果を記録する
   - Phase 0〜5やstabilizeの過去の試験許可・通信予算は各docsの履歴であり、新しい作業の恒常的な通信許可ではない（[Phase 0](Old/docs/phase0-findings.md)、[stabilize](docs/stabilize-progress.md)）
 - トークンをレンダラプロセス(画面側)に渡さない
@@ -68,7 +68,7 @@ pnpm install
 pnpm test          # Vitest
 pnpm lint          # ESLint
 pnpm typecheck     # tsc --noEmit
-pnpm spike:<name>  # Phase 0 の疎通確認スクリプト(docs/phase0-runbook.md)
+pnpm spike:<name>  # Phase 0 の疎通確認スクリプト(Old/docs/phase0-runbook.md)
 pnpm dev:fake      # Electron を --fake(通信なし)で起動
 pnpm build         # electron-vite でビルド
 pnpm package       # exe を作る(手元の Windows で実行)

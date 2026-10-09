@@ -6,29 +6,29 @@
 
 ## 移動前後の対応
 
-| 移動前 | 保存先 | 理由 |
-| --- | --- | --- |
-| `SPEC.md`（更新前版） | [SPEC-9a275bc.md](SPEC-9a275bc.md) | 現行文書更新前の基準版を保存。元の正規パスに最新版を維持 |
-| `DESIGN.md`（更新前版） | [DESIGN-9a275bc.md](DESIGN-9a275bc.md) | 現行文書更新前の基準版を保存。元の正規パスに最新版を維持 |
-| `FEATURES.md`（更新前版） | [FEATURES-9a275bc.md](FEATURES-9a275bc.md) | 現行文書更新前の基準版を保存。元の正規パスに最新版を維持 |
-| `Old/docs/phase0-closure-proposal.md` | [phase0-closure-proposal.md](docs/phase0-closure-proposal.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase0-codex-source.md` | [phase0-codex-source.md](docs/phase0-codex-source.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase0-findings.md` | [phase0-findings.md](docs/phase0-findings.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase0-progress.md` | [phase0-progress.md](docs/phase0-progress.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase0-runbook.md` | [phase0-runbook.md](docs/phase0-runbook.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase0-spikes.md` | [phase0-spikes.md](docs/phase0-spikes.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase1-progress.md` | [phase1-progress.md](docs/phase1-progress.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase2-local-check.md` | [phase2-local-check.md](docs/phase2-local-check.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase2-local-result.md` | [phase2-local-result.md](docs/phase2-local-result.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase2-progress.md` | [phase2-progress.md](docs/phase2-progress.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase3-progress.md` | [phase3-progress.md](docs/phase3-progress.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase4-progress.md` | [phase4-progress.md](docs/phase4-progress.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase5-local-result.md` | [phase5-local-result.md](docs/phase5-local-result.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase5-progress.md` | [phase5-progress.md](docs/phase5-progress.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/phase6-progress.md` | [phase6-progress.md](docs/phase6-progress.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/specification-migration.md` | [specification-migration.md](docs/specification-migration.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/spec-code-review-20261005.md` | [spec-code-review-20261005.md](docs/spec-code-review-20261005.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
-| `Old/docs/feature-list-progress.md` | [feature-list-progress.md](docs/feature-list-progress.md) | 初期開発/過去の文書整備の履歴。実行時読込なし |
+| 移動前                                  | 保存先                                                            | 理由                                                     |
+| --------------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- |
+| `SPEC.md`（更新前版）                   | [SPEC-9a275bc.md](SPEC-9a275bc.md)                                | 現行文書更新前の基準版を保存。元の正規パスに最新版を維持 |
+| `DESIGN.md`（更新前版）                 | [DESIGN-9a275bc.md](DESIGN-9a275bc.md)                            | 現行文書更新前の基準版を保存。元の正規パスに最新版を維持 |
+| `FEATURES.md`（更新前版）               | [FEATURES-9a275bc.md](FEATURES-9a275bc.md)                        | 現行文書更新前の基準版を保存。元の正規パスに最新版を維持 |
+| `Old/docs/phase0-closure-proposal.md`   | [phase0-closure-proposal.md](docs/phase0-closure-proposal.md)     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase0-codex-source.md`       | [phase0-codex-source.md](docs/phase0-codex-source.md)             | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase0-findings.md`           | [phase0-findings.md](docs/phase0-findings.md)                     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase0-progress.md`           | [phase0-progress.md](docs/phase0-progress.md)                     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase0-runbook.md`            | [phase0-runbook.md](docs/phase0-runbook.md)                       | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase0-spikes.md`             | [phase0-spikes.md](docs/phase0-spikes.md)                         | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase1-progress.md`           | [phase1-progress.md](docs/phase1-progress.md)                     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase2-local-check.md`        | [phase2-local-check.md](docs/phase2-local-check.md)               | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase2-local-result.md`       | [phase2-local-result.md](docs/phase2-local-result.md)             | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase2-progress.md`           | [phase2-progress.md](docs/phase2-progress.md)                     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase3-progress.md`           | [phase3-progress.md](docs/phase3-progress.md)                     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase4-progress.md`           | [phase4-progress.md](docs/phase4-progress.md)                     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase5-local-result.md`       | [phase5-local-result.md](docs/phase5-local-result.md)             | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase5-progress.md`           | [phase5-progress.md](docs/phase5-progress.md)                     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/phase6-progress.md`           | [phase6-progress.md](docs/phase6-progress.md)                     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/specification-migration.md`   | [specification-migration.md](docs/specification-migration.md)     | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/spec-code-review-20261005.md` | [spec-code-review-20261005.md](docs/spec-code-review-20261005.md) | 初期開発/過去の文書整備の履歴。実行時読込なし            |
+| `Old/docs/feature-list-progress.md`     | [feature-list-progress.md](docs/feature-list-progress.md)         | 初期開発/過去の文書整備の履歴。実行時読込なし            |
 
 | `docs/design-websearch.md` | [design-websearch.md](docs/design-websearch.md) | 旧設計への統合済み原稿 |
 | `docs/プロンプト` | [プロンプト](docs/プロンプト) | 完了済みの旧作業依頼。当時の許可を再利用しない |

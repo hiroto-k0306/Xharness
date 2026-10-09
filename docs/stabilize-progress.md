@@ -28,7 +28,7 @@ Claude 3/3回、Codex 2/2回。失敗も数に含め、試験別の予約を `.o
 
 ## 2. Web 設計と WebFetch
 
-最新 main から `Old/Old/docs/design-websearch.md` を取得し、暫定の DESIGN.md §22 を原文ベースで置き換えた。§9 にドメイン許可、§12 に原設計の設定項目を追記した。元ファイルは照合用に残した。
+最新 main から `Old/docs/design-websearch.md` を取得し、暫定の DESIGN.md §22 を原文ベースで置き換えた。§9 にドメイン許可、§12 に原設計の設定項目を追記した。元ファイルは照合用に残した。
 
 - WebFetch に必須の `prompt` を追加。公開ページを取得して Markdown に変換し、script/style/nav を除去する。MIT ライセンスの turndown を使用した。既定10万文字・60秒、http→https。
 - Haiku / Luna に prompt に沿った抜き出し・要約を依頼し、親へは summary・URL・切り詰めの有無だけを返す。生ページは親履歴やレシートへ保存しない。要約失敗時も生ページへ戻さない。外部コンテンツの注記を維持する。

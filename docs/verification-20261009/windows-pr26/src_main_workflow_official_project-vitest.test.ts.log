@@ -1,0 +1,17 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/workflow/official/project-vitest.test.ts (9 tests | 3 skipped) 34950ms
+   ✓ runs exactly one real TypeScript Vitest file from copied dependencies; rejects settings and runner edits 30437ms
+   ✓ refuses no-tests without installing dependencies or running an unapproved file 918ms
+   ✓ refuses extra-file without installing dependencies or running an unapproved file 911ms
+   ✓ refuses all-skipped without installing dependencies or running an unapproved file 911ms
+   ✓ refuses unhandled-error without installing dependencies or running an unapproved file 876ms
+   ✓ refuses missing-dependency without installing dependencies or running an unapproved file 895ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed | 3 skipped (9)
+   Start at  12:55:02
+   Duration  35.32s (tests 99%, import 1%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_workflow_official_project-vitest.test.ts.json

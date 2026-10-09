@@ -1,0 +1,17 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/workflow/official/owned-process.test.ts (6 tests) 12047ms
+   ✓ preserves executable discovery and initializes Windows PowerShell modules after the pwsh supervisor 1367ms
+   ✓ skips extensionless and cmd shims and selects an exe without loosening containment 2696ms
+   ✓ preserves bidirectional stdio without parsing or logging native messages 868ms
+   ✓ cancellation and timeout stop a detached grandchild 4403ms
+   ✓ abrupt owner loss kills its tree without replaying or killing persisted PIDs 1297ms
+   ✓ normal parent exit also removes an orphaned descendant and preserves quoting 1414ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  12:54:27
+   Duration  12.23s (tests 99%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_workflow_official_owned-process.test.ts.json

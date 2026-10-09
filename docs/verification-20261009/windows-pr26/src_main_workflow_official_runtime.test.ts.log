@@ -1,0 +1,20 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/workflow/official/runtime.test.ts (26 tests | 17 skipped) 51063ms
+   ✓ resumes verify checkpoint without replaying completed model work 6683ms
+   ✓ resumes review checkpoint without replaying completed model work 6969ms
+   ✓ runs claude implementation, other-provider full review, correction and process evidence 6264ms
+   ✓ runs codex implementation, other-provider full review, correction and process evidence 6125ms
+   ✓ shares X task identity and native usage with existing evaluation trace 3222ms
+   ✓ hands the claude fix the review, failed test and diff, then re-reviews the fixed head 6169ms
+   ✓ hands the codex fix the review, failed test and diff, then re-reviews the fixed head 6400ms
+   ✓ fixes a failed independent test even when the review has no findings 6028ms
+   ✓ completes on nit-only findings with passing tests and does not start a fix 3203ms
+
+ Test Files  1 passed (1)
+      Tests  9 passed | 17 skipped (26)
+   Start at  12:55:37
+   Duration  51.36s (tests 100%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_workflow_official_runtime.test.ts.json

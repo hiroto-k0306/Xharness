@@ -1,0 +1,11 @@
+
+ RUN  v5.0.3 D:/AIwork/Xharness
+
+ ✓ |node| src/main/tools/environment.test.ts (1 test) 7ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  12:51:28
+   Duration  128ms (transform 52%, import 24%, tests 17%, worker 7%)
+
+JSON report written to D:/AIwork/Xharness/.out/pr26-windows-fce9eba/src_main_tools_environment.test.ts.json

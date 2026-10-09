@@ -3,6 +3,7 @@ import type { OfficialWorkflowView } from "../../shared/official-workflow.js";
 import type { WorkflowRecord } from "../../main/workflow/official/runtime.js";
 import styles from "./Activity.module.css";
 import { OfficialCommunication } from "./OfficialCommunication.js";
+import { ModelSelectionEvidence } from "./ModelSelectionEvidence.js";
 
 const endings: Record<string, string> = {
   completed: "完了",
@@ -200,6 +201,7 @@ export function WorkflowFlow({
                 : "この会話の実行記録は未取得です"}
       </p>
       {record?.simulated && <p>模擬通信の記録</p>}
+      {record && <ModelSelectionEvidence record={record} />}
       {record && <OfficialCommunication record={record} />}
       <p>
         {record?.nativeWork

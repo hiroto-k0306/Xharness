@@ -1,3 +1,12 @@
+import {
+  policyCandidate,
+  planAvailability,
+  recordTaskPolicies,
+  resolveCallSelection,
+  type ModelSelectionEvidence,
+  type WorkflowModelPolicies,
+  type ResolveCallModel,
+} from "./model-selection.js";
 import { randomUUID, createHash } from "node:crypto";
 import { communicationInput, communicationText } from "./communication.js";
 import { publicEventRecorder } from "./public-events.js";
@@ -14,6 +23,7 @@ import {
   reviewContract,
   implementationContract,
   schemas,
+  planContract,
   planOutputSchema,
   type OfficialAgent,
   type ModelCandidate,
@@ -89,6 +99,8 @@ export interface WorkflowRecord {
   cwd: string;
   /** Planner fixed at task start; absent in records created before this field. */
   planner?: PlannerChoice;
+  /** Current family selection policy; historic plan/calls remain unchanged. */
+  modelPolicies?: WorkflowModelPolicies;
   startedAt: string;
   finishedAt?: string;
   status:
@@ -130,6 +142,7 @@ export interface WorkflowRecord {
   calls: (
     | {
         requestId: string;
+        modelSelection?: ModelSelectionEvidence;
         communication?: import("./communication.js").WorkflowCommunication;
         nodeId?: string;
         phase: AgentRequest["phase"];
@@ -140,6 +153,7 @@ export interface WorkflowRecord {
       }
     | ({
         requestId: string;
+        modelSelection?: ModelSelectionEvidence;
         communication?: import("./communication.js").WorkflowCommunication;
         nodeId?: string;
         phase: AgentRequest["phase"];
@@ -155,6 +169,8 @@ export interface WorkflowRecord {
   error?: string;
 }
 export interface WorkflowOptions {
+  /** Official path resolves/rechecks once immediately before each communication. */
+  resolveCallModel?: ResolveCallModel;
   nativeWork?: boolean;
   sessionId?: string;
   project?: WorkflowRecord["project"];
@@ -303,18 +319,18 @@ export async function runOfficialSingleTask(
     tail = pending;
     return pending;
   };
-  const eligible = (
+  const eligible = async (
     p: ModelCandidate["provider"],
     model: string,
     effort: AgentRequest["effort"],
   ) => {
-    const candidate = options.models.find(
-      (m) =>
-        m.provider === p &&
-        m.model === model &&
-        m.available &&
-        m.quotaAllowed === true &&
-        m.efforts.includes(effort),
+    const candidate = await policyCandidate(
+      options,
+      record,
+      p,
+      model,
+      effort,
+      signal,
     );
     if (!candidate) throw new WorkflowFailure("unavailable-model");
     return candidate;
@@ -419,6 +435,16 @@ export async function runOfficialSingleTask(
     files: string[],
   ) => {
     signal.throwIfAborted();
+    const selected = await resolveCallSelection(
+      options,
+      record,
+      phase,
+      model,
+      effort,
+      signal,
+    );
+    model = selected.model;
+    effort = selected.effort;
     const requestId = randomUUID();
     const tests = options.project
       ? options.tests.map((test) => ({ ...test, command: "" }))
@@ -431,6 +457,9 @@ export async function runOfficialSingleTask(
           : schemas.implement;
     const entry = {
       requestId,
+      ...(selected.modelSelection
+        ? { modelSelection: selected.modelSelection }
+        : {}),
       communication: communicationInput({ prompt, files, tests, outputSchema }),
       phase,
       provider: model.provider,
@@ -556,7 +585,7 @@ export async function runOfficialSingleTask(
     const planner =
       record.plan || !plannerChoice
         ? undefined
-        : eligible(
+        : await eligible(
             plannerChoice.provider,
             plannerChoice.model,
             plannerChoice.effort,
@@ -601,7 +630,14 @@ export async function runOfficialSingleTask(
       options.tests,
       false,
       freshPlan,
+      await planAvailability(
+        options,
+        record,
+        planContract.parse(proposed),
+        signal,
+      ),
     );
+    recordTaskPolicies(record, options);
     if (record.plan.tasks.length !== 1)
       throw new WorkflowFailure("multi-task-not-enabled");
     const task = record.plan.tasks[0]!;
@@ -613,12 +649,12 @@ export async function runOfficialSingleTask(
       task.reviewer ?? options.reviewers[reviewerProvider];
     if (!configuredReviewer || reviewerProvider === task.assignee.provider)
       throw new WorkflowFailure("reviewer-unavailable");
-    const reviewer = eligible(
+    const reviewer = await eligible(
       reviewerProvider,
       configuredReviewer.model,
       configuredReviewer.effort,
     );
-    const implementer = eligible(
+    const implementer = await eligible(
       task.assignee.provider,
       task.assignee.model,
       task.assignee.effort,

@@ -1,6 +1,6 @@
 # XHarness 現行仕様書
 
-基準日: 2026-10-09。main `f7f7350`を起点とする最新alias追従の今回変更をクラウドLinuxで照合。desktop/headlessの旧HTTP実行・旧モデルツールを廃止した今回の変更を含む。実機・実モデルは今回再実行していない。変更前仕様と旧設計は [Old索引](Old/README.md) に保存。
+基準日: 2026-10-09。main `9a275bc99272b34f0c418a59a8fcc63dcabd20fe`（PR #25後）を起点とする公式専用化後のコードをクラウドLinuxで照合。desktop/headlessの旧HTTP実行・旧モデルツールを廃止した今回の変更を含む。実機・実モデルは今回再実行していない。変更前仕様と旧設計は [Old索引](Old/README.md) に保存。
 
 ## 1. この文書の位置づけ
 
@@ -67,21 +67,13 @@ mainがセッション・公式接続・ファイル・子プロセス・記録�
 
 公式モデルはSDK/App Serverのnativeツールを使う。旧ハーネスRead/Write/Edit/MultiEdit/Bash/Grep/Glob/背景ツールを別名で残して登録しない。UTF-8編集・事前Read・旧チェックポイント等の旧ツール固有契約を公式SDKの保証として扱わない。ファイル比較・秘密/リンク除外・snapshot上限・shell承認・停止・復旧限界は§15を参照する。旧実装の詳細は [変更前仕様](Old/SPEC-6370866.md)。
 
-## 7. モデル選択policy・最新alias・使用量
+## 7. モデル・入力・使用量
 
-利用者が保存する選択policyは世代なしの `provider:alias` と独立したeffort。aliasは `claude:opus` / `claude:sonnet` / `claude:haiku` / `codex:astra` / `codex:sol` / `codex:luna`。画面はaliasと現在の完全IDの対応を表示し、effortを別に選択する。alias選択を特定世代の完全IDへ固定保存しない。
+有効aliasは `claude:opus` / `claude:sonnet` / `claude:haiku` / `codex:astra` / `codex:sol` / `codex:luna`。質問/分類はroles.question、計画は選択メインモデル、実装/別会社レビューは計画で指定した利用可能モデルを使う。公式一覧・通常枠・effortとカタログを照合し、未知・無効・不足なら停止する。旧Haiku4.5を含む無効IDは履歴識別に保持し、最新aliasへの読み替えや再実行を許可しない。
 
-開始・安全checkpoint再開・次のモデル通信の直前に、その時点のカタログでpolicyを完全IDへ解決する。質問/分類はroles.question、計画は利用者の選択policy、実装/別会社レビューは計画で選ばれたpolicyを使う。解決後の1通信では実ID/effort/catalogを固定し、SDK/App Server呼出途中に変えない。カタログのalias先が更新されれば、次の通信は新しい有効IDを使う。SDK版のタスク固定とモデルaliasの通信ごとの解決は別の契約。
+Haiku5.5は1Mコンテキスト・effort low/medium/high/xhigh/max・既定mediumをカタログに持つがverified:falseを維持する。過去のHTTP fixture、catalog verified、限定された実アプリ結果を全モデル/effortの最新公式接続保証と混同しない（§16）。
 
-過去の実ID・effort・catalog・計画・実行条件digest・レシート・結果は書換えない。新しいpolicyと各callのmodelSelectionを追記し、過去の実行に新世代名を付け直さない。modelSelectionはpolicy、今回resolved（実provider/ID/effort/catalog version・updatedAt・digest）、任意のprevious、changedを分ける。UI/LoopFlowは保存された通信事実を表示し、旧callでpolicy/catalogが未記録なら未記録と表示する。
-
-旧完全IDから現選択policyへの正規化は、カタログに明示された同じprovider/familyのID・acceptedIds・historicalIds対応だけを使う。名前の似方・世代番号・モデル一覧順で推測しない。historicalIdsは将来の選択policyをaliasへ対応付ける情報で、保存済み旧IDの履歴解決や再実行許可とは別。gpt-6-sol/gpt-5.6-solはsol、gpt-5.6-lunaはluna、旧Haiku4.5はhaikuへ明示対応する。指定effortは保持し、新しい世代が対応しなければ停止する。
-
-alias不明/競合、設定上書きとの競合、provider/family不一致、解決先IDの無効/廃止、未対応effort、公式一覧/通常枠で利用不能は理由付き停止とし、旧HTTP・他モデル・別会社へのfallback、effort自動変更をしない。公式候補の再確認と実装/レビュー別会社の条件を維持する。関係のない既定モデル設定が無効でも、CLIの旧履歴resume/report/replayを拒否する理由にしない。新規session/新しい送信時は選択policyを検証する。
-
-Haiku5.5は1Mコンテキスト・effort low/medium/high/xhigh/max・既定mediumをカタログに持つがverified:falseを維持する。過去HTTP fixture・catalog verified・限定実アプリ結果を全モデル/effortの最新公式接続保証と混同しない（§16）。通常入力の画像・旧圧縮は未対応。取得済みusageとunknown/未測定を分け、推測で補完しない。
-
-実装の正規化/解決: [catalog.ts](src/main/config/catalog.ts)。最新追従前の契約は [旧仕様f7f7350](Old/SPEC-f7f7350.md)。
+通常入力の画像・旧圧縮コマンドは未対応。直近会話の参考範囲と保存履歴全文を区別し、古い旧Agent Loopの圧縮・retry/fallback・利用枠自動再開を現役機能としない。取得済みusageとunknown/未測定を分け、推測で補完しない。
 
 ## 8. 認証と公式runtime
 
@@ -210,7 +202,7 @@ Codexの残量と認証・課金経路は別に検証する。公式App Server 0
 
 Windows子プロセスの環境は許可リストで構成する。PATHEXTを引き継ぎ、管理pwshが子の起動直前にPSModulePathを取り除いて子シェルの版に合う探索先を初期化する。APIキー・NODE_OPTIONS等を引き継がず、Jobやsandboxを緩めない。承認時計は重なった待機の和集合だけを除外する。根拠は [環境/承認時計の修正と実機結果](docs/workflow-environment-fix-live-20261009.md)。特定端末の成功から全PCでの解消を推定しない。
 
-新しいalias対応の公式sessionでも、不確定なquery・commit・test・副作用を自動再送しない。再開は既存の安全checkpointで許される境界だけとし、再開直前/次call直前のpolicy再解決はその安全条件を緩めない。旧sessionの履歴を一括移行・書換えない。通常作業は履歴の再表示が可能でも自動再開しない。再起動時の進行中記録はinterruptedにし、pending承認や不確定なquery/副作用を復元・再送しない。旧HTTP記録の読取、固定課題checkpoint、通常作業の履歴再表示を同じresumeと扱わない。
+通常作業は履歴の再表示が可能でも自動再開しない。再起動時の進行中記録はinterruptedにし、pending承認や不確定なquery/副作用を復元・再送しない。旧HTTP記録の読取、固定課題checkpoint、通常作業の履歴再表示を同じresumeと扱わない。
 
 ### 独立パネル・検証用の経路
 
@@ -219,8 +211,8 @@ Windows子プロセスの環境は許可リストで構成する。PATHEXTを引
 - providerを起動しない非破壊preflightはGit/scope/link/configを調べるが、native実行許可や完全OS隔離の証明ではない。[preflight](docs/official-workflow-preflight.md)。
 - typed-add-v1の障害注入は専用home・official-only・verify-fix-cycle・環境flagが揃う専用fixtureのみ。X1実装品質、X2注入、X3修正を別記録とし、不確定な注入は再開しない。[障害注入仕様/検証](docs/fix-cycle-fault-injection-20261007.md)。
 - `--official-only`＋絶対XHARNESS_HOMEはElectron profileをロック前に分離し、既存homeをコピー・移行しない。独立パネルのCodex絶対exe設定の保存は認証ではない。合成workspace保存先は実体/リンク/書込検査し、不正ならTempへfallbackしない。
-- 計画は利用者のalias/effort policyから通信直前に完全IDを解決し、両社の利用可能な候補から実装と別会社レビューを選ぶ。以後の新しい通信でもpolicyを解決し直すが、保存済み計画/model/effort/digestは書換えずmodelSelectionへ今回の事実を追記する。旧記録の欠落modelはrecord-compat.tsの形式版別固定定義から必要時だけ読み取り、明示family対応がない場合は停止する。履歴を最新aliasへ読み替えない。
-- 独立パネルの「質問だけ送信」は同じ会社のroles.questionの完全ID/effortを公式一覧と照合し、未提供なら同社別モデルにもfallbackせず停止する。質問roleも各通信直前に現catalogから解決し、その1通信中は固定する。1回/60秒、直近5件の参考履歴を使い、計画・作業開始・他社接続・native会話resumeを行わない。履歴はsession/模擬/実通信の出典を分ける。開発接続ピッカーは配布版へ公開しない。
+- 計画は開始時の選択model/effortを完全IDに解決し、両社の利用可能な候補から実装と別会社レビューを選ぶ。旧記録の欠落modelはrecord-compat.tsの形式版別固定定義から必要時だけ解決し、履歴を最新aliasへ読み替えない。
+- 独立パネルの「質問だけ送信」は同じ会社のroles.questionの完全ID/effortを公式一覧と照合し、未提供なら同社別モデルにもfallbackせず停止する。1回/60秒、直近5件の参考履歴を使い、計画・作業開始・他社接続・native会話resumeを行わない。履歴はsession/模擬/実通信の出典を分ける。開発接続ピッカーは配布版へ公開しない。
 
 ### 公式接続ランタイムの自動追従（2026-10-08ユーザー承認）
 
@@ -236,14 +228,14 @@ Claudeは同梱SDKを初期版として、固定の管理フォルダーへSDK�
 
 ## 16. 最新履歴の検証範囲と残る不一致
 
-| 根拠・対象                                                                                | 確認済みの範囲                                                                                                    | 未確認・限界                                                               |
-| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [環境修正後の実アプリ](docs/workflow-environment-fix-live-20261009.md)、配布ソース3627b89 | Claude SDK0.3.293 / 固定Codex0.162.0-alpha.20。判別→計画→Codex実装→Claudeレビューが完了。command8件exit0、文書1件 | 独立プロジェクトテストなし。新方式の全機能・他PCでの成功ではない           |
-| [全回帰](docs/full-regression-20261009.md)、4fada0e                                       | Vitest2,287成功・1失敗、失敗DAGの単独再確認成功。開発GUI13・配布GUI14成功                                         | 全体は終了1。単独成功で全回帰合格にしない。配布コードは3627b89             |
-| [PR #25の限定確認](docs/catalog-timeout-fix-20261009.md)、69f155eからの変更               | Linuxで117成功。alias6種/旧Haiku無効化とモデル移行をモック確認                                                    | 当時Windows必須3件未実行、対象DAG60秒未確認。後続Windows限定結果は本節末尾 |
-| [公式専用化前の文書照合](docs/documentation-refresh-20261009.md)、main9a275bc             | コード/履歴・リンク・Old対応の限定確認                                                                            | Windows・実モデル・インストール再実行なし                                  |
+| 根拠・対象                                                                                | 確認済みの範囲                                                                                                    | 未確認・限界                                                             |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [環境修正後の実アプリ](docs/workflow-environment-fix-live-20261009.md)、配布ソース3627b89 | Claude SDK0.3.293 / 固定Codex0.162.0-alpha.20。判別→計画→Codex実装→Claudeレビューが完了。command8件exit0、文書1件 | 独立プロジェクトテストなし。新方式の全機能・他PCでの成功ではない         |
+| [全回帰](docs/full-regression-20261009.md)、4fada0e                                       | Vitest2,287成功・1失敗、失敗DAGの単独再確認成功。開発GUI13・配布GUI14成功                                         | 全体は終了1。単独成功で全回帰合格にしない。配布コードは3627b89           |
+| [PR #25の限定確認](docs/catalog-timeout-fix-20261009.md)、69f155eからの変更               | Linuxで117成功。alias6種/旧Haiku無効化とモデル移行をモック確認                                                    | Windows必須3件未実行、対象DAG60秒成功未確認。全回帰/GUI/配布の再実施なし |
+| [公式専用化前の文書照合](docs/documentation-refresh-20261009.md)、main9a275bc             | コード/履歴・リンク・Old対応の限定確認                                                                            | Windows・実モデル・インストール再実行なし                                |
 
-カタログのverifiedはモデル/経路/effortの全組合せの保証ではない。Haiku5.5は上記実アプリ課題に判別成功記録がある一方、catalog/models.yamlはverified:falseを維持している。今回それを検証済みへ変更しない。他PC、最新mainのWindows配布、今回alias改修のStore版pwsh/実通信/GUI、長時間・取消・再起動を伴う実通信、native DAGは未確認。
+カタログのverifiedはモデル/経路/effortの全組合せの保証ではない。Haiku5.5は上記実アプリ課題に判別成功記録がある一方、catalog/models.yamlはverified:falseを維持している。今回それを検証済みへ変更しない。Store版pwsh、他PC、最新mainのWindows配布、長時間・取消・再起動を伴う実通信、native DAGは未確認。
 
 今回変更と、実装側の別途確認事項：
 
@@ -254,10 +246,6 @@ Claudeは同梱SDKを初期版として、固定の管理フォルダーへSDK�
 
 後続の公式移行修正で、改善候補の評価記録は保存済み公式workflow UUID・完了状態・最終回答・receipt・固定入力・project境界を照合するadapterを追加した。record/replay/historyの変更で結果を無効化し、旧evaluationTask/traceは旧記録の受動読取に限定する。模擬/送信区分が不明・usage providerが不一致なら登録を拒否し、欠測や累積thread usageを独立呼出しの実測へ昇格しない。品質は明示評価と完了証拠を併用する。
 
-モデル候補は公式経路でenabledかつ提供終了前のcatalogから列挙する。旧provider登録やfake候補で絞らず、列挙時にSDK通信は行わない。共有枠・認証・実際の利用可否の保証ではなく、通常送信時の公式検証を維持する。旧fixtureによる18失敗は同等の公式検証へ移行し、関連9ファイル69件が成功した。全回帰52失敗の過去集計は更新せず、当時残ったWindows依存34件をLinuxで成功扱いしない。後続のWindows限定結果は下記記録を参照する。修正・未確認点は [公式移行回帰の修復記録](docs/official-migration-regression-fix-20261009.md) を参照。
+モデル候補は公式経路でenabledかつ提供終了前のcatalogから列挙する。旧provider登録やfake候補で絞らず、列挙時にSDK通信は行わない。共有枠・認証・実際の利用可否の保証ではなく、通常送信時の公式検証を維持する。旧fixtureによる18失敗は同等の公式検証へ移行し、関連9ファイル69件が成功した。全回帰52失敗の過去集計は更新せず、残るWindows依存34件をLinuxで成功扱いしない。修正・未確認点は [公式移行回帰の修復記録](docs/official-migration-regression-fix-20261009.md) を参照。
 
 今回の追加実装・限定検証・既存失敗の比較は [公式共通化記録](docs/official-only-consolidation-20261009.md) を参照。
-
-### Windows限定記録と今回alias改修の区別
-
-[PR #26 Windows限定検証](docs/windows-pr26-validation-20261009.md)はmainマージ対象 `fce9eba`、Node24.16.0、Store版pwsh7.6.6で承認対象48件成功・対象失敗/skip0、ACL保留1件未実行。モデル通信・GUI・認証変更・SDK更新・配布/インストールなし。この成功を今回のalias最新追従、安全再開、各callモデル証拠UIのWindows/実モデル/GUI/配布検証へ読み替えない。今回変更の限定検証結果は別の記録で対象HEADと範囲を明記する。

@@ -8,6 +8,7 @@ export function ModelPicker({
   onApply,
   onDefault,
   onClose,
+  aliasPolicies = false,
 }: {
   models: NonNullable<AppState["models"]>;
   model: string;
@@ -15,11 +16,22 @@ export function ModelPicker({
   onApply(model: string, effort?: Effort): Promise<void>;
   onDefault?(model: string, effort?: Effort): Promise<void>;
   onClose(): void;
+  aliasPolicies?: boolean;
 }) {
-  const initialModel = models.find((x) => x.id === model) ?? models[0];
-  const [selected, setSelected] = useState(initialModel?.id ?? ""),
+  const policy = (x: (typeof models)[number]) =>
+    aliasPolicies && x.alias ? `${x.provider}:${x.alias}` : x.id;
+  const choices = aliasPolicies ? models.filter((x) => x.alias) : models;
+  const initialModel = choices.find(
+    (x) =>
+      x.id === model.split(":").at(-1) ||
+      policy(x) === model ||
+      x.alias === model,
+  );
+  const [selected, setSelected] = useState(
+      initialModel ? policy(initialModel) : "",
+    ),
     [level, setLevel] = useState(effort);
-  const m = models.find((x) => x.id === selected);
+  const m = choices.find((x) => policy(x) === selected);
   const effectiveLevel = m?.efforts.includes(level)
     ? level
     : (m?.defaultEffort ?? m?.efforts[0]);
@@ -43,18 +55,28 @@ export function ModelPicker({
           onChange={(e) => {
             setSelected(e.target.value);
             setLevel(
-              models.find((x) => x.id === e.target.value)?.defaultEffort ??
-                "high",
+              choices.find((x) => policy(x) === e.target.value)
+                ?.defaultEffort ?? "high",
             );
           }}
         >
-          {models.map((x) => (
-            <option key={x.id} value={x.id}>
-              {x.provider} · {x.label}
+          {!m && (
+            <option value="">現在のモデルは選択できません：{model}</option>
+          )}
+          {choices.map((x) => (
+            <option key={x.id} value={policy(x)}>
+              {aliasPolicies
+                ? `${policy(x)} → ${x.id}`
+                : `${x.provider} · ${x.label}`}
             </option>
           ))}
         </select>
       </label>
+      {aliasPolicies && (
+        <p>
+          次の呼出時にaliasの最新IDを解決します。保存済み呼出の実IDは変更しません。
+        </p>
+      )}
       {m?.efforts.length ? (
         <label>
           effort

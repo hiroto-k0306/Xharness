@@ -4,14 +4,6 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 このファイルは**開発者向け**。アプリを使う人向けの説明(インストール・起動・使い方)は [release/README.md](release/README.md) にあり、配布物に同梱する。
 
-## モデルaliasの最新追従
-
-選択は世代なし `provider:alias`（opus/sonnet/haiku/astra/sol/luna）と別のeffortです。開始・安全再開・各モデル通信直前に現カタログから完全IDを解決し、その1通信中は固定します。旧IDは明示historicalIds等の同じ会社/family対応だけで将来の選択policyへ正規化します。過去の実ID/effort/catalog/plan/digestを変えず、各callに今回のpolicy/実ID・変更有無を追記します。
-
-未知/競合・effort非対応・公式利用不能は理由付き停止とし、別モデルやeffortへfallbackしません。CLI履歴resumeは無関係な既定モデルが無効でも読めますが、新規会話/送信は選択aliasを検証します。安全checkpointの条件と不確定な副作用の再送禁止を維持します。詳細は [SPEC §7](SPEC.md#7-モデル選択policy最新alias使用量)。変更前入口は [README-f7f7350](Old/README-f7f7350.md)。
-
-[Windows限定48件成功](docs/windows-pr26-validation-20261009.md)はfce9ebaの結果で、今回alias改修のWindows/実モデル/GUI/配布検証ではありません。
-
 ## 現在の仕様と状態
 
 作業前に [SPEC.md](SPEC.md) の担当節と [AGENTS.md](AGENTS.md) を読む。現行仕様はSPEC.md、現行設計はDESIGN.mdへ集約する。更新前の仕様・設計・機能一覧と初期履歴は [Old索引](Old/README.md) に保存する。過去のフェーズ順や未実装案を、そのまま現在の実装要件にはしない。
@@ -129,5 +121,3 @@ pnpm release
 | `scripts/`                                            | アイコン生成・配布物の収集                             |
 | `release/`                                            | 配布物に同梱するファイル                               |
 | `brand/`、`resources/`                                | ロゴ・アイコン                                         |
-
-最新aliasの追従方針と限定検証は [実装記録](docs/latest-alias-policy-20261009.md) を参照。

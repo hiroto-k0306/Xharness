@@ -17,7 +17,7 @@ export type OfficialWorkflowCommand =
       mode?: "single" | "dag";
       /** Verification-only fix-cycle task; refused unless the mode is on. */
       task?: "typed-add-v1";
-      /** The main model selected when the task is started; fixed for this task. */
+      /** Saved main-model policy; each new call resolves the current catalog ID. */
       planner?: {
         model: string;
         effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;

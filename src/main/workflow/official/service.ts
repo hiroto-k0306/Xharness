@@ -1,4 +1,9 @@
 import {
+  resolveCallSelection,
+  validateSavedModelSelections,
+  type ResolveCallModel,
+} from "./model-selection.js";
+import {
   mkdir,
   writeFile,
   readFile,
@@ -50,6 +55,7 @@ import {
 } from "./codex-installation.js";
 import { OperationApprovals } from "./operation-approval.js";
 import {
+  WorkflowFailure,
   planContract,
   schemas,
   implementationContract,
@@ -67,7 +73,9 @@ import {
 } from "../../../shared/official-workflow.js";
 import {
   catalogUnavailableReason,
-  catalogVersion,
+  resolveModelPolicy,
+  normalizeModelPolicy,
+  type ModelPolicy,
   resolveRole,
   roleEffort,
   type ResolvedModel,
@@ -316,6 +324,7 @@ export class OfficialWorkflowService {
                 !isAbsolute(record.project.testProgram))))
         )
           continue;
+        validateSavedModelSelections(record);
         if (record.plan) record.plan = planContract.parse(record.plan);
         if (record.simulated !== this.settings.fake) continue;
         if (
@@ -510,6 +519,42 @@ export class OfficialWorkflowService {
     }
     this.records.set(record.id, structuredClone(record));
   }
+  private callResolver(
+    cwd: string | (() => string),
+    agents: Partial<Record<"claude" | "codex", OfficialAgent>>,
+  ): ResolveCallModel {
+    return async (policy, signal) => {
+      signal.throwIfAborted();
+      const agent = agents[policy.provider];
+      if (!agent) throw new Error("必要な公式接続がありません。");
+      const discovered = await agent
+        .discover(typeof cwd === "function" ? cwd() : cwd, signal)
+        .catch((e: unknown) => {
+          throw new Error(connectionFailure(policy.provider, e));
+        });
+      signal.throwIfAborted();
+      const target = resolveModelPolicy(
+        `${policy.provider}:${policy.model}`,
+        policy.effort,
+      );
+      const offered =
+        policy.provider === "claude" ? pinClaudeModels(discovered) : discovered;
+      const model = offered.find(
+        (m) => m.provider === target.provider && m.model === target.id,
+      );
+      const effort = target.effort ?? null;
+      if (
+        !model ||
+        !model.available ||
+        model.quotaAllowed !== true ||
+        !model.efforts.includes(effort)
+      )
+        throw new Error(
+          `必要な公式モデル「${target.id}」の利用枠/effortを確認できません。別のモデルへは切り替えていません。`,
+        );
+      return { model: structuredClone(model), catalog: target.catalog };
+    };
+  }
   private async options(
     cwd: string,
     provider: "claude" | "codex",
@@ -568,7 +613,10 @@ export class OfficialWorkflowService {
         ? impliedRecordModels(start.record)
         : { reviewers: {} };
     const listed = (model: string, effort: AgentRequest["effort"]) => {
-      const found = usable.find((m) => m.model === model);
+      const target = resolveModelPolicy(model, effort ?? undefined);
+      const found = usable.find(
+        (m) => m.provider === target.provider && m.model === target.id,
+      );
       if (!found || !found.efforts.includes(effort))
         throw new Error(
           `再開できません：記録のモデル「${model}」（effort ${effort ?? "既定"}）を公式接続で利用できません。推測では置き換えません。`,
@@ -583,19 +631,32 @@ export class OfficialWorkflowService {
     );
     // A resumed record with a plan needs no planner; the recorded one is only kept.
     const planned = start?.kind === "resume" && !!start.record.plan;
-    const chosenPlanner = planned ? undefined : (planner ?? implied.planner);
+    const savedPlannerPolicy =
+      start?.kind === "resume"
+        ? start.record.modelPolicies?.planner
+        : undefined;
+    const chosenPlanner = planned
+      ? undefined
+      : savedPlannerPolicy
+        ? {
+            provider: savedPlannerPolicy.provider,
+            model: savedPlannerPolicy.model,
+            effort: savedPlannerPolicy.effort ?? null,
+          }
+        : (planner ?? implied.planner);
     if (!planned && !chosenPlanner)
       throw new Error(
         "計画モデルが選択されていません。メインモデルを選択してから開始してください。",
       );
     // Product path: the planner comes from the user's main model (or the record),
     // and the plan chooses usable official models for implementation and review.
-    return {
+    const runtimeOptions = {
       ...options,
       simulated: false,
       diagnosticText: true, // This service creates only fixed synthetic workspaces.
       timeoutMs: 120000,
       agents: { claude, codex },
+      resolveCallModel: this.callResolver(cwd, { claude, codex }),
       models: usable,
       ...(chosenPlanner
         ? { planner: resolvePlannerChoice(chosenPlanner, usable) }
@@ -603,6 +664,11 @@ export class OfficialWorkflowService {
       reviewers,
       goal: `Correct addition without modifying the test. Assign the one implementation task to ${provider}.`,
     } satisfies WorkflowOptions;
+    runtimeOptions.resolveCallModel = this.callResolver(
+      () => runtimeOptions.cwd,
+      { claude, codex },
+    );
+    return runtimeOptions;
   }
   private launch(
     id: string,
@@ -694,6 +760,7 @@ export class OfficialWorkflowService {
     signal: AbortSignal,
   ): Promise<{
     agent?: OfficialAgent;
+    policy?: ModelPolicy;
     model: ModelCandidate;
     effort: AgentRequest["effort"];
   }> {
@@ -754,6 +821,9 @@ export class OfficialWorkflowService {
       );
     return {
       agent: selectedAgent,
+      ...(this.settings.fake
+        ? {}
+        : { policy: normalizeModelPolicy(wanted, effort ?? undefined) }),
       model,
       effort,
     };
@@ -762,6 +832,7 @@ export class OfficialWorkflowService {
     record: WorkflowRecord,
     target: {
       agent?: OfficialAgent;
+      policy?: ModelPolicy;
       model: ModelCandidate;
       effort: AgentRequest["effort"];
     },
@@ -779,13 +850,35 @@ export class OfficialWorkflowService {
         withTaskTrace(
           { model: target.model.model, taskId: record.id },
           async () => {
-            const model = target.model;
+            if (target.policy)
+              record.modelPolicies = {
+                ...record.modelPolicies,
+                question: target.policy,
+              };
+            const selected = await resolveCallSelection(
+              {
+                resolveCallModel: this.settings.fake
+                  ? undefined
+                  : this.callResolver(record.cwd, {
+                      [provider]: target.agent!,
+                    }),
+              },
+              record,
+              "conversation",
+              target.model,
+              target.effort,
+              controller.signal,
+            );
+            const model = selected.model;
             const entry = {
               requestId: randomUUID(),
               phase: "conversation" as const,
               provider,
               requestedModel: model.model,
-              effort: target.effort,
+              effort: selected.effort,
+              ...(selected.modelSelection
+                ? { modelSelection: selected.modelSelection }
+                : {}),
               status: "running" as const,
             };
             const history =
@@ -1003,9 +1096,12 @@ export class OfficialWorkflowService {
         ),
     )
       .then(() => {})
-      .catch(async () => {
+      .catch(async (error: unknown) => {
         record.status = controller.signal.aborted ? "cancelled" : "failed";
-        record.error = "conversation-failed-no-retry";
+        record.error =
+          error instanceof WorkflowFailure
+            ? error.code
+            : "conversation-failed-no-retry";
         record.finishedAt = new Date().toISOString();
         await this.save(record);
       })
@@ -1024,7 +1120,15 @@ export class OfficialWorkflowService {
       throw new Error(
         "公式workflowの保存領域が使えないか、別の実行が進行中です。旧HTTPへ切り替えません。",
       );
-    const selected = resolveModel(request.model);
+    const selected = this.settings.fake
+      ? resolveModel(request.model)
+      : (() => {
+          const current = resolveModelPolicy(
+            request.model,
+            request.effort ?? undefined,
+          );
+          return { provider: current.provider, model: current.id };
+        })();
     if (!selected || !["claude", "codex"].includes(selected.provider))
       throw new Error(
         "公式モデルを明示選択してください。旧HTTPへ切り替えません。",
@@ -1415,28 +1519,8 @@ export class OfficialWorkflowService {
         const record = this.records.get(command.id);
         if (!record || resumeBlockReason(record))
           throw new Error("不確定な副作用または再開不能な段階です");
-        // Resume uses the recorded models (or the fixed per-version ones it
-        // implies); a model the catalog no longer offers stops here.
-        if (!this.settings.fake) {
-          const implied = impliedRecordModels(record);
-          for (const id of [
-            // A planned record never calls its planner again.
-            record.plan
-              ? undefined
-              : (record.planner?.model ?? implied.planner?.model),
-            ...(record.plan?.tasks ?? []).flatMap((t) => [
-              t.assignee.model,
-              t.reviewer?.model,
-            ]),
-            ...Object.values(implied.reviewers).map((r) => r.model),
-          ]) {
-            const reason = id ? catalogUnavailableReason(id) : undefined;
-            if (reason)
-              throw new Error(
-                `再開できません：${reason}別のモデルへは切り替えていません。`,
-              );
-          }
-        }
+        // Saved plans/calls stay historical; the next call resolves only the
+        // saved family policy or an explicitly mapped historical selection.
         const workspace = gitWorkspace(record.cwd, redact),
           current = await workspace.inspect(new AbortController().signal);
         if (!current.clean || current.head !== record.head)
@@ -1468,10 +1552,10 @@ export class OfficialWorkflowService {
     } catch (error) {
       this.error =
         error instanceof Error &&
-        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先|再開できません|修正経路の検証課題)/.test(
+        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先|再開できません|修正経路の検証課題|モデル選択|モデルalias|モデル「)/.test(
           error.message,
         )
-          ? error.message
+          ? redact(error.message)
           : "workflowを開始できませんでした。再送していません。";
       const prepared = this.preparing && this.records.get(this.preparing.id);
       if (prepared?.status === "planning" && !prepared.calls.length) {
@@ -1520,32 +1604,23 @@ export function resolvePlannerChoice(
   choice: PlannerSelection | PlannerChoice,
   models: ModelCandidate[],
 ): PlannerChoice {
-  const target =
-    "provider" in choice
-      ? { provider: choice.provider, model: choice.model }
-      : resolveModel(choice.model);
-  if (!target)
-    throw new Error(
-      `計画モデル「${choice.model}」を公式接続のモデルに対応付けできません。別のモデルへは切り替えていません。`,
-    );
-  const retired = catalogUnavailableReason(target.model);
-  if (retired)
-    throw new Error(
-      `計画モデル「${target.model}」を使えません：${retired}別のモデルへは切り替えていません。`,
-    );
+  const target = resolveModelPolicy(
+    "provider" in choice ? `${choice.provider}:${choice.model}` : choice.model,
+    choice.effort ?? undefined,
+  );
   const candidate = models.find(
-    (m) => m.provider === target.provider && m.model === target.model,
+    (m) => m.provider === target.provider && m.model === target.id,
   );
   const connection =
     target.provider === "claude" ? "Claude SDK" : "Codex App Server";
   if (!candidate || !candidate.available || candidate.quotaAllowed !== true)
     throw new Error(
-      `計画モデル「${target.model}」は公式${connection}で利用できないか、通常枠を確認できません。別のモデルへは切り替えていません。`,
+      `計画モデル「${target.id}」は公式${connection}で利用できないか、通常枠を確認できません。別のモデルへは切り替えていません。`,
     );
   const effort = choice.effort ?? null;
   if (!candidate.efforts.includes(effort))
     throw new Error(
-      `計画モデル「${target.model}」は推論レベル「${effort ?? "既定"}」に対応していません。別のモデルへは切り替えていません。`,
+      `計画モデル「${target.id}」は推論レベル「${effort ?? "既定"}」に対応していません。別のモデルへは切り替えていません。`,
     );
   return {
     provider: target.provider,
@@ -1553,12 +1628,7 @@ export function resolvePlannerChoice(
     effort,
     selectedAs:
       "provider" in choice ? (choice.selectedAs ?? choice.model) : choice.model,
-    // A new selection records the catalog it was resolved with; a recorded one keeps its own.
-    ...("provider" in choice
-      ? choice.catalog
-        ? { catalog: choice.catalog }
-        : {}
-      : { catalog: catalogVersion() }),
+    catalog: target.catalog,
   };
 }
 /**

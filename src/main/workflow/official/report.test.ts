@@ -1,6 +1,105 @@
 import { expect, it } from "vitest";
 import { officialWorkflowReport } from "./report.js";
 import type { WorkflowRecord } from "./runtime.js";
+
+function selectionRecord(
+  call: WorkflowRecord["calls"][number],
+): WorkflowRecord {
+  return {
+    version: 1,
+    simulated: true,
+    id: "selection",
+    goal: "fixture",
+    cwd: "fixture",
+    startedAt: "2026-10-09",
+    status: "implementing",
+    next: "implement",
+    base: "a",
+    head: "b",
+    correctionRounds: 0,
+    tools: [],
+    checks: [],
+    reviews: [],
+    commits: [],
+    calls: [call],
+  };
+}
+const selectionCall: WorkflowRecord["calls"][number] = {
+  requestId: "selection-call",
+  provider: "codex",
+  phase: "implement",
+  requestedModel: "gpt-call-id",
+  effort: "high",
+  status: "running",
+};
+it("exports escaped saved alias resolutions and changes without rewriting history", () => {
+  const record = selectionRecord({
+    ...selectionCall,
+    modelSelection: {
+      policy: { provider: "codex", model: "<sol>", effort: "high" },
+      resolved: {
+        provider: "codex",
+        model: "<gpt-call-id>",
+        effort: "high",
+        catalog: {
+          version: 2,
+          updatedAt: '<img src="x">',
+          digest: "b".repeat(64),
+        },
+      },
+      previous: {
+        model: "<gpt-previous>",
+        effort: "low",
+        catalog: {
+          version: 1,
+          updatedAt: "previous-date",
+          digest: "a".repeat(64),
+        },
+      },
+      changed: true,
+    },
+  });
+  const before = JSON.stringify(record),
+    html = officialWorkflowReport(record);
+  expect(html).toContain("保存policy：codex:&lt;sol&gt; / effort：high");
+  expect(html).toContain(
+    "呼出時の実ID：codex/&lt;gpt-call-id&gt; / effort：high",
+  );
+  expect(html).toContain(
+    "catalog：v2 · &lt;img src=&quot;x&quot;&gt; · digest " + "b".repeat(64),
+  );
+  expect(html).toContain(
+    "前回の実ID：&lt;gpt-previous&gt; / effort：low / catalog：v1",
+  );
+  expect(html).toContain("前回との変更：あり");
+  expect(html).not.toContain('<img src="x">');
+  expect(JSON.stringify(record)).toBe(before);
+});
+it("exports historical IDs with missing policy evidence instead of inventing an alias", () => {
+  const html = officialWorkflowReport(selectionRecord(selectionCall));
+  expect(html).toContain(
+    "当時の指定ID：codex/gpt-call-id / effort：high（alias policy・catalogの保存記録なし）",
+  );
+  expect(html).not.toContain("保存policy：");
+});
+it("does not claim unchanged resolution when the previous call evidence is absent", () => {
+  const html = officialWorkflowReport(
+    selectionRecord({
+      ...selectionCall,
+      modelSelection: {
+        policy: { provider: "codex", model: "sol", effort: "high" },
+        resolved: {
+          provider: "codex",
+          model: "gpt-call-id",
+          effort: "high",
+          catalog: { version: 1, updatedAt: "date", digest: "a".repeat(64) },
+        },
+        changed: false,
+      },
+    }),
+  );
+  expect(html).toContain("前回との変更：前回の解決記録なし");
+});
 it("separates model evidence and escapes it without leaking diagnostic answer text", () => {
   const record: WorkflowRecord = {
     version: 1,

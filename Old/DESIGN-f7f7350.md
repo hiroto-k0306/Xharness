@@ -1,6 +1,6 @@
 # XHarness 現行設計書
 
-基準: 2026-10-09、main `f7f7350`を起点とする今回のalias最新追従後のコード。desktop/headlessの旧HTTP実行と旧モデルツールを廃止した設計説明です。動作の要件は [SPEC.md](SPEC.md)、検証状態は [公式共通化記録](docs/official-only-consolidation-20261009.md)、初回の文書照合は [文書照合記録](docs/documentation-refresh-20261009.md)。旧フェーズ設計・未実装案は [旧設計](Old/DESIGN-9a275bc.md) と [Old索引](Old/README.md) に保存します。
+基準: 2026-10-09、main `9a275bc99272b34f0c418a59a8fcc63dcabd20fe`を起点とする今回の公式専用化後のコード。desktop/headlessの旧HTTP実行と旧モデルツールを廃止した設計説明です。動作の要件は [SPEC.md](SPEC.md)、検証状態は [公式共通化記録](docs/official-only-consolidation-20261009.md)、初回の文書照合は [文書照合記録](docs/documentation-refresh-20261009.md)。旧フェーズ設計・未実装案は [旧設計](Old/DESIGN-9a275bc.md) と [Old索引](Old/README.md) に保存します。
 
 ## 1. プロセスと経路
 
@@ -41,9 +41,7 @@ snapshotは秘密名・リンク・依存物・生成物等を除き、10,000フ
 
 ## 4. モデルと公式runtime
 
-[catalog/models.yaml](catalog/models.yaml) と [catalog.ts](src/main/config/catalog.ts) のnormalizeModelPolicy/resolveModelPolicyを使います。保存選択はprovider:aliasと別のeffort、送信IDは開始/安全再開/各call直前の現カタログで解決します。有効aliasはopus/sonnet/haiku/astra/sol/luna。解決した実ID/effort/catalogは1通信中固定し、次callで再解決します。未知/競合/無効/effort非対応/公式利用不能なら停止し、別モデル/会社/HTTPへfallbackしません。
-
-historicalIdsはカタログに明示された同じprovider/familyの旧IDだけを将来の選択policyへ対応付けます。名前や世代番号から推測しません。過去recordの実ID/effort/catalog/plan/digestは維持し、policyとcall.modelSelectionを追記します。modelSelectionはpolicy/今回resolved/previous/changedを分離し、UIは記録された実行事実を表示します。旧callの未記録policy/catalogを現一覧で補完しません。SDK版固定とモデルalias最新追従は別の層です。
+[catalog/models.yaml](catalog/models.yaml) と共通resolverがID/alias/能力/effort/役割を解決します。有効aliasはopus/sonnet/haiku/astra/sol/lunaだけです。旧Haikuを含む無効モデルのIDは履歴識別用に保持し、実行許可にしません。候補は公式接続一覧と通常枠に照合し、未知・不足・経路不明なら停止します。desktop/headlessはHTTP・他モデル・他社へ暗黙fallbackしません。
 
 公式Claude SDKは配布resourceのseedから管理フォルダーへ準備し、専用Workerで使用します。各タスクにSDK版を固定し、更新途中で差し替えません。24時間ごとのstable更新確認は既知の0.3.x互換範囲と検査を通った版だけを適用します。SHA512、archiveパス/API宣言/importを検査し、install scriptやCLIを起動せずactive pointerを切り替えます。構造検査は将来の実通信成功の保証ではありません。
 
@@ -55,7 +53,7 @@ Codexは明示exeを優先し、未指定のAppX探索と管理領域への必�
 
 request IDごとに指示/構造化応答を各24,000文字、公開イベントを128件/64,000 UTF-8バイト/本文4,000文字まで選別保存します。思考・認証・画像音声本体を除去し、欠測/省略/旧記録本文なしを表示します。SDK内部の全HTTP往復は保存・再現しません。保存失敗はphase停止対象です。
 
-通常作業は再表示だけで、自動resume・query再送・pending承認復元をしません。起動時の未完了記録はinterruptedにします。新しいalias対応sessionの再開も既存安全checkpointの境界に限定し、不確定な副作用を自動再送しません。過去ID/plan/digestを維持し次のcallを解決します。固定課題の安全checkpoint、旧Agent Loop記録の閲覧とは別です。headlessの旧会話は閲覧専用とし、/clearから新しい公式セッションを作ります。GUIも旧実行器を復元しませんが、完了済みの保存会話へ利用者が新しく送る入力は公式入口を通り、直近履歴を参考データとして渡します。旧未完了タスクの引継ぎは拒否します。保存homeの単一writer・セッション削除の排他と、worktreeの確認付きkeep/merge/removeは維持します。
+通常作業は再表示だけで、自動resume・query再送・pending承認復元をしません。起動時の未完了記録はinterruptedにします。固定課題の安全checkpoint、旧Agent Loop記録の閲覧とは別です。headlessの旧会話は閲覧専用とし、/clearから新しい公式セッションを作ります。GUIも旧実行器を復元しませんが、完了済みの保存会話へ利用者が新しく送る入力は公式入口を通り、直近履歴を参考データとして渡します。旧未完了タスクの引継ぎは拒否します。保存homeの単一writer・セッション削除の排他と、worktreeの確認付きkeep/merge/removeは維持します。
 
 ## 6. 参考スキルと端末UI
 
@@ -69,8 +67,6 @@ headlessは実行要求時に共通OfficialWorkflowServiceを準備します。�
 
 Windows配布はNSIS/portable exe、利用者READMEとSHA256SUMSをリポジトリ外へ収集します。クラウドではexe・インストール・ACL/認証変更・実モデル試験を行いません。実装済み、モック検証済み、過去の実機成功、最新版で未確認を分けます。
 
-最新記録では環境修正後の文書課題が実機で完了しましたが、全回帰は模擬DAG1件timeoutです。PR #25はその1件だけ60秒に変更し、Linux限定117件成功・当時Windows必須3件未確認でした。後続Windows48件結果は下記の別記録です。今回の公式専用化・headless移行・参考スキル連携は実機再実行ではありません。過去の117件成功を今回変更の検証結果へ読み替えません。
+最新記録では環境修正後の文書課題が実機で完了しましたが、全回帰は模擬DAG1件timeoutです。PR #25はその1件だけ60秒に変更し、Linux限定117件成功・Windows必須3件未確認です。今回の公式専用化・headless移行・参考スキル連携は実機再実行ではありません。過去の117件成功を今回変更の検証結果へ読み替えません。
 
 native DAG、通常作業の自動再開、全shell副作用の復元、全モデル/effort互換性、他PC/Store版pwsh、最新main Windows配布の成功は保証しません。旧設計のフェーズ順・将来案は採用済み要件にしません。分類promptは今回の探索方式へ更新しました。Codex読取phase設定の意図・経緯などの要確認事項はSPEC §16に記録します。
-
-[Windows48件の記録](docs/windows-pr26-validation-20261009.md)はfce9ebaの限定結果で、今回のalias対応をWindows/実モデル/GUI/配布で検証した記録ではありません。変更前設計は [DESIGN-f7f7350](Old/DESIGN-f7f7350.md)。

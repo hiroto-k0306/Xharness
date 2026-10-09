@@ -56,9 +56,9 @@ it("model apply affects only its session; defaults affect only future sessions",
   );
   expect(
     state.sessions.find((x) => third.ok && x.id === third.sessionId),
-  ).toMatchObject({ model: "claude-sonnet-5-5", effort: "max" });
+  ).toMatchObject({ model: "claude:sonnet", effort: "max" });
   expect(await readFile(join(s.home, "config.yaml"), "utf8")).toContain(
-    "claude-sonnet-5-5",
+    "claude:sonnet",
   );
   await s.c.shutdown();
 });

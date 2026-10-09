@@ -30,3 +30,11 @@ Old/release-README-6370866.md
 
 # 旧ソースは出典commitのバイト列を保存する
 Old/retired-sources/**
+
+# 最新alias追従への更新前版（本文を原本どおり保存）
+Old/SPEC-f7f7350.md
+Old/DESIGN-f7f7350.md
+Old/FEATURES-f7f7350.md
+Old/README-f7f7350.md
+Old/AGENTS-f7f7350.md
+Old/release-README-f7f7350.md

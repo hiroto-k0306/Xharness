@@ -12,7 +12,8 @@ import {
 } from "../core/llm-budget.js";
 import { resolve } from "node:path";
 import { loadAgentConfig } from "../agents/definitions.js";
-import { resolveModel } from "../config/config.js";
+import { resolveModel, loadMainConfig } from "../config/config.js";
+import { normalizeModelPolicy } from "../config/catalog.js";
 import {
   loadProjectConfig,
   projectMemory,
@@ -235,11 +236,18 @@ export async function runOfficialSessionTurn(
       throw new Error(
         "公式入力の初期対応では既存の通信回数上限・フック・プロジェクト権限設定を適用できません。設定を無視せず停止しました。保存設定は変更していません。",
       );
-    const chosen = resolveModel(session.model, ctx.options.aliases);
-    if (!chosen)
-      throw new Error(
-        "選択モデルを公式IDへ解決できません。旧HTTPへ切り替えません。",
-      );
+    // The service resolves each call from the policy; never freeze a generation here.
+    const selectionConfig = await loadMainConfig(
+      ctx.options.home,
+      undefined,
+      projectRoot,
+    );
+    const chosen = normalizeModelPolicy(
+      session.model,
+      session.effort,
+      undefined,
+      selectionConfig.aliases,
+    );
     abort.signal.throwIfAborted();
     const result = await ctx.options.officialSession!(
       {

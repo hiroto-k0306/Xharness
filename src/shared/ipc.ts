@@ -124,6 +124,8 @@ export interface AppState {
   models?: {
     imageInput?: boolean;
     id: string;
+    /** Current automatic-update policy; id remains the resolved catalog ID. */
+    alias?: string;
     provider: ProviderName;
     label: string;
     efforts: Effort[];

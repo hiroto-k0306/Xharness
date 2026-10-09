@@ -1151,11 +1151,11 @@ it("pins the managed Claude agent through discovery and a question, then uses th
   };
   await instance.submitSession(request, new AbortController().signal);
   expect(factory).toHaveBeenCalledTimes(1);
-  expect(first.calls).toMatchObject({ discover: 1, run: 1 });
+  expect(first.calls).toMatchObject({ discover: 2, run: 1 });
   expect(second.calls).toMatchObject({ discover: 0, run: 0 });
   await instance.submitSession(request, new AbortController().signal);
   expect(factory).toHaveBeenCalledTimes(2);
-  expect(second.calls).toMatchObject({ discover: 1, run: 1 });
+  expect(second.calls).toMatchObject({ discover: 2, run: 1 });
   expect(instance.view().claudeRuntime?.version).toBe("0.3.291");
 });
 

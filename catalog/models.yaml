@@ -2,8 +2,8 @@
 # 作成日: 2026-10-01
 # 出典: Codex 公式ドキュメント (learn.chatgpt.com/docs/models, /docs/changelog)、Anthropic のモデル一覧
 #
-# 実行時は ~/.harness/models.yaml に置く。main には計画段階でこの内容 (enabled: true のもの) を渡す。
-# verified: false の項目は、Phase 0 の疎通確認で実際に呼び出せることを確かめてから true にする。
+# 実行時は同梱カタログを読む。選択はaliasとeffortを保存し、各通信前に現在のIDを解決する。
+# verified は過去の確認記録で、現在の公式経路・全effortの利用保証ではない。
 #
 # 項目の意味:
 #   id            Adapter に渡すモデル ID
@@ -20,6 +20,7 @@
 #                   quotaWindow       公式SDKの使用量で見るモデル別の枠 (例 seven_day_opus)
 #                 effort を送るかどうかは efforts の有無で決める (無いモデルには送らない)
 #   acceptedIds   同じモデルとして受け付ける別表記の ID (送信には id を使う)
+#   historicalIds 選択policyだけを現aliasへ移行できる旧世代ID。過去記録のIDは変更しない
 #   stats         実績 (ハーネスがレシートから自動で書き込む。手で編集しない)
 #
 # roles にモデルの役割を集約する。値は provider:alias かモデル ID、または
@@ -74,6 +75,7 @@ models:
   - provider: claude
     id: claude-haiku-5-5
     alias: haiku
+    historicalIds: [claude-haiku-4-5-20251001, claude-haiku-4-5]
     displayName: Haiku 5.5
     enabled: true
     verified: false  # 2026-10-07正式リリース。XHarnessの実通信は未確認
@@ -139,6 +141,7 @@ models:
   - provider: codex
     id: gpt-6.1-sol
     alias: sol
+    historicalIds: [gpt-6-sol, gpt-5.6-sol]
     displayName: GPT-6.1 Sol
     enabled: true
     verified: true  # X2 / X4: low・medium・high・xhigh・max の OAuth 疎通を確認
@@ -157,6 +160,7 @@ models:
   - provider: codex
     id: gpt-6-luna
     alias: luna
+    historicalIds: [gpt-5.6-luna]
     displayName: GPT-6 Luna
     enabled: true
     verified: true  # X2 / X4: low・high・max の OAuth 疎通を確認

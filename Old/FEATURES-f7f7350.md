@@ -1,6 +1,6 @@
 # XHarness 機能一覧
 
-2026-10-09。main `f7f7350`を起点とする今回のalias最新追従後の機能です。desktop/headlessの旧HTTP実行・旧Agent Loop・旧モデル公開ツールを廃止しました。動作の要件は [SPEC.md](SPEC.md)、構成は [DESIGN.md](DESIGN.md)、開発操作は [README.md](README.md)。変更前一覧は [Old](Old/FEATURES-6370866.md) に保存します。
+2026-10-09。main `9a275bc`を起点とする今回の公式専用化後の機能です。desktop/headlessの旧HTTP実行・旧Agent Loop・旧モデル公開ツールを廃止しました。動作の要件は [SPEC.md](SPEC.md)、構成は [DESIGN.md](DESIGN.md)、開発操作は [README.md](README.md)。変更前一覧は [Old](Old/FEATURES-6370866.md) に保存します。
 
 ソース実装・オフライン確認と、配布版への収録・実機確認を分けます。今回変更を実アプリ/実モデルで再実行したとは扱いません。
 
@@ -62,13 +62,3 @@ Transcript/LoopFlow、公式指示・応答・公開ツールイベント、HTML
 全shell副作用の復元、完全な匿名化、全モデル/effort互換性、他PC/Store版pwsh、今回のWindows配布・インストール・実モデル成功は未確認/保証外です。旧予約・旧画像/圧縮・旧MCP/Webツール・旧Task・自前認証更新は現役機能ではありません。
 
 過去の実機成功・全回帰失敗・PR #25限定確認はSPEC §16に残します。その結果を今回の公式専用化の実測へ読み替えません。
-
-## 世代なしaliasの最新追従
-
-モデル選択はprovider:aliasとeffortを別々に保存します。画面にはalias→現在の完全IDを表示します。開始・安全checkpoint再開・次の通信直前に現在のカタログから解決し、1通信中は固定します。次世代への更新は次の通信からです。未知/競合・effort非対応・公式利用不能なら理由付き停止し、別モデルやeffortへ黙って変更しません。
-
-旧完全IDは明示された同じ会社/モデルfamilyのhistoricalIds対応があるときだけ将来の選択policyへ対応付けます。過去の実ID/effort/catalog/計画/digestはそのまま残し、各callのpolicy・今回実ID・前回・変更有無を保存事実として表示します。旧記録を最新モデルの実行結果と表示しません。安全checkpoint以外の不確定な副作用を自動再送せず、旧sessionの履歴を一括移行しません。
-
-CLI履歴resume/report/replayは、関係のない既定モデルが無効でも閲覧可能です。新規会話と新しい送信はalias選択を検証します。改善比較帳簿の8000文字上限と公式送信4000文字上限は今回変更しません。
-
-[Windows限定48件成功](docs/windows-pr26-validation-20261009.md)はfce9ebaの過去結果。今回alias改修のWindows・実モデル・GUI・配布確認は未実施です。変更前一覧は [FEATURES-f7f7350](Old/FEATURES-f7f7350.md)。

@@ -216,7 +216,7 @@ it("passes the selected model/cwd to the common controller and requests explicit
   expect(service.submitSession).toHaveBeenCalledOnce();
   expect(service.submitSession.mock.calls[0]![0]).toMatchObject({
     cwd,
-    model: "codex:gpt-6.1-sol",
+    model: "codex:sol",
     effort: "high",
     automaticWork: true,
     autoOperations: false,

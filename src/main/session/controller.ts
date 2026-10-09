@@ -26,7 +26,10 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isEffort, loadMainConfig, resolveModel } from "../config/config.js";
 import { loadModelCatalog } from "../config/model-catalog.js";
-import { catalogUnavailableReason } from "../config/catalog.js";
+import {
+  catalogUnavailableReason,
+  resolveModelPolicy,
+} from "../config/catalog.js";
 import { loadProjectConfig } from "../config/project.js";
 import { WorkspaceTrust } from "../config/trust.js";
 import { redact } from "../core/redact.js";
@@ -259,6 +262,7 @@ export class SessionController {
         .filter((m) => m.enabled)
         .map((m) => ({
           id: m.id,
+          alias: m.alias,
           provider: m.provider,
           label: (m as typeof m & { displayName?: string }).displayName ?? m.id,
           imageInput: m.imageInput,
@@ -1333,7 +1337,7 @@ export class SessionController {
         case "set_default_model": {
           const saved = await saveDefaultModel(this.options.home, command);
           if (!saved.ok) return saved;
-          if (!this.options.cliModel) this.model = command.model;
+          if (!this.options.cliModel) this.model = saved.model;
           if (!this.options.cliEffort) this.effort = saved.effort;
           await this.emitState();
           return { ok: true };
@@ -1402,6 +1406,34 @@ export class SessionController {
       this.options.phase4 && workspaceId && !this.options.fake
         ? await loadMainConfig(this.options.home, undefined, root)
         : undefined;
+    const policyConfig = this.options.officialSession
+      ? (projectMain ?? (await loadMainConfig(this.options.home)))
+      : projectMain;
+    const selectedModel = this.options.cliModel
+      ? this.model
+      : (projectMain?.choice.model ?? this.model);
+    const selectedEffort =
+      this.options.cliEffort ?? projectMain?.choice.effort ?? this.effort;
+    let selection = selectedModel;
+    if (this.options.officialSession) {
+      try {
+        const policy = resolveModelPolicy(
+          selectedModel,
+          selectedEffort,
+          undefined,
+          policyConfig?.aliases ?? this.options.aliases,
+        );
+        selection = `${policy.provider}:${policy.model}`;
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "モデル選択を確認できません。",
+        };
+      }
+    }
     const session: StoredSession = {
       id,
       title: "New session",
@@ -1409,11 +1441,8 @@ export class SessionController {
       cwd,
       worktree,
       readOnly,
-      model: this.options.cliModel
-        ? this.model
-        : (projectMain?.choice.model ?? this.model),
-      effort:
-        this.options.cliEffort ?? projectMain?.choice.effort ?? this.effort,
+      model: selection,
+      effort: selectedEffort,
       createdAt: now,
       updatedAt: now,
       fileLinkGuidanceVersion: 1,
@@ -1818,14 +1847,36 @@ export class SessionController {
   ): Promise<CommandResult> {
     const session = this.sessions.get(sessionId);
     if (!session) return { ok: false, error: "Unknown session" };
-    const cfg = this.options.phase4
-      ? await loadMainConfig(
-          this.options.home,
+    const cfg =
+      this.options.phase4 || this.options.officialSession
+        ? await loadMainConfig(
+            this.options.home,
+            undefined,
+            this.ctx.workspaceRoot(session),
+          )
+        : undefined;
+    let policyModel: string | undefined;
+    let resolved: ReturnType<typeof resolveModel>;
+    if (this.options.officialSession) {
+      try {
+        const policy = resolveModelPolicy(
+          spec,
+          effort ?? session.effort,
           undefined,
-          this.ctx.workspaceRoot(session),
-        )
-      : undefined;
-    const resolved = resolveModel(spec, cfg?.aliases ?? this.options.aliases);
+          cfg?.aliases ?? this.options.aliases,
+        );
+        policyModel = `${policy.provider}:${policy.model}`;
+        resolved = { provider: policy.provider, model: policy.id };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "モデル選択を確認できません。",
+        };
+      }
+    } else resolved = resolveModel(spec, cfg?.aliases ?? this.options.aliases);
     if (
       expected &&
       (resolved?.model !== expected.model ||
@@ -1862,7 +1913,7 @@ export class SessionController {
     signal?.throwIfAborted();
     await this.sessions.save({
       ...session,
-      model: resolved.model,
+      model: policyModel ?? resolved.model,
       siwcServerDefault: false,
       effort: effort ?? session.effort,
     });

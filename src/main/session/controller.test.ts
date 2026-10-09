@@ -226,16 +226,16 @@ it("preserves session-specific model and effort across restart", async () => {
   ).toMatchObject({ ok: true });
   expect(
     (await controller.state()).sessions.find((s) => s.id === b),
-  ).toMatchObject({ model: "claude-opus-5-5", effort: "high" });
+  ).toMatchObject({ model: "claude:opus", effort: "high" });
   await controller.shutdown();
   const restarted = make();
   await restarted.controller.init();
   expect(
     (await restarted.controller.state()).sessions.find((s) => s.id === a),
-  ).toMatchObject({ model: "claude-sonnet-5-5", effort: "low" });
+  ).toMatchObject({ model: "claude:sonnet", effort: "low" });
   await send(restarted.controller, a, "continue");
   expect(restarted.official.mock.calls[0]![0]).toMatchObject({
-    model: "claude:claude-sonnet-5-5",
+    model: "claude:sonnet",
     effort: "low",
   });
 });

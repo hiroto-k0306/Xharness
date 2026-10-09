@@ -260,6 +260,11 @@ export function validateOfficialPlan(
   tests: TestSpec[],
   serializeConflicts = false,
   requireReviewer = false,
+  availableSelection?: (
+    provider: ModelCandidate["provider"],
+    model: string,
+    effort: AgentRequest["effort"],
+  ) => boolean,
 ) {
   const plan = planContract.parse(value);
   const ids = new Set(plan.tasks.map((t) => t.id));
@@ -276,14 +281,20 @@ export function validateOfficialPlan(
     if (task.acceptance.some((id) => !tests.some((t) => t.id === id)))
       throw new WorkflowFailure("unapproved-test");
     if (
-      !models.some(
-        (m) =>
-          m.provider === task.assignee.provider &&
-          m.model === task.assignee.model &&
-          m.available &&
-          m.quotaAllowed === true &&
-          m.efforts.includes(task.assignee.effort),
-      )
+      !(availableSelection
+        ? availableSelection(
+            task.assignee.provider,
+            task.assignee.model,
+            task.assignee.effort,
+          )
+        : models.some(
+            (m) =>
+              m.provider === task.assignee.provider &&
+              m.model === task.assignee.model &&
+              m.available &&
+              m.quotaAllowed === true &&
+              m.efforts.includes(task.assignee.effort),
+          ))
     )
       throw new WorkflowFailure("unavailable-model");
     if (!task.reviewer) {
@@ -294,14 +305,20 @@ export function validateOfficialPlan(
         throw new WorkflowFailure("reviewer-same-provider");
       const reviewer = task.reviewer;
       if (
-        !models.some(
-          (m) =>
-            m.provider === reviewer.provider &&
-            m.model === reviewer.model &&
-            m.available &&
-            m.quotaAllowed === true &&
-            m.efforts.includes(reviewer.effort),
-        )
+        !(availableSelection
+          ? availableSelection(
+              reviewer.provider,
+              reviewer.model,
+              reviewer.effort,
+            )
+          : models.some(
+              (m) =>
+                m.provider === reviewer.provider &&
+                m.model === reviewer.model &&
+                m.available &&
+                m.quotaAllowed === true &&
+                m.efforts.includes(reviewer.effort),
+            ))
       )
         throw new WorkflowFailure("unavailable-model");
     }

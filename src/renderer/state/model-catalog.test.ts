@@ -3,10 +3,26 @@ import {
   setUiModelCatalog,
   uiProviderOf,
   uiSendsEffort,
+  uiModelLabel,
 } from "./model-catalog.js";
 import { providerOf } from "./steps.js";
 
 afterEach(() => setUiModelCatalog(undefined));
+
+it("reads an alias policy against the current catalog without relabeling historical IDs", () => {
+  setUiModelCatalog([
+    { id: "gpt-current", alias: "sol", provider: "codex", efforts: ["high"] },
+  ]);
+  expect(uiProviderOf("sol")).toBe("codex");
+  expect(uiProviderOf("codex:sol")).toBe("codex");
+  expect(uiModelLabel("codex:sol")).toBe("codex:sol → gpt-current");
+  expect(uiModelLabel("gpt-prior")).toBe("gpt-prior");
+  setUiModelCatalog([
+    { id: "gpt-next", alias: "sol", provider: "codex", efforts: [] },
+  ]);
+  expect(uiModelLabel("codex:sol")).toBe("codex:sol → gpt-next");
+  expect(uiSendsEffort("codex:sol")).toBe(false);
+});
 
 it("reads provider and effort display from the catalog the main process sent", () => {
   // A catalog entry decides, even when the name would suggest otherwise.

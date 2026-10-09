@@ -112,7 +112,7 @@ it("resolves the main model to its own official connection without substituting"
   ).toThrow(/推論レベル「max」に対応していません/);
   expect(() =>
     resolvePlannerChoice({ model: "claude:gpt-6.1-sol" }, official),
-  ).toThrow(/対応付けできません/);
+  ).toThrow(/明示されたalias対応/);
   const paused = official.map((m) => ({ ...m, quotaAllowed: null }));
   expect(() =>
     resolvePlannerChoice({ model: "claude:opus", effort: "high" }, paused),

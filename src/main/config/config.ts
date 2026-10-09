@@ -8,11 +8,13 @@ import {
   catalogAliases,
   catalogModel,
   loadCatalog,
+  normalizeModelPolicy,
+  resolveModelPolicy,
   resolveRole,
   roleEffort,
 } from "./catalog.js";
 
-/** aliases の既定値はモデルカタログの alias から作る。設定ファイルの aliases で上書きできる。 */
+/** Compatibility export. Live resolutions obtain catalog aliases again; standard alias overrides must not conflict. */
 export const DEFAULT_ALIASES: Record<string, string> = catalogAliases();
 export const EFFORTS: readonly ReasoningEffort[] = [
   "low",
@@ -49,7 +51,7 @@ export function providerOfModel(model: string): ProviderId {
  */
 export function resolveModel(
   spec: string,
-  aliases: Record<string, string> = DEFAULT_ALIASES,
+  aliases: Record<string, string> = catalogAliases(),
 ): { provider: ProviderId; model: string } | undefined {
   const text = spec.trim();
   if (!text) return undefined;
@@ -187,7 +189,7 @@ export interface MainConfig {
 
 /**
  * グローバルと任意のプロジェクト設定をキーごとにマージして読む(§12)。
- * ファイルが無ければ既定値。不正な値は警告を付けて既定値に戻す。
+ * ファイルが無ければ既定値。モデル選択はalias/effortを保持し、不明な値も閲覧を塞がず通信境界で停止する。
  * プロジェクトの main / aliases / fallback / web の指定キーを優先する。
  */
 export async function loadMainConfig(
@@ -244,32 +246,43 @@ export async function loadMainConfig(
         );
     }
   }
-  const aliases = { ...DEFAULT_ALIASES };
+  const aliases = { ...catalogAliases() };
   if (root.aliases && typeof root.aliases === "object")
     for (const [k, v] of Object.entries(root.aliases))
       if (typeof v === "string") aliases[k] = v;
   const main = (
     root.main && typeof root.main === "object" ? root.main : {}
   ) as Record<string, unknown>;
-  let resolved = resolveModel(DEFAULT_MAIN.model, aliases)!;
-  if (main.model !== undefined) {
-    const r =
-      typeof main.model === "string"
-        ? resolveModel(main.model, aliases)
-        : undefined;
-    if (r) resolved = r;
-    else
-      warnings.push(
-        `config.yaml の main.model を解決できないため ${DEFAULT_MAIN.model} を使います`,
-      );
+  const spec =
+    main.model === undefined ? DEFAULT_MAIN.model : String(main.model);
+  // Invalid user values remain represented; consumers must validate before creating/sending.
+  const effort = (
+    main.effort === undefined ? DEFAULT_MAIN.effort : String(main.effort)
+  ) as ReasoningEffort;
+  let resolved: { provider: ProviderId; model: string } = {
+    provider: spec.startsWith("codex:") ? "codex" : providerOfModel(spec),
+    model: /^(claude|codex):/.test(spec)
+      ? spec.slice(spec.indexOf(":") + 1)
+      : spec,
+  };
+  try {
+    resolved = normalizeModelPolicy(spec, undefined, loadCatalog(), aliases);
+  } catch (error) {
+    warnings.push(
+      `config.yaml の main.model: ${(error as Error).message} 通信前に停止します。`,
+    );
   }
-  let effort: ReasoningEffort = DEFAULT_MAIN.effort;
-  if (main.effort !== undefined) {
-    if (isEffort(main.effort)) effort = main.effort;
-    else
-      warnings.push(
-        `config.yaml の main.effort が不正なため ${DEFAULT_MAIN.effort} を使います`,
-      );
+  try {
+    resolveModelPolicy(
+      `${resolved.provider}:${resolved.model}`,
+      effort,
+      loadCatalog(),
+      aliases,
+    );
+  } catch (error) {
+    warnings.push(
+      `config.yaml の main選択: ${(error as Error).message} 通信前に停止します。`,
+    );
   }
   const fallback: Partial<Record<ProviderId, string>> = defaultFallback();
   if (root.fallback && typeof root.fallback === "object") {
@@ -315,7 +328,7 @@ export async function loadMainConfig(
 
 /**
  * 起動時の既定モデルを決める。優先順位: --model(--effort) > 設定ファイル > claude:opus / high。
- * このビルドが扱えないプロバイダ(Codex は Phase 3)は既定値へ戻して警告する。
+ * 不明・非対応の選択は理由付き停止し、既定値や他社へ置換しない。
  */
 export async function resolveStartup(opts: {
   home: string;
@@ -327,17 +340,15 @@ export async function resolveStartup(opts: {
   const cfg = await loadMainConfig(opts.home, opts.read);
   const warnings = [...cfg.warnings];
   let choice = cfg.choice;
-  if (!opts.supported.includes(choice.provider)) {
-    warnings.push(
-      `${choice.provider} はまだ使えないため ${DEFAULT_MAIN.model} を使います`,
-    );
-    choice = { ...choice, ...resolveModel(DEFAULT_MAIN.model)! };
-  }
   if (opts.cliModel !== undefined) {
-    const r = resolveModel(opts.cliModel, cfg.aliases);
-    if (!r) throw new Error(`--model を解決できません: ${opts.cliModel}`);
+    const r = normalizeModelPolicy(
+      opts.cliModel,
+      undefined,
+      loadCatalog(),
+      cfg.aliases,
+    );
     if (!opts.supported.includes(r.provider))
-      throw new Error(`${r.provider} はまだ使えません(Phase 3)`);
+      throw new Error(`${r.provider} はこの起動経路で使えません。`);
     choice = { ...choice, ...r };
   }
   if (opts.cliEffort !== undefined) {
@@ -345,6 +356,21 @@ export async function resolveStartup(opts: {
       throw new Error(`--effort は ${EFFORTS.join(" / ")} のいずれか`);
     choice = { ...choice, effort: opts.cliEffort };
   }
+  if (!opts.supported.includes(choice.provider))
+    throw new Error(
+      `${choice.provider} はこの起動経路で使えません。別のモデルへは切り替えていません。`,
+    );
+  const policy = resolveModelPolicy(
+    `${choice.provider}:${choice.model}`,
+    choice.effort,
+    loadCatalog(),
+    cfg.aliases,
+  );
+  choice = {
+    provider: policy.provider,
+    model: policy.model,
+    effort: choice.effort,
+  };
   return {
     choice,
     aliases: cfg.aliases,

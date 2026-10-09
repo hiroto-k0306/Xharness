@@ -1,3 +1,9 @@
+import {
+  policyCandidate,
+  planAvailability,
+  recordTaskPolicies,
+  resolveCallSelection,
+} from "./model-selection.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -80,18 +86,18 @@ export async function runNativeTask(
     tail = pending;
     return pending;
   };
-  const eligible = (
+  const eligible = async (
     provider: "claude" | "codex",
     model: string,
     effort: AgentRequest["effort"],
   ) => {
-    const candidate = options.models.find(
-      (m) =>
-        m.provider === provider &&
-        m.model === model &&
-        m.available &&
-        m.quotaAllowed === true &&
-        m.efforts.includes(effort),
+    const candidate = await policyCandidate(
+      options,
+      record,
+      provider,
+      model,
+      effort,
+      signal,
     );
     if (!candidate) throw new WorkflowFailure("unavailable-model");
     return candidate;
@@ -104,6 +110,16 @@ export async function runNativeTask(
     schema: Record<string, unknown>,
   ) {
     signal.throwIfAborted();
+    const selected = await resolveCallSelection(
+      options,
+      record,
+      phase,
+      model,
+      effort,
+      signal,
+    );
+    model = selected.model;
+    effort = selected.effort;
     if (record.calls.filter((c) => c.phase !== "conversation").length >= 7)
       throw new WorkflowFailure("call-budget-exceeded");
     const requestId = randomUUID(),
@@ -116,6 +132,9 @@ export async function runNativeTask(
     const index = record.calls.length;
     record.calls.push({
       requestId,
+      ...(selected.modelSelection
+        ? { modelSelection: selected.modelSelection }
+        : {}),
       phase,
       provider: model.provider,
       requestedModel: model.model,
@@ -164,6 +183,9 @@ export async function runNativeTask(
     const { output, ...metadata } = result;
     record.calls[index] = {
       requestId,
+      ...(selected.modelSelection
+        ? { modelSelection: selected.modelSelection }
+        : {}),
       phase,
       provider: model.provider,
       requestedModel: model.model,
@@ -201,7 +223,7 @@ export async function runNativeTask(
     if (!selection) throw new WorkflowFailure("planner-missing");
     const provider = "provider" in selection ? selection.provider : "claude";
     record.planner = { ...selection, provider };
-    const planner = eligible(provider, selection.model, selection.effort);
+    const planner = await eligible(provider, selection.model, selection.effort);
     await save();
     const proposed = planContract.parse(
       await invoke(
@@ -235,16 +257,23 @@ export async function runNativeTask(
         })),
       false,
       true,
+      await planAvailability(
+        options,
+        record,
+        planContract.parse(proposed),
+        signal,
+      ),
     );
+    recordTaskPolicies(record, options);
     if (record.plan.tasks.length !== 1)
       throw new WorkflowFailure("multi-task-not-enabled");
     const task = record.plan.tasks[0]!;
-    const implementer = eligible(
+    const implementer = await eligible(
       task.assignee.provider,
       task.assignee.model,
       task.assignee.effort,
     );
-    const reviewer = eligible(
+    const reviewer = await eligible(
       task.reviewer!.provider,
       task.reviewer!.model,
       task.reviewer!.effort,

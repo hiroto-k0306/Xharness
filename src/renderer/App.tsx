@@ -11,7 +11,11 @@ import { ConnectionPicker } from "./components/ConnectionPicker.js";
 import { PlanApproval } from "./components/PlanApproval.js";
 import { RewindApproval } from "./components/RewindApproval.js";
 import { useEffect, useState } from "react";
-import { setUiModelCatalog, uiSendsEffort } from "./state/model-catalog.js";
+import {
+  setUiModelCatalog,
+  uiSendsEffort,
+  uiModelLabel,
+} from "./state/model-catalog.js";
 import {
   Hero,
   LoopFlow,
@@ -37,7 +41,8 @@ import styles from "./App.module.css";
 
 /** effort を送らないモデル(カタログに efforts が無い)は表示もしない(§7.1) */
 function modelLabel(model: string, effort: string): string {
-  return uiSendsEffort(model) ? `${model} · ${effort}` : model;
+  const label = uiModelLabel(model);
+  return uiSendsEffort(model) ? `${label} · ${effort}` : label;
 }
 
 export function App() {
@@ -583,6 +588,7 @@ export function App() {
           )}
           {modelOpen && current && (
             <ModelPicker
+              aliasPolicies={app.officialDefault}
               models={app.models ?? []}
               model={model}
               effort={effort}

@@ -1,6 +1,6 @@
 # AGENTS.md — XHarness
 
-このリポジトリで作業するコーディングエージェント(想定: Codex / sol、完全IDは現カタログで解決)向けの指示。人間の開発者も同じルールに従う。
+このリポジトリで作業するコーディングエージェント(想定: Codex / GPT-6.1 Sol)向けの指示。人間の開発者も同じルールに従う。
 
 ## プロジェクト概要
 
@@ -40,14 +40,6 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - Windows検証はユーザーが使うpwshの実体・配布形態まで合わせる。Codex同梱版だけで成功しても、WindowsApps / Store版での成功とみなさない。使用したNode・pwshの版と実体をdocs/へ記録する
 - モデル実行: 公式Claude Agent SDK / Codex App Server。GUIとheadlessで同じ認証・通常枠・sandbox・承認境界を使い、旧HTTPへfallbackしない
 - MCP SDKや旧検索の依存が互換処理に残っていても、通常の公式モデルへ旧ツールを公開する根拠にはしない
-
-## モデルpolicyと履歴
-
-- 利用者の選択は世代なしprovider:aliasと独立effort。開始/安全再開/各call直前に現catalogで解決し、1通信中は実ID/effort/catalogを固定する。
-- 旧IDのpolicy正規化は明示historicalIds/acceptedIds等の同じprovider/family対応だけを使う。文字列の類似・世代番号から推測せず、未知/競合/effort非対応/公式利用不能で停止し、fallbackしない。
-- 過去の実ID・effort・catalog・plan・digestを書き換えない。policyとcall.modelSelectionを追記し、旧callの欠測証拠を現catalogで補わない。
-- 新しい公式sessionの再開も既存安全checkpointだけ。alias更新を理由に不確定なquery/副作用を再送しない。CLIの旧履歴閲覧を無関係なdefault modelの不正で妨げず、新規/sendでは選択を検証する。
-- Windows48件成功の根拠はfce9ebaの限定記録。今回alias改修のWindows/実モデル/GUI/配布成功へ読み替えない。前契約は [AGENTS-f7f7350](Old/AGENTS-f7f7350.md)、現行要件はSPEC §7/§15。
 
 ## コードのルール
 

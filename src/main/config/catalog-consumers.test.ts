@@ -104,7 +104,7 @@ it("passes the connection-test role's model and effort as startup arguments", as
   });
   expect(started.choice).toMatchObject({
     provider: "claude",
-    model: "claude-sonnet-5-5",
+    model: "sonnet",
     effort: "low",
   });
   // A role without effort falls back to the model's catalog default.

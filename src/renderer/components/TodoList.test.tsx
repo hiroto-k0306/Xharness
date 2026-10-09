@@ -64,6 +64,7 @@ it("shows the list in receipt details including child snapshots", () => {
       ]}
     />,
   );
+  fireEvent.click(screen.getByRole("button", { name: /receipts ·/ }));
   fireEvent.click(screen.getByRole("button", { name: /#1/ }));
   expect(
     within(screen.getByRole("dialog")).getByRole("region", {

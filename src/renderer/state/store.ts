@@ -85,6 +85,9 @@ export function applyEvent(s: EventState, e: UiEvent): EventState {
   if (e.type === "rewind_request")
     return put(s, e.sessionId, { ...view(s, e.sessionId), rewind: e });
   switch (e.type) {
+    case "notification_focus":
+      // App selects an existing conversation and focuses its approval card.
+      return s;
     case "official_scope_required":
       return put(s, e.sessionId, {
         ...view(s, e.sessionId),

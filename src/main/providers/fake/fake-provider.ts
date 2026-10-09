@@ -352,7 +352,7 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 
 /**
  * 通信しない Provider。過去fixturesの SSE を保持した共通デコーダで再生する。
- * 認証情報は読まない・要求しない。DESIGN.md §6 の Provider に準拠。
+ * 認証情報は読まない・要求しない。旧設計 Old/DESIGN-9a275bc.md §6 の Provider に準拠。
  */
 export class FakeProvider implements Provider {
   readonly offline = true;

@@ -1,0 +1,81 @@
+{
+  "phase": "before",
+  "before": {
+    "browser": "151.0.7922.173",
+    "axNodes": [
+      {
+        "role": "group",
+        "name": "公式workflow receipts",
+        "ignored": false,
+        "properties": []
+      },
+      {
+        "role": "DisclosureTriangle",
+        "name": "公式の計画・検証・レビュー・保存証跡（ 公式接続と作業準備を確認しています。 接続確認を中断 0件）",
+        "ignored": false,
+        "properties": [
+          {
+            "name": "focusable",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          },
+          {
+            "name": "expanded",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "paragraph",
+        "name": "",
+        "ignored": false,
+        "properties": []
+      },
+      {
+        "role": "button",
+        "name": "接続確認を中断",
+        "ignored": false,
+        "properties": [
+          {
+            "name": "invalid",
+            "value": {
+              "type": "token",
+              "value": "false"
+            }
+          },
+          {
+            "name": "focusable",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          }
+        ]
+      }
+    ],
+    "summary": "公式の計画・検証・レビュー・保存証跡（\n\n公式接続と作業準備を確認しています。接続確認を中断\n\n0件）",
+    "summaryHtml": "公式の計画・検証・レビュー・保存証跡（<p>公式接続と作業準備を確認しています。<button>接続確認を中断</button></p>0件）",
+    "ax": "- main:\n  - group \"公式workflow receipts\":\n    - text: 公式の計画・検証・レビュー・保存証跡（\n    - paragraph:\n      - text: 公式接続と作業準備を確認しています。\n      - button \"接続確認を中断\"\n    - text: 0件）",
+    "open": false
+  },
+  "afterCancel": {
+    "open": false,
+    "cancelCalls": [
+      {
+        "action": "cancel",
+        "id": "preparing",
+        "sessionId": "chat"
+      }
+    ]
+  },
+  "afterKeyboard": {
+    "open": false,
+    "focusOnSummary": true
+  },
+  "pageErrors": []
+}

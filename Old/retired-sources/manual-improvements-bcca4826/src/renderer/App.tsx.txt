@@ -1,0 +1,864 @@
+import { STEP_NODES } from "../shared/ipc.js";
+import { DEFAULT_IMAGES } from "../shared/images.js";
+import { builtinCommands } from "../shared/commands.js";
+import { AgentsPanel } from "./components/AgentsPanel.js";
+import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
+import { ChatOfficialApprovals } from "./components/ChatOfficialApprovals.js";
+import { OfficialRuntimeSettings } from "./components/OfficialRuntimeSettings.js";
+import { OfficialWorkflowReceipts } from "./components/OfficialWorkflowReceipts.js";
+import { OfficialWorkflowPanel } from "./components/OfficialWorkflowPanel.js";
+import { WorkflowFlow } from "./components/WorkflowFlow.js";
+import { PhaseBar } from "./components/PhaseBar.js";
+import { ModelPicker } from "./components/ModelPicker.js";
+import { ConnectionPicker } from "./components/ConnectionPicker.js";
+import { PlanApproval } from "./components/PlanApproval.js";
+import { RewindApproval } from "./components/RewindApproval.js";
+import { useEffect, useRef, useState } from "react";
+import {
+  setUiModelCatalog,
+  uiSendsEffort,
+  uiModelLabel,
+} from "./state/model-catalog.js";
+import {
+  Hero,
+  LoopFlow,
+  Receipts,
+  UsagePopover,
+} from "./components/Activity.js";
+import { PermissionInline } from "./components/PermissionInline.js";
+import { PromptLine } from "./components/PromptLine.js";
+import { QuotaPause } from "./components/QuotaPause.js";
+import { ProjectMemoryPanel } from "./components/ProjectMemory.js";
+import { ImprovementsPanel } from "./components/Improvements.js";
+import { HandoffsPanel } from "./components/Handoffs.js";
+import { LocalBrowserPanel } from "./components/LocalBrowser.js";
+import { SkillsManager } from "./components/SkillsManager.js";
+import { OfficialSkillsManager } from "./components/OfficialSkillsManager.js";
+import { Sidebar } from "./components/Sidebar.js";
+import { StepTabs } from "./components/StepTabs.js";
+import { TitleBar } from "./components/TitleBar.js";
+import { Transcript } from "./components/Transcript.js";
+import { WorkspacePicker } from "./components/WorkspacePicker.js";
+import { providerOf } from "./state/steps.js";
+import { useStore } from "./state/store.js";
+import styles from "./App.module.css";
+
+/** effort を送らないモデル(カタログに efforts が無い)は表示もしない(§7.1) */
+function modelLabel(model: string, effort: string): string {
+  const label = uiModelLabel(model);
+  return uiSendsEffort(model) ? `${label} · ${effort}` : label;
+}
+
+export function App() {
+  const [wideFlow, setWideFlow] = useState(() => window.innerWidth >= 1100);
+  useEffect(() => {
+    const resize = () => setWideFlow(window.innerWidth >= 1100);
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+  const [modelOpen, setModelOpen] = useState(false);
+  const [approvalFocus, setApprovalFocus] = useState<{
+    sessionId: string;
+    workflowId?: string;
+    approvalId?: string;
+    sequence: number;
+  }>();
+  const permissionSent = useRef(new Set<string>());
+  const focusSequence = useRef(0);
+  const [permissionBusy, setPermissionBusy] = useState(false);
+  const [officialError, setOfficialError] = useState("");
+  const [officialOpenSignal, setOfficialOpenSignal] = useState(0);
+  const [skillsOpen, setSkillsOpen] = useState(false);
+  const [improvementsOpen, setImprovementsOpen] = useState(false);
+  const [skillDraft, setSkillDraft] = useState("");
+  const [selectedAgents, setSelectedAgents] = useState<Record<string, string>>(
+    {},
+  );
+  const [pane, setPane] = useState("transcript");
+  const [usageOpen, setUsageOpen] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(false);
+  const s = useStore();
+  const { app, views, prefs } = s;
+  useEffect(() => s.start(), []);
+  // The UI follows the same catalog the main process resolved.
+  setUiModelCatalog(app?.models);
+
+  const current = app?.currentSessionId ?? null;
+  useEffect(
+    () =>
+      window.harness.onEvent((event) => {
+        if (event.type !== "notification_focus") return;
+        const state = useStore.getState();
+        if (!state.app?.sessions.some((item) => item.id === event.sessionId))
+          return;
+        setPane("transcript");
+        setApprovalFocus({ ...event, sequence: ++focusSequence.current });
+        state.openSession(event.sessionId);
+      }),
+    [],
+  );
+  const scopeRequest = current ? views[current]?.officialScopeText : undefined;
+  useEffect(() => {
+    setOfficialError("");
+  }, [current, scopeRequest]);
+  useEffect(() => setSkillsOpen(false), [current]);
+  useEffect(() => setImprovementsOpen(false), [current]);
+  const view = current ? views[current] : undefined;
+  const session = app?.sessions.find((x) => x.id === current);
+  const workspace = app?.workspaces.find((w) => w.id === session?.workspaceId);
+  const waiting = !!view?.pending;
+  const respondPending = (
+    decision: import("../shared/ipc.js").PermissionDecision,
+  ) => {
+    if (!current || !view?.pending) return;
+    const state = useStore.getState();
+    const requestId = view.pending.requestId;
+    if (
+      state.app?.currentSessionId !== current ||
+      state.views[current]?.pending?.requestId !== requestId ||
+      permissionSent.current.has(requestId)
+    )
+      return;
+    permissionSent.current.add(requestId);
+    setPermissionBusy(true);
+    void window.harness
+      .command({
+        type: "permission_response",
+        sessionId: current,
+        requestId,
+        decision,
+      })
+      .then((result) => {
+        if (!result.ok)
+          state.apply({
+            type: "error",
+            sessionId: current,
+            message: result.error,
+          });
+      })
+      .finally(() => setPermissionBusy(false));
+  };
+  const selected = current ? (selectedAgents[current] ?? "auto") : "auto";
+  const agentId =
+    selected === "auto" ? (view?.activeAgent ?? "main") : selected;
+  const agent = view?.agents?.[agentId];
+  const agentStep = view?.agentSteps?.[agentId];
+  const activeView = agent
+    ? {
+        ...view!,
+        running: agent.status === "running",
+        step: agentStep
+          ? {
+              step: (STEP_NODES.indexOf(agentStep.step) + 1) as
+                1 | 2 | 3 | 4 | 5 | 6,
+              node: agentStep.step,
+              round: agentStep.round,
+            }
+          : undefined,
+      }
+    : view;
+  const agentItems = agent
+    ? (agent.items ??
+      (agent.text
+        ? [{ kind: "assistant" as const, id: agentId, text: agent.text }]
+        : []))
+    : undefined;
+  const transcriptItems =
+    selected === "auto" || !agent
+      ? (view?.items ?? [])
+      : agentItems && agentItems.length > 0
+        ? agentItems
+        : [
+            {
+              kind: "notice" as const,
+              id: `empty-${agentId}`,
+              tone: "dim" as const,
+              text: `${agent.name} の出力はまだありません`,
+            },
+          ];
+  const transcriptKey = `${current}:${selected === "auto" ? "main" : agentId}`;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (mod && key === "m") {
+        e.preventDefault();
+        setModelOpen((v) => !v);
+        return;
+      }
+      if (mod && key === "u") {
+        e.preventDefault();
+        setUsageOpen((v) => !v);
+        return;
+      }
+      if (mod && key === "h") {
+        e.preventDefault();
+        s.setPrefs({ heroOpen: !prefs.heroOpen });
+        return;
+      }
+      if (e.shiftKey && e.key === "Tab" && current) {
+        e.preventDefault();
+        const modes = ["default", "acceptEdits", "plan"] as const;
+        const index = modes.indexOf(session?.permissionMode ?? "default");
+        void window.harness.command({
+          type: "set_mode",
+          sessionId: current,
+          mode: modes[(index + 1) % 3]!,
+        });
+        return;
+      }
+      if (mod && key === "n") {
+        e.preventDefault();
+        void s.newSession(session?.workspaceId ?? null, session?.readOnly);
+      } else if (mod && key === "w" && current) {
+        e.preventDefault();
+        s.closeSession(current);
+      } else if (mod && key === "b") {
+        e.preventDefault();
+        s.setPrefs({ sidebarOpen: !prefs.sidebarOpen });
+      } else if (mod && key === "o") {
+        e.preventDefault();
+        s.setPrefs({ pickerOpen: !prefs.pickerOpen });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  if (!app) return <div className={styles.boot}># starting…</div>;
+  const model = session?.model ?? app.model;
+  const effort = session?.effort ?? app.effort;
+  const agentsPanel = (
+    <AgentsPanel
+      view={view}
+      selected={selected}
+      model={model}
+      onSelect={(id) => {
+        if (current) setSelectedAgents((v) => ({ ...v, [current]: id }));
+      }}
+    />
+  );
+  return (
+    <div className={styles.win}>
+      <TitleBar
+        usage={
+          <UsagePopover
+            usage={s.usage}
+            calls={session?.llmCalls}
+            fallback={app.fallback}
+            open={usageOpen}
+            onToggle={() => setUsageOpen((v) => !v)}
+            onClose={() => setUsageOpen(false)}
+          />
+        }
+        workspaceName={workspace?.name}
+        branch={session?.branch ?? workspace?.branch}
+        pickerOpen={prefs.pickerOpen}
+        onTogglePicker={() => s.setPrefs({ pickerOpen: !prefs.pickerOpen })}
+        fake={app.fake}
+      />
+      {prefs.pickerOpen && (
+        <WorkspacePicker
+          fake={app.fake}
+          gitAvailable={app.gitAvailable}
+          progress={s.repositoryProgress}
+          workspaces={app.workspaces}
+          currentId={session?.workspaceId ?? null}
+          onPickFolder={s.pickFolder}
+          onStart={(id, readOnly, isolated, base, branch) =>
+            void s.newSession(id, readOnly, isolated, base, branch)
+          }
+          onForget={(id) =>
+            void window.harness.command({
+              type: "forget_workspace",
+              workspaceId: id,
+            })
+          }
+          onClose={() => s.setPrefs({ pickerOpen: false })}
+        />
+      )}
+      <div className={styles.body} data-sidebar={prefs.sidebarOpen}>
+        {deleteId && (
+          <div className={styles.deleteOverlay}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="delete-session-title"
+              className={styles.deleteDialog}
+            >
+              <h2 id="delete-session-title">セッションを削除しますか？</h2>
+              <p>{app.sessions.find((x) => x.id === deleteId)?.title}</p>
+              <p>
+                会話履歴と巻き戻し用の記録を削除します。この操作は取り消せません。
+              </p>
+              {deleteError && (
+                <p role="alert">
+                  削除できませんでした。実行中の処理を停止してから再試行してください。
+                </p>
+              )}
+              {app.sessions.find((x) => x.id === deleteId)?.worktree && (
+                <p>
+                  worktreeと作業ファイルは残ります。片付ける場合はキャンセルし、対象セッションのworktree操作を先に行ってください。
+                </p>
+              )}
+              <button
+                type="button"
+                disabled={deleting}
+                autoFocus
+                onClick={() => {
+                  setDeleteId(null);
+                  setDeleteError(false);
+                }}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  try {
+                    if (await s.deleteSession(deleteId)) {
+                      setDeleteId(null);
+                      setDeleteError(false);
+                    } else setDeleteError(true);
+                  } finally {
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {deleting ? "削除中…" : "削除する"}
+              </button>
+            </div>
+          </div>
+        )}
+        {prefs.sidebarOpen && (
+          <Sidebar
+            width={prefs.sidebarWidth}
+            onResize={
+              app.phase4
+                ? (sidebarWidth) => s.setPrefs({ sidebarWidth })
+                : undefined
+            }
+            app={app}
+            views={views}
+            collapsed={prefs.collapsed}
+            sort={prefs.sort}
+            search={prefs.search}
+            onNew={() =>
+              void s.newSession(session?.workspaceId ?? null, session?.readOnly)
+            }
+            onOpen={s.openSession}
+            onDelete={setDeleteId}
+            onToggleGroup={s.toggleGroup}
+            onSearch={(search) => s.setPrefs({ search })}
+            onSort={(sort) => s.setPrefs({ sort })}
+          />
+        )}
+        <main className={styles.content} data-session-id={current ?? ""}>
+          {!app.fake && app.authentication && (
+            <AuthenticationPanel
+              views={app.authentication}
+              disabled={app.sessions.some(
+                (session) => session.status !== "idle",
+              )}
+              command={(type, provider) =>
+                window.harness.command(
+                  type === "authenticate" && provider
+                    ? { type, provider }
+                    : { type: "refresh_auth" },
+                )
+              }
+            />
+          )}
+          {session?.worktree && (
+            <div>
+              <span>worktree · {session.worktree.branch} </span>
+              <button
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      "消えた worktree を保存済みブランチから復元しますか？",
+                    )
+                  )
+                    return;
+                  const result = await window.harness.command({
+                    type: "restore_worktree",
+                    sessionId: session.id,
+                    confirmed: true,
+                  });
+                  if (!result.ok)
+                    s.apply({
+                      type: "error",
+                      sessionId: session.id,
+                      message: result.error,
+                    });
+                }}
+              >
+                復元
+              </button>
+              <select
+                aria-label="worktree action"
+                defaultValue="keep"
+                onChange={async (e) => {
+                  const action = e.target.value as
+                    "keep" | "merge" | "remove" | "remove_branch";
+                  if (
+                    action !== "keep" &&
+                    !window.confirm(
+                      action === "merge"
+                        ? "元のリポジトリへマージしますか？"
+                        : "worktree を削除しますか？未コミットの変更も失われます。",
+                    )
+                  ) {
+                    e.target.value = "keep";
+                    return;
+                  }
+                  const result = await window.harness.command({
+                    type: "finish_worktree",
+                    sessionId: session.id,
+                    action,
+                    confirmed: true,
+                  });
+                  if (!result.ok)
+                    s.apply({
+                      type: "error",
+                      sessionId: session.id,
+                      message: result.error,
+                    });
+                  e.target.value = "keep";
+                }}
+              >
+                <option value="keep">残す</option>
+                <option value="merge">元のブランチへマージ</option>
+                <option value="remove">ブランチを残して削除</option>
+                <option value="remove_branch">worktree とブランチを削除</option>
+              </select>
+            </div>
+          )}
+          {app.phase4 && (
+            <Hero
+              model={model}
+              view={view}
+              open={prefs.heroOpen}
+              onToggle={() => s.setPrefs({ heroOpen: !prefs.heroOpen })}
+              extra={agentsPanel}
+            />
+          )}
+          <PhaseBar
+            view={view}
+            model={model}
+            onPhase={
+              app.officialDefault
+                ? undefined
+                : (phase) => void s.send(`/phase ${phase}`)
+            }
+            onJump={(phase) => {
+              setPane("transcript");
+              if (current)
+                setSelectedAgents((v) => ({ ...v, [current]: "main" }));
+              requestAnimationFrame(() =>
+                document
+                  .querySelectorAll('[data-phase="' + phase + '"]')
+                  .item(0)
+                  ?.scrollIntoView?.({ block: "start" }),
+              );
+            }}
+          />
+          {app.officialDefault && view?.workflow && (
+            <p role="status">
+              旧workflow段階の変更は公式経路に未対応です。保存された段階は閲覧のみです。
+            </p>
+          )}
+          {!app.phase4 && agentsPanel}
+          {!app.officialDefault && (
+            <StepTabs
+              active={activeView?.step}
+              waiting={waiting}
+              model={agent?.model ?? model}
+            />
+          )}
+          {app.phase4 && (
+            <div
+              className={styles.paneTabs}
+              role="tablist"
+              aria-label="session panels"
+            >
+              <button
+                role="tab"
+                aria-selected={pane === "transcript"}
+                onClick={() => setPane("transcript")}
+              >
+                Transcript
+              </button>
+              <button
+                role="tab"
+                aria-selected={pane === "flow"}
+                onClick={() => setPane("flow")}
+              >
+                LoopFlow
+              </button>
+            </div>
+          )}
+          <div className={styles.agentArea}>
+            <div className={styles.middle} data-pane={pane}>
+              <Transcript
+                officialDefault={app.officialDefault}
+                key={transcriptKey}
+                items={transcriptItems}
+                running={!!view?.running}
+                model={model}
+                onCommand={(text) => void s.send(text)}
+                blocked={
+                  waiting || !!view?.rewind || session?.status !== "idle"
+                }
+                onReply={selected === "auto" || !agent ? s.send : undefined}
+              >
+                {view?.pending?.plan && current ? (
+                  <PlanApproval
+                    key={view.pending.requestId}
+                    plan={view.pending.plan}
+                    models={app.models ?? []}
+                    onApprove={async (items) => {
+                      const result = await window.harness.command({
+                        type: "plan_response",
+                        sessionId: current,
+                        requestId: view.pending!.requestId,
+                        items,
+                      });
+                      if (!result.ok)
+                        s.apply({
+                          type: "error",
+                          sessionId: current,
+                          message: result.error,
+                        });
+                    }}
+                    onDeny={() => respondPending("deny")}
+                    onRevise={() => {
+                      respondPending("deny");
+                      s.apply({
+                        type: "notice",
+                        sessionId: current,
+                        tone: "dim",
+                        message: "計画への修正指示を入力してください",
+                      });
+                    }}
+                  />
+                ) : (
+                  view?.pending &&
+                  !skillsOpen &&
+                  !improvementsOpen && (
+                    <PermissionInline
+                      oneTime={view.pending.oneTime}
+                      persistent={app.phase4}
+                      tool={view.pending.tool}
+                      summary={view.pending.summary}
+                      onRespond={respondPending}
+                      disabled={
+                        permissionBusy ||
+                        permissionSent.current.has(view.pending.requestId)
+                      }
+                    />
+                  )
+                )}
+
+                {view?.rewind && current && (
+                  <RewindApproval
+                    key={view.rewind.requestId}
+                    preview={view.rewind.preview}
+                    onRespond={(choice) => {
+                      void window.harness.command({
+                        type: "rewind_response",
+                        sessionId: current,
+                        requestId: view.rewind!.requestId,
+                        choice,
+                      });
+                    }}
+                  />
+                )}
+                {current && app.officialDefault && (
+                  <ChatOfficialApprovals
+                    key={current}
+                    sessionId={current}
+                    focus={
+                      approvalFocus?.sessionId === current
+                        ? approvalFocus
+                        : undefined
+                    }
+                  />
+                )}
+              </Transcript>
+              {app.phase4 &&
+                (app.officialDefault ? (
+                  <WorkflowFlow
+                    key={current ?? "no-session"}
+                    sessionId={current ?? undefined}
+                    running={!!view?.running}
+                    scopeRequired={!!view?.officialScopeText}
+                    enabled={wideFlow || pane === "flow"}
+                  />
+                ) : (
+                  <LoopFlow view={activeView} model={agent?.model ?? model} />
+                ))}
+            </div>
+          </div>
+          {app.phase4 && (
+            <Receipts
+              receipts={view?.receipts}
+              sessionId={current ?? undefined}
+              running={session?.status !== "idle"}
+            >
+              {current && app.officialDefault && (
+                <OfficialWorkflowReceipts key={current} sessionId={current} />
+              )}
+            </Receipts>
+          )}
+          {app.connections && current && (
+            <ConnectionPicker
+              key={current}
+              views={app.connections}
+              current={session?.connection ?? "legacy"}
+              modelCommand={(slug) =>
+                window.harness.command({
+                  type: "set_siwc_model",
+                  sessionId: current,
+                  model: slug,
+                })
+              }
+              disabled={session?.status !== "idle"}
+              accountCommand={(action, account) =>
+                window.harness.command({
+                  type: "siwc_account",
+                  sessionId: current,
+                  action,
+                  account,
+                })
+              }
+              command={(action, connection) =>
+                window.harness.command(
+                  action === "apply"
+                    ? { type: "set_connection", sessionId: current, connection }
+                    : {
+                        type: "check_connection",
+                        sessionId: current,
+                        cancel: action === "cancel",
+                      },
+                )
+              }
+            />
+          )}
+          {session?.connection === "openai-siwc" && (
+            <span>
+              Using ChatGPT plan
+              {session.siwcServerDefault
+                ? " · 推論設定: モデルの既定値"
+                : ""} ·{" "}
+              <a
+                href="https://chatgpt.com/#settings/Usage"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Manage usage
+              </a>
+            </span>
+          )}
+          {modelOpen && current && (
+            <ModelPicker
+              aliasPolicies={app.officialDefault}
+              models={app.models ?? []}
+              model={model}
+              effort={effort}
+              onDefault={async (model, effort) => {
+                const result = await window.harness.command({
+                  type: "set_default_model",
+                  model,
+                  effort,
+                });
+                if (result.ok) setModelOpen(false);
+                else
+                  s.apply({
+                    type: "error",
+                    sessionId: current,
+                    message: result.error,
+                  });
+              }}
+              onClose={() => setModelOpen(false)}
+              onApply={async (model, effort) => {
+                const result = await window.harness.command({
+                  type: "set_model",
+                  sessionId: current,
+                  model,
+                  effort,
+                });
+                if (result.ok) setModelOpen(false);
+                else
+                  s.apply({
+                    type: "error",
+                    sessionId: current,
+                    message: result.error,
+                  });
+              }}
+            />
+          )}
+          {(session?.imageBytes ?? 0) >
+            (app.images?.warnSessionBytes ??
+              DEFAULT_IMAGES.warnSessionBytes) && (
+            <div role="status">
+              セッションの画像合計が警告値を超えています。再送する履歴を減らすには
+              {app.officialDefault
+                ? "公式経路は画像の再送・旧 /compact に未対応です。保存済み画像は履歴として閲覧できます。"
+                : "/compact を実行してください（保存済み画像は残ります）。"}
+            </div>
+          )}
+          {session?.quotaPause && current && (
+            <QuotaPause pause={session.quotaPause} sessionId={current} />
+          )}
+          {current && session?.workspaceId && (
+            <SkillsManager
+              officialDefault={app.officialDefault}
+              key={`skills-${current}`}
+              sessionId={current}
+              open={skillsOpen}
+              onOpenChange={setSkillsOpen}
+              running={!!view?.running || waiting}
+              persistent={app.phase4}
+              receipts={view?.receipts ?? []}
+              permission={view?.pending}
+              draft={skillDraft}
+            />
+          )}
+          {current && app.officialDefault && (
+            <OfficialSkillsManager
+              key={`official-skills-${current}`}
+              sessionId={current}
+              provider={providerOf(model)}
+              running={!!view?.running || waiting}
+            />
+          )}
+          {current && session?.workspaceId && (
+            <LocalBrowserPanel
+              key={`local-browser-${current}`}
+              sessionId={current}
+            />
+          )}
+          {current && session?.workspaceId && (
+            <HandoffsPanel
+              key={`handoffs-${current}`}
+              session={session}
+              sessions={app.sessions}
+            />
+          )}
+          {current && session?.workspaceId && (
+            <ProjectMemoryPanel key={current} sessionId={current} />
+          )}
+          {current && session?.workspaceId && (
+            <ImprovementsPanel
+              key={`improvements-${current}`}
+              sessionId={current}
+              workspaceId={session.workspaceId}
+              permission={view?.pending}
+              open={improvementsOpen}
+              onOpenChange={setImprovementsOpen}
+            />
+          )}
+          {app.officialDefault && <OfficialRuntimeSettings />}
+          <OfficialWorkflowPanel
+            verificationOnly
+            openSignal={officialOpenSignal}
+            mainModel={model}
+            mainEffort={effort}
+            mainProvider={
+              (app.models ?? []).find((m) => m.id === model)?.provider ??
+              (/^(claude|codex):/.exec(model ?? "")?.[1] as
+                "claude" | "codex" | undefined)
+            }
+          />
+          {app.officialDefault && (
+            <section aria-label="公式入力の自動判別">
+              {officialError && <p role="alert">{officialError}</p>}
+              <p>
+                公式Claude SDK / Codex App
+                Serverを使用します。旧HTTPへ自動切替しません。
+              </p>
+              <p>
+                質問・作業を同じ会社のHaiku /
+                Lunaで自動判別します。質問はその場で回答し、作業は公式エージェントが選択中のフォルダーを探索して計画を提案します。承認後はそのフォルダー／worktreeを直接編集し、検証結果はモデルの実行報告として表示します。
+              </p>
+              {view?.officialScopeText && (
+                <>
+                  <p>作業依頼：{view.officialScopeText}</p>
+                  <p>
+                    公式エージェントが作業場所を調べ、計画を提案します。承認後は選択中のフォルダー／worktreeで実装とテストを行い、別会社が変更をレビューします。
+                  </p>
+                  <p>
+                    既存テストの事前指定やcleanなGit状態は必須ではありません。追加の操作許可は個別に確認します。テスト結果はモデルの実行報告として区別し、追加課金や自動再開は行いません。
+                  </p>
+                  <button
+                    disabled={!!view.running || waiting}
+                    onClick={() => {
+                      if (!session?.workspaceId) {
+                        setOfficialError(
+                          "対象フォルダーを選択してください。対象未確認のまま計画へ進みません。",
+                        );
+                        return;
+                      }
+                      setOfficialError("");
+                      setOfficialOpenSignal((n) => n + 1);
+                      void s.send(view.officialScopeText!);
+                    }}
+                  >
+                    作業対象を自動確認して計画を作成
+                  </button>
+                </>
+              )}
+            </section>
+          )}
+          <PromptLine
+            officialDefault={app.officialDefault}
+            onDraftChange={setSkillDraft}
+            maxImages={app.images?.maxPerMessage}
+            sessionId={current}
+            imageInput={app.models?.find((m) => m.id === model)?.imageInput}
+            onStop={s.abort}
+            onModel={() => setModelOpen((v) => !v)}
+            mode={
+              app.phase4 ? (session?.permissionMode ?? "default") : undefined
+            }
+            readOnly={session?.readOnly}
+            onMode={(mode) => {
+              if (current)
+                void window.harness.command({
+                  type: "set_mode",
+                  sessionId: current,
+                  mode,
+                });
+            }}
+            suggestions={[
+              ...builtinCommands.filter((c) => c.value !== "/exit"),
+              ...(app.commands ?? []),
+              ...(view?.mcp?.prompts ?? []).map((p) => ({
+                value: p.command,
+                args: p.arguments
+                  .map((a) => (a.required ? `<${a.name}>` : `[${a.name}]`))
+                  .join(" "),
+                description: p.description,
+              })),
+            ]}
+            cwdLabel={workspace?.name ?? (session ? "scratch" : "~")}
+            running={!!view?.running}
+            blocked={waiting}
+            modelLabel={modelLabel(model, effort)}
+            modelColor={
+              providerOf(model) === "codex" ? "var(--codex)" : "var(--claude)"
+            }
+            onSubmit={(text, images) => {
+              return s.send(text, images);
+            }}
+          />
+        </main>
+      </div>
+    </div>
+  );
+}

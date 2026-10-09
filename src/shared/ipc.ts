@@ -10,11 +10,11 @@ import {
 } from "./connections.js";
 import { parseMemoryAction } from "./project-memory.js";
 import { parseSkillUiRequest } from "./project-skills.js";
-import { parseImprovementAction } from "./improvements.js";
+import { parseOfficialSkillAction } from "./official-skills.js";
 import { parseHandoffAction } from "./handoffs.js";
 import { parseLocalBrowserAction } from "./local-browser.js";
 import { attachmentInfo, type ImageAttachment } from "./images.js";
-// DESIGN.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
+// 旧設計 Old/DESIGN-9a275bc.md §16.4: 公開APIは harness:event(main → renderer)と harness:command(renderer → main)。
 // §14.2のローカルリンク専用IPCはpreload内部だけで使用し、公開APIには含めない。
 
 export const EVENT_CHANNEL = "harness:event";
@@ -43,7 +43,7 @@ export const STEP_NODES = [
 ] as const;
 export type StepNode = (typeof STEP_NODES)[number];
 
-/** DESIGN.md §16.5 */
+/** 旧設計 Old/DESIGN-9a275bc.md §16.5 */
 export interface Receipt {
   error?: import("../main/tools/errors.js").ToolFailure;
   agentId?: string;
@@ -124,6 +124,8 @@ export interface AppState {
   models?: {
     imageInput?: boolean;
     id: string;
+    /** Current automatic-update policy; id remains the resolved catalog ID. */
+    alias?: string;
     provider: ProviderName;
     label: string;
     efforts: Effort[];
@@ -196,6 +198,12 @@ export type TranscriptItem =
  * "state" / "transcript" / "user_message" / "turn" / "tool_result" / "permission_resolved" も追加分。
  */
 export type UiEvent =
+  | {
+      type: "notification_focus";
+      sessionId: string;
+      workflowId?: string;
+      approvalId?: string;
+    }
   | { type: "official_scope_required"; sessionId: string; text?: string }
   | { type: "memory_changed"; sessionId: string }
   | {
@@ -354,15 +362,14 @@ export type HarnessCommand =
       request: import("./handoffs.js").HandoffAction;
     }
   | {
-      type: "improvements";
-      sessionId: string;
-      operationId: string;
-      request: import("./improvements.js").ImprovementAction;
-    }
-  | {
       type: "project_skills";
       sessionId: string;
       request: import("./project-skills.js").SkillUiRequest;
+    }
+  | {
+      type: "official_skills";
+      sessionId: string;
+      request: import("./official-skills.js").OfficialSkillAction;
     }
   | {
       type: "project_memory";
@@ -461,11 +468,10 @@ export type CommandResult =
       workspaceId?: string;
       sessionId?: string;
       memory?: import("./project-memory.js").MemoryList;
-      improvements?: import("./improvements.js").ImprovementView;
       handoffs?: import("./handoffs.js").HandoffView;
       localBrowser?: import("./local-browser.js").LocalBrowserView;
       preparedPrompt?: string;
-      modelCandidates?: import("./model-candidates.js").ModelCandidateView;
+      officialSkills?: import("./official-skills.js").OfficialSkillsView;
       skills?:
         | import("./project-skills.js").SkillListing
         | import("./project-skills.js").SkillPreview
@@ -554,19 +560,10 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
         ? { type: "project_skills", sessionId: c.sessionId, request }
         : undefined;
     }
-    case "improvements": {
-      const request = parseImprovementAction(c.request);
-      return str(c.sessionId) &&
-        str(c.operationId) &&
-        /^[\w-]{1,128}$/.test(c.operationId) &&
-        request &&
-        jsonFits(c.request)
-        ? {
-            type: "improvements",
-            sessionId: c.sessionId,
-            operationId: c.operationId,
-            request,
-          }
+    case "official_skills": {
+      const request = parseOfficialSkillAction(c.request);
+      return str(c.sessionId) && /^[\w-]{1,128}$/.test(c.sessionId) && request
+        ? { type: "official_skills", sessionId: c.sessionId, request }
         : undefined;
     }
     case "project_memory": {

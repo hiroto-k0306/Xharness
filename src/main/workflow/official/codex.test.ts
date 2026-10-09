@@ -207,6 +207,110 @@ const request = (phase: AgentRequest["phase"] = "review"): AgentRequest => ({
   tool: vi.fn(async () => {}),
   approve: vi.fn(async () => false),
 });
+it.each(["plan", "implement", "fix", "review"] as const)(
+  "refuses selected native skills before starting Codex in %s until isolation is verified",
+  async (phase) => {
+    const mock = fakeServer(),
+      start = vi.fn(() => mock.server),
+      selected = {
+        provider: "codex" as const,
+        scope: "project" as const,
+        name: "selected-skill",
+        source: ".agents/skills/selected-skill/SKILL.md",
+        hash: "a".repeat(64),
+        bundleHash: "b".repeat(64),
+        files: [
+          {
+            relativePath: "SKILL.md",
+            body: "private skill body",
+            hash: "a".repeat(64),
+          },
+        ],
+      };
+    const result = await new CodexWorkflowAgent(start).run(
+      { ...request(phase), nativeWork: true, officialSkills: [selected] },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toMatch(
+      /^official-skills-codex-discovery-boundary-unverified:/,
+    );
+    expect(result.error).toContain("公式skill実行は未対応");
+    expect(result.error).toContain("project/ancestor/user/admin/system");
+    expect(result.dispatched).toBe(false);
+    expect(start).not.toHaveBeenCalled();
+    expect(mock.calls).toEqual([]);
+    expect(result.officialSkillsEvidence).toEqual({
+      requested: [
+        {
+          provider: selected.provider,
+          scope: selected.scope,
+          name: selected.name,
+          source: selected.source,
+          hash: selected.hash,
+          bundleHash: selected.bundleHash,
+        },
+      ],
+      dispatched: [],
+      observed: [],
+    });
+    expect(JSON.stringify(result)).not.toContain("private skill body");
+  },
+);
+it("cancelled selected skills remain requested metadata without a server, dispatch, observation or body", async () => {
+  const start = vi.fn(() => fakeServer().server);
+  const controller = new AbortController();
+  controller.abort();
+  const selected = {
+    provider: "codex" as const,
+    scope: "project" as const,
+    name: "selected",
+    source: "/synthetic/.agents/skills/selected/SKILL.md",
+    hash: "a".repeat(64),
+    bundleHash: "b".repeat(64),
+    files: [
+      {
+        relativePath: "SKILL.md",
+        body: "PRIVATE SKILL BODY",
+        hash: "a".repeat(64),
+      },
+    ],
+  };
+  const result = await new CodexWorkflowAgent(start).run(
+    { ...request(), nativeWork: true, officialSkills: [selected] },
+    controller.signal,
+  );
+  expect(result.status).toBe("cancelled");
+  expect(result.dispatched).toBe(false);
+  expect(start).not.toHaveBeenCalled();
+  expect(result.officialSkillsEvidence).toMatchObject({
+    requested: [
+      {
+        name: "selected",
+        hash: selected.hash,
+        bundleHash: selected.bundleHash,
+      },
+    ],
+    dispatched: [],
+    observed: [],
+  });
+  expect(JSON.stringify(result)).not.toContain("PRIVATE SKILL BODY");
+});
+it("an empty skill selection preserves ordinary Codex execution", async () => {
+  const mock = fakeServer();
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    { ...request(), officialSkills: [] },
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
+  expect(result.dispatched).toBe(true);
+  expect(result.officialSkillsEvidence).toBeUndefined();
+  const turn = mock.calls.find(([method]) => method === "turn/start")![1];
+  expect(turn.input).toEqual([{ type: "text", text: "Synthetic only" }]);
+  expect(mock.calls.some(([method]) => method === "skills/config/write")).toBe(
+    false,
+  );
+});
 it.each(["new.ts", "../outside.ts", "auth.json"])(
   "native file changes can exceed hints but keep workspace and secret boundaries: %s",
   async (path) => {
@@ -1552,3 +1656,72 @@ it("tells implementation threads exactly the reads XHarness can route to approva
     await rm(cwd, { recursive: true, force: true });
   }
 });
+
+it("invalid DAG Codex scope starts no App Server", async () => {
+  const start = vi.fn();
+  const result = await new CodexWorkflowAgent(start).run(
+    { ...request(), nativeWork: true, writeScope: ["../outside"] },
+    new AbortController().signal,
+  );
+  expect(result.dispatched).toBe(false);
+  expect(start).not.toHaveBeenCalled();
+});
+
+it.each(["new.ts", "other.ts"])(
+  "DAG direct file-change requests respect exact scope: %s",
+  async (path) => {
+    const cwd = await mkdtemp(join(tmpdir(), "xh-native-file-"));
+    try {
+      const mock = fakeServer(),
+        original = mock.server.request;
+      let decision: unknown;
+      mock.server.request = async (method, raw, signal) => {
+        if (method !== "turn/start") return original(method, raw, signal);
+        queueMicrotask(() => {
+          void (async () => {
+            mock.emit("turn/started", {
+              threadId: "thread-fixture",
+              turn: { id: "turn-fixture" },
+            });
+            mock.emit("item/started", {
+              threadId: "thread-fixture",
+              turnId: "turn-fixture",
+              item: {
+                id: "edit-fixture",
+                type: "fileChange",
+                changes: [{ path }],
+              },
+            });
+            decision = await mock.approval()(
+              "item/fileChange/requestApproval",
+              {
+                threadId: "thread-fixture",
+                turnId: "turn-fixture",
+                itemId: "edit-fixture",
+              },
+            );
+            mock.emit("turn/completed", {
+              threadId: "thread-fixture",
+              turn: { id: "turn-fixture", status: "completed" },
+            });
+          })();
+        });
+        return { turn: { id: "turn-fixture" } };
+      };
+      await new CodexWorkflowAgent(() => mock.server).run(
+        {
+          ...request("implement"),
+          cwd,
+          nativeWork: true,
+          writeScope: ["new.ts"],
+        },
+        new AbortController().signal,
+      );
+      expect(decision).toEqual({
+        decision: path === "new.ts" ? "accept" : "decline",
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  },
+);

@@ -32,6 +32,8 @@ export interface CatalogModel {
   defaultEffort?: ReasoningEffort;
   retiresAt?: string;
   acceptedIds?: string[];
+  /** Explicit previous generations of this alias. Policy migration only, never record ID lookup. */
+  historicalIds?: string[];
   capabilities?: CatalogCapabilities;
 }
 export type RoleName =
@@ -96,7 +98,6 @@ export function parseCatalog(text: string): Catalog {
   };
 }
 
-let shipped: Catalog | undefined;
 let override: Catalog | undefined;
 /** Tests only: replace the catalog every resolver sees; undefined restores the shipped one. */
 export function overrideCatalogForTest(catalog: Catalog | undefined) {
@@ -105,7 +106,8 @@ export function overrideCatalogForTest(catalog: Catalog | undefined) {
 /** Source / packaged main both resolve the repository-shipped catalog, never cwd. */
 export function loadCatalog(): Catalog {
   if (override) return override;
-  if (shipped) return shipped;
+  // The small shipped file is reread at every boundary; a corrupt update must
+  // stop the next call rather than silently reusing an earlier parsed catalog.
   // Keep Node filesystem URLs out of Vite's renderer asset URL rewriting.
   const FileURL = URL;
   for (const path of [
@@ -113,10 +115,10 @@ export function loadCatalog(): Catalog {
     new FileURL("../../catalog/models.yaml", import.meta.url),
   ]) {
     try {
-      shipped = parseCatalog(readFileSync(path, "utf8"));
-      return shipped;
-    } catch {
-      /* Try the bundled layout next. */
+      return parseCatalog(readFileSync(path, "utf8"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
+      /* Only a missing layout may try the bundled location. */
     }
   }
   throw new Error("Model catalog unavailable");
@@ -124,16 +126,17 @@ export function loadCatalog(): Catalog {
 
 /** `alias → id` for executable catalog models; historical IDs remain readable. */
 export function catalogAliases(catalog: Catalog = loadCatalog()) {
-  return Object.fromEntries(
-    catalog.models
-      .filter(
-        (m) =>
-          typeof m.alias === "string" &&
-          m.alias &&
-          !catalogUnavailableReason(m.id, catalog),
-      )
-      .map((m) => [m.alias!, m.id]),
-  ) as Record<string, string>;
+  const entries = catalog.models
+    .filter(
+      (m) =>
+        typeof m.alias === "string" &&
+        m.alias &&
+        !catalogUnavailableReason(m.id, catalog),
+    )
+    .map((m) => [m.alias!, m.id] as const);
+  if (new Set(entries.map(([alias]) => alias)).size !== entries.length)
+    throw new Error("モデルカタログのalias対応が競合しています。");
+  return Object.fromEntries(entries);
 }
 
 /** The catalog entry for an ID (including accepted alternate IDs). */
@@ -188,11 +191,107 @@ export function catalogLookup(
   const colon = spec.indexOf(":");
   const provider = colon > 0 ? spec.slice(0, colon) : undefined;
   const name = colon > 0 ? spec.slice(colon + 1) : spec;
-  const model =
-    catalog.models.find((m) => m.alias === name) ?? catalogModel(name, catalog);
-  if (!model || (provider !== undefined && model.provider !== provider))
-    return undefined;
-  return model;
+  const matches = catalog.models.filter(
+    (m) =>
+      (!provider || m.provider === provider) &&
+      (m.alias === name ||
+        m.id === name ||
+        (m.acceptedIds ?? []).includes(name)),
+  );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+/** Saved selection stays generation-free; a call resolves a separate concrete ID. */
+export interface ModelPolicy {
+  provider: ProviderId;
+  model: string;
+  effort?: ReasoningEffort;
+}
+
+export function normalizeModelPolicy(
+  spec: string,
+  effort?: string,
+  catalog: Catalog = loadCatalog(),
+  aliases?: Record<string, string>,
+): ModelPolicy {
+  const text = spec.trim();
+  const colon = text.indexOf(":");
+  const provider = colon > 0 ? text.slice(0, colon) : undefined;
+  let name = colon > 0 ? text.slice(colon + 1) : text;
+  if (!name || (provider && provider !== "claude" && provider !== "codex"))
+    throw new Error(`モデル選択「${spec}」のprovider/aliasが不正です。`);
+  const direct = catalog.models.filter(
+    (m) => m.alias === name && (!provider || m.provider === provider),
+  );
+  if (direct.length && aliases && Object.hasOwn(aliases, name)) {
+    const target = aliases[name];
+    if (
+      !direct.some(
+        (m) =>
+          m.id === target ||
+          m.alias === target ||
+          `${m.provider}:${m.alias}` === target,
+      )
+    )
+      throw new Error(
+        `モデルalias「${name}」が設定とカタログで競合しています。`,
+      );
+  }
+  if (!direct.length && aliases && Object.hasOwn(aliases, name))
+    name = aliases[name]!;
+  const targetColon = name.indexOf(":");
+  const targetProvider =
+    targetColon > 0 ? name.slice(0, targetColon) : provider;
+  if (provider && targetProvider && provider !== targetProvider)
+    throw new Error(`モデル選択「${spec}」のproviderが競合しています。`);
+  if (targetColon > 0) name = name.slice(targetColon + 1);
+  const matches = catalog.models.filter(
+    (m) =>
+      !!m.alias &&
+      (!targetProvider || m.provider === targetProvider) &&
+      (m.alias === name ||
+        m.id === name ||
+        (m.acceptedIds ?? []).includes(name) ||
+        (m.historicalIds ?? []).includes(name)),
+  );
+  if (matches.length !== 1)
+    throw new Error(
+      matches.length
+        ? `モデルalias「${spec}」の対応が競合しています。`
+        : `モデル「${spec}」に明示されたalias対応がありません。`,
+    );
+  if (effort !== undefined && !isEffortName(effort))
+    throw new Error(`モデル選択のeffort「${effort}」が不正です。`);
+  const target = matches[0]!;
+  return {
+    provider: target.provider,
+    model: target.alias!,
+    ...(effort !== undefined ? { effort: effort as ReasoningEffort } : {}),
+  };
+}
+
+/** Resolve immediately before use; never fall back or alter a saved concrete record ID. */
+export function resolveModelPolicy(
+  spec: string,
+  effort?: string,
+  catalog: Catalog = loadCatalog(),
+  aliases?: Record<string, string>,
+): ModelPolicy & { id: string; catalog: CatalogVersion } {
+  const policy = normalizeModelPolicy(spec, effort, catalog, aliases);
+  const target = catalog.models.find(
+    (m) => m.provider === policy.provider && m.alias === policy.model,
+  )!;
+  const reason = catalogUnavailableReason(target.id, catalog);
+  if (reason) throw new Error(`${reason}別のモデルへは切り替えていません。`);
+  if (
+    policy.effort &&
+    (!target.efforts?.[policy.effort] ||
+      !isEffortName(target.efforts[policy.effort]))
+  )
+    throw new Error(
+      `モデルalias「${policy.model}」のeffort「${policy.effort}」は対応していません。`,
+    );
+  return { ...policy, id: target.id, catalog: catalogVersion(catalog) };
 }
 
 /** Whether effort is sent for this model: only models that list efforts. */

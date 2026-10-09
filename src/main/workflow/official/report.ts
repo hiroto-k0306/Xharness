@@ -10,6 +10,40 @@ const escape = (value: unknown) =>
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+
+/** Resolve nothing here: export the selection evidence saved for each call. */
+function modelSelectionHistory(record: WorkflowRecord) {
+  return `<h2>呼出ごとのモデル解決履歴</h2>${record.calls
+    .map((call, index) => {
+      const selection = call.modelSelection;
+      const title = `<h3>#${index + 1} ${escape(call.phase)} / ${escape(call.status)}</h3>`;
+      if (!selection)
+        return `<article>${title}<p>当時の指定ID：${escape(call.provider)}/${escape(call.requestedModel)} / effort：${escape(call.effort ?? "指定なし")}（alias policy・catalogの保存記録なし）</p></article>`;
+      const catalog = (value: typeof selection.resolved.catalog) =>
+        `v${escape(value.version)} · ${escape(value.updatedAt)} · digest ${escape(value.digest)}`;
+      return `<article>${title}<p>保存policy：${escape(selection.policy.provider)}:${escape(selection.policy.model)} / effort：${escape(selection.policy.effort ?? "指定なし")}</p><p>呼出時の実ID：${escape(selection.resolved.provider)}/${escape(selection.resolved.model)} / effort：${escape(selection.resolved.effort ?? "指定なし")}</p><p>catalog：${catalog(selection.resolved.catalog)}</p><p>前回との変更：${selection.previous ? (selection.changed ? "あり" : "なし") : "前回の解決記録なし"}</p>${selection.previous ? `<p>前回の実ID：${escape(selection.previous.model)} / effort：${escape(selection.previous.effort ?? "指定なし")}${selection.previous.catalog ? ` / catalog：${catalog(selection.previous.catalog)}` : ""}</p>` : ""}</article>`;
+    })
+    .join("")}`;
+}
+
+function officialSkillsHistory(record: WorkflowRecord) {
+  if (!record.calls.some((call) => call.officialSkills)) return "";
+  return `<h2>公式スキルの送信・使用証跡</h2><p>選択・実行基盤への送信は、実際に使用した証拠ではありません。観測は取得したスキル呼出の状態で、タスク全体の成功を証明しません。</p>${record.calls
+    .map((call, index) => {
+      const title = `<h3>#${index + 1} ${escape(call.phase)} / ${escape(call.provider)}</h3>`;
+      const evidence = call.officialSkills;
+      if (!evidence)
+        return `<article>${title}<p>保存記録なし。未使用の証明ではありません。</p></article>`;
+      const status = {
+        requested: "使用要求",
+        allowed: "許可",
+        completed: "呼出完了",
+        denied: "拒否",
+      };
+      return `<article>${title}<h4>要求した選択</h4>${evidence.requested.map((skill) => `<p>${escape(skill.name)} · ${escape(skill.provider)} · ${escape(skill.scope)} · ${escape(skill.source)}<br>本文hash：${escape(skill.hash)} / bundle hash：${escape(skill.bundleHash)}</p>`).join("")}<h4>実行基盤への送信（使用・完了ではありません）</h4>${evidence.dispatched?.length ? evidence.dispatched.map((skill) => `<p>${escape(skill.name)} · ${escape(skill.mechanism)}</p>`).join("") : "<p>送信の証跡なし</p>"}<h4>使用の観測</h4>${evidence.observed?.length ? evidence.observed.map((skill) => `<p>${escape(skill.name)} · ${escape(status[skill.status])}</p>`).join("") : "<p>使用は未確認</p>"}</article>`;
+    })
+    .join("")}`;
+}
 /** Escaped public excerpts only; raw private events and thinking are never rendered. */
 function publicTimeline(c: import("./communication.js").WorkflowCommunication) {
   const events = c.events ?? [];
@@ -104,11 +138,11 @@ export function officialWorkflowReport(record: WorkflowRecord) {
         .join("")}</table>`
     : "";
   const dagSummary = record.dag
-    ? `<h3>DAG / 最大2並列 / native会話resume未対応</h3><p>固定合成課題の模擬実行。実provider並行実行は未検証。</p><table><tr><th>node</th><th>状態</th><th>base</th><th>取込HEAD</th></tr>${record.dag.nodes.map((n) => `<tr>${cells([n.id, n.state, n.base, n.integratedHead])}</tr>`).join("")}</table>`
+    ? `<h3>DAG / 最大2並列 / native会話resume未対応</h3><p>${record.nativeDagWorkspace ? "通常作業の隔離Git worktree実行。利用者のブランチは変更しません。" : "固定合成課題の記録。"}${record.simulated ? " 模擬通信で、実provider並行実行の検証ではありません。" : " 実provider並行実行の検証範囲は対象リビジョンの記録を参照してください。"}</p><table><tr><th>node</th><th>状態</th><th>base</th><th>取込HEAD</th></tr>${record.dag.nodes.map((n) => `<tr>${cells([n.id, n.state, n.base, n.integratedHead])}</tr>`).join("")}</table>`
     : "";
   const reviews =
     (record.nativeWork
-      ? `<h3>通常作業の検証報告</h3><p>base/headはファイル比較digestです。Gitコミットではありません。作業場所: ${escape(record.cwd)}。以下はモデルの実行報告で、ハーネス独立検証ではありません。</p>${record.nativeValidation?.length ? record.nativeValidation.map((t) => `<p>${escape(t.command)}: ${escape(t.status)} / ${escape(t.summary)}</p>`).join("") : "<p>テスト実行報告なし</p>"}`
+      ? `<h3>通常作業の検証報告</h3><p>${record.nativeDagWorkspace?.integration?.head ? "base/headは所有する隔離Git worktreeのGitコミットです。利用者のブランチは変更しません。" : "base/headはファイル比較digestです。Gitコミットではありません。"}${record.nativeDagWorkspace ? ` source base ${escape(record.nativeDagWorkspace.sourceBase)} / 統合HEAD ${escape(record.nativeDagWorkspace.integration?.head ?? "未取込")}。独立プロセスの結果はchecks表、モデル報告は以下に分けて表示します。` : ""}作業場所: ${escape(record.cwd)}。以下はモデルの実行報告で、ハーネス独立検証ではありません。</p>${record.nativeValidation?.length ? record.nativeValidation.map((t) => `<p>${escape(t.command)}: ${escape(t.status)} / ${escape(t.summary)}</p>`).join("") : "<p>テスト実行報告なし</p>"}`
       : "") +
     dagSummary +
     record.reviews
@@ -117,5 +151,5 @@ export function officialWorkflowReport(record: WorkflowRecord) {
           `<article><p>${escape(r.base)} → ${escape(r.head)}</p>${r.findings.length ? r.findings.map((f) => `<p><strong>${escape(f.severity)}</strong> ${escape(f.file)}:${f.line} — ${escape(f.message)}<br>根拠: ${escape(f.evidence)}</p>`).join("") : "<p>指摘なし（モデルレビュー。客観テストとは別）</p>"}</article>`,
       )
       .join("");
-  return `<!doctype html><html lang="ja"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>XHarness official workflow</title><style>body{max-width:1400px;margin:32px auto;padding:0 20px;font:15px system-ui;background:#111722;color:#e6e9ee}table{border-collapse:collapse;width:100%;margin:16px 0}td,th{padding:10px;text-align:left;border:1px solid #384255;overflow-wrap:anywhere}h1,h2{color:#9cbbfc}pre{white-space:pre-wrap}article{border-left:3px solid #657baf;padding-left:16px}</style><h1>公式workflow — ${escape(record.status)}</h1><p>${escape(record.goal)}</p>${record.answer ? `<h2>回答</h2><p>${escape(record.answer)}</p>` : ""}<p>${record.simulated ? "模擬実行。実モデルの品質・速度比較には使いません。" : "実行記録。モデル自己申告をテスト合格に読み替えません。"}</p><p>タスク ${escape(record.id)} / 修正 ${record.correctionRounds}回 / ${escape(record.startedAt)} → ${escape(record.finishedAt)}</p><p>base ${escape(record.base)}<br>head ${escape(record.head)}<br>計画承認 ${escape(record.approvedDigest)}</p><h2>確認する計画</h2><table><tr><th>課題</th><th>ファイル</th><th>依存</th><th>実装担当</th><th>理由</th><th>レビュー担当</th><th>受入テスト</th></tr>${plan}</table><p>計画モデル（作成時に確定）: ${record.planner ? escape(`${record.planner.provider} / ${record.planner.model} / ${record.planner.effort ?? "server default"}${record.planner.selectedAs ? `（選択: ${record.planner.selectedAs}）` : ""}`) : "記録なし（この項目より前の記録）"}</p>${record.callBudget ? `<p>通信上限（送信前に予約）: ${escape(JSON.stringify(record.callBudget.limits))} / 予約済み: ${escape(JSON.stringify(record.callBudget.reserved))}</p>` : ""}<h2>総使用量とカバー率</h2><p>入力の既知合計 ${escape(usage.input.known)} (${usage.input.measuredCalls}/${usage.dispatchedCalls} calls)、出力 ${escape(usage.output.known)} (${usage.output.measuredCalls}/${usage.dispatchedCalls} calls)、完全usage ${usage.completeUsageCalls}/${usage.dispatchedCalls} calls。cache/reasoningはproviderの包含関係を保ち二重加算しません。サブスク枠消費・料金への換算はしません。runningの未確認試行は欠測として別に扱います。</p><table><tr><th>段階</th><th>provider</th><th>指定model</th><th>effort</th><th>観測model</th><th>状態</th><th>In</th><th>Out</th><th>cache read</th><th>cache write</th><th>reasoning</th><th>scope</th><th>ms</th></tr>${calls}</table>${communication}<h2>指定・初期化・主応答モデルの証跡</h2>${modelEvidence}${injectionSummary}<h2>プロセスで確認した受入・統合テスト</h2><table><tr><th>head</th><th>テスト</th><th>退出値</th><th>結果</th><th>ms</th><th>根拠source</th></tr>${tests}</table><h2>他社による全差分・統合レビュー</h2>${reviews}<h2>コミットと実行境界</h2><pre>${escape(record.commits.join("\n"))}</pre><p>native session/turn ID、tool input/outputのdigest、承認・実行状態、プロセス出力は同じタスクのJSONに保存します。再開でrunning試行や不明な副作用を自動再実行しません。</p>${record.error ? `<p>停止理由 ${escape(record.error)}</p>` : ""}</html>`;
+  return `<!doctype html><html lang="ja"><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>XHarness official workflow</title><style>body{max-width:1400px;margin:32px auto;padding:0 20px;font:15px system-ui;background:#111722;color:#e6e9ee}table{border-collapse:collapse;width:100%;margin:16px 0}td,th{padding:10px;text-align:left;border:1px solid #384255;overflow-wrap:anywhere}h1,h2{color:#9cbbfc}pre{white-space:pre-wrap}article{border-left:3px solid #657baf;padding-left:16px}</style><h1>公式workflow — ${escape(record.status)}</h1><p>${escape(record.goal)}</p>${record.answer ? `<h2>回答</h2><p>${escape(record.answer)}</p>` : ""}<p>${record.simulated ? "模擬実行。実モデルの品質・速度比較には使いません。" : "実行記録。モデル自己申告をテスト合格に読み替えません。"}</p><p>タスク ${escape(record.id)} / 修正 ${record.correctionRounds}回 / ${escape(record.startedAt)} → ${escape(record.finishedAt)}</p><p>base ${escape(record.base)}<br>head ${escape(record.head)}<br>計画承認 ${escape(record.approvedDigest)}</p><h2>確認する計画</h2><table><tr><th>課題</th><th>ファイル</th><th>依存</th><th>実装担当</th><th>理由</th><th>レビュー担当</th><th>受入テスト</th></tr>${plan}</table><p>計画モデル（作成時に確定）: ${record.planner ? escape(`${record.planner.provider} / ${record.planner.model} / ${record.planner.effort ?? "server default"}${record.planner.selectedAs ? `（選択: ${record.planner.selectedAs}）` : ""}`) : "記録なし（この項目より前の記録）"}</p>${record.callBudget ? `<p>通信上限（送信前に予約）: ${escape(JSON.stringify(record.callBudget.limits))} / 予約済み: ${escape(JSON.stringify(record.callBudget.reserved))}</p>` : ""}<h2>総使用量とカバー率</h2><p>入力の既知合計 ${escape(usage.input.known)} (${usage.input.measuredCalls}/${usage.dispatchedCalls} calls)、出力 ${escape(usage.output.known)} (${usage.output.measuredCalls}/${usage.dispatchedCalls} calls)、完全usage ${usage.completeUsageCalls}/${usage.dispatchedCalls} calls。cache/reasoningはproviderの包含関係を保ち二重加算しません。サブスク枠消費・料金への換算はしません。runningの未確認試行は欠測として別に扱います。</p><table><tr><th>段階</th><th>provider</th><th>指定model</th><th>effort</th><th>観測model</th><th>状態</th><th>In</th><th>Out</th><th>cache read</th><th>cache write</th><th>reasoning</th><th>scope</th><th>ms</th></tr>${calls}</table>${modelSelectionHistory(record)}${officialSkillsHistory(record)}${communication}<h2>指定・初期化・主応答モデルの証跡</h2>${modelEvidence}${injectionSummary}<h2>プロセスで確認した受入・統合テスト</h2><table><tr><th>head</th><th>テスト</th><th>退出値</th><th>結果</th><th>ms</th><th>根拠source</th></tr>${tests}</table><h2>他社による全差分・統合レビュー</h2>${reviews}<h2>コミットと実行境界</h2><pre>${escape(record.commits.join("\n"))}</pre><p>native session/turn ID、tool input/outputのdigest、承認・実行状態、プロセス出力は同じタスクのJSONに保存します。再開でrunning試行や不明な副作用を自動再実行しません。</p>${record.error ? `<p>停止理由 ${escape(record.error)}</p>` : ""}</html>`;
 }

@@ -201,11 +201,9 @@ it("keeps a legacy record's implied models after an alias generation update", as
   services.push(restarted);
   await restarted.command({ action: "list" });
   expect(await readFile(file, "utf8")).toBe(before);
-  // History keeps fixed IDs; a disabled reviewer stops execution.
+  // History keeps fixed IDs; no explicit alias mapping means execution stops.
   const view = await restarted.command({ action: "resume", id });
-  expect(view.error).toMatch(
-    /gpt-6-luna.*無効.*別のモデルへは切り替えていません/,
-  );
+  expect(view.error).toMatch(/gpt-6-luna.*明示されたalias対応がありません/);
   expect(claude.requests).toEqual([]);
   expect(codex.requests).toEqual([]);
   expect(await readFile(file, "utf8")).toBe(before);
@@ -293,7 +291,7 @@ it("reads a new-format record but refuses its disabled models after the aliases 
   expect(impliedRecordModels(record)).toEqual({ reviewers: {} });
   expect(() =>
     resolvePlannerChoice(recorded, [candidate("codex", "gpt-6.1-sol")]),
-  ).toThrow(/gpt-6.1-sol.*無効/);
+  ).toThrow(/gpt-6.1-sol.*明示されたalias対応がありません/);
   const claude = agent("claude", ["claude-sonnet-5-5"]),
     codex = agent("codex", ["gpt-6.1-sol", "gpt-7-sol"]);
   const restarted = new OfficialWorkflowService({
@@ -306,13 +304,27 @@ it("reads a new-format record but refuses its disabled models after the aliases 
   await restarted.command({ action: "list" });
   expect(await readFile(file, "utf8")).toBe(before);
   const view = await restarted.command({ action: "resume", id });
-  expect(view.error).toMatch(
-    /gpt-6.1-sol.*無効.*別のモデルへは切り替えていません/,
+  const stopped = await finished(restarted, id);
+  expect(view.error ?? stopped.error).toMatch(
+    /gpt-6.1-sol.*明示されたalias対応がありません/,
   );
+  expect(stopped.status).toBe("failed");
   expect(claude.requests).toEqual([]);
   expect(codex.requests).toEqual([]);
-  expect(await readFile(file, "utf8")).toBe(before);
+  expectSavedFacts(stopped, record);
 });
+function expectSavedFacts(actual: WorkflowRecord, before: WorkflowRecord) {
+  for (const key of [
+    "id",
+    "plan",
+    "approvedDigest",
+    "executionDigest",
+    "planner",
+    "calls",
+  ] as const)
+    expect(actual[key]).toEqual(before[key]);
+}
+
 async function finished(instance: OfficialWorkflowService, id: string) {
   for (let i = 0; i < 1500; i++) {
     const view = await instance.command({ action: "list" });
@@ -411,25 +423,22 @@ it.each([
 ] as const)(
   "still stops a resume when %s is retired",
   async (_label, retired) => {
-    const { view, claude, codex } = await resumeWith(
+    const { view, id, restarted, claude, codex } = await resumeWith(
       (r) => {
         delete r.plan!.tasks[0]!.reviewer;
       },
       [retired],
-      ["claude-sonnet-5-5"],
+      ["claude-sonnet-5-5", "claude-opus-5-5"],
       ["gpt-6-luna"],
     );
-    expect(view.error).toMatch(
-      new RegExp(
-        `^再開できません：モデル「${retired.replaceAll(".", "\.")}」は提供終了`,
-      ),
-    );
+    const error = view.error ?? (await finished(restarted, id)).error;
+    expect(error).toContain(`モデル「${retired}」は提供終了`);
     expect(claude.requests.length + codex.requests.length).toBe(0);
   },
 );
 
 it.each(["claude-haiku-4-5-20251001", "claude-haiku-4-5"])(
-  "reads historical %s without rewriting it and refuses execution even if offered",
+  "reads unmapped historical %s without changing saved facts and refuses dispatch even if offered",
   async (model) => {
     const { instance, home, claude, codex } = await service(
       [model, "claude-haiku-5-5"],
@@ -437,6 +446,11 @@ it.each(["claude-haiku-4-5-20251001", "claude-haiku-4-5"])(
     );
     const { id, file } = await savedRecord(home, (record) => {
       record.plan!.tasks[0]!.assignee.model = model;
+    });
+    useCatalog((doc) => {
+      // No explicit history-to-policy mapping: offering a similar current model
+      // does not authorize using it for this saved selection.
+      delete doc.models.find((m) => m.id === "claude-haiku-5-5")!.historicalIds;
     });
     await instance.close();
     const restarted = new OfficialWorkflowService({
@@ -451,11 +465,75 @@ it.each(["claude-haiku-4-5-20251001", "claude-haiku-4-5"])(
     const historical = listed.records.find((r) => r.record.id === id)!.record;
     expect(historical.plan!.tasks[0]!.assignee.model).toBe(model);
     const resumed = await restarted.command({ action: "resume", id });
-    expect(resumed.error).toMatch(
-      /再開できません：.*無効.*別のモデルへは切り替えていません/,
+    const stopped = await finished(restarted, id);
+    expect(resumed.error ?? stopped.error).toMatch(
+      /明示されたalias対応がありません/,
     );
+    expect(stopped.status).toBe("failed");
     expect(claude.requests).toEqual([]);
     expect(codex.requests).toEqual([]);
-    expect(await readFile(file, "utf8")).toBe(before);
+    expectSavedFacts(stopped, JSON.parse(before) as WorkflowRecord);
   },
 );
+
+it("uses an explicitly mapped current Haiku for the next call without rewriting historical selection", async () => {
+  const oldModel = "claude-haiku-4-5-20251001";
+  const { instance, home, claude, codex } = await service(
+    [oldModel, "claude-haiku-5-5"],
+    ["gpt-6-luna"],
+  );
+  // Capture one mock dispatch then stop, before independent subprocess checks.
+  // This verifies model resolution, not Windows validation or task success.
+  claude.agent.run = async (request) => {
+    claude.requests.push(request);
+    return {
+      status: "failed",
+      dispatched: true,
+      output: null,
+      observedModels: [request.model.model],
+      usage: null,
+      elapsedMs: 1,
+    };
+  };
+  const { id, file } = await savedRecord(home, (record) => {
+    record.plan!.tasks[0]!.assignee.model = oldModel;
+    record.plan!.tasks[0]!.reviewer = {
+      provider: "codex",
+      model: "gpt-6-luna",
+      effort: "low",
+      reason: "Different company",
+    };
+  });
+  await instance.close();
+  const before = JSON.parse(await readFile(file, "utf8")) as WorkflowRecord;
+  const restarted = new OfficialWorkflowService({
+    home,
+    fake: false,
+    codexPath: "C:/configured/codex.exe",
+    agents: { claude: claude.agent, codex: codex.agent },
+  });
+  services.push(restarted);
+  const view = await restarted.command({ action: "resume", id });
+  expect(view.error).toBeUndefined();
+  const done = await finished(restarted, id);
+  expect(claude.requests.map((r) => r.model.model)).toEqual([
+    "claude-haiku-5-5",
+  ]);
+  expect(
+    [...claude.requests, ...codex.requests].every(
+      (r) => r.model.model !== oldModel,
+    ),
+  ).toBe(true);
+  for (const key of [
+    "id",
+    "plan",
+    "approvedDigest",
+    "executionDigest",
+    "planner",
+  ] as const)
+    expect(done[key]).toEqual(before[key]);
+  expect(done.calls[0]?.modelSelection).toMatchObject({
+    policy: { provider: "claude", model: "haiku" },
+    resolved: { model: "claude-haiku-5-5" },
+  });
+});

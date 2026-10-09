@@ -1,4 +1,4 @@
-// brand/icon.svg から resources/icon.ico を生成する(DESIGN.md §16.10)。
+// brand/icon.svg から resources/icon.ico を生成する(docs/design/Architecture.md。旧設計: Old/DESIGN-9a275bc.md §16.10)。
 //   pnpm icon
 // 16 / 24 / 32 / 48 / 64 / 128 / 256px の PNG を sharp で書き出し、png-to-ico で1つにまとめる。
 // 16・24px は線が細くなりすぎないよう、影(<g id="shadow">)を省いた版を使う。

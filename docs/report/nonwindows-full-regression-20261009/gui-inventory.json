@@ -1,0 +1,450 @@
+{
+  "config": {
+    "argv": [
+      "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "/workspace/Xharness/node_modules/@playwright/test/cli.js",
+      "test",
+      "--list",
+      "--reporter=json"
+    ],
+    "configFile": "/workspace/Xharness/playwright.config.ts",
+    "rootDir": "/workspace/Xharness/test/gui",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/workspace/Xharness/.out/gui",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {},
+        "id": "development",
+        "name": "development",
+        "testDir": "/workspace/Xharness/test/gui",
+        "testIgnore": ["**/packaged-entry.spec.ts"],
+        "testMatch": ["**/*.spec.ts"],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [["json"]],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "automatic-workspace.spec.ts",
+      "file": "automatic-workspace.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "ordinary native work explores, awaits approval and uses the selected folder",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "7f9f7951c12c90d1151c-2dc0f278dd9177366f0a",
+          "file": "automatic-workspace.spec.ts",
+          "line": 5,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "connection-profile.spec.ts",
+      "file": "connection-profile.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "isolated connection profile starts without checking SDK or dispatching legacy",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "123200a6b083d55fb72e-c7b29bb5a791141fbd3e",
+          "file": "connection-profile.spec.ts",
+          "line": 6,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "local-browser.spec.ts",
+      "file": "local-browser.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "real isolated Electron local fixture observes, confirms one DOM click, receipts and stops without model calls",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "ea78fcd37c36442c0558-62943652f4ee7dcca177",
+          "file": "local-browser.spec.ts",
+          "line": 6,
+          "column": 1
+        },
+        {
+          "title": "local DOM mutation and reload invalidate confirmation instead of executing stale coordinates",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "ea78fcd37c36442c0558-4c198d661627b414e72c",
+          "file": "local-browser.spec.ts",
+          "line": 176,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "official-session.spec.ts",
+      "file": "official-session.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "ordinary fake questions finish once, persist public evidence and survive reload",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "c1b05ec44b7bc9aec756-b1c9f18204a37be6c046",
+          "file": "official-session.spec.ts",
+          "line": 5,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "official-workflow.spec.ts",
+      "file": "official-workflow.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "official questions end once without entering a planning loop and survive reload",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "994bc5845d7b1dd88f64-fac0be90cddc379059b6",
+          "file": "official-workflow.spec.ts",
+          "line": 3,
+          "column": 1
+        },
+        {
+          "title": "official single-task UI approves, cancels, restores checkpoints and cross-reviews both providers",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "994bc5845d7b1dd88f64-899007a94b5ba1d23629",
+          "file": "official-workflow.spec.ts",
+          "line": 23,
+          "column": 1
+        },
+        {
+          "title": "synthetic DAG UI restores approval and displays serial imports and full integration evidence",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "994bc5845d7b1dd88f64-e740cbc54102e05bafcb",
+          "file": "official-workflow.spec.ts",
+          "line": 57,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "portable.spec.ts",
+      "file": "portable.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "portable executable keeps two fake homes and extraction resources isolated",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "c79a3b05e7f67b52c1b1-dcc33505c10b3f62cdc7",
+          "file": "portable.spec.ts",
+          "line": 26,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "release-recovery.spec.ts",
+      "file": "release-recovery.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "packaged restart preserves records and a killed process never replays pending work",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "df91ee86e1ff622b97f6-7edcecdec5152f1f1d3b",
+          "file": "release-recovery.spec.ts",
+          "line": 8,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "siwc.spec.ts",
+      "file": "siwc.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "SIWC account lifecycle uses mock OAuth and real Windows protected isolated storage",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "29b961bc15522f7b21a1-3eb9cbdb9b0e0d048163",
+          "file": "siwc.spec.ts",
+          "line": 5,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "skills-manager.spec.ts",
+      "file": "skills-manager.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "empty manager handles denial, typing, cancellation, escape and narrow-window focus",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "972643106a72cd3fb8e5-be21f1cee1bb8d90bd59",
+          "file": "skills-manager.spec.ts",
+          "line": 33,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "smoke.spec.ts",
+      "file": "smoke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "startup is fake and isolated",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "4219922fea2e2bd3c691-73155b91aec9ed2d5175",
+          "file": "smoke.spec.ts",
+          "line": 3,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "storage-safety.spec.ts",
+      "file": "storage-safety.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "desktop fences same-home headless while another fake home can start",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "fb66d5ce2c5c41335835-da6e2514ba065aa75e30",
+          "file": "storage-safety.spec.ts",
+          "line": 8,
+          "column": 1
+        },
+        {
+          "title": "shows uncommitted records and refuses execution while preserving report export",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [],
+              "status": "skipped"
+            }
+          ],
+          "id": "fb66d5ce2c5c41335835-e34926e1f9889a72c37d",
+          "file": "storage-safety.spec.ts",
+          "line": 73,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-09T07:59:06.473Z",
+    "duration": 240.28499999999997,
+    "expected": 0,
+    "skipped": 15,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

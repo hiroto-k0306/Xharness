@@ -83,12 +83,12 @@ it("official model selection uses the enabled catalog without invoking legacy pr
     }),
   ).toMatchObject({ ok: true });
   expect((await c.state()).sessions.find((s) => s.id === id)).toMatchObject({
-    model: "gpt-6-luna",
+    model: "codex:luna",
     effort: "low",
   });
   expect(
     await c.handle({ type: "set_model", sessionId: id, model: "gpt-unknown" }),
-  ).toMatchObject({ ok: false, error: "Unknown model" });
+  ).toMatchObject({ ok: false, error: expect.stringContaining("alias") });
   expect(official).not.toHaveBeenCalled();
   expect(oldStream).not.toHaveBeenCalled();
 });
@@ -104,7 +104,7 @@ it("ordinary questions finish once, retain only this session's history and never
   expect(official).toHaveBeenCalledTimes(1);
   expect(official.mock.calls[0]![0]).toMatchObject({
     sessionId: id,
-    model: "claude:claude-opus-5-5",
+    model: "claude:opus",
     text: "最初の質問",
     history: [],
   });

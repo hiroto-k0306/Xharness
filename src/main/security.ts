@@ -1,5 +1,5 @@
 // electron を import しない(型だけ)。BrowserWindow の安全側の設定を1か所に集める。
-// DESIGN.md §14: contextIsolation: true / nodeIntegration: false / sandbox: true。
+// 旧設計 Old/DESIGN-9a275bc.md §14: contextIsolation: true / nodeIntegration: false / sandbox: true。
 import type { WebPreferences } from "electron";
 
 export function secureWebPreferences(preload: string): WebPreferences {

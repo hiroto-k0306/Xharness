@@ -1,0 +1,13 @@
+
+ RUN  v5.0.3 /workspace/Xharness
+
+ ✓ |node| src/main/session/repository.test.ts (14 tests | 13 skipped) 4ms
+ ✓ |node| src/main/local-links.test.ts (42 tests | 41 skipped) 4ms
+ ✓ |node| src/main/agents/reviewer-commands.test.ts (105 tests | 101 skipped) 5ms
+
+ Test Files  3 passed (3)
+      Tests  6 passed | 155 skipped (161)
+   Start at  08:11:20
+   Duration  648ms (transform 68%, import 23%, tests 5%, worker 4%)
+
+JSON report written to /tmp/xh-nonwin-filter-nested.json

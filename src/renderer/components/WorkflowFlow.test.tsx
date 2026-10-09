@@ -245,3 +245,53 @@ it("does not fetch when closed, and treats retrieval failure as unknown", async 
   );
   expect(screen.getAllByText("状態不明")).toHaveLength(7);
 });
+
+it("shows native DAG independent checks separately from agent reports", async () => {
+  setup(
+    snapshot(
+      record({
+        status: "completed",
+        next: "complete",
+        nativeWork: { validation: "independent-process", baseline: "files" },
+        nativeDagWorkspace: {
+          source: "source",
+          sourceBase: "a",
+          sourceBranch: "main",
+          approvalDigest: "a".repeat(64),
+          ownedDirectory: "owned",
+          tasks: [],
+          integration: {
+            cwd: "owned/integration",
+            head: "b",
+            status: "completed",
+          },
+        },
+        checks: [
+          {
+            head: "b",
+            tests: [
+              {
+                id: "independent",
+                exitCode: 0,
+                passed: true,
+                elapsedMs: 1,
+                source: "process",
+                output: "fixture",
+              },
+            ],
+          },
+        ],
+        nativeValidation: [
+          { command: "agent-only", status: "failed", summary: "agent report" },
+        ],
+      }),
+    ),
+  );
+  render(<WorkflowFlow {...props} />);
+  expect(await screen.findByText("独立テスト")).toBeInTheDocument();
+  expect(
+    screen.getByText("ハーネスがローカルプロセスを実行"),
+  ).toBeInTheDocument();
+  expect(screen.getByText("1/1件 合格")).toBeInTheDocument();
+  expect(screen.queryByText("モデルのテスト実行報告")).toBeNull();
+});

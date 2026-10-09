@@ -1,0 +1,7 @@
+XHarness official headless
+node dist/headless.js [--model provider:model] [--effort level] [--cwd path] [--resume sessionId] [--mode 通常|自動|計画] [--fake] [--codex-path executable]
+--report sessionId --output new-report.html / --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path]
+/help /exit /stop /model [provider:model] [effort] /mode 通常|自動|計画 /resume [sessionId] /clear /history /workflow
+GUIと同じ公式Claude SDK / Codex App Server・計画承認・実装・テスト・レビューを使います。TTYでのみ計画/操作を承認できます。
+旧HTTP・Task・MCP・画像・/compact・旧実行slashは使用しません。旧履歴は閲覧できますが公式へ自動転送しません。
+終了コード: 0=正常、1=拒否/失敗/承認不能、130=Ctrl+C/実行中のEOF取消。

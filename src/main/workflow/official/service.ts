@@ -1,4 +1,21 @@
 import {
+  measuredAgent,
+  modelPerformance,
+  plannerModelFeedback,
+} from "./model-feedback.js";
+import { OfficialSkills } from "../../session/official-skills.js";
+import {
+  parseSkillSelections,
+  skillSelections,
+  validateSavedSkillSelections,
+} from "./skill-selection.js";
+import type { OfficialSkillSelection } from "../../../shared/official-skills.js";
+import {
+  resolveCallSelection,
+  validateSavedModelSelections,
+  type ResolveCallModel,
+} from "./model-selection.js";
+import {
   mkdir,
   writeFile,
   readFile,
@@ -26,6 +43,8 @@ import {
   fixtureModels,
 } from "./fixtures.js";
 import {
+  approvalDigest,
+  digest,
   runOfficialSingleTask,
   resumeBlockReason,
   type PlannerChoice,
@@ -48,8 +67,13 @@ import {
   resolveCodexOverride,
   type CodexInstallation,
 } from "./codex-installation.js";
-import { OperationApprovals } from "./operation-approval.js";
 import {
+  OperationApprovals,
+  OPERATION_APPROVAL_MS,
+  harnessTestSchema,
+} from "./operation-approval.js";
+import {
+  WorkflowFailure,
   planContract,
   schemas,
   implementationContract,
@@ -67,15 +91,21 @@ import {
 } from "../../../shared/official-workflow.js";
 import {
   catalogUnavailableReason,
-  catalogVersion,
+  resolveModelPolicy,
+  normalizeModelPolicy,
+  type ModelPolicy,
   resolveRole,
   roleEffort,
   type ResolvedModel,
 } from "../../config/catalog.js";
 import { impliedRecordModels } from "./record-compat.js";
+import { createValidationRuntime } from "./validation-runtime.js";
+import { projectNode } from "./project-task.js";
 import { prepareProjectTask } from "./project-task.js";
 import type { ProjectInventory } from "./project-inventory.js";
-import { runNativeTask } from "./native-runtime.js";
+import { runNativePlannedWork, type NativeDagOptions } from "./native-dag.js";
+import { createProjectDagWorkspace } from "./project-dag-workspace.js";
+import { nativeSnapshot } from "./native-snapshot.js";
 import { projectScopeContract, projectScopeSchema } from "./contracts.js";
 import type {
   OfficialSessionSubmission,
@@ -103,7 +133,10 @@ function verificationOptions(
   options.callBudget = { ...FIX_CYCLE_BUDGET };
 }
 export class OfficialWorkflowService {
-  private operationApprovals = new OperationApprovals();
+  private operationApprovals = new OperationApprovals(
+    OPERATION_APPROVAL_MS,
+    () => this.changed(),
+  );
   private root: string;
   private records = new Map<string, WorkflowRecord>();
   private active?: {
@@ -113,8 +146,11 @@ export class OfficialWorkflowService {
   };
   private approval?: {
     id: string;
+    approvalId: string;
+    sessionId?: string;
+    expiresAt: number;
     digest: string;
-    accept: (accepted: boolean) => void;
+    accept: (accepted: boolean, expired?: boolean) => void;
     autoOperations?: boolean;
   };
   private error?: string;
@@ -125,11 +161,17 @@ export class OfficialWorkflowService {
   private codexPackage?: string;
   private codexError?: string;
   private invalidConnection = false;
-  private preparing?: { id: string; controller: AbortController };
+  private preparing?: {
+    id: string;
+    controller: AbortController;
+    sessionId?: string;
+  };
   constructor(
     private settings: {
       home: string;
       fake: boolean;
+      /** State-only signal. Notification failures never affect workflow persistence. */
+      onChange?: () => void | Promise<void>;
       codexPath?: string;
       /** Metadata-only test seam; never starts a CLI. */
       discoverCodex?: () => Promise<CodexInstallation>;
@@ -144,6 +186,10 @@ export class OfficialWorkflowService {
         agent: () => OfficialAgent;
         view: () => import("../../../shared/sdk-runtime.js").SdkRuntimeView;
       };
+      /** Explicit offline test/verified sandbox seam. Absent in production until isolation is verified. */
+      validateIntegration?: NativeDagOptions["validateIntegration"];
+      /** Internal offline seam for capability factory routing. */
+      validationRuntime?: typeof createValidationRuntime;
       options?: (
         cwd: string,
         provider: "claude" | "codex",
@@ -295,12 +341,17 @@ export class OfficialWorkflowService {
         if (
           record.nativeWork &&
           (!record.sessionId ||
-            record.nativeWork.validation !== "agent-reported" ||
+            (record.nativeWork.validation !== "agent-reported" &&
+              !(
+                record.nativeWork.validation === "independent-process" &&
+                this.nativeDagRecordPathValid(record)
+              )) ||
             record.nativeWork.baseline !== "files" ||
             !record.sourceCwd ||
             !isAbsolute(record.cwd) ||
-            resolve(record.cwd).toLowerCase() !==
-              resolve(record.sourceCwd).toLowerCase())
+            (resolve(record.cwd).toLowerCase() !==
+              resolve(record.sourceCwd).toLowerCase() &&
+              !this.nativeDagRecordPathValid(record)))
         )
           continue;
         if (
@@ -316,6 +367,8 @@ export class OfficialWorkflowService {
                 !isAbsolute(record.project.testProgram))))
         )
           continue;
+        validateSavedModelSelections(record);
+        validateSavedSkillSelections(record);
         if (record.plan) record.plan = planContract.parse(record.plan);
         if (record.simulated !== this.settings.fake) continue;
         if (
@@ -367,10 +420,16 @@ export class OfficialWorkflowService {
               : "公式Codexの同梱CLIを確認できません。実行パスを指定してください。")),
       },
       activeId: this.active?.id ?? this.preparing?.id,
+      activeSessionId:
+        this.records.get(this.active?.id ?? this.preparing?.id ?? "")
+          ?.sessionId ?? this.preparing?.sessionId,
       operationApproval: this.operationApprovals.view(),
       approval: this.approval
         ? {
             id: this.approval.id,
+            approvalId: this.approval.approvalId,
+            sessionId: this.approval.sessionId,
+            expiresAt: this.approval.expiresAt,
             digest: this.approval.digest,
             autoOperations: this.approval.autoOperations,
           }
@@ -492,6 +551,11 @@ export class OfficialWorkflowService {
     await rename(temporary, join(this.root, "connection.json"));
   }
   private async save(record: WorkflowRecord) {
+    if (record.status === "completed" && !record.simulated)
+      record.modelPerformance = {
+        version: 1,
+        samples: modelPerformance(record),
+      };
     const directory = join(this.root, record.id);
     await mkdir(directory, { recursive: true });
     if (
@@ -509,6 +573,115 @@ export class OfficialWorkflowService {
       await rename(temporary, target);
     }
     this.records.set(record.id, structuredClone(record));
+    this.changed();
+  }
+  private changed() {
+    try {
+      void Promise.resolve(this.settings.onChange?.()).catch(() => {});
+    } catch {
+      /* Notifications do not change workflow outcomes. */
+    }
+  }
+  private matchesConversation(id: string, sessionId?: string) {
+    const record = this.records.get(id);
+    if (record?.sessionId) return sessionId === record.sessionId;
+    if (this.preparing?.id === id && this.preparing.sessionId)
+      return sessionId === this.preparing.sessionId;
+    return (
+      sessionId === undefined &&
+      (((this.settings.fake ||
+        (!!this.settings.options && record?.simulated === true)) &&
+        !record?.nativeWork &&
+        !record?.project) ||
+        !!this.settings.verification)
+    );
+  }
+  private configureOfficialSkills(
+    options: WorkflowOptions,
+    selections: OfficialSkillSelection[],
+    sourceCwd: string,
+  ) {
+    if (!selections.length) return;
+    options.officialSkills = skillSelections(selections);
+    options.resolveOfficialSkills = async (pinned, signal) => {
+      const bundles = [];
+      for (const selected of pinned) {
+        signal.throwIfAborted();
+        bundles.push(
+          await new OfficialSkills({
+            cwd: sourceCwd,
+            provider: selected.provider,
+          }).select(selected),
+        );
+      }
+      signal.throwIfAborted();
+      return bundles;
+    };
+  }
+  private nativeDagRecordPathValid(record: WorkflowRecord) {
+    const saved = record.nativeDagWorkspace;
+    if (
+      !saved ||
+      !record.sourceCwd ||
+      saved.source !== resolve(record.sourceCwd) ||
+      !/^[a-f0-9]{64}$/.test(saved.approvalDigest) ||
+      !/^[a-f0-9]{40,64}$/.test(saved.sourceBase)
+    )
+      return false;
+    const root = resolve(this.root, record.id, "parallel");
+    const rel = relative(root, saved.ownedDirectory);
+    if (
+      !rel ||
+      rel.startsWith("..") ||
+      isAbsolute(rel) ||
+      rel.includes("/") ||
+      rel.includes("\\")
+    )
+      return false;
+    return (
+      saved.integration?.status === "completed" &&
+      saved.integration.cwd === join(saved.ownedDirectory, "integration") &&
+      resolve(record.cwd) === resolve(saved.integration.cwd)
+    );
+  }
+  private callResolver(
+    cwd: string | (() => string),
+    agents: Partial<Record<"claude" | "codex", OfficialAgent>>,
+  ): ResolveCallModel {
+    return async (policy, signal, invocationCwd) => {
+      signal.throwIfAborted();
+      const agent = agents[policy.provider];
+      if (!agent) throw new Error("必要な公式接続がありません。");
+      const discovered = await agent
+        .discover(
+          invocationCwd ?? (typeof cwd === "function" ? cwd() : cwd),
+          signal,
+        )
+        .catch((e: unknown) => {
+          throw new Error(connectionFailure(policy.provider, e));
+        });
+      signal.throwIfAborted();
+      const target = resolveModelPolicy(
+        `${policy.provider}:${policy.model}`,
+        policy.effort,
+      );
+      const offered =
+        policy.provider === "claude" ? pinClaudeModels(discovered) : discovered;
+      const model = offered.find(
+        (m) => m.provider === target.provider && m.model === target.id,
+      );
+      const effort = target.effort ?? null;
+      if (
+        !model ||
+        !model.available ||
+        model.quotaAllowed !== true ||
+        !model.efforts.includes(effort)
+      )
+        throw new Error(
+          `必要な公式モデル「${target.id}」の利用枠/effortを確認できません。別のモデルへは切り替えていません。`,
+        );
+      return { model: structuredClone(model), catalog: target.catalog };
+    };
   }
   private async options(
     cwd: string,
@@ -568,7 +741,10 @@ export class OfficialWorkflowService {
         ? impliedRecordModels(start.record)
         : { reviewers: {} };
     const listed = (model: string, effort: AgentRequest["effort"]) => {
-      const found = usable.find((m) => m.model === model);
+      const target = resolveModelPolicy(model, effort ?? undefined);
+      const found = usable.find(
+        (m) => m.provider === target.provider && m.model === target.id,
+      );
       if (!found || !found.efforts.includes(effort))
         throw new Error(
           `再開できません：記録のモデル「${model}」（effort ${effort ?? "既定"}）を公式接続で利用できません。推測では置き換えません。`,
@@ -583,19 +759,32 @@ export class OfficialWorkflowService {
     );
     // A resumed record with a plan needs no planner; the recorded one is only kept.
     const planned = start?.kind === "resume" && !!start.record.plan;
-    const chosenPlanner = planned ? undefined : (planner ?? implied.planner);
+    const savedPlannerPolicy =
+      start?.kind === "resume"
+        ? start.record.modelPolicies?.planner
+        : undefined;
+    const chosenPlanner = planned
+      ? undefined
+      : savedPlannerPolicy
+        ? {
+            provider: savedPlannerPolicy.provider,
+            model: savedPlannerPolicy.model,
+            effort: savedPlannerPolicy.effort ?? null,
+          }
+        : (planner ?? implied.planner);
     if (!planned && !chosenPlanner)
       throw new Error(
         "計画モデルが選択されていません。メインモデルを選択してから開始してください。",
       );
     // Product path: the planner comes from the user's main model (or the record),
     // and the plan chooses usable official models for implementation and review.
-    return {
+    const runtimeOptions = {
       ...options,
       simulated: false,
       diagnosticText: true, // This service creates only fixed synthetic workspaces.
       timeoutMs: 120000,
       agents: { claude, codex },
+      resolveCallModel: this.callResolver(cwd, { claude, codex }),
       models: usable,
       ...(chosenPlanner
         ? { planner: resolvePlannerChoice(chosenPlanner, usable) }
@@ -603,6 +792,11 @@ export class OfficialWorkflowService {
       reviewers,
       goal: `Correct addition without modifying the test. Assign the one implementation task to ${provider}.`,
     } satisfies WorkflowOptions;
+    runtimeOptions.resolveCallModel = this.callResolver(
+      () => runtimeOptions.cwd,
+      { claude, codex },
+    );
+    return runtimeOptions;
   }
   private launch(
     id: string,
@@ -611,30 +805,105 @@ export class OfficialWorkflowService {
     autoOperations = false,
   ) {
     const controller = new AbortController();
+    options.modelFeedback = plannerModelFeedback(
+      this.records.values(),
+      options.models,
+    );
+    options.agents = {
+      claude: measuredAgent(options.agents.claude),
+      codex: measuredAgent(options.agents.codex),
+    };
     options.id = id;
     options.resume = resume;
     options.save = (r) => this.save(r);
-    options.approveTool = (name, input, signal) =>
-      name === "item/commandExecution/requestApproval" ||
-      name === "native/operation"
-        ? this.operationApprovals.ask(id, input, signal)
+    options.approveTool = async (name, input, signal) => {
+      const sessionId = this.records.get(id)?.sessionId;
+      if (name === "harness/test") {
+        const parsed = harnessTestSchema.safeParse(input);
+        const record = this.records.get(id);
+        const integration = record?.nativeDagWorkspace?.integration;
+        if (
+          !parsed.success ||
+          !record ||
+          !sessionId ||
+          record.plan?.parallelization?.mode !== "parallel" ||
+          record.status !== "verifying" ||
+          record.next !== "verify" ||
+          record.pendingEffect?.kind !== "test" ||
+          record.approvedDigest !== approvalDigest(record) ||
+          integration?.status !== "completed" ||
+          integration.cwd !== record.cwd ||
+          parsed.data.cwd !== record.cwd ||
+          JSON.stringify(parsed.data.testFiles) !==
+            JSON.stringify(record.plan.validation?.testFiles)
+        )
+          return false;
+        const spec = {
+          id: "native-dag-node-validation",
+          program: parsed.data.program,
+          args: parsed.data.args,
+          command: parsed.data.command,
+          timeoutMs: 60000,
+        };
+        const baseline = await nativeSnapshot(record.cwd, signal);
+        if (
+          parsed.data.digest !==
+          digest({ spec, head: record.head, content: baseline.head })
+        )
+          return false;
+        return this.operationApprovals.askHarnessTest(
+          id,
+          parsed.data,
+          signal,
+          sessionId,
+        );
+      }
+      return name === "item/commandExecution/requestApproval" ||
+        name === "native/operation"
+        ? this.operationApprovals.ask(id, input, signal, sessionId)
         : Promise.resolve(false);
+    };
     options.approve = async (_plan, digest, signal) =>
-      new Promise<boolean>((accept) => {
-        const finish = (yes: boolean) => {
+      new Promise<boolean>((accept, reject) => {
+        let settled = false;
+        const approvalId = randomUUID();
+        const expiresAt = Date.now() + OPERATION_APPROVAL_MS;
+        const finish = (yes: boolean, expired = false) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           signal.removeEventListener("abort", cancel);
-          this.approval = undefined;
-          if (yes && !signal.aborted && options.nativeWork && autoOperations)
-            this.operationApprovals.allowFlow(id, options.cwd);
-          accept(yes);
+          if (this.approval?.approvalId === approvalId)
+            this.approval = undefined;
+          this.changed();
+          if (expired) {
+            reject(new WorkflowFailure("plan-approval-expired"));
+            return;
+          }
+          const granted = yes && !signal.aborted && Date.now() < expiresAt;
+          if (granted && options.nativeWork && autoOperations)
+            this.operationApprovals.allowFlow(
+              id,
+              options.cwd,
+              this.records.get(id)?.sessionId,
+            );
+          accept(granted);
         };
         const cancel = () => finish(false);
+        const timer = setTimeout(
+          () => finish(false, true),
+          OPERATION_APPROVAL_MS,
+        );
         this.approval = {
           id,
+          approvalId,
+          sessionId: this.records.get(id)?.sessionId,
           digest,
+          expiresAt,
           accept: finish,
           autoOperations: !!options.nativeWork && autoOperations,
         };
+        this.changed();
         signal.addEventListener("abort", cancel, { once: true });
         if (signal.aborted) cancel();
       });
@@ -646,13 +915,73 @@ export class OfficialWorkflowService {
           taskId: id,
         },
         async () => {
-          const record = await (
+          let validateIntegration = this.settings.validateIntegration;
+          let validationUnavailableReason: string | undefined;
+          let checkValidationRuntime: NativeDagOptions["checkValidationRuntime"];
+          if (
+            options.nativeWork &&
+            !validateIntegration &&
+            (!this.settings.fake || this.settings.validationRuntime)
+          ) {
+            try {
+              const executable =
+                this.codexExecutable ??
+                (this.settings.fake && this.settings.validationRuntime
+                  ? this.settings.codexPath
+                  : undefined);
+              if (!executable)
+                validationUnavailableReason = "validation-cli-unconfigured";
+              else {
+                const nodeExecutable = process.versions.electron
+                  ? await projectNode(
+                      options.cwd,
+                      process.env.PATH ?? "",
+                      options.cwd,
+                    )
+                  : process.execPath;
+                const runtime = await (
+                  this.settings.validationRuntime ?? createValidationRuntime
+                )({
+                  executable,
+                  nodeExecutable,
+                  signal: controller.signal,
+                });
+                if (runtime.available) {
+                  validateIntegration = runtime.validateIntegration;
+                  checkValidationRuntime = runtime.checkIdentity;
+                } else validationUnavailableReason = runtime.reason;
+              }
+            } catch (error) {
+              if (
+                error instanceof WorkflowFailure &&
+                error.code === "validation-cleanup-unverified"
+              )
+                throw error;
+              validationUnavailableReason = "validation-runtime-unverified";
+            }
+          }
+          controller.signal.throwIfAborted();
+          const record =
             "worktrees" in options
-              ? runOfficialDag
+              ? await runOfficialDag(options as DagOptions, controller.signal)
               : options.nativeWork
-                ? runNativeTask
-                : runOfficialSingleTask
-          )(options as DagOptions, controller.signal);
+                ? await runNativePlannedWork(
+                    {
+                      ...options,
+                      validateIntegration,
+                      validationUnavailableReason,
+                      checkValidationRuntime,
+                      prepareDag: (approved, signal) =>
+                        createProjectDagWorkspace({
+                          cwd: options.cwd,
+                          ownedRoot: join(this.root, id, "parallel"),
+                          approvalDigest: approved,
+                          signal,
+                        }),
+                    },
+                    controller.signal,
+                  )
+                : await runOfficialSingleTask(options, controller.signal);
           return {
             ...record,
             stopCause:
@@ -666,7 +995,25 @@ export class OfficialWorkflowService {
       ),
     )
       .then(() => {})
-      .catch(() => {
+      .catch(async (error: unknown) => {
+        const record = this.records.get(id);
+        if (
+          options.nativeWork &&
+          record?.inputIntent === "work" &&
+          !record.nativeWork &&
+          !record.plan
+        ) {
+          record.status = controller.signal.aborted ? "cancelled" : "failed";
+          if (!controller.signal.aborted)
+            record.error =
+              error instanceof WorkflowFailure &&
+              error.code === "validation-cleanup-unverified"
+                ? "validation-cleanup-unverified"
+                : "native-preparation-failed-no-retry";
+          record.finishedAt = new Date().toISOString();
+          delete record.answer;
+          await this.save(record);
+        }
         this.error =
           "安全に継続できません。保存状態と作業を保全し、再送を停止しました。";
       })
@@ -674,6 +1021,7 @@ export class OfficialWorkflowService {
         this.active = undefined;
         this.approval = undefined;
         this.operationApprovals.cancel();
+        this.changed();
       });
     this.active = { id, controller, done };
   }
@@ -694,6 +1042,7 @@ export class OfficialWorkflowService {
     signal: AbortSignal,
   ): Promise<{
     agent?: OfficialAgent;
+    policy?: ModelPolicy;
     model: ModelCandidate;
     effort: AgentRequest["effort"];
   }> {
@@ -754,6 +1103,9 @@ export class OfficialWorkflowService {
       );
     return {
       agent: selectedAgent,
+      ...(this.settings.fake
+        ? {}
+        : { policy: normalizeModelPolicy(wanted, effort ?? undefined) }),
       model,
       effort,
     };
@@ -762,6 +1114,7 @@ export class OfficialWorkflowService {
     record: WorkflowRecord,
     target: {
       agent?: OfficialAgent;
+      policy?: ModelPolicy;
       model: ModelCandidate;
       effort: AgentRequest["effort"];
     },
@@ -779,13 +1132,35 @@ export class OfficialWorkflowService {
         withTaskTrace(
           { model: target.model.model, taskId: record.id },
           async () => {
-            const model = target.model;
+            if (target.policy)
+              record.modelPolicies = {
+                ...record.modelPolicies,
+                question: target.policy,
+              };
+            const selected = await resolveCallSelection(
+              {
+                resolveCallModel: this.settings.fake
+                  ? undefined
+                  : this.callResolver(record.cwd, {
+                      [provider]: target.agent!,
+                    }),
+              },
+              record,
+              "conversation",
+              target.model,
+              target.effort,
+              controller.signal,
+            );
+            const model = selected.model;
             const entry = {
               requestId: randomUUID(),
               phase: "conversation" as const,
               provider,
               requestedModel: model.model,
-              effort: target.effort,
+              effort: selected.effort,
+              ...(selected.modelSelection
+                ? { modelSelection: selected.modelSelection }
+                : {}),
               status: "running" as const,
             };
             const history =
@@ -1003,14 +1378,18 @@ export class OfficialWorkflowService {
         ),
     )
       .then(() => {})
-      .catch(async () => {
+      .catch(async (error: unknown) => {
         record.status = controller.signal.aborted ? "cancelled" : "failed";
-        record.error = "conversation-failed-no-retry";
+        record.error =
+          error instanceof WorkflowFailure
+            ? error.code
+            : "conversation-failed-no-retry";
         record.finishedAt = new Date().toISOString();
         await this.save(record);
       })
       .finally(() => {
         this.active = undefined;
+        this.changed();
       });
     this.active = { id: record.id, controller, done };
   }
@@ -1024,7 +1403,36 @@ export class OfficialWorkflowService {
       throw new Error(
         "公式workflowの保存領域が使えないか、別の実行が進行中です。旧HTTPへ切り替えません。",
       );
-    const selected = resolveModel(request.model);
+    let officialSkills: OfficialSkillSelection[];
+    try {
+      officialSkills = parseSkillSelections(request.officialSkills ?? []);
+    } catch {
+      throw new Error(
+        "公式スキルの選択情報が不正です。本文・権限設定を受け取っていません。",
+      );
+    }
+    if (request.task && officialSkills.length)
+      throw new Error(
+        "公式スキルは通常のnative作業だけに対応しています。固定範囲・登録テスト経路へ転用していません。",
+      );
+    // Trusted roots and every pinned file are validated before classification.
+    for (const skill of officialSkills) {
+      signal.throwIfAborted();
+      await new OfficialSkills({
+        cwd: request.cwd,
+        provider: skill.provider,
+      }).select(skill);
+    }
+    signal.throwIfAborted();
+    const selected = this.settings.fake
+      ? resolveModel(request.model)
+      : (() => {
+          const current = resolveModelPolicy(
+            request.model,
+            request.effort ?? undefined,
+          );
+          return { provider: current.provider, model: current.id };
+        })();
     if (!selected || !["claude", "codex"].includes(selected.provider))
       throw new Error(
         "公式モデルを明示選択してください。旧HTTPへ切り替えません。",
@@ -1040,7 +1448,7 @@ export class OfficialWorkflowService {
     signal.addEventListener("abort", cancel, { once: true });
     if (signal.aborted) cancel();
     this.busy = true;
-    this.preparing = { id, controller };
+    this.preparing = { id, controller, sessionId: request.sessionId };
     try {
       await mkdir(directory, { recursive: true });
       if (
@@ -1048,6 +1456,43 @@ export class OfficialWorkflowService {
         resolve(directory).toLowerCase()
       )
         throw new Error("Linked workflow storage");
+      controller.signal.throwIfAborted();
+      // No classifier or planner is dispatched for a known unsupported provider.
+      // Retain requested metadata, with no invented dispatch/observation facts.
+      if (officialSkills.some((skill) => skill.provider === "codex")) {
+        const stopped: WorkflowRecord = {
+          version: 1,
+          simulated: this.settings.fake,
+          id,
+          sessionId: request.sessionId,
+          sourceCwd: request.cwd,
+          cwd: await mkdtemp(join(directory, "workspace-question-")),
+          goal: request.text,
+          officialSkills: skillSelections(officialSkills),
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          status: "failed",
+          next: "complete",
+          base: "0".repeat(40),
+          head: "0".repeat(40),
+          correctionRounds: 0,
+          calls: [],
+          tools: [],
+          checks: [],
+          reviews: [],
+          commits: [],
+          error: "official-skills-codex-isolation-unverified",
+          answer:
+            "Codexの選択したskillsだけを公式基盤へ渡す隔離境界を確認できないため停止しました。分類・計画・skills送信は行っていません。別のskillsや参考資料へ置き換えていません。",
+        };
+        await this.save(stopped);
+        return {
+          workflowId: id,
+          status: stopped.status,
+          summary: stopped.answer!,
+          taskRequired: false,
+        };
+      }
       const provider = selected.provider as "claude" | "codex";
       if (request.task) {
         const snapshot = await prepareProjectTask(
@@ -1094,6 +1539,9 @@ export class OfficialWorkflowService {
         );
         const record: WorkflowRecord = {
           version: 1,
+          ...(officialSkills.length
+            ? { officialSkills: skillSelections(officialSkills) }
+            : {}),
           simulated: this.settings.fake,
           id,
           sessionId: request.sessionId,
@@ -1137,7 +1585,7 @@ export class OfficialWorkflowService {
         } finally {
           controller.signal.removeEventListener("abort", cancelActive);
         }
-        this.preparing = { id, controller };
+        this.preparing = { id, controller, sessionId: request.sessionId };
       };
       await waitRun();
       let record = this.records.get(id);
@@ -1145,6 +1593,21 @@ export class OfficialWorkflowService {
         throw new Error(
           "公式実行の保存状態を確認できません。再送していません。",
         );
+      if (
+        officialSkills.length &&
+        record.status === "completed" &&
+        (record.inputIntent !== "work" || request.automaticWork === undefined)
+      ) {
+        record.status = "failed";
+        record.error =
+          record.inputIntent === "question"
+            ? "official-skills-question-unsupported"
+            : "official-skills-native-work-required";
+        record.answer =
+          "選択した公式スキルは通常のnative作業だけに対応しています。質問の参考資料へ変換したり、スキルを実行した扱いにはしていません。";
+        record.finishedAt = new Date().toISOString();
+        await this.save(record);
+      }
       let automaticTask = false;
       if (
         !request.task &&
@@ -1170,6 +1633,7 @@ export class OfficialWorkflowService {
           );
           options.goal = request.text;
           options.nativeWork = true;
+          this.configureOfficialSkills(options, officialSkills, request.cwd);
           options.cwd = request.cwd;
           options.files = [];
           options.tests = [];
@@ -1227,6 +1691,23 @@ export class OfficialWorkflowService {
     if (command.action === "list") return this.view();
     if (command.action === "tool_decision") {
       if (
+        !this.matchesConversation(command.id, command.sessionId) ||
+        this.active?.id !== command.id
+      )
+        return {
+          ...this.view(),
+          error: "承認の会話または実行が一致しません。許可していません。",
+        };
+      if (
+        command.scope === "flow" &&
+        this.operationApprovals.view()?.source === "harness-test"
+      )
+        return {
+          ...this.view(),
+          error:
+            "ハーネスの独立検査は今回の明示承認が必要です。flow許可を適用していません。",
+        };
+      if (
         command.scope === "flow" &&
         (this.active?.id !== command.id ||
           !this.records.get(command.id)?.nativeWork ||
@@ -1239,10 +1720,16 @@ export class OfficialWorkflowService {
         command.digest,
         command.allow,
         command.scope === "flow",
+        command.sessionId,
       );
       return this.view();
     }
     if (command.action === "cancel") {
+      if (!this.matchesConversation(command.id, command.sessionId))
+        return {
+          ...this.view(),
+          error: "取消の会話が一致しません。実行を変更していません。",
+        };
       if (this.preparing?.id === command.id) this.preparing.controller.abort();
       if (this.active?.id === command.id) {
         this.active.controller.abort();
@@ -1251,11 +1738,23 @@ export class OfficialWorkflowService {
       return this.view();
     }
     if (command.action === "approve") {
+      const pending = this.approval;
       if (
-        this.approval?.id === command.id &&
-        this.approval.digest === command.digest
+        !pending ||
+        this.active?.id !== command.id ||
+        !this.matchesConversation(command.id, command.sessionId) ||
+        pending.id !== command.id ||
+        pending.digest !== command.digest ||
+        (command.approvalId !== undefined
+          ? command.approvalId !== pending.approvalId
+          : !!pending.sessionId)
       )
-        this.approval.accept(true);
+        return {
+          ...this.view(),
+          error: "計画承認の会話・ID・digestが一致しません。許可していません。",
+        };
+      if (Date.now() >= pending.expiresAt) pending.accept(false, true);
+      else pending.accept(command.allow ?? true);
       return this.view();
     }
     if (command.action === "resume" && this.records.get(command.id)?.project)
@@ -1415,28 +1914,8 @@ export class OfficialWorkflowService {
         const record = this.records.get(command.id);
         if (!record || resumeBlockReason(record))
           throw new Error("不確定な副作用または再開不能な段階です");
-        // Resume uses the recorded models (or the fixed per-version ones it
-        // implies); a model the catalog no longer offers stops here.
-        if (!this.settings.fake) {
-          const implied = impliedRecordModels(record);
-          for (const id of [
-            // A planned record never calls its planner again.
-            record.plan
-              ? undefined
-              : (record.planner?.model ?? implied.planner?.model),
-            ...(record.plan?.tasks ?? []).flatMap((t) => [
-              t.assignee.model,
-              t.reviewer?.model,
-            ]),
-            ...Object.values(implied.reviewers).map((r) => r.model),
-          ]) {
-            const reason = id ? catalogUnavailableReason(id) : undefined;
-            if (reason)
-              throw new Error(
-                `再開できません：${reason}別のモデルへは切り替えていません。`,
-              );
-          }
-        }
+        // Saved plans/calls stay historical; the next call resolves only the
+        // saved family policy or an explicitly mapped historical selection.
         const workspace = gitWorkspace(record.cwd, redact),
           current = await workspace.inspect(new AbortController().signal);
         if (!current.clean || current.head !== record.head)
@@ -1463,15 +1942,20 @@ export class OfficialWorkflowService {
           );
         }
         options.goal = record.goal;
+        this.configureOfficialSkills(
+          options,
+          record.officialSkills ?? [],
+          record.sourceCwd ?? record.cwd,
+        );
         this.launch(record.id, options, record);
       }
     } catch (error) {
       this.error =
         error instanceof Error &&
-        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先|再開できません|修正経路の検証課題)/.test(
+        /^(不確定|作業領域|必要な公式|公式Codex|公式Claude|合成課題|計画モデル|質問先|再開できません|修正経路の検証課題|モデル選択|モデルalias|モデル「)/.test(
           error.message,
         )
-          ? error.message
+          ? redact(error.message)
           : "workflowを開始できませんでした。再送していません。";
       const prepared = this.preparing && this.records.get(this.preparing.id);
       if (prepared?.status === "planning" && !prepared.calls.length) {
@@ -1520,32 +2004,23 @@ export function resolvePlannerChoice(
   choice: PlannerSelection | PlannerChoice,
   models: ModelCandidate[],
 ): PlannerChoice {
-  const target =
-    "provider" in choice
-      ? { provider: choice.provider, model: choice.model }
-      : resolveModel(choice.model);
-  if (!target)
-    throw new Error(
-      `計画モデル「${choice.model}」を公式接続のモデルに対応付けできません。別のモデルへは切り替えていません。`,
-    );
-  const retired = catalogUnavailableReason(target.model);
-  if (retired)
-    throw new Error(
-      `計画モデル「${target.model}」を使えません：${retired}別のモデルへは切り替えていません。`,
-    );
+  const target = resolveModelPolicy(
+    "provider" in choice ? `${choice.provider}:${choice.model}` : choice.model,
+    choice.effort ?? undefined,
+  );
   const candidate = models.find(
-    (m) => m.provider === target.provider && m.model === target.model,
+    (m) => m.provider === target.provider && m.model === target.id,
   );
   const connection =
     target.provider === "claude" ? "Claude SDK" : "Codex App Server";
   if (!candidate || !candidate.available || candidate.quotaAllowed !== true)
     throw new Error(
-      `計画モデル「${target.model}」は公式${connection}で利用できないか、通常枠を確認できません。別のモデルへは切り替えていません。`,
+      `計画モデル「${target.id}」は公式${connection}で利用できないか、通常枠を確認できません。別のモデルへは切り替えていません。`,
     );
   const effort = choice.effort ?? null;
   if (!candidate.efforts.includes(effort))
     throw new Error(
-      `計画モデル「${target.model}」は推論レベル「${effort ?? "既定"}」に対応していません。別のモデルへは切り替えていません。`,
+      `計画モデル「${target.id}」は推論レベル「${effort ?? "既定"}」に対応していません。別のモデルへは切り替えていません。`,
     );
   return {
     provider: target.provider,
@@ -1553,12 +2028,7 @@ export function resolvePlannerChoice(
     effort,
     selectedAs:
       "provider" in choice ? (choice.selectedAs ?? choice.model) : choice.model,
-    // A new selection records the catalog it was resolved with; a recorded one keeps its own.
-    ...("provider" in choice
-      ? choice.catalog
-        ? { catalog: choice.catalog }
-        : {}
-      : { catalog: catalogVersion() }),
+    catalog: target.catalog,
   };
 }
 /**

@@ -49,7 +49,7 @@ describe("main model from config (DESIGN §12)", () => {
     );
     expect(cfg.choice).toEqual({
       provider: "codex",
-      model: "gpt-6-luna",
+      model: "luna",
       effort: "max",
     });
     expect(cfg.web).toMatchObject({
@@ -81,7 +81,7 @@ describe("main model from config (DESIGN §12)", () => {
     const cfg = await loadMainConfig(await homeWith());
     expect(cfg.choice).toEqual({
       provider: "claude",
-      model: "claude-opus-5-5",
+      model: "opus",
       effort: "high",
     });
     expect(cfg.warnings).toEqual([]);
@@ -92,7 +92,7 @@ describe("main model from config (DESIGN §12)", () => {
     );
     expect(cfg.choice).toEqual({
       provider: "claude",
-      model: "claude-sonnet-5-5",
+      model: "sonnet",
       effort: "max",
     });
   });
@@ -102,19 +102,19 @@ describe("main model from config (DESIGN §12)", () => {
         "aliases:\n  fast: claude-haiku-4-5\nmain:\n  model: fast\n",
       ),
     );
-    expect(cfg.choice.model).toBe("claude-haiku-4-5");
+    expect(cfg.choice.model).toBe("haiku");
   });
-  it("falls back to defaults with a warning for bad values or broken YAML", async () => {
+  it("preserves invalid model/effort for boundary refusal, and warns for broken YAML", async () => {
     const bad = await loadMainConfig(
       await homeWith("main:\n  model: claude:gpt-6\n  effort: turbo\n"),
     );
     expect(bad.choice).toMatchObject({
-      model: "claude-opus-5-5",
-      effort: "high",
+      model: "gpt-6",
+      effort: "turbo",
     });
     expect(bad.warnings).toHaveLength(2);
     const broken = await loadMainConfig(await homeWith("main: [unclosed"));
-    expect(broken.choice.model).toBe("claude-opus-5-5");
+    expect(broken.choice.model).toBe("opus");
     expect(broken.warnings).toHaveLength(1);
   });
   it("resolves provider:alias, bare alias and full ids, and rejects mismatches", () => {
@@ -146,21 +146,21 @@ describe("startup precedence", () => {
       supported,
     });
     expect(r.choice).toMatchObject({
-      model: "claude-haiku-5-5",
+      model: "haiku",
       effort: "xhigh",
     });
   });
   it("uses the config file when no flags are given", async () => {
     const home = await homeWith("main:\n  model: sonnet\n");
     expect((await resolveStartup({ home, supported })).choice.model).toBe(
-      "claude-sonnet-5-5",
+      "sonnet",
     );
   });
-  it("falls back to claude:opus when the config names a provider this build lacks", async () => {
-    const home = await homeWith("main:\n  model: codex:sol\n");
-    const r = await resolveStartup({ home, supported });
-    expect(r.choice.model).toBe("claude-opus-5-5");
-    expect(r.warnings.join()).toContain("codex");
+  it("stops when the selected provider is unavailable instead of substituting the default", async () => {
+    const home = await homeWith("main: {model: codex:sol}\n");
+    await expect(resolveStartup({ home, supported })).rejects.toThrow(
+      /別のモデルへは切り替えていません/,
+    );
   });
   it("rejects an unusable --model or --effort instead of silently ignoring it", async () => {
     const home = await homeWith();

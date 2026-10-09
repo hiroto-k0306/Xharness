@@ -81,6 +81,14 @@
   flex-shrink: 0;
   overflow: hidden;
 }
+.receipts:has(> details[aria-label="公式workflow receipts"][open]) {
+  max-height: min(45vh, 520px);
+}
+.receipts > details[aria-label="公式workflow receipts"][open] {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
 .heading {
   flex-shrink: 0;
   background: var(--bg);

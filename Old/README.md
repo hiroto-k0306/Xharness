@@ -56,3 +56,24 @@
 ## 旧ソースの追加整理（2026-10-09）
 
 PR #26のマージ後、main `991e6e4` を基準に旧ソースを [実行対象外の保存庫](retired-sources/README.md) へ整理しました。削除済みソースもGitから復元し、現行への復活を防ぐため `.txt` として保存しています。全件の移動元・出典は [対応一覧](retired-sources/manifest.tsv)、残す共通機能と検証範囲は [整理記録](../docs/retired-source-archive-20261009.md) を参照してください。
+
+## 最新世代alias追従前の文書（f7f7350）
+
+以下はmain `f7f7350`時点の旧版です。現行仕様として使わず、保存本文はバイト単位で維持しています。旧本文中の相対リンクは当時の正規パスを基準とするため、原本保全のため変更していません。現行文書・有効な入口はリポジトリの正規パスを参照してください。
+
+| 保存前              | 旧版保存先                                             | 理由                                          |
+| ------------------- | ------------------------------------------------------ | --------------------------------------------- |
+| `SPEC.md`           | [SPEC-f7f7350.md](SPEC-f7f7350.md)                     | alias最新追従・安全再開・検証範囲の更新前資料 |
+| `DESIGN.md`         | [DESIGN-f7f7350.md](DESIGN-f7f7350.md)                 | alias最新追従・安全再開・検証範囲の更新前資料 |
+| `FEATURES.md`       | [FEATURES-f7f7350.md](FEATURES-f7f7350.md)             | alias最新追従・安全再開・検証範囲の更新前資料 |
+| `README.md`         | [README-f7f7350.md](README-f7f7350.md)                 | alias最新追従・安全再開・検証範囲の更新前資料 |
+| `AGENTS.md`         | [AGENTS-f7f7350.md](AGENTS-f7f7350.md)                 | alias最新追従・安全再開・検証範囲の更新前資料 |
+| `release/README.md` | [release-README-f7f7350.md](release-README-f7f7350.md) | alias最新追従・安全再開・検証範囲の更新前資料 |
+
+## 手動改善比較の退役（bcca4826）
+
+利用者が不要とした手動改善版・評価ケース・モデル候補の比較入口を退役しました。旧ソース22件は移動、共通入口3件は旧版snapshot保存し、現役の共通処理は保持します。[保存庫](retired-sources/manual-improvements-bcca4826/README.md) と [25件の移動前後・hash対応表](retired-sources/manual-improvements-bcca4826/manifest.tsv) を参照してください。既存比較DB・会話・ユーザーデータは移動/削除/書換していません。
+
+## 2026-10-09 文書階層の再構成
+
+[再構成直前の原本](doc-layout-0e5fa40/INDEX.md)27件を追加保存しました。既存Old本文は変更していません。現行正本は[文書索引](../docs/README.md)、[移動対応](../docs/report/documentation-layout-20261009/moves.tsv)、[整理報告](../docs/report/documentation-layout-20261009.md)を参照してください。

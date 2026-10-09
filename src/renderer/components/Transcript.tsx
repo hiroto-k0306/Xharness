@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { type TranscriptItem } from "../../shared/ipc.js";
 import { Logo } from "./Logo.js";
@@ -99,6 +99,7 @@ function CommandGroup({ tools }: { tools: ToolItem[] }) {
 }
 
 export interface TranscriptProps {
+  children?: ReactNode;
   officialDefault?: boolean;
   items: TranscriptItem[];
   running: boolean;
@@ -112,6 +113,7 @@ export interface TranscriptProps {
 /** モデル出力はReactでescapeする。HTMLは解釈せず、明示的な安全なリンクのみ描画する。 */
 export function Transcript({
   items,
+  children,
   running,
   model,
   onCommand,
@@ -162,7 +164,7 @@ export function Transcript({
       i.kind === "user" ||
       (i.kind === "tool" && ["AskUserQuestion", "StopTask"].includes(i.tool)),
   )?.id;
-  if (!items.length)
+  if (!items.length && !children)
     return (
       <div ref={pane} className={styles.pane} data-testid="transcript">
         <div className={styles.empty}>
@@ -282,6 +284,7 @@ export function Transcript({
           </div>
         );
       })}
+      {children}
       {running && <span className={styles.cursor} aria-hidden />}
       {zoom &&
         createPortal(

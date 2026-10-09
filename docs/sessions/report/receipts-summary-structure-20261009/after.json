@@ -1,0 +1,102 @@
+{
+  "phase": "after",
+  "before": {
+    "browser": "151.0.7922.173",
+    "axNodes": [
+      {
+        "role": "paragraph",
+        "name": "",
+        "ignored": false,
+        "properties": []
+      },
+      {
+        "role": "group",
+        "name": "公式workflow receipts",
+        "ignored": false,
+        "properties": []
+      },
+      {
+        "role": "button",
+        "name": "接続確認を中断",
+        "ignored": false,
+        "properties": [
+          {
+            "name": "invalid",
+            "value": {
+              "type": "token",
+              "value": "false"
+            }
+          },
+          {
+            "name": "focusable",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          }
+        ]
+      },
+      {
+        "role": "DisclosureTriangle",
+        "name": "公式の計画・検証・レビュー・保存証跡（0件）",
+        "ignored": false,
+        "properties": [
+          {
+            "name": "focusable",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": true
+            }
+          },
+          {
+            "name": "expanded",
+            "value": {
+              "type": "booleanOrUndefined",
+              "value": false
+            }
+          }
+        ]
+      }
+    ],
+    "summary": "公式の計画・検証・レビュー・保存証跡（0件）",
+    "summaryHtml": "公式の計画・検証・レビュー・保存証跡（0件）",
+    "ax": "- main:\n  - paragraph:\n    - text: 公式接続と作業準備を確認しています。\n    - button \"接続確認を中断\"\n  - group \"公式workflow receipts\": 公式の計画・検証・レビュー・保存証跡（0件）",
+    "open": false
+  },
+  "afterCancel": {
+    "open": false,
+    "cancelCalls": [
+      {
+        "action": "cancel",
+        "id": "preparing",
+        "sessionId": "chat"
+      }
+    ]
+  },
+  "afterKeyboard": {
+    "open": false,
+    "focusOnSummary": true
+  },
+  "keyboardCancel": {
+    "open": false,
+    "calls": [
+      {
+        "action": "cancel",
+        "id": "preparing",
+        "sessionId": "chat"
+      },
+      {
+        "action": "cancel",
+        "id": "preparing",
+        "sessionId": "chat"
+      }
+    ],
+    "pendingDisabled": true,
+    "noDuplicate": true
+  },
+  "ownership": {
+    "otherHidden": true,
+    "returnClosed": true
+  },
+  "pageErrors": []
+}

@@ -1,0 +1,21 @@
+.cards {
+  display: grid;
+  gap: 12px;
+}
+.card {
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  padding: 14px;
+  overflow-wrap: anywhere;
+  background: var(--panel);
+}
+.card:focus {
+  outline: 2px solid var(--accent);
+}
+.card button {
+  margin: 8px 8px 0 0;
+}
+.card pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

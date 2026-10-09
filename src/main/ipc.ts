@@ -102,7 +102,7 @@ export async function confirmAuthentication(
 }
 import { type Host, type SessionController } from "./session/controller.js";
 
-/** Electron に依存する部分はこのファイルと index.ts だけ(DESIGN.md §4)。 */
+/** Electron に依存する部分はこのファイルと index.ts だけ(旧設計 Old/DESIGN-9a275bc.md §4)。 */
 export function createHost(getWindow: () => BrowserWindow | null): Host {
   return {
     async saveReport(filename) {

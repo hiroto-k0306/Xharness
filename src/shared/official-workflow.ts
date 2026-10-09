@@ -17,22 +17,32 @@ export type OfficialWorkflowCommand =
       mode?: "single" | "dag";
       /** Verification-only fix-cycle task; refused unless the mode is on. */
       task?: "typed-add-v1";
-      /** The main model selected when the task is started; fixed for this task. */
+      /** Saved main-model policy; each new call resolves the current catalog ID. */
       planner?: {
         model: string;
         effort?: "low" | "medium" | "high" | "xhigh" | "max" | null;
       };
     }
-  | { action: "approve"; id: string; digest: string }
+  | {
+      action: "approve";
+      id: string;
+      digest: string;
+      approvalId?: string;
+      sessionId?: string;
+      allow?: boolean;
+    }
   | {
       action: "tool_decision";
       id: string;
       approvalId: string;
+      /** Application conversation ID, never the native provider thread ID. */
+      sessionId?: string;
       digest: string;
       allow: boolean;
       scope?: "flow";
     }
-  | { action: "cancel" | "resume"; id: string };
+  | { action: "cancel"; id: string; sessionId?: string }
+  | { action: "resume"; id: string };
 export interface OfficialWorkflowView {
   claudeRuntime?: import("./sdk-runtime.js").SdkRuntimeView;
   /** Workflow (plan / implement / review) can start: storage and both connections configured. */
@@ -55,7 +65,16 @@ export interface OfficialWorkflowView {
     message: string;
   };
   activeId?: string;
-  approval?: { id: string; digest: string; autoOperations?: boolean };
+  /** App conversation owner, including preparation before the first record exists. */
+  activeSessionId?: string;
+  approval?: {
+    id: string;
+    approvalId: string;
+    digest: string;
+    sessionId?: string;
+    expiresAt: number;
+    autoOperations?: boolean;
+  };
   operationApproval?: PendingOperation;
   records: {
     record: WorkflowRecord;

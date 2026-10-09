@@ -1,0 +1,138 @@
+{
+  "config": {
+    "argv": [
+      "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "/workspace/Xharness/node_modules/@playwright/test/cli.js",
+      "test",
+      "test/gui/smoke.spec.ts",
+      "--reporter=json"
+    ],
+    "configFile": "/workspace/Xharness/playwright.config.ts",
+    "rootDir": "/workspace/Xharness/test/gui",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/workspace/Xharness/.out/gui",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "development",
+        "name": "development",
+        "testDir": "/workspace/Xharness/test/gui",
+        "testIgnore": ["**/packaged-entry.spec.ts"],
+        "testMatch": ["**/*.spec.ts"],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [["json"]],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "smoke.spec.ts",
+      "file": "smoke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "startup is fake and isolated",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 1271,
+                  "error": {
+                    "message": "Error: electron.launch: Process failed to launch!\nCall log:\n\u001b[2m  - <launching> /workspace/Xharness/node_modules/.pnpm/electron@44.5.1/node_modules/electron/dist/electron -r /workspace/Xharness/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/server/electron/loader.js --no-sandbox --inspect=0 --remote-debugging-port=0 /workspace/Xharness --fake\u001b[22m\n\u001b[2m  - <launched> pid=187398\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075934.386752:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075934.393295:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\u001b[22m\n\u001b[2m  2 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  2 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  - [pid=187398][err]\u001b[22m\n\u001b[2m  - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] Debugger listening on ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  - [pid=187398][err] For help, see: https://nodejs.org/learn/getting-started/debugging\u001b[22m\n\u001b[2m  - <ws connecting> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  4 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - <ws connected> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  - [pid=187398][err] Debugger attached.\u001b[22m\n\u001b[2m  4 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  8 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  8 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  17 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  5 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  2 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  6 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] (node:187398) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\u001b[22m\n\u001b[2m  - [pid=187398][err] (Use `electron --trace-warnings ...` to show where the warning was created)\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075935.369187:ERROR:ui/ozone/platform/x11/ozone_platform_x11.cc:257] Missing X server or $DISPLAY\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075935.369226:ERROR:ui/aura/env.cc:246] The platform failed to initialize.  Exiting.\u001b[22m\n\u001b[2m  - <ws disconnected> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4 code=1005 reason=\u001b[22m\n\u001b[2m  - [pid=187398] <kill>\u001b[22m\n\u001b[2m  - [pid=187398] <will force kill>\u001b[22m\n\u001b[2m  - [pid=187398] <process did exit: exitCode=null, signal=SIGTRAP>\u001b[22m\n\u001b[2m  - [pid=187398] starting temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=187398] finished temporary directories cleanup\u001b[22m\n",
+                    "stack": "Error: electron.launch: Process failed to launch!\nCall log:\n\u001b[2m  - <launching> /workspace/Xharness/node_modules/.pnpm/electron@44.5.1/node_modules/electron/dist/electron -r /workspace/Xharness/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/server/electron/loader.js --no-sandbox --inspect=0 --remote-debugging-port=0 /workspace/Xharness --fake\u001b[22m\n\u001b[2m  - <launched> pid=187398\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075934.386752:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075934.393295:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\u001b[22m\n\u001b[2m  2 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  2 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  - [pid=187398][err]\u001b[22m\n\u001b[2m  - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] Debugger listening on ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  - [pid=187398][err] For help, see: https://nodejs.org/learn/getting-started/debugging\u001b[22m\n\u001b[2m  - <ws connecting> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  4 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - <ws connected> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  - [pid=187398][err] Debugger attached.\u001b[22m\n\u001b[2m  4 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  8 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  8 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  17 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  5 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  2 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  6 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] (node:187398) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\u001b[22m\n\u001b[2m  - [pid=187398][err] (Use `electron --trace-warnings ...` to show where the warning was created)\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075935.369187:ERROR:ui/ozone/platform/x11/ozone_platform_x11.cc:257] Missing X server or $DISPLAY\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075935.369226:ERROR:ui/aura/env.cc:246] The platform failed to initialize.  Exiting.\u001b[22m\n\u001b[2m  - <ws disconnected> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4 code=1005 reason=\u001b[22m\n\u001b[2m  - [pid=187398] <kill>\u001b[22m\n\u001b[2m  - [pid=187398] <will force kill>\u001b[22m\n\u001b[2m  - [pid=187398] <process did exit: exitCode=null, signal=SIGTRAP>\u001b[22m\n\u001b[2m  - [pid=187398] starting temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=187398] finished temporary directories cleanup\u001b[22m\n\n    at Object.electronApp (/workspace/Xharness/test/gui/electron.fixture.ts:37:21)",
+                    "location": {
+                      "file": "/workspace/Xharness/test/gui/electron.fixture.ts",
+                      "column": 21,
+                      "line": 37
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39melectron.fixture.ts:37\n\n  35 |       ) as Record<string, string>;\n  36 |       const executablePath = process.env.XHARNESS_TEST_EXECUTABLE;\n> 37 |       application = await electron.launch({\n     |                     ^\n  38 |         cwd: root,\n  39 |         ...(executablePath ? { executablePath } : {}),\n  40 |         args: executablePath ? [\"--fake\"] : [root, \"--fake\"],"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/workspace/Xharness/test/gui/electron.fixture.ts",
+                        "column": 21,
+                        "line": 37
+                      },
+                      "message": "Error: electron.launch: Process failed to launch!\nCall log:\n\u001b[2m  - <launching> /workspace/Xharness/node_modules/.pnpm/electron@44.5.1/node_modules/electron/dist/electron -r /workspace/Xharness/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/server/electron/loader.js --no-sandbox --inspect=0 --remote-debugging-port=0 /workspace/Xharness --fake\u001b[22m\n\u001b[2m  - <launched> pid=187398\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075934.386752:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075934.393295:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\u001b[22m\n\u001b[2m  2 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  2 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  - [pid=187398][err]\u001b[22m\n\u001b[2m  - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] Debugger listening on ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  - [pid=187398][err] For help, see: https://nodejs.org/learn/getting-started/debugging\u001b[22m\n\u001b[2m  - <ws connecting> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  4 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - <ws connected> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4\u001b[22m\n\u001b[2m  - [pid=187398][err] Debugger attached.\u001b[22m\n\u001b[2m  4 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  8 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  8 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  17 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  5 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  2 × [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m  6 × [pid=187398][err]\u001b[22m\n\u001b[2m    - [pid=187398][err] Fontconfig error: No writable cache directories\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/var/cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.cache/fontconfig\u001b[22m\n\u001b[2m    - [pid=187398][err] \t/home/agent/.fontconfig\u001b[22m\n\u001b[2m  - [pid=187398][err] (node:187398) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\u001b[22m\n\u001b[2m  - [pid=187398][err] (Use `electron --trace-warnings ...` to show where the warning was created)\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075935.369187:ERROR:ui/ozone/platform/x11/ozone_platform_x11.cc:257] Missing X server or $DISPLAY\u001b[22m\n\u001b[2m  - [pid=187398][err] [187398:1009/075935.369226:ERROR:ui/aura/env.cc:246] The platform failed to initialize.  Exiting.\u001b[22m\n\u001b[2m  - <ws disconnected> ws://127.0.0.1:37541/1f37c64d-1205-4c02-a06f-54f3ab4cb4e4 code=1005 reason=\u001b[22m\n\u001b[2m  - [pid=187398] <kill>\u001b[22m\n\u001b[2m  - [pid=187398] <will force kill>\u001b[22m\n\u001b[2m  - [pid=187398] <process did exit: exitCode=null, signal=SIGTRAP>\u001b[22m\n\u001b[2m  - [pid=187398] starting temporary directories cleanup\u001b[22m\n\u001b[2m  - [pid=187398] finished temporary directories cleanup\u001b[22m\n\n\n   at electron.fixture.ts:37\n\n  35 |       ) as Record<string, string>;\n  36 |       const executablePath = process.env.XHARNESS_TEST_EXECUTABLE;\n> 37 |       application = await electron.launch({\n     |                     ^\n  38 |         cwd: root,\n  39 |         ...(executablePath ? { executablePath } : {}),\n  40 |         args: executablePath ? [\"--fake\"] : [root, \"--fake\"],\n    at Object.electronApp (/workspace/Xharness/test/gui/electron.fixture.ts:37:21)"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-09T07:59:34.096Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/workspace/Xharness/.out/gui/smoke-startup-is-fake-and-isolated-development/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/workspace/Xharness/test/gui/electron.fixture.ts",
+                    "column": 21,
+                    "line": 37
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "4219922fea2e2bd3c691-73155b91aec9ed2d5175",
+          "file": "smoke.spec.ts",
+          "line": 3,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-09T07:59:33.619Z",
+    "duration": 1823.346,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

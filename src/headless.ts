@@ -12,13 +12,9 @@ import { OfficialWorkflowService } from "./main/workflow/official/service.js";
 import { ClaudeSdkManager } from "./main/workflow/official/sdk-manager.js";
 import { managedClaudeStart } from "./main/workflow/official/sdk-worker-client.js";
 import { ClaudeWorkflowAgent } from "./main/workflow/official/claude.js";
-import {
-  loadMainConfig,
-  resolveModel,
-  isEffort,
-} from "./main/config/config.js";
+import { loadMainConfig, isEffort } from "./main/config/config.js";
 import { loadModelCatalog } from "./main/config/model-catalog.js";
-import { catalogUnavailableReason } from "./main/config/catalog.js";
+import { resolveModelPolicy } from "./main/config/catalog.js";
 import { resolvePermissionMode } from "./shared/permission-modes.js";
 import { redact } from "./main/core/redact.js";
 import { exportExecutionReport } from "./main/session/report.js";
@@ -30,6 +26,7 @@ import { loadProjectConfig } from "./main/config/project.js";
 import { WorkspaceTrust } from "./main/config/trust.js";
 import type { UiEvent, Effort } from "./shared/ipc.js";
 import type { OfficialWorkflowView } from "./shared/official-workflow.js";
+import type { WorkflowRecord } from "./main/workflow/official/runtime.js";
 
 const HELP = `XHarness official headless\nnode dist/headless.js [--model provider:model] [--effort level] [--cwd path] [--resume sessionId] [--mode 通常|自動|計画] [--fake] [--codex-path executable]\n--report sessionId --output new-report.html / --replay sessionId [--replay-parent parentId] [--replay-mode default|acceptEdits|plan --cwd path]\n/help /exit /stop /model [provider:model] [effort] /mode 通常|自動|計画 /resume [sessionId] /clear /history /workflow\nGUIと同じ公式Claude SDK / Codex App Server・計画承認・実装・テスト・レビューを使います。TTYでのみ計画/操作を承認できます。\n旧HTTP・Task・MCP・画像・/compact・旧実行slashは使用しません。旧履歴は閲覧できますが公式へ自動転送しません。\n終了コード: 0=正常、1=拒否/失敗/承認不能、130=Ctrl+C/実行中のEOF取消。\n`;
 const FLAGS = new Set(["--help", "--fake"]);
@@ -193,16 +190,14 @@ export async function headless(
   const model =
     options.get("--model") ??
     `${config.choice.provider}:${config.choice.model}`;
-  const resolved = resolveModel(model, config.aliases);
-  const reason = resolved
-    ? catalogUnavailableReason(resolved.model)
-    : "Unknown model";
-  if (!resolved || reason)
-    throw new Error(`モデルを変更せず停止しました: ${reason}`);
   const effort = options.get("--effort") ?? config.choice.effort;
-  const catalog = loadModelCatalog().find((m) => m.id === resolved.model);
-  if (!isEffort(effort) || (catalog?.efforts && !catalog.efforts[effort]))
-    throw new Error("Unavailable model effort");
+  // Resume opens saved history independently of an unrelated invalid default.
+  // A send/new-session validates the selected alias at its own boundary.
+  let selection = model;
+  if (!options.has("--resume")) {
+    const policy = resolveModelPolicy(model, effort, undefined, config.aliases);
+    selection = `${policy.provider}:${policy.model}`;
+  }
   const writer = await acquireHomeWriter(home);
   let terminal: Terminal | undefined;
   let controller: SessionController | undefined;
@@ -308,11 +303,9 @@ export async function headless(
     };
     controller = new SessionController({
       home,
-      model: `${resolved.provider}:${resolved.model}`,
+      model: selection,
       effort: effort as Effort,
-      cliModel: options.has("--model")
-        ? `${resolved.provider}:${resolved.model}`
-        : undefined,
+      cliModel: options.has("--model") ? selection : undefined,
       cliEffort: options.get("--effort") as Effort | undefined,
       fake,
       phase4: true,
@@ -391,10 +384,26 @@ export async function headless(
       await fresh();
     }
     write("公式headless。旧HTTPへ切替なし。/helpで対応操作を確認できます。\n");
-    const printView = (view: OfficialWorkflowView) => {
-      for (const { record } of view.records)
-        write(`workflow ${record.id} · ${record.status} · ${record.goal}\n`);
+    const printSelection = (call: WorkflowRecord["calls"][number]) => {
+      const selection = call.modelSelection;
+      if (!selection) {
+        write(
+          `  ${call.phase}: ${call.requestedModel} / ${call.effort ?? "既定"}（alias/catalog解決記録なし）\n`,
+        );
+        return;
+      }
+      const previous = selection.previous;
+      write(
+        `  ${call.phase}: ${selection.policy.provider}:${selection.policy.model} → ${selection.resolved.model} / ${selection.resolved.effort ?? "既定"} · catalog ${selection.resolved.catalog.version}/${selection.resolved.catalog.updatedAt}/${selection.resolved.catalog.digest} · ${previous ? `${previous.model} → ${selection.resolved.model}（${selection.changed ? "変更あり" : "変更なし"}）` : "前回の解決記録なし"}\n`,
+      );
     };
+    const printView = (view: OfficialWorkflowView) => {
+      for (const { record } of view.records) {
+        write(`workflow ${record.id} · ${record.status} · ${record.goal}\n`);
+        for (const call of record.calls) printSelection(call);
+      }
+    };
+    const printedCalls = new Set<string>();
     while (!interrupted && !stopAfterTurn) {
       const line = await terminal.read("❯ ", lifetime.signal);
       if (line === undefined) break;
@@ -444,7 +453,7 @@ export async function headless(
       if (pieces[0] === "/model") {
         if (pieces.length === 1) {
           for (const m of loadModelCatalog().filter((m) => m.enabled))
-            write(`${m.provider}:${m.id}\n`);
+            write(`${m.provider}:${m.alias ?? m.id} → ${m.id}\n`);
           continue;
         }
         if (pieces.length > 3 || (pieces[2] && !isEffort(pieces[2]))) {
@@ -519,12 +528,23 @@ export async function headless(
             write(
               `workflow ${record.id} · ${record.status} · calls ${record.calls.length} · fix ${record.correctionRounds}\n`,
             );
+            record.calls.forEach((call, index) => {
+              const key = `${record.id}:${index}`;
+              if (!printedCalls.has(key)) {
+                printSelection(call);
+                printedCalls.add(key);
+              }
+            });
             lastStatus = status;
           }
           const plan = view?.approval;
           const operation = view?.operationApproval;
           if (plan || operation) {
             const id = plan?.id ?? operation!.workflowId;
+            const conversationSessionId =
+              plan?.sessionId ??
+              operation?.conversationSessionId ??
+              view?.records.find((r) => r.record.id === id)?.record.sessionId;
             write(
               plan
                 ? `計画 ${id}\n${JSON.stringify(record?.plan ?? view?.records.find((r) => r.record.id === id)?.record.plan, null, 2)}\n`
@@ -540,7 +560,11 @@ export async function headless(
                 "非TTYでは計画/操作を承認できません。無断許可せず記録を保全して停止しました。\n",
               );
               exitCode ||= 1;
-              await service!.command({ action: "cancel", id });
+              await service!.command({
+                action: "cancel",
+                id,
+                sessionId: conversationSessionId,
+              });
             } else {
               // A native timeout/cancellation must also release the terminal prompt.
               const expired = new AbortController();
@@ -552,7 +576,9 @@ export async function headless(
                 if (
                   !pending ||
                   pending.digest !== (plan?.digest ?? operation!.digest) ||
-                  (operation && Date.now() >= operation.expiresAt)
+                  pending.approvalId !==
+                    (plan?.approvalId ?? operation!.approvalId) ||
+                  Date.now() >= pending.expiresAt
                 )
                   expired.abort();
               }, 20);
@@ -568,12 +594,20 @@ export async function headless(
               if (answer?.trim().toLowerCase() === "y") {
                 await service!.command(
                   plan
-                    ? { action: "approve", id, digest: plan.digest }
+                    ? {
+                        action: "approve",
+                        id,
+                        digest: plan.digest,
+                        approvalId: plan.approvalId,
+                        sessionId: conversationSessionId,
+                        allow: true,
+                      }
                     : {
                         action: "tool_decision",
                         id,
                         approvalId: operation!.approvalId,
                         digest: operation!.digest,
+                        sessionId: conversationSessionId,
                         allow: true,
                       },
                 );
@@ -587,9 +621,23 @@ export async function headless(
                         id,
                         approvalId: operation.approvalId,
                         digest: operation.digest,
+                        sessionId: conversationSessionId,
                         allow: false,
                       }
-                    : { action: "cancel", id },
+                    : plan && answer !== undefined && !expired.signal.aborted
+                      ? {
+                          action: "approve",
+                          id,
+                          digest: plan.digest,
+                          approvalId: plan.approvalId,
+                          sessionId: conversationSessionId,
+                          allow: false,
+                        }
+                      : {
+                          action: "cancel",
+                          id,
+                          sessionId: conversationSessionId,
+                        },
                 );
               }
             }

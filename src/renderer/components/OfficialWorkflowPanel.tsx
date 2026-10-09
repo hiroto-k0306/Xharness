@@ -5,17 +5,21 @@ import type {
 } from "../../shared/official-workflow.js";
 import styles from "./OfficialWorkflowPanel.module.css";
 import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
+import { ModelSelectionEvidence } from "./ModelSelectionEvidence.js";
+import { OfficialSkillEvidence } from "./OfficialSkillEvidence.js";
 import { OfficialCommunication } from "./OfficialCommunication.js";
 import { OfficialPlanAssignments } from "./OfficialPlanAssignments.js";
 import { ClaudeSdkStatus } from "./ClaudeSdkStatus.js";
 import { CodexRuntimeSettings } from "./CodexRuntimeSettings.js";
 import { officialFailureMessage } from "../../main/workflow/official/session-result.js";
 export function OfficialWorkflowPanel({
+  verificationOnly = false,
   mainModel,
   mainEffort,
   mainProvider,
   openSignal,
 }: {
+  verificationOnly?: boolean;
   /** Company of the main model; questions use only this connection. */
   mainProvider?: "claude" | "codex";
   openSignal?: number;
@@ -32,7 +36,6 @@ export function OfficialWorkflowPanel({
   const [workspaceRoot, setWorkspaceRoot] = useState("");
   const [question, setQuestion] = useState("");
   const sending = useRef(false);
-  const openedApproval = useRef("");
   useEffect(() => {
     if (openSignal) setOpen(true);
   }, [openSignal]);
@@ -47,13 +50,6 @@ export function OfficialWorkflowPanel({
         .then((v) => {
           if (live) {
             setView(v);
-            const key = v.approval
-              ? `${v.approval.id}:${v.approval.digest}`
-              : "";
-            if (key && openedApproval.current !== key) {
-              openedApproval.current = key;
-              setOpen(true);
-            }
           }
         })
         .catch(() => {
@@ -81,6 +77,7 @@ export function OfficialWorkflowPanel({
       setPending(false);
     }
   };
+  if (verificationOnly && !view?.simulated && !view?.verification) return null;
   return (
     <>
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -143,125 +140,140 @@ export function OfficialWorkflowPanel({
           <p>
             既存のフォルダの絶対パスを指定します。存在・書き込み可否を確認し、使えない場合は理由を表示して停止します（別の場所へ自動で切り替えません）。空で保存すると既定に戻ります。既存の記録は移動しません。
           </p>
-          {view?.operationApproval && (
-            <section
-              className={styles.operationApproval}
-              role="alertdialog"
-              aria-label="今回の操作の承認"
-              key={view.operationApproval.approvalId}
-            >
-              <h3>操作の許可が必要です</h3>
-              <p>
-                今回の操作だけ、またはこのフローの残りの操作を許可できます。フロー許可は終了・停止時に失効し、禁止操作は許可しません。10分以内に回答がなければ拒否します。承認待ちの間はphaseの制限時間を止めます。
-              </p>
-              <p>操作：{view.operationApproval.command}</p>
-              <p>対象：{view.operationApproval.targets.join(", ")}</p>
-              <p>作業場所：{view.operationApproval.cwd}</p>
-              <p>要求理由：{view.operationApproval.reason}</p>
-              <p>
-                セッション：{view.operationApproval.sessionId} / request：
-                {view.operationApproval.requestId}
-              </p>
-              <p>
-                期限：
-                {new Date(
-                  view.operationApproval.expiresAt,
-                ).toLocaleTimeString()}
-              </p>
-              {[true, false].map((allow) => (
-                <button
-                  key={String(allow)}
-                  disabled={pending}
-                  onClick={() =>
-                    void send({
-                      action: "tool_decision",
-                      id: view.operationApproval!.workflowId,
-                      approvalId: view.operationApproval!.approvalId,
-                      digest: view.operationApproval!.digest,
-                      allow,
-                    })
-                  }
-                >
-                  {allow ? "今回の操作だけ許可" : "拒否"}
-                </button>
-              ))}
-              {view.records.some(
-                ({ record }) =>
-                  record.id === view.operationApproval!.workflowId &&
-                  record.nativeWork,
-              ) && (
-                <button
-                  disabled={pending}
-                  onClick={() =>
-                    void send({
-                      action: "tool_decision",
-                      id: view.operationApproval!.workflowId,
-                      approvalId: view.operationApproval!.approvalId,
-                      digest: view.operationApproval!.digest,
-                      allow: true,
-                      scope: "flow",
-                    })
-                  }
-                >
-                  このフローのみ許可
-                </button>
-              )}
-            </section>
-          )}
+          {view?.operationApproval &&
+            (view.simulated || view.verification) &&
+            view.records.some(
+              ({ record }) =>
+                record.id === view.operationApproval!.workflowId &&
+                !record.sessionId &&
+                !record.nativeWork &&
+                !record.project,
+            ) && (
+              <section
+                className={styles.operationApproval}
+                role="alertdialog"
+                aria-label="今回の操作の承認"
+                key={view.operationApproval.approvalId}
+              >
+                <h3>操作の許可が必要です</h3>
+                <p>
+                  今回の操作だけ、またはこのフローの残りの操作を許可できます。フロー許可は終了・停止時に失効し、禁止操作は許可しません。10分以内に回答がなければ拒否します。承認待ちの間はphaseの制限時間を止めます。
+                </p>
+                <p>操作：{view.operationApproval.command}</p>
+                <p>対象：{view.operationApproval.targets.join(", ")}</p>
+                <p>作業場所：{view.operationApproval.cwd}</p>
+                <p>要求理由：{view.operationApproval.reason}</p>
+                <p>
+                  セッション：{view.operationApproval.sessionId} / request：
+                  {view.operationApproval.requestId}
+                </p>
+                <p>
+                  期限：
+                  {new Date(
+                    view.operationApproval.expiresAt,
+                  ).toLocaleTimeString()}
+                </p>
+                {[true, false].map((allow) => (
+                  <button
+                    key={String(allow)}
+                    disabled={pending}
+                    onClick={() =>
+                      void send({
+                        action: "tool_decision",
+                        id: view.operationApproval!.workflowId,
+                        approvalId: view.operationApproval!.approvalId,
+                        digest: view.operationApproval!.digest,
+                        allow,
+                      })
+                    }
+                  >
+                    {allow ? "今回の操作だけ許可" : "拒否"}
+                  </button>
+                ))}
+                {view.records.some(
+                  ({ record }) =>
+                    record.id === view.operationApproval!.workflowId &&
+                    record.nativeWork,
+                ) && (
+                  <button
+                    disabled={pending}
+                    onClick={() =>
+                      void send({
+                        action: "tool_decision",
+                        id: view.operationApproval!.workflowId,
+                        approvalId: view.operationApproval!.approvalId,
+                        digest: view.operationApproval!.digest,
+                        allow: true,
+                        scope: "flow",
+                      })
+                    }
+                  >
+                    このフローのみ許可
+                  </button>
+                )}
+              </section>
+            )}
           <p>
             計画は作成時に選択中のメインモデルとeffortを使います。計画が実装担当と別会社のレビュー担当を選び、承認前に表示します。通常の単一課題は最大7回のphase呼出・各120秒・修正2回で終了します。SDK内部のモデル往復数は別です。
           </p>
-          <label>
-            実行方式{" "}
-            <select
-              aria-label="workflow実行方式"
-              value={mode}
-              onChange={(e) => setMode(e.target.value as "single" | "dag")}
-            >
-              <option value="single">単一タスク</option>
-              <option value="dag" disabled={!view?.simulated}>
-                合成DAG（模擬・最大2並列）
-              </option>
-            </select>
-          </label>
-          {mode === "dag" && (
-            <p>
-              DAGは固定合成課題の模擬実行です。実provider並行実行は未検証。native会話のresumeは行わず、安全な保存段階から新しいphaseを開始します。
-            </p>
+          {(view?.simulated || view?.verification) && (
+            <>
+              <label>
+                実行方式{" "}
+                <select
+                  aria-label="workflow実行方式"
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as "single" | "dag")}
+                >
+                  <option value="single">単一タスク</option>
+                  <option value="dag" disabled={!view?.simulated}>
+                    合成DAG（模擬・最大2並列）
+                  </option>
+                </select>
+              </label>
+              {mode === "dag" && (
+                <p>
+                  DAGは固定合成課題の模擬実行です。実provider並行実行は未検証。native会話のresumeは行わず、安全な保存段階から新しいphaseを開始します。
+                </p>
+              )}
+              <label>
+                実装候補{" "}
+                <select
+                  aria-label="公式workflow実装候補"
+                  value={provider}
+                  disabled={mode === "dag"}
+                  onChange={(e) =>
+                    setProvider(e.target.value as "claude" | "codex")
+                  }
+                >
+                  <option value="claude">Claude → Codexレビュー</option>
+                  <option value="codex">Codex → Claudeレビュー</option>
+                </select>
+              </label>
+              <button
+                disabled={
+                  !view?.available || !!view.activeId || pending || !mainModel
+                }
+                onClick={() =>
+                  void send({
+                    action: "create",
+                    provider,
+                    mode,
+                    ...(mainModel
+                      ? {
+                          planner: {
+                            model: mainModel,
+                            effort: mainEffort ?? null,
+                          },
+                        }
+                      : {}),
+                  })
+                }
+              >
+                合成課題の計画を作成
+              </button>
+            </>
           )}
-          <label>
-            実装候補{" "}
-            <select
-              aria-label="公式workflow実装候補"
-              value={provider}
-              disabled={mode === "dag"}
-              onChange={(e) =>
-                setProvider(e.target.value as "claude" | "codex")
-              }
-            >
-              <option value="claude">Claude → Codexレビュー</option>
-              <option value="codex">Codex → Claudeレビュー</option>
-            </select>
-          </label>
-          <button
-            disabled={
-              !view?.available || !!view.activeId || pending || !mainModel
-            }
-            onClick={() =>
-              void send({
-                action: "create",
-                provider,
-                mode,
-                ...(mainModel
-                  ? {
-                      planner: { model: mainModel, effort: mainEffort ?? null },
-                    }
-                  : {}),
-              })
-            }
-          >
-            合成課題の計画を作成
-          </button>
           {view?.verification === "fix-cycle-v1" && (
             <section aria-label="修正経路の検証モード">
               <p>
@@ -377,10 +389,21 @@ export function OfficialWorkflowPanel({
               </small>
               <p>
                 {r.nativeWork &&
-                  "ファイル内容の比較digest（Git HEADではありません）："}
+                  (r.nativeDagWorkspace?.integration?.head
+                    ? "隔離Git worktreeのコミット（利用者ブランチ未変更）："
+                    : "ファイル内容の比較digest（Git HEADではありません）：")}
                 base {/^0+$/.test(r.base) ? "未測定" : r.base.slice(0, 12)} →
                 head {/^0+$/.test(r.head) ? "未測定" : r.head.slice(0, 12)}
               </p>
+              {r.nativeDagWorkspace && (
+                <p>
+                  所有する隔離Git worktrees：source base{" "}
+                  {r.nativeDagWorkspace.sourceBase.slice(0, 12)} / 統合HEAD{" "}
+                  {r.nativeDagWorkspace.integration?.head?.slice(0, 12) ??
+                    "未取込"}
+                  。利用者のブランチは変更しません。
+                </p>
+              )}
               {r.plan && (
                 <>
                   <h4>確認する計画</h4>
@@ -390,10 +413,15 @@ export function OfficialWorkflowPanel({
                       <p>
                         公式エージェントに対象探索・編集・テスト選択を任せます。作業場所：
                         {r.cwd}
-                        （選択中のフォルダー／worktree）。既存の変更を保全し、自動commit・reset・mergeは行いません。
+                        {r.nativeDagWorkspace
+                          ? "（所有する隔離Git worktree）。承認済み変更だけをハーネスがcommit・統合し、利用者のブランチへmerge/resetは行いません。"
+                          : "（選択中のフォルダー／worktree）。既存の変更を保全し、自動commit・reset・mergeは行いません。"}
                       </p>
                       <p>
-                        ファイル一覧は計画時点の候補です。公式sandboxを維持します。通常モードでは操作ごとに確認し、「このフローのみ許可」も選べます。追加課金は禁止のままです。
+                        {r.nativeDagWorkspace
+                          ? "ファイル一覧は各taskの承認済み編集範囲です。"
+                          : "ファイル一覧は計画時点の候補です。"}
+                        公式sandboxを維持します。通常モードでは操作ごとに確認し、「このフローのみ許可」も選べます。追加課金は禁止のままです。
                       </p>
                       {view.approval?.id === r.id &&
                         view.approval.autoOperations && (
@@ -402,7 +430,9 @@ export function OfficialWorkflowPanel({
                           </p>
                         )}
                       <p>
-                        テスト結果はモデルの実行報告です。ハーネスの独立プロセス検証ではありません。別会社レビューと最大2回の修正を行います。
+                        {r.nativeDagWorkspace
+                          ? "各taskのモデル報告と、統合後に別承認で実行する独立プロセステストを分けて記録します。統合レビューで重大指摘があれば停止し、作業領域を保全します。"
+                          : "テスト結果はモデルの実行報告です。ハーネスの独立プロセス検証ではありません。別会社レビューと最大2回の修正を行います。"}
                       </p>
                     </section>
                   )}
@@ -490,30 +520,45 @@ export function OfficialWorkflowPanel({
                 </>
               )}
               {view.approval?.id === r.id && (
-                <>
-                  {r.injection && (
-                    <p>
-                      この課題は検証用です。実装（X1）の品質テストが合格した後に、既知の不良コミット（X2）を注入し、テスト・レビュー・修正（X3）を確認します。
-                    </p>
-                  )}
-                  <p>承認digest：{view.approval.digest}</p>
-                  <button
-                    disabled={pending}
-                    onClick={() =>
-                      void send({
-                        action: "approve",
-                        id: r.id,
-                        digest: view.approval!.digest,
-                      })
-                    }
-                  >
-                    この計画を承認
-                  </button>
-                </>
+                <p>承認操作は対応する会話のチャットで行います。</p>
               )}
+              {view.approval?.id === r.id &&
+                (view.simulated || view.verification) &&
+                !r.sessionId &&
+                !r.nativeWork &&
+                !r.project && (
+                  <>
+                    {r.injection && (
+                      <p>
+                        この課題は検証用です。実装（X1）の品質テストが合格した後に、既知の不良コミット（X2）を注入し、テスト・レビュー・修正（X3）を確認します。
+                      </p>
+                    )}
+                    <p>承認digest：{view.approval.digest}</p>
+                    <button
+                      disabled={pending}
+                      onClick={() =>
+                        void send({
+                          action: "approve",
+                          id: r.id,
+                          digest: view.approval!.digest,
+                          approvalId: view.approval!.approvalId,
+                          allow: true,
+                        })
+                      }
+                    >
+                      この計画を承認
+                    </button>
+                  </>
+                )}
               {view.activeId === r.id ? (
                 <button
-                  onClick={() => void send({ action: "cancel", id: r.id })}
+                  onClick={() =>
+                    void send({
+                      action: "cancel",
+                      id: r.id,
+                      sessionId: r.sessionId,
+                    })
+                  }
                 >
                   workflowを中断
                 </button>
@@ -537,7 +582,10 @@ export function OfficialWorkflowPanel({
               )}
               <h4>
                 {r.nativeWork
-                  ? "モデルの検証報告と別会社レビュー"
+                  ? r.nativeDagWorkspace ||
+                    r.nativeWork.validation === "independent-process"
+                    ? "独立プロセス検証・モデル報告・別会社レビュー"
+                    : "モデルの検証報告と別会社レビュー"
                   : "実テストとレビューの証跡"}
               </h4>
               {r.nativeValidation?.map((test, index) => (
@@ -575,6 +623,8 @@ export function OfficialWorkflowPanel({
               ))}
               <details>
                 <summary>使用量・native状態・保存証跡</summary>
+                <ModelSelectionEvidence record={r} />
+                <OfficialSkillEvidence record={r} />
                 {r.calls.map((call) =>
                   "diagnostics" in call && call.diagnostics ? (
                     <OfficialModelEvidence
@@ -608,7 +658,13 @@ export function OfficialWorkflowPanel({
                 公式接続と利用可能な枠を確認しています。
                 <button
                   onClick={() =>
-                    void send({ action: "cancel", id: view.activeId! })
+                    void send({
+                      action: "cancel",
+                      id: view.activeId!,
+                      sessionId: view.records.find(
+                        ({ record }) => record.id === view.activeId,
+                      )?.record.sessionId,
+                    })
                   }
                 >
                   接続確認を中断

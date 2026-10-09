@@ -1,0 +1,18 @@
+{
+  "head": "2463fc12297f3632daa1ba02fa0e374ec767bfe4",
+  "executable": "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+  "args": [
+    "node_modules/vitest/vitest.mjs",
+    "run",
+    "/workspace/Xharness/src/main/local-links.test.ts",
+    "/workspace/Xharness/src/main/agents/reviewer-commands.test.ts",
+    "/workspace/Xharness/src/main/session/repository.test.ts",
+    "--maxWorkers=1",
+    "--testTimeout=30000",
+    "--testNamePattern",
+    "[\\s\\S]*(?:rejects malformed, remote and ambiguous URL file:///C:/a\n|rejects \\.\\\\scripts\\\\pnpm\\.ps1 test\ncalc|rejects \\.\\\\scripts\\\\pnpm\\.ps1 test\rcalc|rejects \\./scripts/pnpm\\.ps1 test\ncalc|rejects \\./scripts/pnpm\\.ps1 test\rcalc|rejects unsafe URL git@example\\.com:a\\.git\ncommand)$",
+    "--reporter=default",
+    "--reporter=json",
+    "--outputFile.json=/tmp/xh-nonwin-filter-nested.json"
+  ]
+}

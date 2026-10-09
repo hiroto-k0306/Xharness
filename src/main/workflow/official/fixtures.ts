@@ -161,6 +161,13 @@ export function fixtureAgents(
       let output: unknown;
       if (request.phase === "plan") {
         const plan = fixturePlan(implementation);
+        if (request.nativeWork)
+          plan.parallelization = {
+            mode: "serial",
+            reason:
+              "Synthetic single-task native fixture; no independent parallel scope needed.",
+            maxParallel: 1,
+          };
         const registered = JSON.parse(request.prompt).acceptanceTests;
         if (Array.isArray(registered))
           plan.tasks[0]!.acceptance = registered.map(

@@ -14,7 +14,8 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
-import { loadModelCatalog } from "../config/model-catalog.js";
+import { loadMainConfig } from "../config/config.js";
+import { resolveModelPolicy } from "../config/catalog.js";
 import { prepareProviderHistory } from "../context/provider-compactor.js";
 import { Router } from "../core/router.js";
 import { systemPrompt } from "./turn.js";
@@ -53,15 +54,27 @@ export async function setMode(
 export async function saveDefaultModel(
   home: string,
   command: Extract<HarnessCommand, { type: "set_default_model" }>,
-): Promise<{ ok: true; effort: Effort } | { ok: false; error: string }> {
-  const model = loadModelCatalog().find(
-    (m) => m.enabled && m.id === command.model,
-  );
-  if (
-    !model ||
-    (command.effort && model.efforts && !model.efforts[command.effort])
-  )
-    return { ok: false, error: "Unavailable model or effort" };
+): Promise<
+  { ok: true; model: string; effort: Effort } | { ok: false; error: string }
+> {
+  const current = await loadMainConfig(home);
+  const effort = command.effort ?? current.choice.effort;
+  let model: string;
+  try {
+    const policy = resolveModelPolicy(
+      command.model,
+      effort,
+      undefined,
+      current.aliases,
+    );
+    model = `${policy.provider}:${policy.model}`;
+  } catch (error) {
+    return {
+      ok: false,
+      error:
+        error instanceof Error ? error.message : "モデル選択を確認できません。",
+    };
+  }
   const path = join(home, "config.yaml");
   let doc: Record<string, unknown> = {};
   try {
@@ -71,13 +84,12 @@ export async function saveDefaultModel(
   }
   if (!doc || typeof doc !== "object" || Array.isArray(doc))
     throw new Error("Invalid configuration");
-  const effort = command.effort ?? model.defaultEffort ?? "high";
-  doc.main = { model: command.model, effort };
+  doc.main = { model, effort };
   const temp = path + "." + randomUUID() + ".tmp";
   await mkdir(home, { recursive: true });
   await writeFile(temp, stringify(doc));
   await rename(temp, path);
-  return { ok: true, effort };
+  return { ok: true, model, effort };
 }
 
 /** /compact: 古い履歴を要約に置き換える(元の履歴は保存したまま) */

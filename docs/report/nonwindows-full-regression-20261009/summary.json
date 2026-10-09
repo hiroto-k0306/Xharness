@@ -1,0 +1,56 @@
+{
+  "execution_head": "2463fc12297f3632daa1ba02fa0e374ec767bfe4",
+  "vitest_full_runs": 1,
+  "runner_raw": {
+    "numTotalTests": 2038,
+    "numPassedTests": 1938,
+    "numFailedTests": 11,
+    "numPendingTests": 89
+  },
+  "file_project_executions": 214,
+  "unique_test_files": 211,
+  "duplicated_successful_cases_across_node_renderer_projects": 33,
+  "unique_cases": 2005,
+  "initial_unique_passed": 1905,
+  "explicit_windows_excluded": 34,
+  "native_platform_skipped": 14,
+  "acl_held_skipped": 1,
+  "accidental_filter_gap": 40,
+  "gap_completed_passed": 40,
+  "unique_after_completion": {
+    "passed": 1945,
+    "failed": 11,
+    "skipped": 49
+  },
+  "full_run_failures_fixed_by_related_tests": 11,
+  "new_positive_historical_alias_case": 1,
+  "postfix_related_runs": {
+    "ui_phase": {
+      "passed": 12,
+      "skipped": 0
+    },
+    "catalog": {
+      "passed": 15,
+      "skipped": 2
+    },
+    "vitest_session": {
+      "passed": 1,
+      "skipped": 0
+    }
+  },
+  "postfix_related_passes_are_not_added_to_total": true,
+  "coverage_conclusion": "1945 originally passed unique cases + 11 repaired original cases = 1956 covered original non-Windows cases; new positive 1 is separately counted; no post-fix full rerun",
+  "gui_default_inventory": 15,
+  "gui_windows_job_excluded": 2,
+  "gui_windows_acl_dependency_excluded": 1,
+  "gui_packaged_excluded": 2,
+  "gui_linux_candidates": 10,
+  "gui_unique_smoke_failed_environment": 1,
+  "gui_other_candidates_not_run_environment": 9,
+  "gui_targeted_environment_probe_repeats_not_added": 1,
+  "legacy_gui_default_excluded": {
+    "current_archived_source": 12,
+    "Old_nonexecutable_text": 2
+  },
+  "gui_packaged_entry_default_ignored": 1
+}

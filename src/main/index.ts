@@ -1,4 +1,15 @@
-import { app, BrowserWindow, dialog, safeStorage, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  Notification,
+  safeStorage,
+  shell,
+} from "electron";
+import {
+  initializeNotificationIdentity,
+  UserNotifications,
+} from "./notifications.js";
 import { homedir } from "node:os";
 import { mkdirSync } from "node:fs";
 import { fakeUserDataPath } from "./fake-profile.js";
@@ -40,6 +51,9 @@ import {
 const here = fileURLToPath(new URL(".", import.meta.url));
 const startup = parseStartupArgs(process.argv.slice(1));
 const fake = startup.fake;
+initializeNotificationIdentity(process.platform, fake, (id) =>
+  app.setAppUserModelId(id),
+);
 const officialUserData = officialProfile(
   process.argv.slice(1),
   process.env.XHARNESS_HOME,
@@ -76,6 +90,23 @@ let window: BrowserWindow | null = null;
 let controller: SessionController | undefined;
 let officialWorkflow: OfficialWorkflowService | undefined;
 let claudeSdk: ClaudeSdkManager | undefined;
+const userNotifications = new UserNotifications({
+  supported: () =>
+    process.platform === "win32" && !fake && Notification.isSupported(),
+  show: (title, body, click) => {
+    const notification = new Notification({ title, body });
+    notification.on("click", click);
+    notification.on("failed", () => {});
+    notification.show();
+  },
+  focus: (event) => {
+    if (!window || window.isDestroyed()) return;
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+    sendEvent(window, event);
+  },
+});
 
 function createWindow() {
   window = new BrowserWindow({
@@ -224,7 +255,10 @@ async function start() {
     secrets: [],
     host: createHost(() => window),
     localBrowserFactory: createLocalBrowser,
-    emit: (event) => sendEvent(window, event),
+    emit: (event) => {
+      sendEvent(window, event);
+      userNotifications.event(event);
+    },
   });
   await controller.init();
   if (startup.resume) {
@@ -253,9 +287,14 @@ async function start() {
     });
     await claudeSdk.start();
   }
+  let notificationWorkflowReady = false;
   officialWorkflow = new OfficialWorkflowService({
     home,
     fake,
+    onChange: () => {
+      if (notificationWorkflowReady && officialWorkflow)
+        userNotifications.workflow(officialWorkflow.view());
+    },
     codexPath: main.auth.codexCliPath,
     ...(claudeSdk
       ? {
@@ -272,6 +311,11 @@ async function start() {
     // Explicit flag + environment value + isolated home only; off otherwise.
     verification: verificationMode(process.argv.slice(1), process.env),
   });
+  // Prime after loading/recovery, never toast historical records during startup.
+  userNotifications.workflow(
+    await officialWorkflow.command({ action: "list" }),
+  );
+  notificationWorkflowReady = true;
   registerOfficialWorkflowIpc(() => window, officialWorkflow);
   createWindow();
 }

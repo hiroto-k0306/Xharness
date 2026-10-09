@@ -1,0 +1,138 @@
+{
+  "config": {
+    "argv": [
+      "/opt/codex/runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "/workspace/Xharness/node_modules/@playwright/test/cli.js",
+      "test",
+      "test/gui/smoke.spec.ts",
+      "--reporter=json"
+    ],
+    "configFile": "/workspace/Xharness/playwright.config.ts",
+    "rootDir": "/workspace/Xharness/test/gui",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/workspace/Xharness/.out/gui",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "development",
+        "name": "development",
+        "testDir": "/workspace/Xharness/test/gui",
+        "testIgnore": ["**/packaged-entry.spec.ts"],
+        "testMatch": ["**/*.spec.ts"],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [["json"]],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "smoke.spec.ts",
+      "file": "smoke.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "startup is fake and isolated",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 30000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "development",
+              "projectName": "development",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 1139,
+                  "error": {
+                    "message": "Error: electronApplication.evaluate: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /tmp/xh-nonwin-electron-headless/electron -r /workspace/Xharness/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/server/electron/loader.js --no-sandbox --inspect=0 --remote-debugging-port=0 /workspace/Xharness --fake\n<launched> pid=193373\n[pid=193373][err] [193373:1009/080116.914405:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080116.914738:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[pid=193373][err] Debugger listening on ws://127.0.0.1:43547/68a63e35-80a1-4974-8341-35ff1dece5c4\n[pid=193373][err] For help, see: https://nodejs.org/learn/getting-started/debugging\n[pid=193373][err] Debugger attached.\n[pid=193373][err] (node:193373) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n[pid=193373][err] (Use `electron --trace-warnings ...` to show where the warning was created)\n[pid=193373][err] [193373:1009/080117.817391:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080117.817452:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080117.826047:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:300] Failed to adjust OOM score of renderer with pid 193414: Read-only file system (30)\n[pid=193373][err] \n[pid=193373][err] DevTools listening on ws://127.0.0.1:33557/devtools/browser/9554c90d-9ecb-4949-921b-593b249b6ac9\n[pid=193373][err] [193373:1009/080117.838786:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[pid=193373][err] [193373:1009/080117.838908:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[pid=193373][err] [193373:1009/080117.844244:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[pid=193373][err] [193414:1009/080117.848237:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851025:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851171:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGL failed with error EGL_NOT_INITIALIZED, trying next display type\n[pid=193373][err] [193414:1009/080117.851371:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851455:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851516:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGLES failed with error EGL_NOT_INITIALIZED\n[pid=193373][err] [193414:1009/080117.851615:ERROR:ui/gl/gl_display.cc:665] Initialization of all (2) EGL display types failed.\n[pid=193373][err] [193414:1009/080117.851753:ERROR:ui/ozone/common/gl_ozone_egl.cc:26] GLDisplayEGL::Initialize failed.\n[pid=193373][err] [193414:1009/080117.853318:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.856803:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857061:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGL failed with error EGL_NOT_INITIALIZED, trying next display type\n[pid=193373][err] [193414:1009/080117.857157:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857227:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857292:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGLES failed with error EGL_NOT_INITIALIZED\n[pid=193373][err] [193414:1009/080117.857340:ERROR:ui/gl/gl_display.cc:665] Initialization of all (2) EGL display types failed.\n[pid=193373][err] [193414:1009/080117.857424:ERROR:ui/ozone/common/gl_ozone_egl.cc:26] GLDisplayEGL::Initialize failed.\n[pid=193373][err] [193414:1009/080117.860026:ERROR:components/viz/service/main/viz_main_impl.cc:190] Exiting GPU process due to errors during initialization\n[pid=193373][err] [193373:1009/080117.867290:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:300] Failed to adjust OOM score of renderer with pid 193424: Read-only file system (30)",
+                    "stack": "Error: electronApplication.evaluate: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /tmp/xh-nonwin-electron-headless/electron -r /workspace/Xharness/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/server/electron/loader.js --no-sandbox --inspect=0 --remote-debugging-port=0 /workspace/Xharness --fake\n<launched> pid=193373\n[pid=193373][err] [193373:1009/080116.914405:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080116.914738:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[pid=193373][err] Debugger listening on ws://127.0.0.1:43547/68a63e35-80a1-4974-8341-35ff1dece5c4\n[pid=193373][err] For help, see: https://nodejs.org/learn/getting-started/debugging\n[pid=193373][err] Debugger attached.\n[pid=193373][err] (node:193373) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n[pid=193373][err] (Use `electron --trace-warnings ...` to show where the warning was created)\n[pid=193373][err] [193373:1009/080117.817391:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080117.817452:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080117.826047:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:300] Failed to adjust OOM score of renderer with pid 193414: Read-only file system (30)\n[pid=193373][err] \n[pid=193373][err] DevTools listening on ws://127.0.0.1:33557/devtools/browser/9554c90d-9ecb-4949-921b-593b249b6ac9\n[pid=193373][err] [193373:1009/080117.838786:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[pid=193373][err] [193373:1009/080117.838908:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[pid=193373][err] [193373:1009/080117.844244:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[pid=193373][err] [193414:1009/080117.848237:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851025:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851171:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGL failed with error EGL_NOT_INITIALIZED, trying next display type\n[pid=193373][err] [193414:1009/080117.851371:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851455:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851516:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGLES failed with error EGL_NOT_INITIALIZED\n[pid=193373][err] [193414:1009/080117.851615:ERROR:ui/gl/gl_display.cc:665] Initialization of all (2) EGL display types failed.\n[pid=193373][err] [193414:1009/080117.851753:ERROR:ui/ozone/common/gl_ozone_egl.cc:26] GLDisplayEGL::Initialize failed.\n[pid=193373][err] [193414:1009/080117.853318:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.856803:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857061:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGL failed with error EGL_NOT_INITIALIZED, trying next display type\n[pid=193373][err] [193414:1009/080117.857157:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857227:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857292:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGLES failed with error EGL_NOT_INITIALIZED\n[pid=193373][err] [193414:1009/080117.857340:ERROR:ui/gl/gl_display.cc:665] Initialization of all (2) EGL display types failed.\n[pid=193373][err] [193414:1009/080117.857424:ERROR:ui/ozone/common/gl_ozone_egl.cc:26] GLDisplayEGL::Initialize failed.\n[pid=193373][err] [193414:1009/080117.860026:ERROR:components/viz/service/main/viz_main_impl.cc:190] Exiting GPU process due to errors during initialization\n[pid=193373][err] [193373:1009/080117.867290:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:300] Failed to adjust OOM score of renderer with pid 193424: Read-only file system (30)\n    at Object.electronApp (/workspace/Xharness/test/gui/electron.fixture.ts:47:27)",
+                    "location": {
+                      "file": "/workspace/Xharness/test/gui/electron.fixture.ts",
+                      "column": 27,
+                      "line": 47
+                    },
+                    "snippet": "\u001b[90m   at \u001b[39melectron.fixture.ts:47\n\n  45 |       // メインプロセスで確認する。既存プロファイルへの接続なら操作せず失敗させる。\n  46 |       expect(\n> 47 |         await application.evaluate(({ app }) => ({\n     |                           ^\n  48 |           userData: app.getPath(\"userData\"),\n  49 |           sessionData: app.getPath(\"sessionData\"),\n  50 |         })),"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/workspace/Xharness/test/gui/electron.fixture.ts",
+                        "column": 27,
+                        "line": 47
+                      },
+                      "message": "Error: electronApplication.evaluate: Target page, context or browser has been closed\nBrowser logs:\n\n<launching> /tmp/xh-nonwin-electron-headless/electron -r /workspace/Xharness/node_modules/.pnpm/playwright-core@1.63.0/node_modules/playwright-core/lib/server/electron/loader.js --no-sandbox --inspect=0 --remote-debugging-port=0 /workspace/Xharness --fake\n<launched> pid=193373\n[pid=193373][err] [193373:1009/080116.914405:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080116.914738:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[pid=193373][err] Debugger listening on ws://127.0.0.1:43547/68a63e35-80a1-4974-8341-35ff1dece5c4\n[pid=193373][err] For help, see: https://nodejs.org/learn/getting-started/debugging\n[pid=193373][err] Debugger attached.\n[pid=193373][err] (node:193373) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.\n[pid=193373][err] (Use `electron --trace-warnings ...` to show where the warning was created)\n[pid=193373][err] [193373:1009/080117.817391:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080117.817452:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory\n[pid=193373][err] [193373:1009/080117.826047:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:300] Failed to adjust OOM score of renderer with pid 193414: Read-only file system (30)\n[pid=193373][err] \n[pid=193373][err] DevTools listening on ws://127.0.0.1:33557/devtools/browser/9554c90d-9ecb-4949-921b-593b249b6ac9\n[pid=193373][err] [193373:1009/080117.838786:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[pid=193373][err] [193373:1009/080117.838908:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are \"tcp\" and on UNIX \"unix\")\n[pid=193373][err] [193373:1009/080117.844244:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: \n[pid=193373][err] [193414:1009/080117.848237:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851025:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851171:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGL failed with error EGL_NOT_INITIALIZED, trying next display type\n[pid=193373][err] [193414:1009/080117.851371:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851455:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.851516:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGLES failed with error EGL_NOT_INITIALIZED\n[pid=193373][err] [193414:1009/080117.851615:ERROR:ui/gl/gl_display.cc:665] Initialization of all (2) EGL display types failed.\n[pid=193373][err] [193414:1009/080117.851753:ERROR:ui/ozone/common/gl_ozone_egl.cc:26] GLDisplayEGL::Initialize failed.\n[pid=193373][err] [193414:1009/080117.853318:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.856803:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857061:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGL failed with error EGL_NOT_INITIALIZED, trying next display type\n[pid=193373][err] [193414:1009/080117.857157:ERROR:ui/gl/angle_platform_impl.cc:48] Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] ERR: Display.cpp:1115 (initialize): ANGLE Display::initialize error 12289: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857227:ERROR:ui/gl/egl_util.cc:92] EGL Driver message (Critical) eglInitialize: Could not open the default X display.\n[pid=193373][err] [193414:1009/080117.857292:ERROR:ui/gl/gl_display.cc:630] eglInitialize OpenGLES failed with error EGL_NOT_INITIALIZED\n[pid=193373][err] [193414:1009/080117.857340:ERROR:ui/gl/gl_display.cc:665] Initialization of all (2) EGL display types failed.\n[pid=193373][err] [193414:1009/080117.857424:ERROR:ui/ozone/common/gl_ozone_egl.cc:26] GLDisplayEGL::Initialize failed.\n[pid=193373][err] [193414:1009/080117.860026:ERROR:components/viz/service/main/viz_main_impl.cc:190] Exiting GPU process due to errors during initialization\n[pid=193373][err] [193373:1009/080117.867290:ERROR:content/browser/zygote_host/zygote_host_impl_linux.cc:300] Failed to adjust OOM score of renderer with pid 193424: Read-only file system (30)\n\n   at electron.fixture.ts:47\n\n  45 |       // メインプロセスで確認する。既存プロファイルへの接続なら操作せず失敗させる。\n  46 |       expect(\n> 47 |         await application.evaluate(({ app }) => ({\n     |                           ^\n  48 |           userData: app.getPath(\"userData\"),\n  49 |           sessionData: app.getPath(\"sessionData\"),\n  50 |         })),\n    at Object.electronApp (/workspace/Xharness/test/gui/electron.fixture.ts:47:27)"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-09T08:01:16.778Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/workspace/Xharness/.out/gui/smoke-startup-is-fake-and-isolated-development/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/workspace/Xharness/test/gui/electron.fixture.ts",
+                    "column": 27,
+                    "line": 47
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "4219922fea2e2bd3c691-73155b91aec9ed2d5175",
+          "file": "smoke.spec.ts",
+          "line": 3,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-09T08:01:16.332Z",
+    "duration": 1653.4190000000003,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

@@ -14,7 +14,12 @@ import {
 import { OfficialWorkflowService, resolvePlannerChoice } from "./service.js";
 import type { ModelCandidate, OfficialAgent } from "./contracts.js";
 import { digest } from "./runtime.js";
-import { fixturePlan } from "./fixtures.js";
+import {
+  createSyntheticWorkspace,
+  fixturePlan,
+  fixtureTest,
+} from "./fixtures.js";
+import { gitWorkspace } from "./workspace.js";
 
 interface Entry {
   id: string;
@@ -158,17 +163,24 @@ it("records the selection key, provider, sent ID, effort and catalog version at 
     selectedAs: "codex:sol",
     catalog: catalogVersion(loadCatalog()),
   });
-  // A recorded choice keeps its own catalog version even after the catalog changes.
+  // Saved evidence stays unchanged; a new resolution uses the current catalog.
+  const savedChoice = JSON.stringify(chosen);
   useCatalog((doc) => {
     doc.models.find((m) => m.id === "gpt-6.1-sol")!.displayName = "changed";
   });
-  expect(resolvePlannerChoice(chosen, models).catalog).toEqual(chosen.catalog);
+  expect(resolvePlannerChoice(chosen, models).catalog).toEqual(
+    catalogVersion(loadCatalog()),
+  );
+  expect(resolvePlannerChoice(chosen, models).catalog).not.toEqual(
+    chosen.catalog,
+  );
+  expect(JSON.stringify(chosen)).toBe(savedChoice);
   // A retired planner model stops; no other model is chosen.
   useCatalog((doc) => {
     doc.models.find((m) => m.id === "gpt-6.1-sol")!.enabled = false;
   });
   expect(() => resolvePlannerChoice(chosen, models)).toThrow(
-    /計画モデル「gpt-6.1-sol」を使えません：.*無効/,
+    /モデル「gpt-6.1-sol」.*無効.*別のモデルへは切り替えていません/,
   );
 });
 
@@ -205,7 +217,11 @@ it("stops resuming a record whose recorded model the catalog retired", async () 
   await instance.close();
   const id = randomUUID(),
     directory = join(home, "official-workflows", id);
-  await mkdir(join(directory, "workspace-x"), { recursive: true });
+  await mkdir(directory, { recursive: true });
+  const cwd = await createSyntheticWorkspace("workspace-", directory);
+  const head = (
+    await gitWorkspace(cwd, (x) => x).inspect(new AbortController().signal)
+  ).head;
   const plan = fixturePlan("claude");
   plan.tasks[0]!.assignee.model = "claude-sonnet-5-5";
   plan.tasks[0]!.reviewer = {
@@ -221,12 +237,12 @@ it("stops resuming a record whose recorded model the catalog retired", async () 
       simulated: false,
       id,
       goal: "Correct addition without modifying the test.",
-      cwd: join(directory, "workspace-x"),
+      cwd,
       startedAt: new Date().toISOString(),
       status: "interrupted",
       next: "implement",
-      base: "a".repeat(40),
-      head: "a".repeat(40),
+      base: head,
+      head,
       correctionRounds: 0,
       calls: [],
       tools: [],
@@ -235,7 +251,12 @@ it("stops resuming a record whose recorded model the catalog retired", async () 
       commits: [],
       plan,
       approvedDigest: digest(plan),
-      executionDigest: "b".repeat(64),
+      executionDigest: digest({
+        goal: "Correct addition without modifying the test.",
+        files: ["add.mjs"],
+        tests: [fixtureTest()],
+        integrationTests: [],
+      }),
       planner: {
         provider: "claude",
         model: "claude-opus-5-5",
@@ -247,17 +268,30 @@ it("stops resuming a record whose recorded model the catalog retired", async () 
   useCatalog((doc) => {
     doc.models.find((m) => m.id === "gpt-6-luna")!.retiresAt = "2026-01-01";
   });
+  const claude = agent("claude", claudeIds),
+    codex = agent("codex", codexIds);
   const restarted = new OfficialWorkflowService({
     home,
     fake: false,
-    discoverCodex: async () => ({
-      path: "C:/fixture/codex.exe",
-      package: "fixture",
-    }),
+    codexPath: "C:/fixture/codex.exe",
+    agents: { claude: claude.agent, codex: codex.agent },
   });
   services.push(restarted);
   const view = await restarted.command({ action: "resume", id });
-  expect(view.error).toMatch(
-    /^再開できません：モデル「gpt-6-luna」は提供終了.*別のモデルへは切り替えていません/,
+  let stopped = view.records.find((r) => r.record.id === id)?.record;
+  for (let i = 0; i < 200 && stopped?.status !== "failed"; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    stopped = (await restarted.command({ action: "list" })).records.find(
+      (r) => r.record.id === id,
+    )?.record;
+  }
+  expect(stopped?.status).toBe("failed");
+  expect(view.error ?? stopped?.error).toMatch(
+    /^モデル「gpt-6-luna」は提供終了.*別のモデルへは切り替えていません/,
   );
+  expect(stopped?.plan).toEqual(plan);
+  expect(stopped?.approvedDigest).toBe(digest(plan));
+  expect(stopped?.calls).toEqual([]);
+  expect(claude.ran).toEqual([]);
+  expect(codex.ran).toEqual([]);
 });

@@ -3,6 +3,7 @@ import { type PermissionDecision } from "../../shared/ipc.js";
 import styles from "./PermissionInline.module.css";
 
 export interface PermissionInlineProps {
+  disabled?: boolean;
   persistent?: boolean;
   oneTime?: boolean;
   tool: string;
@@ -10,9 +11,10 @@ export interface PermissionInlineProps {
   onRespond(decision: PermissionDecision): void;
 }
 
-/** モーダルではなく PromptLine の直上に出す。y 許可 / a このセッション中許可 / n 拒否(§16.3) */
+/** モーダルではなく 会話チャット内に出す。y 許可 / a このセッション中許可 / n 拒否(§16.3) */
 export function PermissionInline({
   tool,
+  disabled = false,
   summary,
   onRespond,
   persistent,
@@ -20,6 +22,7 @@ export function PermissionInline({
 }: PermissionInlineProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (disabled) return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
       if (
         e.target instanceof HTMLElement &&
@@ -41,7 +44,7 @@ export function PermissionInline({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onRespond, oneTime]);
+  }, [onRespond, oneTime, disabled]);
   return (
     <div
       className={styles.perm}
@@ -79,21 +82,37 @@ export function PermissionInline({
         )}
       </span>
       <span className={styles.keys}>
-        <button type="button" onClick={() => onRespond("allow")}>
+        <button
+          disabled={disabled}
+          type="button"
+          onClick={() => onRespond("allow")}
+        >
           <kbd>y</kbd>allow
         </button>
         {!oneTime && (
-          <button type="button" onClick={() => onRespond("always")}>
+          <button
+            disabled={disabled}
+            type="button"
+            onClick={() => onRespond("always")}
+          >
             <kbd>a</kbd>
             {persistent ? "always" : "session"}
           </button>
         )}
         {persistent && !oneTime && (
-          <button type="button" onClick={() => onRespond("session")}>
+          <button
+            disabled={disabled}
+            type="button"
+            onClick={() => onRespond("session")}
+          >
             session
           </button>
         )}
-        <button type="button" onClick={() => onRespond("deny")}>
+        <button
+          disabled={disabled}
+          type="button"
+          onClick={() => onRespond("deny")}
+        >
           <kbd>n</kbd>deny
         </button>
       </span>

@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { ChatOfficialApprovals } from "./ChatOfficialApprovals.js";
 import { OfficialWorkflowPanel } from "./OfficialWorkflowPanel.js";
 import type {
   OfficialWorkflowCommand,
@@ -89,10 +90,18 @@ it.each([false, true])(
     const view: OfficialWorkflowView = {
       available: true,
       simulated: true,
-      approval: { id: record.id, digest: "approved-scope" },
+      approval: {
+        id: record.id,
+        digest: "approved-scope",
+        approvalId: "plan-id",
+        expiresAt: Date.now() + 60000,
+      },
       records: [{ record, resumeBlocked: null, reportHref: "report.html" }],
     };
-    const api = vi.fn(async () => view);
+    const api = vi.fn(async (command?: OfficialWorkflowCommand) => {
+      void command;
+      return view;
+    });
     vi.stubGlobal("harness", { officialWorkflow: api });
     render(<OfficialWorkflowPanel openSignal={1} />);
     const scope = await screen.findByRole("region", {
@@ -111,14 +120,12 @@ it.each([false, true])(
       expect(scope).toHaveTextContent("元のnode_modulesは共有しません");
       expect(scope).toHaveTextContent("vitest@5.0.3");
     } else expect(scope).not.toHaveTextContent("コピー");
-    fireEvent.click(screen.getByRole("button", { name: "この計画を承認" }));
-    await waitFor(() =>
-      expect(api).toHaveBeenCalledWith({
-        action: "approve",
-        id: record.id,
-        digest: "approved-scope",
-      }),
-    );
+    expect(
+      screen.queryByRole("button", { name: "この計画を承認" }),
+    ).not.toBeInTheDocument();
+    expect(
+      api.mock.calls.every(([c]) => c === undefined || c.action !== "approve"),
+    ).toBe(true);
   },
 );
 it.each([
@@ -181,7 +188,12 @@ it.each([
     const view: OfficialWorkflowView = {
       available: true,
       simulated: true,
-      approval: { id: record.id, digest: "saved-approval-digest" },
+      approval: {
+        id: record.id,
+        digest: "saved-approval-digest",
+        approvalId: "saved-grant",
+        expiresAt: Date.now() + 60000,
+      },
       records: [{ record, resumeBlocked: null, reportHref: "report.html" }],
     };
     const commands: OfficialWorkflowCommand[] = [];
@@ -231,7 +243,13 @@ it.each([
     fireEvent.click(screen.getByRole("button", { name: "この計画を承認" }));
     await waitFor(() =>
       expect(commands.filter((c) => c.action === "approve")).toEqual([
-        { action: "approve", id: record.id, digest: "saved-approval-digest" },
+        {
+          action: "approve",
+          id: record.id,
+          digest: "saved-approval-digest",
+          approvalId: "saved-grant",
+          allow: true,
+        },
       ]),
     );
   },
@@ -245,7 +263,8 @@ it.each([true, false, "flow"] as const)(
       digest: "a".repeat(64),
       expiresAt: Date.now() + 60000,
       requestId: "request",
-      sessionId: "session",
+      sessionId: "native-session",
+      conversationSessionId: "session",
       turnId: "turn",
       itemId: "item",
       command: "Get-Content add.mjs",
@@ -258,38 +277,39 @@ it.each([true, false, "flow"] as const)(
       simulated: true,
       activeId: "workflow",
       operationApproval: pending,
-      records:
-        allow === "flow"
-          ? [
-              {
-                record: {
-                  version: 1,
-                  id: "workflow",
-                  sessionId: "s",
-                  simulated: true,
-                  goal: "fixture",
-                  cwd: pending.cwd,
-                  startedAt: new Date().toISOString(),
-                  status: "implementing",
-                  next: "implement",
-                  base: "a".repeat(64),
-                  head: "a".repeat(64),
-                  correctionRounds: 0,
-                  calls: [],
-                  tools: [],
-                  checks: [],
-                  reviews: [],
-                  commits: [],
+      records: [
+        {
+          record: {
+            version: 1,
+            id: "workflow",
+            sessionId: "session",
+            simulated: true,
+            goal: "fixture",
+            cwd: pending.cwd,
+            startedAt: new Date().toISOString(),
+            status: "implementing",
+            next: "implement",
+            base: "a".repeat(64),
+            head: "a".repeat(64),
+            correctionRounds: 0,
+            calls: [],
+            tools: [],
+            checks: [],
+            reviews: [],
+            commits: [],
+            ...(allow === "flow"
+              ? {
                   nativeWork: {
-                    validation: "agent-reported",
-                    baseline: "files",
+                    validation: "agent-reported" as const,
+                    baseline: "files" as const,
                   },
-                },
-                resumeBlocked: null,
-                reportHref: "fixture",
-              },
-            ]
-          : [],
+                }
+              : {}),
+          },
+          resumeBlocked: null,
+          reportHref: "fixture",
+        },
+      ],
     };
     let release!: () => void;
     const commands: OfficialWorkflowCommand[] = [];
@@ -302,8 +322,7 @@ it.each([true, false, "flow"] as const)(
       return view;
     });
     vi.stubGlobal("harness", { officialWorkflow });
-    render(<OfficialWorkflowPanel />);
-    fireEvent.click(screen.getByRole("button", { name: "公式workflow" }));
+    render(<ChatOfficialApprovals sessionId="session" />);
     await screen.findByRole("alertdialog", { name: "今回の操作の承認" });
     expect(screen.getByText(/操作：/)).toHaveTextContent(pending.command);
     expect(screen.getByText(/作業場所：/)).toHaveTextContent(pending.cwd);
@@ -322,6 +341,7 @@ it.each([true, false, "flow"] as const)(
         {
           action: "tool_decision",
           id: "workflow",
+          sessionId: "session",
           approvalId: "nonce",
           digest: pending.digest,
           allow: allow !== false,
@@ -330,7 +350,7 @@ it.each([true, false, "flow"] as const)(
       ]),
     );
     release();
-    await waitFor(() => expect(button).not.toBeDisabled());
+    await waitFor(() => expect(button).toBeDisabled());
   },
 );
 it.each(["claude", "codex"] as const)(
@@ -400,7 +420,11 @@ it.each([undefined, "fix-cycle-v1"] as const)(
     vi.stubGlobal("harness", { officialWorkflow });
     render(<OfficialWorkflowPanel mainModel="gpt-6-luna" mainEffort="low" />);
     fireEvent.click(screen.getByRole("button", { name: "公式workflow" }));
-    await screen.findByRole("button", { name: "合成課題の計画を作成" });
+    await waitFor(() => expect(officialWorkflow).toHaveBeenCalled());
+    if (!verification)
+      expect(
+        screen.queryByRole("button", { name: "合成課題の計画を作成" }),
+      ).not.toBeInTheDocument();
     const button = screen.queryByRole("button", {
       name: "修正経路の検証課題を作成",
     });

@@ -63,3 +63,64 @@ it("rejects foreign frames and arbitrary workflow input before invoking the serv
     path: "D:/AIwork",
   });
 });
+
+it("accepts explicit session-bound plan/operation decisions and rejects malformed extra capabilities", async () => {
+  const webContents = { mainFrame: {} };
+  const window = {
+    webContents,
+    isDestroyed: () => false,
+  } as unknown as BrowserWindow;
+  const command = vi.fn(async () => ({}));
+  registerOfficialWorkflowIpc(() => window, {
+    command,
+  } as unknown as OfficialWorkflowService);
+  const event = {
+    sender: webContents,
+    senderFrame: webContents.mainFrame,
+  } as unknown as IpcMainInvokeEvent;
+  const id = "11111111-1111-4111-8111-111111111111";
+  const approvalId = "22222222-2222-4222-8222-222222222222";
+  const digest = "a".repeat(64);
+  for (const valid of [
+    {
+      action: "approve",
+      id,
+      approvalId,
+      digest,
+      sessionId: "chat",
+      allow: false,
+    },
+    {
+      action: "tool_decision",
+      id,
+      approvalId,
+      digest,
+      sessionId: "chat",
+      allow: true,
+    },
+    { action: "cancel", id, sessionId: "chat" },
+  ]) {
+    await mock.handler!(event, valid);
+    expect(command).toHaveBeenLastCalledWith(valid);
+  }
+  for (const invalid of [
+    { action: "approve", id, approvalId: "bad", digest, sessionId: "chat" },
+    { action: "approve", id, digest, sessionId: "" },
+    {
+      action: "tool_decision",
+      id,
+      approvalId,
+      digest,
+      sessionId: 4,
+      allow: true,
+    },
+    { action: "cancel", id, sessionId: "chat", allow: true },
+    { action: "resume", id, sessionId: "chat" },
+  ])
+    await expect(mock.handler!(event, invalid)).rejects.toThrow(
+      "Invalid workflow command",
+    );
+  // Optional fields remain parseable only for main's explicit synthetic/verification compatibility gate.
+  await mock.handler!(event, { action: "approve", id, digest });
+  expect(command).toHaveBeenLastCalledWith({ action: "approve", id, digest });
+});

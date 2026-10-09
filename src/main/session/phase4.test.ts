@@ -55,7 +55,9 @@ it("applies project model and effort while preserving explicit CLI precedence", 
     const session = (await c.state()).sessions.find(
       (s) => s.id === created.sessionId,
     );
-    expect(session?.model).toBe(cli ? "claude-opus-5-5" : "claude-sonnet-5-5");
+    // Project config preserves its alias policy; this fixture has no official
+    // dispatcher. An explicit CLI model keeps the supplied current ID.
+    expect(session?.model).toBe(cli ? "claude-opus-5-5" : "sonnet");
     expect(session?.effort).toBe(cli ? "high" : "low");
     await c.shutdown();
   }

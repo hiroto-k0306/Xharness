@@ -31,6 +31,20 @@ const assignment = z
 export const planContract = z
   .object({
     summary: text,
+    parallelization: z
+      .object({
+        mode: z.enum(["serial", "parallel"]),
+        reason: text,
+        maxParallel: z.union([z.literal(1), z.literal(2)]),
+        conditions: z.array(text).max(16).optional(),
+        unresolved: z.array(text).max(16).optional(),
+      })
+      .strict()
+      .optional(),
+    validation: z
+      .object({ testFiles: z.array(relativeFile).min(1).max(10) })
+      .strict()
+      .optional(),
     tasks: z
       .array(
         z
@@ -38,6 +52,21 @@ export const planContract = z
             id: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
             title: text,
             instructions: text,
+            classification: z
+              .object({
+                kind: z.enum([
+                  "bug-fix",
+                  "feature",
+                  "refactor",
+                  "documentation",
+                  "testing",
+                  "other",
+                  "unknown",
+                ]),
+                difficulty: z.enum(["easy", "moderate", "hard", "unknown"]),
+              })
+              .strict()
+              .optional(),
             files: z.array(relativeFile).min(1).max(30),
             dependsOn: z.array(z.string()).max(16),
             acceptance: z.array(z.string()).min(1).max(20),
@@ -172,8 +201,12 @@ export interface RuntimeUsage {
   complete: boolean;
 }
 export interface AgentRequest {
+  /** Main-validated pinned bundles for native work, filtered to this provider. */
+  officialSkills?: import("../../../shared/official-skills.js").OfficialSkillBundle[];
   /** Delegates normal work to the official native agent within its sandbox. */
   nativeWork?: boolean;
+  /** Exact approved write paths for isolated DAG tasks; absent for ordinary native work. */
+  writeScope?: string[];
   /** Only explicitly approved synthetic diagnostics may retain response text. */
   diagnosticText?: boolean;
   requestId: string;
@@ -198,6 +231,9 @@ export interface AgentRequest {
   ): Promise<boolean | "declined" | "expired" | "cancelled">;
 }
 export interface AgentResult {
+  timing?: import("./model-feedback.js").CallTiming;
+  /** Provider dispatch/observation facts, distinct from the requested selection. */
+  officialSkillsEvidence?: import("../../../shared/official-skills.js").OfficialSkillEvidence;
   diagnostics?: import("./diagnostics.js").AgentDiagnostics;
   status: "completed" | "failed" | "cancelled" | "timeout" | "quota-paused";
   dispatched: boolean;
@@ -260,6 +296,11 @@ export function validateOfficialPlan(
   tests: TestSpec[],
   serializeConflicts = false,
   requireReviewer = false,
+  availableSelection?: (
+    provider: ModelCandidate["provider"],
+    model: string,
+    effort: AgentRequest["effort"],
+  ) => boolean,
 ) {
   const plan = planContract.parse(value);
   const ids = new Set(plan.tasks.map((t) => t.id));
@@ -276,14 +317,20 @@ export function validateOfficialPlan(
     if (task.acceptance.some((id) => !tests.some((t) => t.id === id)))
       throw new WorkflowFailure("unapproved-test");
     if (
-      !models.some(
-        (m) =>
-          m.provider === task.assignee.provider &&
-          m.model === task.assignee.model &&
-          m.available &&
-          m.quotaAllowed === true &&
-          m.efforts.includes(task.assignee.effort),
-      )
+      !(availableSelection
+        ? availableSelection(
+            task.assignee.provider,
+            task.assignee.model,
+            task.assignee.effort,
+          )
+        : models.some(
+            (m) =>
+              m.provider === task.assignee.provider &&
+              m.model === task.assignee.model &&
+              m.available &&
+              m.quotaAllowed === true &&
+              m.efforts.includes(task.assignee.effort),
+          ))
     )
       throw new WorkflowFailure("unavailable-model");
     if (!task.reviewer) {
@@ -294,14 +341,20 @@ export function validateOfficialPlan(
         throw new WorkflowFailure("reviewer-same-provider");
       const reviewer = task.reviewer;
       if (
-        !models.some(
-          (m) =>
-            m.provider === reviewer.provider &&
-            m.model === reviewer.model &&
-            m.available &&
-            m.quotaAllowed === true &&
-            m.efforts.includes(reviewer.effort),
-        )
+        !(availableSelection
+          ? availableSelection(
+              reviewer.provider,
+              reviewer.model,
+              reviewer.effort,
+            )
+          : models.some(
+              (m) =>
+                m.provider === reviewer.provider &&
+                m.model === reviewer.model &&
+                m.available &&
+                m.quotaAllowed === true &&
+                m.efforts.includes(reviewer.effort),
+            ))
       )
         throw new WorkflowFailure("unavailable-model");
     }

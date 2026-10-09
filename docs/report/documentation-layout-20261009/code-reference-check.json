@@ -1,0 +1,17 @@
+{
+  "files": [
+    "electron-builder.yml",
+    "scripts/make-icon.ts",
+    "src/main/agents/reviewer-commands.ts",
+    "src/main/config/config.ts",
+    "src/main/ipc.ts",
+    "src/main/providers/fake/fake-provider.ts",
+    "src/main/security.ts",
+    "src/main/session/store.ts",
+    "src/renderer/theme.css",
+    "src/shared/ipc.ts"
+  ],
+  "typescript_ast_without_comments_unchanged": true,
+  "builder_yaml_values_unchanged": true,
+  "css_rules_unchanged": true
+}

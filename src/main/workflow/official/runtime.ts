@@ -1,3 +1,18 @@
+import {
+  resolveCallSkills,
+  skillSelections,
+  skillEvidence,
+  type ResolveOfficialSkills,
+} from "./skill-selection.js";
+import {
+  policyCandidate,
+  planAvailability,
+  recordTaskPolicies,
+  resolveCallSelection,
+  type ModelSelectionEvidence,
+  type WorkflowModelPolicies,
+  type ResolveCallModel,
+} from "./model-selection.js";
 import { randomUUID, createHash } from "node:crypto";
 import { communicationInput, communicationText } from "./communication.js";
 import { publicEventRecorder } from "./public-events.js";
@@ -14,6 +29,7 @@ import {
   reviewContract,
   implementationContract,
   schemas,
+  planContract,
   planOutputSchema,
   type OfficialAgent,
   type ModelCandidate,
@@ -61,7 +77,16 @@ export const approvalDigest = (
     ? digest({ plan: record.plan, executionDigest: record.executionDigest })
     : digest(record.plan);
 export interface WorkflowRecord {
-  nativeWork?: { validation: "agent-reported"; baseline: "files" };
+  modelPerformance?: {
+    version: 1;
+    samples: import("./model-feedback.js").ModelPerformanceSample[];
+  };
+  /** Requested pinned native skills. Bodies are never stored in workflow records. */
+  officialSkills?: import("../../../shared/official-skills.js").OfficialSkillSelection[];
+  nativeWork?: {
+    validation: "agent-reported" | "independent-process";
+    baseline: "files";
+  };
   nativeValidation?: {
     command: string;
     status: "passed" | "failed" | "not-run";
@@ -89,6 +114,8 @@ export interface WorkflowRecord {
   cwd: string;
   /** Planner fixed at task start; absent in records created before this field. */
   planner?: PlannerChoice;
+  /** Current family selection policy; historic plan/calls remain unchanged. */
+  modelPolicies?: WorkflowModelPolicies;
   startedAt: string;
   finishedAt?: string;
   status:
@@ -116,6 +143,13 @@ export interface WorkflowRecord {
     id: string;
   };
   dag?: import("./dag.js").DagState;
+  nativeDagWorkspace?: ReturnType<
+    Awaited<
+      ReturnType<
+        typeof import("./project-dag-workspace.js").createProjectDagWorkspace
+      >
+    >["snapshots"]
+  >;
   resumed?: number;
   executionDigest?: string;
   /** Verification-only fix-cycle fault injection; absent in normal use. */
@@ -130,6 +164,9 @@ export interface WorkflowRecord {
   calls: (
     | {
         requestId: string;
+        /** Requested skills for this provider/phase; not evidence of actual use. */
+        officialSkills?: import("../../../shared/official-skills.js").OfficialSkillEvidence;
+        modelSelection?: ModelSelectionEvidence;
         communication?: import("./communication.js").WorkflowCommunication;
         nodeId?: string;
         phase: AgentRequest["phase"];
@@ -140,6 +177,9 @@ export interface WorkflowRecord {
       }
     | ({
         requestId: string;
+        /** Requested skills for this provider/phase; not evidence of actual use. */
+        officialSkills?: import("../../../shared/official-skills.js").OfficialSkillEvidence;
+        modelSelection?: ModelSelectionEvidence;
         communication?: import("./communication.js").WorkflowCommunication;
         nodeId?: string;
         phase: AgentRequest["phase"];
@@ -155,7 +195,24 @@ export interface WorkflowRecord {
   error?: string;
 }
 export interface WorkflowOptions {
+  modelFeedback?: ReturnType<
+    typeof import("./model-feedback.js").plannerModelFeedback
+  >;
+  officialSkills?: import("../../../shared/official-skills.js").OfficialSkillSelection[];
+  resolveOfficialSkills?: ResolveOfficialSkills;
+  /** Official path resolves/rechecks once immediately before each communication. */
+  resolveCallModel?: ResolveCallModel;
   nativeWork?: boolean;
+  /** Internal planner/dispatcher handoff; never supplied by IPC or resumed. */
+  nativePlanningOnly?: boolean;
+  nativePlanSchema?: Record<string, unknown>;
+  nativePlanInstruction?: string;
+  preparedNative?: {
+    record: WorkflowRecord;
+    baseline: import("./native-snapshot.js").NativeSnapshot;
+    approved?: boolean;
+    writeScope?: string[];
+  };
   sessionId?: string;
   project?: WorkflowRecord["project"];
   /** Carries the bounded classifier/scope calls into the final workflow evidence. */
@@ -295,6 +352,8 @@ export async function runOfficialSingleTask(
     delete record.finishedAt;
     delete record.error;
   }
+  if (!options.resume && options.officialSkills?.length)
+    record.officialSkills = skillSelections(options.officialSkills);
   record.executionDigest = executionDigest;
   let tail: Promise<void> = Promise.resolve();
   const save = () => {
@@ -303,18 +362,18 @@ export async function runOfficialSingleTask(
     tail = pending;
     return pending;
   };
-  const eligible = (
+  const eligible = async (
     p: ModelCandidate["provider"],
     model: string,
     effort: AgentRequest["effort"],
   ) => {
-    const candidate = options.models.find(
-      (m) =>
-        m.provider === p &&
-        m.model === model &&
-        m.available &&
-        m.quotaAllowed === true &&
-        m.efforts.includes(effort),
+    const candidate = await policyCandidate(
+      options,
+      record,
+      p,
+      model,
+      effort,
+      signal,
     );
     if (!candidate) throw new WorkflowFailure("unavailable-model");
     return candidate;
@@ -419,6 +478,23 @@ export async function runOfficialSingleTask(
     files: string[],
   ) => {
     signal.throwIfAborted();
+    const selected = await resolveCallSelection(
+      options,
+      record,
+      phase,
+      model,
+      effort,
+      signal,
+    );
+    model = selected.model;
+    effort = selected.effort;
+    const officialSkills = await resolveCallSkills(
+      options,
+      record,
+      model.provider,
+      phase,
+      signal,
+    );
     const requestId = randomUUID();
     const tests = options.project
       ? options.tests.map((test) => ({ ...test, command: "" }))
@@ -431,6 +507,12 @@ export async function runOfficialSingleTask(
           : schemas.implement;
     const entry = {
       requestId,
+      ...(officialSkills.length
+        ? { officialSkills: { requested: skillSelections(officialSkills) } }
+        : {}),
+      ...(selected.modelSelection
+        ? { modelSelection: selected.modelSelection }
+        : {}),
       communication: communicationInput({ prompt, files, tests, outputSchema }),
       phase,
       provider: model.provider,
@@ -468,6 +550,7 @@ export async function runOfficialSingleTask(
         options.agents[model.provider].run(
           {
             requestId,
+            ...(officialSkills.length ? { officialSkills } : {}),
             diagnosticText: options.diagnosticText,
             taskId: record.id,
             phase,
@@ -503,7 +586,7 @@ export async function runOfficialSingleTask(
           signal,
         ),
     );
-    const { output, ...metadata } = result;
+    const { output, officialSkillsEvidence, ...metadata } = result;
     observe({
       actor: "harness",
       kind: "end",
@@ -514,6 +597,14 @@ export async function runOfficialSingleTask(
     record.calls[record.calls.length - 1] = {
       ...entry,
       ...metadata,
+      ...(officialSkills.length
+        ? {
+            officialSkills: skillEvidence(
+              officialSkills,
+              officialSkillsEvidence,
+            ),
+          }
+        : {}),
       communication: {
         ...entry.communication,
         ...(output !== undefined ? { output: communicationText(output) } : {}),
@@ -556,7 +647,7 @@ export async function runOfficialSingleTask(
     const planner =
       record.plan || !plannerChoice
         ? undefined
-        : eligible(
+        : await eligible(
             plannerChoice.provider,
             plannerChoice.model,
             plannerChoice.effort,
@@ -579,6 +670,9 @@ export async function runOfficialSingleTask(
         plannerChoice!.effort,
         {
           role: "read-only planner",
+          modelFeedback: options.modelFeedback,
+          taskClassification:
+            "Include task classification.kind (bug-fix/feature/refactor/documentation/testing/other/unknown) and difficulty (easy/moderate/hard/unknown), judged independently of model choice. These are planner judgments, not measured facts.",
           goal: options.goal,
           allowedFiles: options.files,
           acceptanceTests: options.tests.map((t) => ({
@@ -601,7 +695,14 @@ export async function runOfficialSingleTask(
       options.tests,
       false,
       freshPlan,
+      await planAvailability(
+        options,
+        record,
+        planContract.parse(proposed),
+        signal,
+      ),
     );
+    recordTaskPolicies(record, options);
     if (record.plan.tasks.length !== 1)
       throw new WorkflowFailure("multi-task-not-enabled");
     const task = record.plan.tasks[0]!;
@@ -613,12 +714,12 @@ export async function runOfficialSingleTask(
       task.reviewer ?? options.reviewers[reviewerProvider];
     if (!configuredReviewer || reviewerProvider === task.assignee.provider)
       throw new WorkflowFailure("reviewer-unavailable");
-    const reviewer = eligible(
+    const reviewer = await eligible(
       reviewerProvider,
       configuredReviewer.model,
       configuredReviewer.effort,
     );
-    const implementer = eligible(
+    const implementer = await eligible(
       task.assignee.provider,
       task.assignee.model,
       task.assignee.effort,

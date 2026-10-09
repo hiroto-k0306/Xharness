@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fixture } from "../session/improvements.fixture.js";
+import { fixture } from "../session/official-session.fixture.js";
 import { SessionStore, WorkspaceStore } from "../session/store.js";
 import { FakeLocalBrowser } from "./fake-browser.js";
 import { LocalBrowserSessions } from "./session.js";

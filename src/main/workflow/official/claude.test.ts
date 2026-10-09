@@ -1,5 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { rm, symlink } from "node:fs/promises";
+import { rm, symlink, stat } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import type { OfficialSkillBundle } from "../../../shared/official-skills.js";
 import { join } from "node:path";
 import type {
   Options,
@@ -621,4 +623,373 @@ it("conversation provides no tools and denies a forged write hook", async () => 
     new AbortController().signal,
   );
   expect(result.status).toBe("completed");
+});
+
+function selectedSkill(): OfficialSkillBundle {
+  const hash = (body: string) =>
+    createHash("sha256").update(body).digest("hex");
+  const body =
+    "---\nname: sample\ndescription: Local selected skill\n---\nRead reference.txt.";
+  const files = [
+    { relativePath: "SKILL.md", body, hash: hash(body) },
+    {
+      relativePath: "reference.txt",
+      body: "Local text reference",
+      hash: hash("Local text reference"),
+    },
+  ];
+  return {
+    provider: "claude",
+    scope: "project",
+    name: "sample",
+    source: "/selected/.claude/skills/sample/SKILL.md",
+    hash: hash(body),
+    bundleHash: hash(
+      JSON.stringify(
+        files.map(({ relativePath, hash }) => ({ relativePath, hash })),
+      ),
+    ),
+    files,
+  };
+}
+it.each(["plan", "implement", "review", "fix"] as const)(
+  "isolates selected skills in native %s without assuming use from init",
+  async (phase) => {
+    const selected = selectedSkill();
+    const mock = mockStart(undefined, [
+      { type: "system", subtype: "init", skills: ["sample", "unselected"] },
+      {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        structured_output: { summary: "OK" },
+      },
+    ] as unknown as SDKMessage[]);
+    const result = await new ClaudeWorkflowAgent(mock.start).run(
+      {
+        ...request(await cwd(), phase),
+        nativeWork: true,
+        officialSkills: [selected],
+      },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("completed");
+    expect(mock.options().settingSources).toEqual([]);
+    expect(mock.options().mcpServers).toEqual({});
+    expect(mock.options().strictMcpConfig).toBe(true);
+    expect(mock.options().tools).toContain("Skill");
+    expect(mock.options().skills).toEqual(["xharness-selected-0:sample"]);
+    expect(mock.options().plugins).toHaveLength(1);
+    expect(result.officialSkillsEvidence).toEqual({
+      requested: [
+        {
+          provider: selected.provider,
+          scope: selected.scope,
+          name: selected.name,
+          source: selected.source,
+          hash: selected.hash,
+          bundleHash: selected.bundleHash,
+        },
+      ],
+      dispatched: [{ name: "sample", mechanism: "claude-plugin" }],
+      observed: [],
+    });
+    expect(JSON.stringify(result.officialSkillsEvidence)).not.toContain(
+      selected.files[0]!.body,
+    );
+    expect(
+      await stat(mock.options().plugins![0]!.path).catch(() => undefined),
+    ).toBeUndefined();
+  },
+);
+it.each([false, true])(
+  "rejects selected skills before SDK creation for incompatible route %s",
+  async (nativeWork) => {
+    const mock = mockStart();
+    const result = await new ClaudeWorkflowAgent(mock.start).run(
+      {
+        ...request(await cwd(), nativeWork ? "conversation" : "plan"),
+        nativeWork,
+        officialSkills: [selectedSkill()],
+      },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toBe("official-skills-phase-unsupported");
+    expect(result.dispatched).toBe(false);
+    expect(mock.accountInfo).not.toHaveBeenCalled();
+  },
+);
+it("records only real selected Skill calls and gates staged references in read-only planning", async () => {
+  const privateBody = selectedSkill().files[0]!.body,
+    privateReference = "LOCAL_SKILL_REFERENCE_PRIVATE",
+    publicProject = "Ordinary project tool output";
+  const events: unknown[] = [];
+  const values: SDKMessage[] = [];
+  const mock = mockStart(async (options) => {
+    const input = { skill: "xharness-selected-0:sample" };
+    const decision = await pre(options, "Skill", input, "skill-call");
+    expect(
+      "hookSpecificOutput" in decision
+        ? decision.hookSpecificOutput
+        : undefined,
+    ).toMatchObject({
+      permissionDecision: "allow",
+    });
+    // SDK canUseTool and hook may see the same call; evidence must not double count.
+    expect(
+      (
+        await options.canUseTool!("Skill", input, {
+          toolUseID: "skill-call",
+          requestId: "skill-call",
+          signal: new AbortController().signal,
+        })
+      )?.behavior,
+    ).toBe("allow");
+    const reference = join(
+      options.plugins![0]!.path,
+      "skills/sample/reference.txt",
+    );
+    expect(
+      (
+        await options.canUseTool!(
+          "Read",
+          { file_path: reference },
+          {
+            toolUseID: "read-ref",
+            requestId: "read-ref",
+            signal: new AbortController().signal,
+          },
+        )
+      )?.behavior,
+    ).toBe("allow");
+    const hook = options.hooks!.PostToolUse![0]!.hooks[0]!;
+    await hook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "fixture",
+        transcript_path: "unused",
+        cwd: options.cwd!,
+        tool_name: "Skill",
+        tool_input: input,
+        tool_use_id: "skill-call",
+        tool_response: privateBody,
+      } as HookInput,
+      "skill-call",
+      { signal: new AbortController().signal },
+    );
+    await hook(
+      {
+        hook_event_name: "PostToolUse",
+        session_id: "fixture",
+        transcript_path: "unused",
+        cwd: options.cwd!,
+        tool_name: "Read",
+        tool_input: { file_path: reference },
+        tool_use_id: "read-ref",
+        tool_response: privateReference,
+      } as HookInput,
+      "read-ref",
+      { signal: new AbortController().signal },
+    );
+    values.push(
+      ...([
+        {
+          type: "assistant",
+          message: {
+            id: "m1",
+            model: "fixture-haiku",
+            content: [
+              { type: "tool_use", id: "skill-call", name: "Skill", input },
+              {
+                type: "tool_use",
+                id: "read-ref",
+                name: "Read",
+                input: { file_path: reference },
+              },
+              {
+                type: "tool_use",
+                id: "project-read",
+                name: "Read",
+                input: { file_path: join(options.cwd!, "add.mjs") },
+              },
+            ],
+          },
+        },
+        {
+          type: "user",
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "skill-call",
+                content: privateBody,
+              },
+              {
+                type: "tool_result",
+                tool_use_id: "read-ref",
+                content: privateReference,
+              },
+              {
+                type: "tool_result",
+                tool_use_id: "project-read",
+                content: publicProject,
+              },
+            ],
+          },
+        },
+        {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          structured_output: { summary: "OK" },
+        },
+      ] as unknown as SDKMessage[]),
+    );
+  }, values);
+  const result = await new ClaudeWorkflowAgent(mock.start).run(
+    {
+      ...request(await cwd(), "plan"),
+      nativeWork: true,
+      officialSkills: [selectedSkill()],
+      event: async (event) => {
+        events.push(event);
+      },
+    },
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
+  expect(result.officialSkillsEvidence?.observed).toEqual([
+    { name: "sample", status: "requested" },
+    { name: "sample", status: "allowed" },
+    { name: "sample", status: "completed" },
+  ]);
+  expect(JSON.stringify({ events, result })).not.toContain(
+    "Local selected skill",
+  );
+  expect(JSON.stringify({ events, result })).not.toContain(privateReference);
+  expect(JSON.stringify(events)).toContain(publicProject);
+});
+it.each(["unselected", "staged-write", "source-read", "skill-extra"])(
+  "denies unsupported skill access %s and cleans the snapshot",
+  async (mode) => {
+    const mock = mockStart(async (options) => {
+      const name =
+        mode === "staged-write"
+          ? "Write"
+          : mode === "source-read"
+            ? "Read"
+            : "Skill";
+      const input =
+        mode === "staged-write"
+          ? {
+              file_path: join(
+                options.plugins![0]!.path,
+                "skills/sample/reference.txt",
+              ),
+              content: "changed",
+            }
+          : mode === "source-read"
+            ? { file_path: selectedSkill().source }
+            : mode === "skill-extra"
+              ? { skill: "xharness-selected-0:sample", command: "BAD" }
+              : { skill: "unselected" };
+      const decision = await pre(options, name, input, "denied");
+      expect(
+        "hookSpecificOutput" in decision
+          ? decision.hookSpecificOutput
+          : undefined,
+      ).toMatchObject({ permissionDecision: "deny" });
+    });
+    const result = await new ClaudeWorkflowAgent(mock.start).run(
+      {
+        ...request(await cwd()),
+        nativeWork: true,
+        officialSkills: [selectedSkill()],
+      },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("failed");
+    expect(result.officialSkillsEvidence?.observed).toEqual(
+      mode === "skill-extra"
+        ? [
+            { name: "sample", status: "requested" },
+            { name: "sample", status: "denied" },
+          ]
+        : [],
+    );
+    expect(
+      await stat(mock.options().plugins![0]!.path).catch(() => undefined),
+    ).toBeUndefined();
+  },
+);
+it("rejects unsafe selected skill bodies before starting SDK", async () => {
+  const selected = selectedSkill();
+  selected.files[0]!.body += "!`BAD`";
+  const mock = mockStart();
+  const result = await new ClaudeWorkflowAgent(mock.start).run(
+    {
+      ...request(await cwd(), "plan"),
+      nativeWork: true,
+      officialSkills: [selected],
+    },
+    new AbortController().signal,
+  );
+  expect(result.error).toBe("official-skill-stage-unsupported");
+  expect(result.dispatched).toBe(false);
+  expect(mock.accountInfo).not.toHaveBeenCalled();
+});
+
+it("cleans selected snapshots after cancellation without completion evidence", async () => {
+  const controller = new AbortController();
+  const mock = mockStart(async () => {
+    controller.abort();
+  });
+  const result = await new ClaudeWorkflowAgent(mock.start).run(
+    {
+      ...request(await cwd(), "plan"),
+      nativeWork: true,
+      officialSkills: [selectedSkill()],
+    },
+    controller.signal,
+  );
+  expect(result.status).toBe("cancelled");
+  expect(result.officialSkillsEvidence?.observed).toEqual([]);
+  expect(
+    await stat(mock.options().plugins![0]!.path).catch(() => undefined),
+  ).toBeUndefined();
+});
+
+it.each(["add.mjs", "other.mjs"])(
+  "DAG Claude direct write scope %s",
+  async (file) => {
+    const root = await cwd();
+    let behavior: string | undefined;
+    const mock = mockStart(async (options) => {
+      const result = await options.canUseTool!(
+        "Write",
+        { file_path: join(root, file) },
+        {
+          toolUseID: "dag-edit",
+          requestId: "dag-edit",
+          signal: new AbortController().signal,
+        },
+      );
+      behavior = result?.behavior;
+    });
+    await new ClaudeWorkflowAgent(mock.start).run(
+      { ...request(root), nativeWork: true, writeScope: ["add.mjs"] },
+      new AbortController().signal,
+    );
+    expect(behavior).toBe(file === "add.mjs" ? "allow" : "deny");
+  },
+);
+it("invalid DAG Claude scope starts no SDK query", async () => {
+  const start = vi.fn();
+  const result = await new ClaudeWorkflowAgent(start).run(
+    { ...request(await cwd()), nativeWork: true, writeScope: ["../outside"] },
+    new AbortController().signal,
+  );
+  expect(result.dispatched).toBe(false);
+  expect(start).not.toHaveBeenCalled();
 });

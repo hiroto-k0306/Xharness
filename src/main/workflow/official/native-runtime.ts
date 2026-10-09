@@ -1,3 +1,14 @@
+import {
+  resolveCallSkills,
+  skillSelections,
+  skillEvidence,
+} from "./skill-selection.js";
+import {
+  policyCandidate,
+  planAvailability,
+  recordTaskPolicies,
+  resolveCallSelection,
+} from "./model-selection.js";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
@@ -47,8 +58,11 @@ export async function runNativeTask(
   if (options.resume)
     throw new WorkflowFailure("native-work-resume-not-supported");
   let baseline: NativeSnapshot;
-  const record: WorkflowRecord = {
+  const record: WorkflowRecord = options.preparedNative?.record ?? {
     version: 1,
+    ...(options.officialSkills?.length
+      ? { officialSkills: skillSelections(options.officialSkills) }
+      : {}),
     id: options.id ?? randomUUID(),
     sessionId: options.sessionId,
     sourceCwd: options.cwd,
@@ -80,18 +94,18 @@ export async function runNativeTask(
     tail = pending;
     return pending;
   };
-  const eligible = (
+  const eligible = async (
     provider: "claude" | "codex",
     model: string,
     effort: AgentRequest["effort"],
   ) => {
-    const candidate = options.models.find(
-      (m) =>
-        m.provider === provider &&
-        m.model === model &&
-        m.available &&
-        m.quotaAllowed === true &&
-        m.efforts.includes(effort),
+    const candidate = await policyCandidate(
+      options,
+      record,
+      provider,
+      model,
+      effort,
+      signal,
     );
     if (!candidate) throw new WorkflowFailure("unavailable-model");
     return candidate;
@@ -104,6 +118,23 @@ export async function runNativeTask(
     schema: Record<string, unknown>,
   ) {
     signal.throwIfAborted();
+    const selected = await resolveCallSelection(
+      options,
+      record,
+      phase,
+      model,
+      effort,
+      signal,
+    );
+    model = selected.model;
+    effort = selected.effort;
+    const officialSkills = await resolveCallSkills(
+      { ...options, nativeWork: true },
+      record,
+      model.provider,
+      phase,
+      signal,
+    );
     if (record.calls.filter((c) => c.phase !== "conversation").length >= 7)
       throw new WorkflowFailure("call-budget-exceeded");
     const requestId = randomUUID(),
@@ -116,6 +147,12 @@ export async function runNativeTask(
     const index = record.calls.length;
     record.calls.push({
       requestId,
+      ...(officialSkills.length
+        ? { officialSkills: { requested: skillSelections(officialSkills) } }
+        : {}),
+      ...(selected.modelSelection
+        ? { modelSelection: selected.modelSelection }
+        : {}),
       phase,
       provider: model.provider,
       requestedModel: model.model,
@@ -135,13 +172,17 @@ export async function runNativeTask(
       options.agents[model.provider].run(
         {
           nativeWork: true,
+          ...(officialSkills.length ? { officialSkills } : {}),
           requestId,
           taskId: record.id,
           phase,
           cwd: options.cwd,
           model,
           effort,
-          files: [],
+          files: options.preparedNative?.writeScope ?? [],
+          ...(options.preparedNative?.writeScope
+            ? { writeScope: [...options.preparedNative.writeScope] }
+            : {}),
           tests: [],
           prompt: JSON.stringify(prompt),
           outputSchema: schema,
@@ -161,14 +202,28 @@ export async function runNativeTask(
         signal,
       ),
     );
-    const { output, ...metadata } = result;
+    const { output, officialSkillsEvidence, ...metadata } = result;
     record.calls[index] = {
       requestId,
+      ...(officialSkills.length
+        ? { officialSkills: { requested: skillSelections(officialSkills) } }
+        : {}),
+      ...(selected.modelSelection
+        ? { modelSelection: selected.modelSelection }
+        : {}),
       phase,
       provider: model.provider,
       requestedModel: model.model,
       effort,
       ...metadata,
+      ...(officialSkills.length
+        ? {
+            officialSkills: skillEvidence(
+              officialSkills,
+              officialSkillsEvidence,
+            ),
+          }
+        : {}),
       communication: {
         ...communication,
         ...(output !== undefined ? { output: communicationText(output) } : {}),
@@ -189,80 +244,106 @@ export async function runNativeTask(
   const schema = (contract: z.ZodType) =>
     z.toJSONSchema(contract, { target: "draft-7" });
   try {
-    baseline = await nativeSnapshot(options.cwd, signal);
-    record.base = record.head = baseline.head;
-    record.executionDigest = digest({
-      cwd: options.cwd,
-      goal: options.goal,
-      baseline: baseline.head,
-      mode: "native-v1",
-    });
-    const selection = options.planner;
-    if (!selection) throw new WorkflowFailure("planner-missing");
-    const provider = "provider" in selection ? selection.provider : "claude";
-    record.planner = { ...selection, provider };
-    const planner = eligible(provider, selection.model, selection.effort);
-    await save();
-    const proposed = planContract.parse(
-      await invoke(
-        "plan",
-        planner,
+    baseline =
+      options.preparedNative?.baseline ??
+      (await nativeSnapshot(options.cwd, signal));
+    if (!options.preparedNative) {
+      record.base = record.head = baseline.head;
+      record.executionDigest = digest({
+        cwd: options.cwd,
+        goal: options.goal,
+        baseline: baseline.head,
+        mode: "native-v1",
+      });
+      const selection = options.planner;
+      if (!selection) throw new WorkflowFailure("planner-missing");
+      const provider = "provider" in selection ? selection.provider : "claude";
+      record.planner = { ...selection, provider };
+      const planner = await eligible(
+        provider,
+        selection.model,
         selection.effort,
-        {
-          goal: options.goal,
-          cwd: options.cwd,
-          availableModels: options.models,
-          instruction:
-            "Explore this workspace read-only using native tools. Return one task with Japanese summary, instructions, proposed files and acceptance criteria (plain text, not registered IDs). Select an implementer and a reviewer from different companies using availableModels. Existing tests are not required: choose suitable validation, or explicitly explain what cannot be tested. Do not edit or run project code until user approves the plan. Do not access credentials or delegate.",
-        },
-        schema(planContract),
-      ),
-    );
-    // Scope is the workspace, not an enumerated preflight list. Still validate
-    // model assignments, safe relative hints and the cross-company reviewer.
-    record.plan = validateOfficialPlan(
-      proposed,
-      options.models,
-      proposed.tasks.flatMap((t) => t.files),
-      proposed.tasks
-        .flatMap((t) => t.acceptance)
-        .map((id) => ({
-          id,
-          program: "",
-          args: [],
-          command: "",
-          timeoutMs: 0,
-        })),
-      false,
-      true,
-    );
+      );
+      await save();
+      const proposed = planContract.parse(
+        await invoke(
+          "plan",
+          planner,
+          selection.effort,
+          {
+            goal: options.goal,
+            cwd: options.cwd,
+            availableModels: options.models,
+            modelFeedback: options.modelFeedback,
+            taskClassification:
+              "For each task include classification.kind (bug-fix/feature/refactor/documentation/testing/other/unknown) and difficulty (easy/moderate/hard/unknown). This is a planner judgment, not measured fact; judge independently of the chosen model.",
+            instruction:
+              options.nativePlanInstruction ??
+              "Explore this workspace read-only using native tools. Return one task with Japanese summary, instructions, proposed files and acceptance criteria (plain text, not registered IDs). Select an implementer and a reviewer from different companies using availableModels. Existing tests are not required: choose suitable validation, or explicitly explain what cannot be tested. Do not edit or run project code until user approves the plan. Do not access credentials or delegate.",
+          },
+          options.nativePlanSchema ?? schema(planContract),
+        ),
+      );
+      // Scope is the workspace, not an enumerated preflight list. Still validate
+      // model assignments, safe relative hints and the cross-company reviewer.
+      record.plan = validateOfficialPlan(
+        proposed,
+        options.models,
+        proposed.tasks.flatMap((t) => t.files),
+        proposed.tasks
+          .flatMap((t) => t.acceptance)
+          .map((id) => ({
+            id,
+            program: "",
+            args: [],
+            command: "",
+            timeoutMs: 0,
+          })),
+        false,
+        true,
+        await planAvailability(
+          options,
+          record,
+          planContract.parse(proposed),
+          signal,
+        ),
+      );
+      recordTaskPolicies(record, options);
+    }
+    if (options.nativePlanningOnly) {
+      await save();
+      return record;
+    }
+    if (!record.plan) throw new WorkflowFailure("plan-missing");
     if (record.plan.tasks.length !== 1)
       throw new WorkflowFailure("multi-task-not-enabled");
     const task = record.plan.tasks[0]!;
-    const implementer = eligible(
+    const implementer = await eligible(
       task.assignee.provider,
       task.assignee.model,
       task.assignee.effort,
     );
-    const reviewer = eligible(
+    const reviewer = await eligible(
       task.reviewer!.provider,
       task.reviewer!.model,
       task.reviewer!.effort,
     );
     if ((await nativeSnapshot(options.cwd, signal)).head !== baseline.head)
       throw new WorkflowFailure("workspace-changed-before-approval");
-    record.status = "approval";
-    record.next = "approval";
-    await save();
-    const approved = approvalDigest(record);
-    if (
-      !(await options.approve(structuredClone(record.plan), approved, signal))
-    )
-      throw new WorkflowFailure("plan-denied");
-    signal.throwIfAborted();
-    if ((await nativeSnapshot(options.cwd, signal)).head !== baseline.head)
-      throw new WorkflowFailure("workspace-changed-before-approval");
-    record.approvedDigest = approved;
+    if (!options.preparedNative?.approved) {
+      record.status = "approval";
+      record.next = "approval";
+      await save();
+      const approved = approvalDigest(record);
+      if (
+        !(await options.approve(structuredClone(record.plan), approved, signal))
+      )
+        throw new WorkflowFailure("plan-denied");
+      signal.throwIfAborted();
+      if ((await nativeSnapshot(options.cwd, signal)).head !== baseline.head)
+        throw new WorkflowFailure("workspace-changed-before-approval");
+      record.approvedDigest = approved;
+    }
     for (let round = 0; round <= 2; round++) {
       record.correctionRounds = round;
       record.status = "implementing";
@@ -289,6 +370,13 @@ export async function runNativeTask(
         full = nativeDiff(baseline, after);
       record.head = after.head;
       if (!full.files.length) throw new WorkflowFailure("no-changes");
+      if (
+        options.preparedNative?.writeScope &&
+        full.files.some(
+          (file) => !options.preparedNative!.writeScope!.includes(file),
+        )
+      )
+        throw new WorkflowFailure("native-dag-write-scope-violation");
       record.status = "reviewing";
       record.next = "review";
       await save();

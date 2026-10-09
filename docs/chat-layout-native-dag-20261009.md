@@ -18,18 +18,18 @@
 
 各node/統合callのモデルaliasとskillを再検証します。Claude bundleは元sourceへのpinを維持し、作業worktreeから別版や未選択skillを探索せず選択snapshotだけを渡します。Codex選択skillは既存のdiscovery隔離未確認停止を維持します。固定合成/模擬DAGのskill未対応とは別です。ただし本番並列は次の停止境界があるため、この受渡し実装を実通信成功と扱いません。
 
-## 本番は独立検証が未接続のため停止
+## 本番factory接続と対象Windowsの未確認
 
 初期並列契約の独立検証はtask files内のexact `.test.js` / `.test.mjs`（最大10件）を固定Node `--test`で統合後に実行し、project codeの実行を別承認へ結び付けます。他framework/languageの安全な独立実行を対応済みと扱いません。
 
-本番の公式App Server command/execをrestricted read・networkAccess:falseで独立検証へ接続する安全性は未確認です。productionにvalidateIntegrationを渡していないため、並列計画は計画出力後、計画承認・worktree作成・実装より前に `independent-validation-unavailable` で停止します。計画通信があったことと、承認/実装がなかったことを分けます。未確認を理由にhost直実行へ逃げたり、黙って直列へ切り替えたりしません。
+本番は `createValidationRuntime` をserviceの通常native経路へ接続しました。対象CLIの対応schemaと合成境界/取消/終了検査に成功したruntimeだけが、公式App Server command/exec（restricted read・networkAccess:false）のvalidateIntegrationを供給します。未対応なら計画後・承認/実装前に `independent-validation-unavailable` で停止し、黙って直列へ変更しません。CLI/Node identityは承認前/後・node開始前・独立検証前にも照合します。終了確認が不確定なら直列も開始せず診断資料を保全します。対象Windowsでの実確認は未実施で、本番利用可能を確認済みとは扱いません。
 
 実装されたDAG scheduler/worktreeのfixture検証はfake公式agents・real Git・固定Node testを使います。実モデル通信、対象公式CLIの独立検証sandbox、Windows filesystem/process隔離、実通知表示、GUI/配布・インストールは未確認で、fixture成功から推定しません。
 
 ## コード根拠と限定検証
 
 - [App](../src/renderer/App.tsx)、[OfficialRuntimeSettings](../src/renderer/components/OfficialRuntimeSettings.tsx)、[OfficialWorkflowReceipts](../src/renderer/components/OfficialWorkflowReceipts.tsx): 通常画面からの設定/承認/証跡の移設。
-- [native-dag](../src/main/workflow/official/native-dag.ts): 必須判断、直列委譲、最大2並行、独立検証port未接続の承認前停止。
+- [native-dag](../src/main/workflow/official/native-dag.ts): 必須判断、直列委譲、最大2並行、未対応runtimeの承認前停止。
 - [contracts](../src/main/workflow/official/contracts.ts): parallelization/validation/担当/依存の型。
 - [project-dag-workspace](../src/main/workflow/official/project-dag-workspace.ts): clean Git、所有worktree/commit、統合と競合保全。
 - [native-runtime](../src/main/workflow/official/native-runtime.ts)、[service](../src/main/workflow/official/service.ts): 通常nativeの計画/実行、共通モデル/承認/記録。
@@ -39,10 +39,10 @@
 - 関連統合13ファイル141件成功（GUI、headless、計画承認、通常作業、モデル解決、保存/レポート）。
 - DAG/routerとservice 2ファイル22件成功。実adapter/範囲/独立検証/worktreeなど直接7ファイル185件成功、command approval 74件成功。承認・独立検証2ファイル30件成功。これらは重複を含む別の限定実行記録で、件数を足した全回帰の結果ではありません。
 - 型検査 `tsc --noEmit`、変更コードのESLint/Prettier、`git diff --check` 成功。VitestのGitを使う限定検査ではリポジトリ標準の `--maxWorkers=1 --testTimeout=30000` を指定し、製品timeoutを変更していません。
-- 入口/関連文書/Old索引のローカルリンク497件、欠損0。既存Oldソース148件（969,922 bytes）のSHA256とサイズ、追加旧版6件とmain `f7f7350` の内容一致を確認。
+- 入口/関連文書/Old索引のローカルリンク504件、欠損0（リンク先ファイルの存在確認）。既存Oldソース148件（969,922 bytes）のSHA256とサイズ、追加旧版6件とmain `f7f7350` の内容一致を確認。
 - 通常App全体の表示fixture画像2件、1440×1000、JavaScript error 0。チャット内承認とReceiptsを確認。Receiptsの展開後クリップを修正し、末尾へスクロール可能と実ブラウザーで確認。表示fixtureは実モデル実行の証拠ではありません。
 
-書込scope付きDAGタスクではopaque shell操作を承認前に拒否します。直接file editは承認済みexact filesに限定し、所有worktreeの差分も再照合します。統合レビューは固定readOnlyです。これはファイル別OS sandbox保証を新たに検証したことではありません。資源評価は既知の制約の理由説明と最大2の検査で、実機資源測定や予測所要時間はありません。独立検証が未接続である事実もplanner入力へ渡し、直列案を選ぶ場合に理由を示させます。
+書込scope付きDAGタスクではopaque shell操作を承認前に拒否します。直接file editは承認済みexact filesに限定し、所有worktreeの差分も再照合します。統合レビューは固定readOnlyです。これはファイル別OS sandbox保証を新たに検証したことではありません。資源評価は既知の制約の理由説明と最大2の検査で、実機資源測定や予測所要時間はありません。runtime検査による可否と固定理由もplanner入力へ渡し、直列案を選ぶ場合に理由を示させます。
 
 表示画像のLibrary保存: `libfile_130b669e44cc8191afcc9f0b3faa0356`（チャット承認）、`libfile_31e719eefc148191b828647eb317276e`（Receipts）、いずれもversion 0。画像はリポジトリ配布物へ追加していません。
 
@@ -58,14 +58,28 @@ main `f7f7350` との差分ファイルは [変更一覧](change-list-20261009.t
 
 ## 本番利用の未完了点と次の検証（追加監査）
 
-**通常フローで本番並列を利用可能にする依頼は未完了です。** 最大2件のscheduler/所有Git/明示承認/独立検証契約が実装されたことと、本番のvalidator接続・対応実機での隔離確認は別です。
+**本番接続コードは実装しましたが、対象Windowsで本番利用可能との確認は未完了です。** 最大2件のscheduler/所有Git/明示承認とfactoryのmock接続検証を、対象実機での隔離確認・実モデルの並列実行成功と分けます。
 
-停止の分類は、production factoryの未実装・未接続と、対象Windows CLIの隔離対応の検証待ちです。ユーザーの権限承認待ちや、この検査を実施済みとする状態ではありません。GUI `src/main/index.ts` とCLI `src/headless.ts` のservice生成では `validateIntegration` を渡さず、`service.ts` はsettingsの検証用注入値だけをrouterへ渡します。`native-dag.ts` のparallel分岐は関数未提供で `independent-validation-unavailable`、個別validatorはverifiedSandboxのcommandExec/restrictedRead/networkDenied/cliVersionが未提供で `validation-unavailable` にします。boolを無根拠にtrueへ変える修正はしません。
+追加監査 `acf6ba1` 時点ではproduction factoryが未実装・未接続でした。後続変更でservice内の既定factoryへ接続済みです。現在の停止分類はruntimeの対応検査失敗、または所有プロセス終了/identityの不確定です。権限承認待ちではありません。単なる外部CLIの未知フィールド受理や呼出側boolからproofを製造せず、schema・合成検査に成功したfactoryだけが内部verifiedSandboxを渡します。
 
 cloudの既存CLIは `/opt/codex/bin/codex`、`0.159.0-alpha.3`。ローカル生成schemaのreadOnlyにはnetworkAccessだけがあり、restricted read accessがありません。未知accessフィールドが受理されても、有効な読取制限の証拠にはできません。さらに現行AppServerRpcのowned processはWindows専用で、Linuxでは `owned-process-platform-unsupported` により開始できません。Linuxの一時transport成功をWindowsの実装保証へ流用しません。対象PCのCLI版/同設定の有効性は今回未確認です。
 
-既存 `workspace.runAcceptance` / `spawnOwnedProcess` はWindows Job/leaseにより子孫終了を管理しますが、任意project codeの外部ファイル/資格情報読取・ネットワークを隔離しません。DAGの任意テストへそのまま代用しません。直列nativeは独立validatorを呼ばず、公式SDK/App Serverの既存sandbox/操作承認内で動き、テストはagent-reportedです。新しい未接続停止はparallelだけで、質問と直列へ同じ独立検証要件を追加していません。
+既存 `workspace.runAcceptance` / `spawnOwnedProcess` はWindows Job/leaseにより子孫終了を管理しますが、任意project codeの外部ファイル/資格情報読取・ネットワークを隔離しません。DAGの任意テストへそのまま代用しません。直列nativeは独立validatorを呼ばず、公式SDK/App Serverの既存sandbox/操作承認内で動き、テストはagent-reportedです。通常作業の計画前にfactory準備処理が追加されますが、単なる未対応なら直列は従来経路を使い、質問はfactoryを通りません。終了確認不確定や取消時にはplannerを送信しません。
 
-必要最小の次作業は、対象Windowsの既存CLIについてschemaを確認し、合成一時領域だけを使う非モデル `command/exec` の制約検査を行うことです。root内読取の成功、root外の合成sentinel読取拒否、内外への書込拒否、localhostの合成listenerへの接続拒否、取消と子孫終了を確認します。モデル通信はこの隔離検査には不要です。CLI/Node/OS/policyと検査証拠に結び付くfactoryを成功時だけ接続し、バイナリ変更で失効させる必要があります。schema非対応なら対象CLIの更新判断が別途必要で、今回勝手にインストール/ACL/認証変更やWindows操作はしていません。factory配線・否定検査のmock/Git検証はcloudで準備できますが、mockだけで対象Windowsの隔離対応を成立させられません。
+必要最小の次作業は、対象Windowsの既存CLIについてschemaを確認し、合成一時領域だけを使う非モデル `command/exec` の制約検査を行うことです。root内読取の成功、root外の合成sentinel読取拒否、内外への書込拒否、localhostの合成listenerへの接続拒否、取消と子孫終了を確認します。モデル通信はこの隔離検査には不要です。このschema/合成検査とidentity失効はfactoryに実装済みです。schema非対応なら対象CLIの更新判断が別途必要で、今回勝手にインストール/ACL/認証変更やWindows操作はしていません。factory配線・否定検査はcloudでmock/Git検証済みですが、mockだけで対象Windowsの隔離対応を成立させられません。
 
 Codexの選択skill実行も未対応です。`codex.ts` はofficialSkills非空ならdispatched:falseでモデル入力前に停止します。全project/ancestor/user/admin/system由来の未選択skillの自動discoveryを、設定を永続変更せず選択集合だけに制限できることが確認できていません。最小の次手は対象CLIの有効skill集合と一時的allowlist/disable契約の確認です。通常の文書を参照入力へ添付する代案はnative skill実行と別の機能で、対応済みとして読み替えません。
+
+## 本番factory追加の限定確認
+
+- [validation-runtime](../src/main/workflow/official/validation-runtime.ts)、[同テスト](../src/main/workflow/official/validation-runtime.test.ts): 対応schema、ホストpositive control、合成read/write/network拒否、取消開始/継続、所有プロセス終了、identity失効を検査。読取policyはincludePlatformDefaults:trueで、OS既定の読取範囲をゼロにしたとの主張ではありません。
+- [service](../src/main/workflow/official/service.ts): GUI/CLI共通の既定factory接続、未対応理由をplannerへ渡す。取消/終了不確定ではnative plannerを送らず既存分類recordを停止状態として保存。
+- [notifications](../src/main/notifications.ts): work分類だけのcompletedで早すぎる終了通知を出さず、後続native作業と最終通知を維持。
+
+本段階の最終限定検査: factory/service/DAG/通知/headless/通常作業7ファイル131件成功。型・変更コードのlint/format/diff検査成功。対象Windows・実CLI probe・実モデル通信は実施していません。
+
+追加コードの対象: `b6d842d`（runtime factory）、`d7cce4b`（DAG受け渡し）、`a8d046a`（分類通知）。DAG受け渡しの関連3ファイル53件成功。承認digest/所有manifest/各node通信・レビュー/process JSON/必要な反対会社の統合レビューを照合し、省略されたreview応答等の証拠不足は拒否します。保存完了snapshotに基づく受け渡しで、`currentSourceHeadVerified:false` を明記し、現在のGit HEADを再検査したものと扱いません。
+
+対象Windowsの最初の隔離確認には [非モデル診断スクリプト](../scripts/verify-parallel-runtime.ts) を使えます。既存のNode/依存物と絶対パスのCLIを指定して `node --import tsx scripts/verify-parallel-runtime.ts --codex-path <CLIの絶対パス>` を実行します。必要なら `--node-path <Nodeの絶対パス>` を指定します。モデル/thread・project codeは送信せず、インストール・ログイン・設定変更も行いません。合成一時領域とlocalhost listenerによるfactoryの検査だけを実行し、固定理由と `modelDispatched:false` を出します。exit 0はruntime検査成功、2は未対応、3は終了確認等の不確定、130は取消です。今回実行したのは `--help` と型/lint/format検査だけで、対象Windowsの診断結果は未取得です。
+
+リモート照合は2026-10-09 05:29 UTC時点の `origin/main=f7f7350e426185078aa6869f802024d9b59c5be8` まで成功しました。06:06 UTCの最終fetchはHTTPS認証情報を取得できず失敗しました。認証設定は変更しておらず、その後の最新リモート状態は未確認です。push/mergeは実施していません。

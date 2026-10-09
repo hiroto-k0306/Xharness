@@ -19,6 +19,7 @@ A	docs/chat-layout-native-dag-20261009.md
 A	docs/latest-alias-policy-20261009.md
 A	docs/official-skills-20261009.md
 M	release/README.md
+A	scripts/verify-parallel-runtime.ts
 A	src/headless-alias.test.ts
 M	src/headless.test.ts
 M	src/headless.ts
@@ -36,6 +37,8 @@ M	src/main/official-workflow-ipc.ts
 A	src/main/session/alias-policy.test.ts
 M	src/main/session/controller.test.ts
 M	src/main/session/controller.ts
+M	src/main/session/handoff-official.ts
+M	src/main/session/handoffs-official.test.ts
 M	src/main/session/official-session.test.ts
 A	src/main/session/official-skill-ui.test.ts
 A	src/main/session/official-skill-ui.ts
@@ -45,6 +48,7 @@ M	src/main/session/phase5.test.ts
 M	src/main/session/settings-commands.ts
 M	src/main/session/store.ts
 M	src/main/session/turn.ts
+M	src/main/workflow/official/app-server-rpc.ts
 A	src/main/workflow/official/approval-session.test.ts
 M	src/main/workflow/official/automatic-session.test.ts
 M	src/main/workflow/official/claude.test.ts
@@ -82,6 +86,8 @@ A	src/main/workflow/official/skill-selection.test.ts
 A	src/main/workflow/official/skill-selection.ts
 A	src/main/workflow/official/skill-stage.test.ts
 A	src/main/workflow/official/skill-stage.ts
+A	src/main/workflow/official/validation-runtime.test.ts
+A	src/main/workflow/official/validation-runtime.ts
 A	src/main/workflow/official/write-scope.test.ts
 A	src/main/workflow/official/write-scope.ts
 M	src/renderer/App.official.test.tsx

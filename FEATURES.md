@@ -89,4 +89,4 @@ Windows通知は承認/入力待ちと終了/停止を固定文面で知らせ�
 
 ## 通常計画の並列判断と限定DAG
 
-質問はDAGを通りません。全作業計画は直列/並列の理由と条件を決めます。直列は1統合task、並列はclean Git・exact files/依存・最大2並行・所有worktreeに限定し、元checkoutへ自動反映しません。並列scheduler/worktreeは実装しましたが、本番独立検証の安全なApp Server portが未確認のため計画承認/実装前に停止します。fake公式agents+real Git+固定Node fixtureの検証を実モデル/Windows sandbox成功と扱いません。推定時間の数値は表示せず、モデル履歴評価feedbackは設計のみ。[第2段階記録](docs/chat-layout-native-dag-20261009.md)。
+質問はDAGを通りません。全作業計画は直列/並列の理由と条件を決めます。直列は1統合task、並列はclean Git・exact files/依存・最大2並行・所有worktreeに限定し、元checkoutへ自動反映しません。並列scheduler/worktreeは実装しましたが、本番独立検証はruntimeのschema・合成隔離/取消・CLI/Node identity検査に成功した場合だけ接続し、未対応なら計画承認/実装前に停止します。対象Windowsでの本番利用確認は未完了です。fake公式agents+real Git+固定Node fixtureの検証を実モデル/Windows sandbox成功と扱いません。推定時間の数値は表示せず、モデル履歴評価feedbackは設計のみ。[第2段階記録](docs/chat-layout-native-dag-20261009.md)。

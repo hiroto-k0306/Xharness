@@ -181,7 +181,7 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 並列はclean Git（untrackedも含む）・2〜16件の非循環task・maxParallel2・独立taskの重ならないexact files・明示依存・担当alias/effortと別会社reviewerに限定する。承認digestへ結合したハーネス所有のdetached task/integration worktreeを使い、元checkout/branchへ自動反映しない。依存成果を統合して後続taskへ渡し、scope外変更・競合・不確定副作用で停止して証跡/worktreeを保全する。
 
-初期の独立検証契約はtask filesに含まれるexact `.test.js` / `.test.mjs` を固定Node `--test` で統合後に検証し、project code実行は別承認とする。ただし本番の公式App Server command/execをrestricted read・networkAccess:falseで安全に使う独立検証portは未確認で、validateIntegrationを接続していない。並列が選ばれた本番workflowは計画出力後、計画承認・worktree作成・実装の前に `independent-validation-unavailable` で停止する。直列へ黙って変更しない。実装されたscheduler/worktreeとfake公式agents+real Git+固定Node fixture検証を、本番DAGの実行成功と扱わない。各node/統合工程のmodel aliasとskillをcall直前に再検証する。Claude skillは元sourceに固定した選択bundleだけをworktree側の一時pluginへ渡す。Codex選択skillは既存の隔離未確認停止を維持する。固定合成の模擬DAGのskill未対応とは別契約。[第2段階・DAG記録](docs/chat-layout-native-dag-20261009.md)。
+初期の独立検証契約はtask filesに含まれるexact `.test.js` / `.test.mjs` を固定Node `--test` で統合後に検証し、project code実行は別承認とする。本番はcreateValidationRuntimeが対象CLIの対応schema、合成read/write境界・localhost通信拒否、取消と所有プロセス終了、CLI/Node SHA256を確認し、成功時だけ公式App Server command/exec（restricted read・networkAccess:false）のvalidateIntegrationを接続する。未対応の並列計画は計画出力後、計画承認・worktree作成・実装の前に `independent-validation-unavailable` で停止する。承認前/後とnode開始前にもidentityを照合し、変更で失効する。終了確認不確定は直列でも開始せず保全する。対象Windowsの実確認は未実施。直列へ黙って変更しない。実装されたscheduler/worktreeとfake公式agents+real Git+固定Node fixture検証を、本番DAGの実行成功と扱わない。各node/統合工程のmodel aliasとskillをcall直前に再検証する。Claude skillは元sourceに固定した選択bundleだけをworktree側の一時pluginへ渡す。Codex選択skillは既存の隔離未確認停止を維持する。固定合成の模擬DAGのskill未対応とは別契約。[第2段階・DAG記録](docs/chat-layout-native-dag-20261009.md)。
 
 ### 通常作業の公式ツール探索（2026-10-09、利用者承認）
 
@@ -197,11 +197,11 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 
 ハーネスは開始時のファイル内容を比較基準にし、依頼・cwd・基準digestと計画を承認へ結び付ける。承認待ちに内容が変われば止める。リンク・秘密の名前・依存物・生成物等を除外し、上限は10,000ファイル、1ファイル8 MiB、合計128 MiB、深さ40。上限・読めない対象・リンクされた作業ルートは明示停止する。基準digestはGit HEADではない。レビューには開始時からの変更ファイルの固定before/after内容とhashを渡す（合計4 MiBまで）。既存変更は比較基準に含め、無関係な既存差分を今回の成果としない。除外領域の変更や実行の全副作用を網羅する記録ではない。
 
-計画承認後、公式エージェントが探索・編集・テスト選択・テスト追加と実行を行う。Codexのread-only/workspace-write sandboxとnetworkAccess:false、Claudeの作業領域内ファイル検証を維持する。通常作業では登録済みテスト以外のshellや複合コマンドを一律拒否せず、要求全文・cwd・理由を今回だけの確認へ渡す。複合式を安全と自動認定しない。追加permission・network拡張・既知の秘密参照・範囲外への相対移動・reset/cleanは引き続き拒否する。shell全体の意味や外部実行先を完全解析する保証はなく、公式sandboxと利用者の内容確認が必要。workflow/cwd/禁止境界を越える包括許可・永続policy変更、認証や課金経路の緩和はしない。ClaudeのバックグラウンドBash・子エージェント委託は有効にしない。
+計画承認後、公式エージェントが探索・編集・テスト選択・テスト追加と実行を行う。Codexのread-only/workspace-write sandboxとnetworkAccess:false、Claudeの作業領域内ファイル検証を維持する。直列通常作業では登録済みテスト以外のshellや複合コマンドを一律拒否せず、要求全文・cwd・理由を今回だけの確認へ渡す。複合式を安全と自動認定しない。追加permission・network拡張・既知の秘密参照・範囲外への相対移動・reset/cleanは引き続き拒否する。shell全体の意味や外部実行先を完全解析する保証はなく、公式sandboxと利用者の内容確認が必要。scope付きDAGタスクではopaque shellを承認前に拒否し、exact filesのnative編集だけを許す。workflow/cwd/禁止境界を越える包括許可・永続policy変更、認証や課金経路の緩和はしない。ClaudeのバックグラウンドBash・子エージェント委託は有効にしない。
 
 操作承認は既存のrequest/native session/turn/item・内容digest・nonce・10分期限に結び付け、保存会話のconversationSessionIdも照合する。計画承認もworkflow・会話・digest・承認UUID・10分期限に結び付ける。待機中はphaseタイマーを止め（重なる待機時間は一度だけ除外し、最後の応答後に再開）、取消・期限後・内容変更・二重要求の許可を再利用しない。再起動でpending許可を復元しない。拒否後はその操作を許可へ変換しない。
 
-通常作業のテストは公式エージェントの実行報告であり、ハーネスによる独立プロセス検証ではない。コマンド・passed/failed/not-run・説明を別項目へ保存し、既存checksへ合格を捏造しない。実行報告なしでも別会社レビューが問題なしなら完了できるが、未テストと表示する。別会社レビューは固定差分・報告の出典を確認し、failedの報告または重大指摘があれば最大2回修正・再レビューする。変更なしは成功扱いにしない。直列作業は計画以降最大7回・各120秒（承認待ちを除く）と判別1回の上限を維持する。限定native DAGの判断/scheduler/worktreeは上記の契約を使うが、本番並列は独立検証未接続で承認前停止する。通常作業の自動再開は無効。保存履歴とHTML・LoopFlowで通常作業と固定課題の独立テストを区別する。結果受け渡しでも通常作業の承認・最終比較digestのレビューと失敗なしの報告を照合し、独立テスト成功とは表示しない。
+直列の通常作業のテストは公式エージェントの実行報告であり、ハーネスによる独立プロセス検証ではない。コマンド・passed/failed/not-run・説明を別項目へ保存し、既存checksへ合格を捏造しない。実行報告なしでも別会社レビューが問題なしなら完了できるが、未テストと表示する。別会社レビューは固定差分・報告の出典を確認し、failedの報告または重大指摘があれば最大2回修正・再レビューする。変更なしは成功扱いにしない。直列作業は計画以降最大7回・各120秒（承認待ちを除く）と判別1回の上限を維持する。限定native DAGの判断/scheduler/worktreeは上記の契約を使うが、本番並列はruntime検査に成功した環境だけ独立検証へ接続し、未対応なら承認前停止する。対象Windowsの実確認は未実施。通常作業の自動再開は無効。保存履歴とHTML・LoopFlowで通常作業と固定課題の独立テストを区別する。結果受け渡しは直列作業の承認・最終比較digestのレビューと失敗なしの報告を照合し、独立テスト成功とは表示しない。DAGは承認digest・所有manifest・各nodeの通信/レビュー・独立process JSON・必要な反対会社の統合レビューを別契約で照合する。省略されたレビュー等の証拠不足は拒否し、保存完了snapshotに基づくことと現在のsource HEADは再確認していないことを明示する。
 
 公式SDK/App Serverが利用不能なら止め、旧HTTPへ暗黙fallbackしない。正規認証・通常枠・追加課金禁止の確認は従来どおり。初期実装のオフライン検証と当時の未確認事項は [通常作業の境界変更](docs/native-workflow-boundary-20261009.md) を参照する。
 

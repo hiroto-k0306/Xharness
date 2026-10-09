@@ -27,7 +27,7 @@ snapshotは秘密名・リンク・依存物・生成物等を除き、10,000フ
 
 通常作業の計画は [native-dag.ts](src/main/workflow/official/native-dag.ts) の必須parallelizationで直列/並列と理由を決めます。直列1taskは既存直接編集へ戻ります。並列はclean Git・exact scope・最大2並行を条件に [project-dag-workspace](src/main/workflow/official/project-dag-workspace.ts) の所有detached worktreeへ限定し、元checkoutを変更しません。未解決条件/競合/範囲外変更は停止します。
 
-独立検証は統合後のexact Node testと別のコード実行承認が必要です。本番の安全なApp Server command/exec検証portは未確認なのでvalidateIntegration未接続で、並列計画は計画承認/実装前に停止します。fake公式agents・real Git・固定Node fixtureでの実装検証と、本番sandbox/Windows/実モデル成功を分けます。各node/統合callのalias/skillを再検証し、Claudeは元sourceへ固定した選択bundleだけをworktreeの一時pluginへ渡します。Codex選択skillは既存の隔離未確認停止を維持します。推定時間を作らず、履歴評価feedbackは設計だけです。
+独立検証は統合後のexact Node testと別のコード実行承認が必要です。本番はcreateValidationRuntimeで対応schema、合成ファイルの境界、localhost通信拒否、取消/所有プロセス終了、CLI/Node identityを確認し、成功時だけApp Server command/exec検証portを接続します。未対応の並列計画は計画承認/実装前に停止します。終了確認が不確定なら直列も開始せず保全します。対象Windowsでの実確認は未実施です。fake公式agents・real Git・固定Node fixtureでの実装検証と、本番sandbox/Windows/実モデル成功を分けます。各node/統合callのalias/skillを再検証し、Claudeは元sourceへ固定した選択bundleだけをworktreeの一時pluginへ渡します。Codex選択skillは既存の隔離未確認停止を維持します。推定時間を作らず、履歴評価feedbackは設計だけです。
 
 ## 3. ツール・承認・OS境界
 

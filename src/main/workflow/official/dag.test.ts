@@ -18,6 +18,8 @@ import { workflowUsage } from "./runtime.js";
 import { withSessionTrace, withTaskTrace } from "../../core/trace.js";
 import { readTraceReplay } from "../../session/report-trace.js";
 import { evaluateTrace } from "../../session/evaluation.js";
+// Acceptance subprocesses require the Windows Job supervisor (pwsh).
+const test = it.skipIf(process.platform !== "win32");
 const homes: string[] = [];
 afterEach(async () => {
   for (const home of homes.splice(0))
@@ -37,7 +39,7 @@ it("refuses a non-simulated DAG before any process or provider starts", async ()
     ),
   ).rejects.toThrow("native-dag-not-enabled");
 });
-it("corrects an explicit synthetic integration review finding and rechecks both providers", async () => {
+test("corrects an explicit synthetic integration review finding and rechecks both providers", async () => {
   const { owned, cwd } = await fixture(),
     fake = dagAgents(undefined, false);
   let first = true;
@@ -95,7 +97,9 @@ it("corrects an explicit synthetic integration review finding and rechecks both 
     record.dag!.integration!.reviews.filter((r) => r.head === finalHead),
   ).toHaveLength(2);
   expect(record.commits).toHaveLength(4);
-}, 30000);
+  // Four real Git commits/worktree imports plus integration correction and
+  // both-provider rechecks: Windows standalone already took 28.22s (30s limit).
+}, 60000);
 it("runs independent tasks in parallel, depends on confirmed imports and globally cross-reviews", async () => {
   const { owned, cwd } = await fixture(),
     fake = dagAgents();

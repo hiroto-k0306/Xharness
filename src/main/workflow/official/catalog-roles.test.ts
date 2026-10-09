@@ -192,6 +192,7 @@ it("offers the planner only models both listed by the connection and enabled in 
     JSON.parse(claude.ran[0]!.prompt) as { availableModels: ModelCandidate[] }
   ).availableModels.map((m) => m.model);
   expect(offered).toContain("gpt-6.1-sol");
+  expect(offered).not.toContain("claude-haiku-4-5-20251001");
   expect(offered).not.toContain("gpt-6-astra"); // disabled in the catalog
   expect(offered).not.toContain("gpt-6-sol"); // listed by the connection, disabled in the catalog
 });
@@ -206,7 +207,7 @@ it("stops resuming a record whose recorded model the catalog retired", async () 
     directory = join(home, "official-workflows", id);
   await mkdir(join(directory, "workspace-x"), { recursive: true });
   const plan = fixturePlan("claude");
-  plan.tasks[0]!.assignee.model = "claude-haiku-4-5-20251001";
+  plan.tasks[0]!.assignee.model = "claude-sonnet-5-5";
   plan.tasks[0]!.reviewer = {
     provider: "codex",
     model: "gpt-6-luna",

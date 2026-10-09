@@ -186,12 +186,12 @@ WindowsではJobとStart-Processの追跡を使い、WindowStyle HiddenでJobを
 
 ## 7. モデル・文脈・画像・使用量
 
-2026-10-08にHaiku 5.5の正式リリースに合わせて `claude:haiku` を `claude-haiku-5-5` へ更新した。1Mコンテキスト・effort low/medium/high/xhigh/max、既定mediumは公式仕様による。実通信は未確認（verified=false）。Haiku 4.5の完全ID・別表記は別モデルとして残し、保存済み計画・明示IDを5.5へ読み替えない。旧モデルの別名は `claude:haiku-4.5`。利用可否は送信前の公式接続の一覧・枠・effortで照合し、使えなければ停止する。
+2026-10-08にHaiku 5.5の正式リリースに合わせて `claude:haiku` を `claude-haiku-5-5` へ更新した。1Mコンテキスト・effort low/medium/high/xhigh/max、既定mediumは公式仕様による。実通信は未確認（verified=false）。Haiku 4.5の完全ID・別表記は別モデルとして残し、保存済み計画・明示IDを5.5へ読み替えない。2026-10-09の利用者訂正に従い、旧Haiku 4.5は無効・役割なしとし、世代付きの旧モデル別名は撤去する。旧IDは履歴の読み取り用に残し、再実行は理由を示して停止する。利用可否は送信前の公式接続の一覧・枠・effortとカタログで照合する。
 
 モデルの情報と役割は [catalog/models.yaml](catalog/models.yaml) に一元化する（2026-10-07ユーザー承認）。コードは共通resolver（`src/main/config/catalog.ts`）だけを通してモデルIDと既定effortを得る。
 
 - `roles`：既定のメインモデル、枠切れ時のfallback、explorer、reviewer（Claude・Codexそれぞれのコード向け）、補助処理（Web要約・検索）、公式workflowの質問、Codex会話の圧縮、公式CLIによる認証更新の確認、接続テスト。設定ファイルの指定があればそちらが優先する。effortは役割の値、無ければそのモデルの `defaultEffort`（`efforts` の無いモデルには送らない）を、送信と表示の両方に使う（質問・Web要約・検索・接続テスト・Claude変換の省略時を含む）。
-- 別名（`provider:alias`）はカタログの `alias` から作る。
+- 別名（`provider:alias`）は最新の有効モデルの世代なしのモデル名（`haiku`・`sol`など）だけとし、カタログの `alias` から作る。世代更新はカタログだけで別名を新IDへ移し、旧モデルを無効・別名なしとする。完全ID・別表記IDの履歴解決と実行可否の判定は分離し、旧IDを最新IDに読み替えない。
 - 能力はモデル名の文字列ではなくカタログで判定する。
   - effortを送るかどうか：`efforts` の有無
   - Claudeのサーバー圧縮：`capabilities.serverCompaction`

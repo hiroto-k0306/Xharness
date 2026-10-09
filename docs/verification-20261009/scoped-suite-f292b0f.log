@@ -36,4 +36,3 @@ AssertionError: promise resolved "{ …(4) }" instead of rejecting
       Tests  1 failed | 356 passed | 3 skipped (360)
    Start at  01:57:29
    Duration  36.89s (tests 54%, import 22%, environment 11%, transform 10%, setup 2%, worker 1%)
-

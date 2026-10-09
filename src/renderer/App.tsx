@@ -29,7 +29,6 @@ import { PermissionInline } from "./components/PermissionInline.js";
 import { PromptLine } from "./components/PromptLine.js";
 import { QuotaPause } from "./components/QuotaPause.js";
 import { ProjectMemoryPanel } from "./components/ProjectMemory.js";
-import { ImprovementsPanel } from "./components/Improvements.js";
 import { HandoffsPanel } from "./components/Handoffs.js";
 import { LocalBrowserPanel } from "./components/LocalBrowser.js";
 import { SkillsManager } from "./components/SkillsManager.js";
@@ -69,7 +68,6 @@ export function App() {
   const [officialError, setOfficialError] = useState("");
   const [officialOpenSignal, setOfficialOpenSignal] = useState(0);
   const [skillsOpen, setSkillsOpen] = useState(false);
-  const [improvementsOpen, setImprovementsOpen] = useState(false);
   const [skillDraft, setSkillDraft] = useState("");
   const [selectedAgents, setSelectedAgents] = useState<Record<string, string>>(
     {},
@@ -104,7 +102,6 @@ export function App() {
     setOfficialError("");
   }, [current, scopeRequest]);
   useEffect(() => setSkillsOpen(false), [current]);
-  useEffect(() => setImprovementsOpen(false), [current]);
   const view = current ? views[current] : undefined;
   const session = app?.sessions.find((x) => x.id === current);
   const workspace = app?.workspaces.find((w) => w.id === session?.workspaceId);
@@ -548,8 +545,7 @@ export function App() {
                   />
                 ) : (
                   view?.pending &&
-                  !skillsOpen &&
-                  !improvementsOpen && (
+                  !skillsOpen && (
                     <PermissionInline
                       oneTime={view.pending.oneTime}
                       persistent={app.phase4}
@@ -753,16 +749,6 @@ export function App() {
           )}
           {current && session?.workspaceId && (
             <ProjectMemoryPanel key={current} sessionId={current} />
-          )}
-          {current && session?.workspaceId && (
-            <ImprovementsPanel
-              key={`improvements-${current}`}
-              sessionId={current}
-              workspaceId={session.workspaceId}
-              permission={view?.pending}
-              open={improvementsOpen}
-              onOpenChange={setImprovementsOpen}
-            />
           )}
           {app.officialDefault && <OfficialRuntimeSettings />}
           <OfficialWorkflowPanel

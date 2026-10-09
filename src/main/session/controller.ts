@@ -26,6 +26,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { isEffort, loadMainConfig, resolveModel } from "../config/config.js";
 import { loadModelCatalog } from "../config/model-catalog.js";
+import { catalogUnavailableReason } from "../config/catalog.js";
 import { loadProjectConfig } from "../config/project.js";
 import { WorkspaceTrust } from "../config/trust.js";
 import { redact } from "../core/redact.js";
@@ -661,11 +662,13 @@ export class SessionController {
                 .filter(
                   (m) =>
                     m.enabled &&
-                    providers.some(
-                      (p) =>
-                        p.id === m.provider &&
-                        p.models().some((x) => x.id === m.id),
-                    ),
+                    !catalogUnavailableReason(m.id) &&
+                    (!!this.options.officialSession ||
+                      providers.some(
+                        (p) =>
+                          p.id === m.provider &&
+                          p.models().some((x) => x.id === m.id),
+                      )),
                 )
                 .map((m) => ({
                   id: m.id,
@@ -675,6 +678,7 @@ export class SessionController {
               // Test/dev fake is an explicit separate configuration, never a live model.
               if (
                 this.options.fake &&
+                !this.options.officialSession &&
                 providers.some((p) => p.models().some((m) => m.id === "fake"))
               )
                 models.push({

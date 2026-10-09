@@ -367,3 +367,29 @@ it("rejects malformed persisted selection evidence without reinterpreting valid 
   });
   expect(() => validateSavedModelSelections(r)).toThrow();
 });
+it("resolves model availability in the isolated call record cwd, including plan checks", async () => {
+  const r = record();
+  r.cwd = "/tmp/owned-node";
+  const resolve = vi.fn<ResolveCallModel>(async (policy, signal, cwd) => {
+    expect(cwd).toBe(r.cwd);
+    return resolver(policy, signal, cwd);
+  });
+  const model = candidate("codex", resolveModelPolicy("codex:sol").id);
+  await policyCandidate(
+    { ...fixtureWorkflowOptions(r.cwd), resolveCallModel: resolve, models: [] },
+    r,
+    "codex",
+    model.model,
+    "low",
+    signal(),
+  );
+  await resolveCallSelection(
+    { resolveCallModel: resolve },
+    r,
+    "implement",
+    model,
+    "low",
+    signal(),
+  );
+  expect(resolve).toHaveBeenCalledTimes(2);
+});

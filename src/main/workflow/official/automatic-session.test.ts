@@ -87,6 +87,8 @@ it.each([false, true])(
       action: "approve",
       id: view.approval!.id,
       digest: view.approval!.digest,
+      approvalId: view.approval!.approvalId,
+      sessionId: f.request.sessionId,
     });
     const result = await done;
     expect(result).toMatchObject({
@@ -129,6 +131,8 @@ it("does not require existing tests, while read-only work remains blocked", asyn
     action: "approve",
     id: approval.id,
     digest: approval.digest,
+    approvalId: approval.approvalId,
+    sessionId: f.request.sessionId,
   });
   expect((await missing).status).toBe("completed");
   const readonly = await f.service.submitSession(
@@ -151,6 +155,8 @@ it("a changed source after plan display stops before creating or editing a works
     action: "approve",
     id: approval.id,
     digest: approval.digest,
+    approvalId: approval.approvalId,
+    sessionId: f.request.sessionId,
   });
   expect((await done).status).toBe("failed");
   expect(await readFile(join(f.cwd, "add.mjs"), "utf8")).toContain(

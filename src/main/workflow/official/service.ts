@@ -38,6 +38,8 @@ import {
   fixtureModels,
 } from "./fixtures.js";
 import {
+  approvalDigest,
+  digest,
   runOfficialSingleTask,
   resumeBlockReason,
   type PlannerChoice,
@@ -63,6 +65,7 @@ import {
 import {
   OperationApprovals,
   OPERATION_APPROVAL_MS,
+  harnessTestSchema,
 } from "./operation-approval.js";
 import {
   WorkflowFailure,
@@ -93,7 +96,9 @@ import {
 import { impliedRecordModels } from "./record-compat.js";
 import { prepareProjectTask } from "./project-task.js";
 import type { ProjectInventory } from "./project-inventory.js";
-import { runNativeTask } from "./native-runtime.js";
+import { runNativePlannedWork, type NativeDagOptions } from "./native-dag.js";
+import { createProjectDagWorkspace } from "./project-dag-workspace.js";
+import { nativeSnapshot } from "./native-snapshot.js";
 import { projectScopeContract, projectScopeSchema } from "./contracts.js";
 import type {
   OfficialSessionSubmission,
@@ -149,7 +154,11 @@ export class OfficialWorkflowService {
   private codexPackage?: string;
   private codexError?: string;
   private invalidConnection = false;
-  private preparing?: { id: string; controller: AbortController };
+  private preparing?: {
+    id: string;
+    controller: AbortController;
+    sessionId?: string;
+  };
   constructor(
     private settings: {
       home: string;
@@ -170,6 +179,8 @@ export class OfficialWorkflowService {
         agent: () => OfficialAgent;
         view: () => import("../../../shared/sdk-runtime.js").SdkRuntimeView;
       };
+      /** Explicit offline test/verified sandbox seam. Absent in production until isolation is verified. */
+      validateIntegration?: NativeDagOptions["validateIntegration"];
       options?: (
         cwd: string,
         provider: "claude" | "codex",
@@ -321,12 +332,17 @@ export class OfficialWorkflowService {
         if (
           record.nativeWork &&
           (!record.sessionId ||
-            record.nativeWork.validation !== "agent-reported" ||
+            (record.nativeWork.validation !== "agent-reported" &&
+              !(
+                record.nativeWork.validation === "independent-process" &&
+                this.nativeDagRecordPathValid(record)
+              )) ||
             record.nativeWork.baseline !== "files" ||
             !record.sourceCwd ||
             !isAbsolute(record.cwd) ||
-            resolve(record.cwd).toLowerCase() !==
-              resolve(record.sourceCwd).toLowerCase())
+            (resolve(record.cwd).toLowerCase() !==
+              resolve(record.sourceCwd).toLowerCase() &&
+              !this.nativeDagRecordPathValid(record)))
         )
           continue;
         if (
@@ -395,6 +411,9 @@ export class OfficialWorkflowService {
               : "公式Codexの同梱CLIを確認できません。実行パスを指定してください。")),
       },
       activeId: this.active?.id ?? this.preparing?.id,
+      activeSessionId:
+        this.records.get(this.active?.id ?? this.preparing?.id ?? "")
+          ?.sessionId ?? this.preparing?.sessionId,
       operationApproval: this.operationApprovals.view(),
       approval: this.approval
         ? {
@@ -552,6 +571,8 @@ export class OfficialWorkflowService {
   private matchesConversation(id: string, sessionId?: string) {
     const record = this.records.get(id);
     if (record?.sessionId) return sessionId === record.sessionId;
+    if (this.preparing?.id === id && this.preparing.sessionId)
+      return sessionId === this.preparing.sessionId;
     return (
       sessionId === undefined &&
       (((this.settings.fake ||
@@ -583,16 +604,45 @@ export class OfficialWorkflowService {
       return bundles;
     };
   }
+  private nativeDagRecordPathValid(record: WorkflowRecord) {
+    const saved = record.nativeDagWorkspace;
+    if (
+      !saved ||
+      !record.sourceCwd ||
+      saved.source !== resolve(record.sourceCwd) ||
+      !/^[a-f0-9]{64}$/.test(saved.approvalDigest) ||
+      !/^[a-f0-9]{40,64}$/.test(saved.sourceBase)
+    )
+      return false;
+    const root = resolve(this.root, record.id, "parallel");
+    const rel = relative(root, saved.ownedDirectory);
+    if (
+      !rel ||
+      rel.startsWith("..") ||
+      isAbsolute(rel) ||
+      rel.includes("/") ||
+      rel.includes("\\")
+    )
+      return false;
+    return (
+      saved.integration?.status === "completed" &&
+      saved.integration.cwd === join(saved.ownedDirectory, "integration") &&
+      resolve(record.cwd) === resolve(saved.integration.cwd)
+    );
+  }
   private callResolver(
     cwd: string | (() => string),
     agents: Partial<Record<"claude" | "codex", OfficialAgent>>,
   ): ResolveCallModel {
-    return async (policy, signal) => {
+    return async (policy, signal, invocationCwd) => {
       signal.throwIfAborted();
       const agent = agents[policy.provider];
       if (!agent) throw new Error("必要な公式接続がありません。");
       const discovered = await agent
-        .discover(typeof cwd === "function" ? cwd() : cwd, signal)
+        .discover(
+          invocationCwd ?? (typeof cwd === "function" ? cwd() : cwd),
+          signal,
+        )
         .catch((e: unknown) => {
           throw new Error(connectionFailure(policy.provider, e));
         });
@@ -744,16 +794,53 @@ export class OfficialWorkflowService {
     options.id = id;
     options.resume = resume;
     options.save = (r) => this.save(r);
-    options.approveTool = (name, input, signal) =>
-      name === "item/commandExecution/requestApproval" ||
-      name === "native/operation"
-        ? this.operationApprovals.ask(
-            id,
-            input,
-            signal,
-            this.records.get(id)?.sessionId,
-          )
+    options.approveTool = async (name, input, signal) => {
+      const sessionId = this.records.get(id)?.sessionId;
+      if (name === "harness/test") {
+        const parsed = harnessTestSchema.safeParse(input);
+        const record = this.records.get(id);
+        const integration = record?.nativeDagWorkspace?.integration;
+        if (
+          !parsed.success ||
+          !record ||
+          !sessionId ||
+          record.plan?.parallelization?.mode !== "parallel" ||
+          record.status !== "verifying" ||
+          record.next !== "verify" ||
+          record.pendingEffect?.kind !== "test" ||
+          record.approvedDigest !== approvalDigest(record) ||
+          integration?.status !== "completed" ||
+          integration.cwd !== record.cwd ||
+          parsed.data.cwd !== record.cwd ||
+          JSON.stringify(parsed.data.testFiles) !==
+            JSON.stringify(record.plan.validation?.testFiles)
+        )
+          return false;
+        const spec = {
+          id: "native-dag-node-validation",
+          program: parsed.data.program,
+          args: parsed.data.args,
+          command: parsed.data.command,
+          timeoutMs: 60000,
+        };
+        const baseline = await nativeSnapshot(record.cwd, signal);
+        if (
+          parsed.data.digest !==
+          digest({ spec, head: record.head, content: baseline.head })
+        )
+          return false;
+        return this.operationApprovals.askHarnessTest(
+          id,
+          parsed.data,
+          signal,
+          sessionId,
+        );
+      }
+      return name === "item/commandExecution/requestApproval" ||
+        name === "native/operation"
+        ? this.operationApprovals.ask(id, input, signal, sessionId)
         : Promise.resolve(false);
+    };
     options.approve = async (_plan, digest, signal) =>
       new Promise<boolean>((accept, reject) => {
         let settled = false;
@@ -806,13 +893,25 @@ export class OfficialWorkflowService {
           taskId: id,
         },
         async () => {
-          const record = await (
+          const record =
             "worktrees" in options
-              ? runOfficialDag
+              ? await runOfficialDag(options as DagOptions, controller.signal)
               : options.nativeWork
-                ? runNativeTask
-                : runOfficialSingleTask
-          )(options as DagOptions, controller.signal);
+                ? await runNativePlannedWork(
+                    {
+                      ...options,
+                      validateIntegration: this.settings.validateIntegration,
+                      prepareDag: (approved, signal) =>
+                        createProjectDagWorkspace({
+                          cwd: options.cwd,
+                          ownedRoot: join(this.root, id, "parallel"),
+                          approvalDigest: approved,
+                          signal,
+                        }),
+                    },
+                    controller.signal,
+                  )
+                : await runOfficialSingleTask(options, controller.signal);
           return {
             ...record,
             stopCause:
@@ -1261,7 +1360,7 @@ export class OfficialWorkflowService {
     signal.addEventListener("abort", cancel, { once: true });
     if (signal.aborted) cancel();
     this.busy = true;
-    this.preparing = { id, controller };
+    this.preparing = { id, controller, sessionId: request.sessionId };
     try {
       await mkdir(directory, { recursive: true });
       if (
@@ -1398,7 +1497,7 @@ export class OfficialWorkflowService {
         } finally {
           controller.signal.removeEventListener("abort", cancelActive);
         }
-        this.preparing = { id, controller };
+        this.preparing = { id, controller, sessionId: request.sessionId };
       };
       await waitRun();
       let record = this.records.get(id);
@@ -1510,6 +1609,15 @@ export class OfficialWorkflowService {
         return {
           ...this.view(),
           error: "承認の会話または実行が一致しません。許可していません。",
+        };
+      if (
+        command.scope === "flow" &&
+        this.operationApprovals.view()?.source === "harness-test"
+      )
+        return {
+          ...this.view(),
+          error:
+            "ハーネスの独立検査は今回の明示承認が必要です。flow許可を適用していません。",
         };
       if (
         command.scope === "flow" &&

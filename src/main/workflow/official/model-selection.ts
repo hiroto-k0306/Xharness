@@ -36,6 +36,7 @@ export interface WorkflowModelPolicies {
 export type ResolveCallModel = (
   policy: ModelPolicy,
   signal: AbortSignal,
+  cwd?: string,
 ) => Promise<{ model: ModelCandidate; catalog: CatalogVersion }>;
 
 const policyContract = z
@@ -126,9 +127,10 @@ async function checkedResolve(
   resolver: ResolveCallModel,
   policy: ModelPolicy,
   signal: AbortSignal,
+  cwd?: string,
 ) {
   try {
-    return await resolver(policy, signal);
+    return await resolver(policy, signal, cwd);
   } catch (error) {
     signal.throwIfAborted();
     throw selectionFailure(error);
@@ -204,6 +206,7 @@ export async function policyCandidate(
       options.resolveCallModel,
       policy,
       signal,
+      record.cwd,
     );
     if (
       resolved.model.provider !== provider ||
@@ -328,6 +331,7 @@ export async function resolveCallSelection(
     options.resolveCallModel,
     policy,
     signal,
+    record.cwd,
   );
   signal.throwIfAborted();
   const chosenEffort = policy.effort ?? null;

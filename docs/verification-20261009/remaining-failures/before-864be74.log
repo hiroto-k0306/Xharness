@@ -1,0 +1,53 @@
+
+ RUN  v5.0.3 /tmp/xharness-before-864be74
+
+ ❯ |node| src/main/workflow/official/service.test.ts (51 tests | 1 failed | 50 skipped) 20278ms
+   × persists denied approval across restart, asks again, and finishes without replaying planning 20276ms
+ ❯ |node| src/main/session/project-memory.test.ts (11 tests | 1 failed | 10 skipped) 34ms
+   × foreign source, foreign cwd, scratch, another home and forgotten project cannot read or write 32ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |node| src/main/session/project-memory.test.ts > foreign source, foreign cwd, scratch, another home and forgotten project cannot read or write
+AssertionError: promise resolved "{ …(4) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "entries": [],
++   "limit": 50,
++   "scope": "9ff7ba0167cb116cd253a10fa987940d6a9a6fd7d8d0833168d40349ead9b794",
++   "warnings": [],
+  }
+
+ ❯ src/main/session/project-memory.test.ts:161:4
+    159|   await expect(
+    160|     new ProjectMemory({ ...f.scope, cwd: f.other }).list(),
+    161|   ).rejects.toThrow();
+       |    ^
+    162|   await expect(
+    163|     new ProjectMemory({ ...f.scope, workspaceId: null }).list(),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  |node| src/main/workflow/official/service.test.ts > persists denied approval across restart, asks again, and finishes without replaying planning
+Error: Workflow fixture did not reach expected state
+ ❯ wait src/main/workflow/official/service.test.ts:91:9
+     89|     await new Promise((r) => setTimeout(r, 20));
+     90|   }
+     91|   throw new Error("Workflow fixture did not reach expected state");
+       |         ^
+     92| }
+     93| it.each([true, false])(
+ ❯ src/main/workflow/official/service.test.ts:270:20
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed (2)
+      Tests  2 failed | 60 skipped (62)
+   Start at  03:02:39
+   Duration  21.67s (tests 95%, transform 3%, import 2%)

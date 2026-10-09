@@ -89,6 +89,8 @@ Claude SDK/Codex App Serverの正規サブスク認証と通常枠を確認し�
 
 プロジェクトメモリの手動候補・採用/却下/編集等と同プロジェクト履歴のscope検証は共通UIとして残す。旧SearchProjectHistory/SearchProjectMemory/ProposeProjectMemoryをモデルへ登録せず、自動でsystemへ注入・過去記録を再実行しない。
 
+手動memory/skillsは登録workspace rootとhomeの実体・SessionStore所有home・保存会話の適格性を再確認する。非Gitのcwdはroot内、Gitのcwdは最寄りrepositoryのcommon Git directoryが登録rootと一致する場合に許可する。同じrepositoryのlinked worktreeは許可し、独立したnested repository・別workspace・scratch・忘れたworkspace・別home・rootのsymlinkは拒否する。cwd文字列が異なるだけで別プロジェクトとは判定しない。
+
 メモリ・受渡し・改善・ローカルブラウザーは、workspace選択時の明示手動UI/IPCとして維持する。既存のvalidator・scope・PermissionGateを通し、旧モデルツールの注入や権限の緩和に使わない。メニューの表示を全処理の公式実機成功の証拠にしない。利用者が選んだ手動操作と、公式モデルが要求できるnativeツールを区別する。受渡しは保存済み公式結果の証拠を読む処理で、新しいproviderを作らない。改善UIは候補/比較記録を保存し、確認済みケースを実行する場合は通常sendの共通公式経路を使う。内部プレビューに旧ListProjectSkills/LoadProjectSkill等のvalidator/gate/trace名が残っても、モデルへの登録数は0であり、将来の内部wrapper分離とは区別する。
 
 旧WebSearch/WebFetch、MCP接続/モデル公開ツール、フック、カスタムslash、旧予約/子委託は通常実行の機能から外す。旧説明は [変更前機能一覧](Old/FEATURES-6370866.md)。公式nativeの未知の外部機能をXHarness対応済みとみなさない。
@@ -240,6 +242,8 @@ Claudeは同梱SDKを初期版として、固定の管理フォルダーへSDK�
 - service.tsの判別promptに残っていた旧「対象と既存Node/Vitestテストを提案する」説明は今回の公式探索方式へ修正した。過去の記録本文を書き換えず、今回変更を実機で再確認したとは扱わない。
 - Codexの通常native計画/reviewでhost/shellを有効にする設定は、旧文書の「読み取りphaseツール無効」と異なる。read-only/network無効の事実を§15へ反映したが、意図と承認経緯は別途確認が必要。権限設定を文書に合わせて変更していない。
 
-固定課題の再開完了待ちと、手動memoryの異なるcwdでのlist拒否には、6370866でも再現する既存テスト失敗が残る。今回合格・境界確認済みとは扱わない。
+固定課題の再開完了待ちと手動memoryの異なるcwdでのlist拒否は、864be74でも再現したテスト前提の不一致を修正した。memory fixtureの独立Git identityを明示し、再開テストは非Windowsだけ固定Node課題を実行するテスト用portを注入した。製品のscope検証と非Windowsプロセス拒否は変更していない。直接検証と全回帰1回でこの2件は成功したが、全回帰には52失敗が残る。WindowsのJob実行・実モデル通信を再検証した結果ではない。
+
+改善候補の評価記録は現在も旧evaluationTask/traceを要求し、公式workflow結果の読取adapterが不足している。公式経路で候補課題を送信できることを、結果記録・比較・採用まで検証済みとみなさない。受渡しの公式結果読取とは別の未完了事項である。追加失敗の分類・未確認点は [残存2件の修正と全回帰記録](docs/remaining-failures-regression-20261009.md) を参照。
 
 今回の追加実装・限定検証・既存失敗の比較は [公式共通化記録](docs/official-only-consolidation-20261009.md) を参照。

@@ -12,7 +12,7 @@ GUIとheadlessは同じSessionController / OfficialWorkflowServiceから、公�
 
 変更前の使い方・開発指示は [旧README](Old/README-6370866.md)、[旧AGENTS](Old/AGENTS-6370866.md)、[旧配布README](Old/release-README-6370866.md) に保存する。旧資料は過去の対応範囲であり、現行の操作手順ではない。
 
-最新の参照は [公式共通化・旧実行器整理](docs/official-only-consolidation-20261009.md)、[文書照合記録](docs/documentation-refresh-20261009.md)、[環境修正後の実アプリ](docs/workflow-environment-fix-live-20261009.md)、[全回帰（1件timeout）](docs/full-regression-20261009.md)、[PR #25の限定確認](docs/catalog-timeout-fix-20261009.md)。最新mainのWindows配布を今回再検証したものではない。
+最新の参照は [残存2件の修正と全回帰（52失敗）](docs/remaining-failures-regression-20261009.md)、[公式共通化・旧実行器整理](docs/official-only-consolidation-20261009.md)、[文書照合記録](docs/documentation-refresh-20261009.md)、[環境修正後の実アプリ](docs/workflow-environment-fix-live-20261009.md)、[過去の全回帰（1件timeout）](docs/full-regression-20261009.md)、[PR #25の限定確認](docs/catalog-timeout-fix-20261009.md)。最新mainのWindows配布を今回再検証したものではない。
 
 過去のWindowsのexe作成・fake GUIの記録は [20261004配布記録](docs/release-20261004-integrated.md)。以前の配布物に今回のGUI/headless共通化や旧経路撤去が入っているとは限らない。今回のWindows配布・インストール・実モデル通信の再検証は未実施。
 

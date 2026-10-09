@@ -3,6 +3,7 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   {
     ignores: [
+      "Old/retired-sources/**",
       "node_modules/**",
       ".tools/**",
       "spike/.out/**",

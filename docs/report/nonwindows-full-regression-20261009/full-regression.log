@@ -1,0 +1,495 @@
+
+ RUN  v5.0.3 /workspace/Xharness
+
+ ✓ |node| src/main/workflow/official/runtime.test.ts (26 tests | 9 skipped) 1469ms
+   ✓ caps correction cycles at two and does not accept model claims as test evidence 640ms
+ ✓ |node| src/main/workflow/official/dag.test.ts (11 tests | 5 skipped) 1102ms
+   ✓ preserves conflicting node results and clean integration HEAD on a definite cherry-pick conflict 462ms
+ ✓ |node| src/main/workflow/official/fault-injection.test.ts (20 tests | 12 skipped) 823ms
+ ✓ |node| src/main/workflow/official/project-vitest.test.ts (9 tests | 6 skipped) 55ms
+ ✓ |node| src/main/workflow/official/planner-choice.test.ts (7 tests | 1 skipped) 1368ms
+   ✓ rejects a new plan without a reviewer and uses configured reviewers only for older records 1060ms
+ ✓ |node| src/main/workflow/official/project-task.test.ts (7 tests | 1 skipped) 325ms
+ ✓ |node| src/main/workflow/official/prepared-runtime.test.ts (3 tests | 1 skipped) 227ms
+ ✓ |node| src/main/session/project-memory.test.ts (12 tests) 511ms
+ ✓ |node| src/main/workflow/official/native-dag.test.ts (20 tests) 13515ms
+   ✓ plans once, executes isolated tasks, independent Node tests and overall cross-company review without changing user branch 1602ms
+   ✓ dependencies receive committed predecessor changes and integration is deterministic 2231ms
+   ✓ cannot complete with independent validation denied 1463ms
+   ✓ cannot complete with independent validation failed 1484ms
+   ✓ cannot complete with independent validation skipped 1241ms
+   ✓ cannot complete with independent validation mutation 1278ms
+   ✓ actually overlaps two independent task calls without exceeding two 2061ms
+   ✓ overall integration review findings prevent completion after passing independent process evidence 1487ms
+ ✓ |node| src/main/session/handoffs-official.test.ts (41 tests) 6455ms
+   ✓ delivers a persisted official false result once without legacy trace, preserves destination and survives restart 350ms
+ ✓ |node| src/main/workflow/official/validation-runtime.test.ts (15 tests) 9179ms
+   ✓ schema absence stops before canary execution and removes generated diagnostics 429ms
+   ✓ rejects early cancellation evidence 729ms
+   ✓ rejects no-ready cancellation evidence 696ms
+   ✓ successful mock support binds identity, refuses provider RPC requests and awaits cleanup for actual validation 986ms
+   ✓ actual validation cancellation waits for owned process closure before rejection 999ms
+   ✓ changed Node binary invalidates proven support before starting validation 516ms
+   ✓ uncertain owned cleanup throws, preserves diagnostics and cannot become serial availability 3668ms
+ ✓ |node| src/main/workflow/official/project-dag-workspace.test.ts (13 tests) 4793ms
+   ✓ runs independent isolated tasks then builds a dependency base and owned integration without editing the user's branch 1729ms
+   ✓ preserves a real integration conflict and rejects retry rather than resetting or merging the user's branch 966ms
+   ✓ rejects uncompleted dependencies, non-topological integration and user-root changes 836ms
+   ✓ does not retry an integration interrupted before checkout and preserves completed task worktrees 367ms
+ ✓ |node| src/headless-replay.test.ts (4 tests) 7297ms
+   ✓ exports an offline HTML report without session initialization or source writes 1677ms
+   ✓ replays real receipts without creating a session or changing saved records 1192ms
+   ✓ compares a recorded Write under plan mode without executing it or making state files 1125ms
+   ✓ rejects replay options that could accidentally enter the live REPL 3301ms
+ ✓ |node| src/main/workflow/official/service.test.ts (51 tests) 6940ms
+   ✓ exposes per-operation approval and consumes only a matching UI decision (true) 1391ms
+   ✓ exposes per-operation approval and consumes only a matching UI decision (false) 317ms
+   ✓ persists denied approval across restart, asks again, and finishes without replaying planning 1333ms
+   ✓ rechecks registration between tasks and refuses switching an active task 312ms
+   ✓ ends consecutive questions and post-work chat after one bounded call and preserves answers 374ms
+ ✓ |node| src/main/workflow/official/native-dag-service.test.ts (7 tests) 4816ms
+   ✓ service automatic work routes parallel with explicit integration consent and retained records 2209ms
+   ✓ service automatic work routes factory-parallel with explicit integration consent and retained records 2039ms
+ ✓ |node| src/main/workflow/official/codex.test.ts (84 tests) 5557ms
+   ✓ pauses the phase limit while a person decides and records why: true 1305ms
+   ✓ pauses the phase limit while a person decides and records why: declined 1305ms
+   ✓ pauses the phase limit while a person decides and records why: expired 1308ms
+   ✓ pauses the phase limit while a person decides and records why: cancelled 1305ms
+ ✓ |node| src/main/session/controller.test.ts (22 tests) 2786ms
+ ✓ |node| scripts/prepare-sdk-runtime.test.ts (1 test) 4172ms
+   ✓ ships SDK types and required peers outside ASAR and replaces only the seed output 4171ms
+ ✓ |node| src/main/session/handoffs.test.ts (11 tests) 1778ms
+   ✓ previews without delivery; confirms once and preserves destination history/model/permissions across restart 357ms
+ ✓ |node| src/headless.test.ts (17 tests) 2641ms
+   ✓ uses the real shared official service in fake mode and preserves native history on resume 439ms
+ ✓ |node| src/main/session/skill-ui.test.ts (5 tests) 1559ms
+   ✓ UI list/preview use the gate and real budgets but never send body or model calls; trace shows preview separately 382ms
+   ✓ renderer reconnect cancels orphaned local reads but keeps the active official submission without re-sending or granting permission 323ms
+   ✓ a changed or deleted preview fails and a new listing is needed; IPC cannot load or escape paths 322ms
+   ✓ reference UI inspection/preview remain local with versioned trace evidence and attached reference submission is explicitly unsupported 329ms
+ ✓ |node| src/main/workflow/official/claude.test.ts (40 tests) 896ms
+ ✓ |node| src/main/computer-use/session.test.ts (8 tests) 1254ms
+ ✓ |node| src/main/session/official-skill-ui.test.ts (4 tests) 531ms
+ ✓ |node| src/main/workflow/official/sdk-worker.test.ts (14 tests) 1362ms
+   ✓ managed SDK worker (11)
+     ✓ times out unresponsive controls 502ms
+ ✓ |node| scripts/electron-bundle.test.ts (2 tests) 1508ms
+   ✓ Electron runtime bundles (2)
+     ✓ keeps Electron external in main and sandboxed preload 1385ms
+ ✓ |node| src/main/workflow/official/automatic-session.test.ts (4 tests) 672ms
+ ✓ |node| src/main/tools/project-skills.test.ts (13 tests) 448ms
+ ✓ |node| src/main/workflow/official/model-selection.test.ts (9 tests) 981ms
+   ✓ keeps the approved plan/digest and executes latest aliases after approval and between review/fix 781ms
+ ✓ |node| src/headless-alias.test.ts (6 tests) 332ms
+ ✓ |node| src/main/session/alias-policy.test.ts (4 tests) 789ms
+   ✓ a model selection during a call affects the next call and does not mutate the active request 346ms
+ ✓ |node| src/main/session/official-skills.test.ts (21 tests | 9 skipped) 283ms
+ ✓ |node| src/main/workflow/official/approval-session.test.ts (4 tests) 709ms
+   ✓ requires current chat/workflow/approval identity and digest, then consumes explicit plan denial once 330ms
+ ✓ |node| src/main/computer-use/boundaries.test.ts (3 tests) 333ms
+ ✓ |node| src/main/session/handoffs-cli.test.ts (1 test) 312ms
+   ✓ headless requires same-process preview confirmation; cancel/list/send never call a provider 310ms
+ ❯ |node| src/main/workflow/official/catalog-compat.test.ts (10 tests | 6 failed | 2 skipped) 806ms
+   × keeps a legacy record's implied models after an alias generation update 134ms
+   ✓ starts a new task while the legacy-record models are retired 119ms
+   ✓ sends the role effort, changed only in the catalog, in each request 76ms
+   × reads a new-format record but refuses its disabled models after the aliases change 67ms
+   ↓ resumes a planned record whose recorded planner is retired, through implementation and review
+   ↓ resumes a legacy record needing only its implementer's reviewer company while the other company's former models are retired
+   × still stops a resume when the legacy reviewer it needs is retired 90ms
+   × still stops a resume when its implementer is retired 100ms
+   × reads historical claude-haiku-4-5-20251001 without rewriting it and refuses execution even if offered 108ms
+   × reads historical claude-haiku-4-5 without rewriting it and refuses execution even if offered 111ms
+ ✓ |node| src/main/workflow/official/automatic-workspace.test.ts (5 tests) 577ms
+ ✓ |node| src/main/config/catalog.test.ts (13 tests) 267ms
+ ✓ |node| src/main/config/config.test.ts (13 tests) 402ms
+ ✓ |node| src/main/workflow/official/model-feedback-service.test.ts (1 test) 537ms
+   ✓ fresh completed service evidence is persisted and becomes the next planner reference without rewriting previous history 535ms
+ ✓ |node| src/main/workflow/official/skill-selection.test.ts (14 tests) 181ms
+ ✓ |node| src/main/providers/fake/fake-provider.test.ts (10 tests) 449ms
+   ✓ FakeProvider (10)
+     ✓ stops promptly when aborted mid-stream 402ms
+ ✓ |node| src/main/workflow/official/workspace.test.ts (6 tests) 410ms
+ ✓ |node| src/main/workflow/official/preflight.test.ts (6 tests) 406ms
+ ✓ |node| src/main/workflow/official/worktrees.test.ts (2 tests) 423ms
+   ✓ creates and integrates clean LF worktrees despite external autocrlf=true 375ms
+ ❯ |node| src/main/workflow/official/catalog-roles.test.ts (6 tests | 2 failed) 427ms
+   ✓ refuses a new Haiku question when only Haiku 4.5 is offered 102ms
+   ✓ displays and sends the question model chosen by the catalog role 88ms
+   ✓ stops a question whose catalog model is retired, and shows why 71ms
+   × records the selection key, provider, sent ID, effort and catalog version at start 34ms
+   ✓ offers the planner only models both listed by the connection and enabled in the catalog 110ms
+   × stops resuming a record whose recorded model the catalog retired 21ms
+ ✓ |node| src/main/session/repository.test.ts (14 tests | 1 skipped) 387ms
+ ✓ |node| src/main/session/connections.test.ts (9 tests) 777ms
+ ✓ |node| src/main/connections/siwc-lifecycle.test.ts (15 tests) 251ms
+ ✓ |node| src/main/session/trust.test.ts (4 tests) 735ms
+ ✓ |node| src/main/config/model-policy.test.ts (6 tests) 184ms
+ ✓ |node| src/main/checkpoints/store.test.ts (14 tests) 173ms
+ ✓ |node| src/main/session/evaluation-offline.test.ts (1 test) 202ms
+ ✓ |node| src/main/session/offline-review.test.ts (9 tests) 447ms
+ ✓ |node| src/main/session/official-session.test.ts (13 tests) 1459ms
+ ✓ |node| src/main/session/retired-manual-improvements.test.ts (1 test) 108ms
+ ✓ |node| src/main/session/storage-consistency.test.ts (6 tests) 433ms
+ ✓ |node| src/main/session/report-trace.test.ts (4 tests) 134ms
+ ✓ |node| src/main/workflow/official/sdk-install.test.ts (14 tests) 157ms
+ ✓ |node| src/main/session/slash-controller.test.ts (4 tests) 564ms
+ ✓ |node| src/main/config/catalog-consumers.test.ts (4 tests) 131ms
+ ✓ |node| src/main/workflow/official/sdk-manager.test.ts (9 tests) 142ms
+ ✓ |node| scripts/make-icon.test.ts (4 tests) 127ms
+ ✓ |node| src/main/session/early-send-cancellation.test.ts (8 tests) 985ms
+ ❯ |node| src/main/workflow/official/vitest-session.test.ts (1 test | 1 failed) 30027ms
+   × normal work does not require a Vitest version, installed dependencies or registered test before planning 30025ms
+ ✓ |node| src/main/core/trace-store.test.ts (6 tests) 98ms
+ ✓ |node| src/main/session/quota-pause.test.ts (9 tests) 100ms
+ ✓ |node| src/main/session/evaluation.test.ts (9 tests) 99ms
+ ✓ |node| src/main/connections/siwc-callback-store.test.ts (5 tests) 101ms
+ ✓ |node| src/main/workflow/official/command-approval.test.ts (74 tests) 84ms
+ ✓ |node| src/main/workflow/official/native-runtime.test.ts (7 tests) 94ms
+ ✓ |node| src/main/workflow/official/skill-stage.test.ts (14 tests | 7 skipped) 29ms
+ ✓ |node| src/main/session/session-boundaries.test.ts (6 tests) 887ms
+ ✓ |node| src/preload/local-links.test.ts (1 test) 68ms
+ ✓ |node| src/main/core/git-read-boundary.test.ts (11 tests) 68ms
+ ✓ |node| src/main/connections/integration.test.ts (9 tests) 82ms
+ ✓ |node| src/main/local-links.test.ts (42 tests | 2 skipped) 70ms
+ ✓ |node| src/main/connections/siwc-auth.test.ts (20 tests) 62ms
+ ✓ |node| src/main/connections/siwc-http.test.ts (11 tests) 63ms
+ ✓ |node| src/shared/replay.test.ts (6 tests) 60ms
+ ✓ |node| src/main/session/report.test.ts (5 tests) 62ms
+ ✓ |node| src/main/core/permissions.test.ts (14 tests) 44ms
+ ✓ |node| src/main/workflow/official/model-feedback.test.ts (26 tests) 51ms
+ ✓ |node| src/main/connections/sdk-binding.test.ts (9 tests) 46ms
+ ❯ |node| src/main/session/phase4.test.ts (2 tests | 1 failed) 260ms
+   × applies project model and effort while preserving explicit CLI precedence 118ms
+   ✓ rejects duplicate official submissions, cancels the pending call and never clones in fake mode 141ms
+ ✓ |node| src/main/core/router.test.ts (9 tests) 141ms
+ ✓ |node| src/main/agents/reviewer-commands.test.ts (105 tests | 4 skipped) 44ms
+ ✓ |node| src/main/core/permissions-security.test.ts (56 tests) 40ms
+ ✓ |node| src/main/hooks/examples.test.ts (6 tests) 42ms
+ ✓ |node| src/main/config/trust.test.ts (8 tests) 41ms
+ ✓ |node| src/main/providers/codex/stream.test.ts (16 tests) 38ms
+ ✓ |node| src/main/session/store.test.ts (8 tests) 44ms
+ ✓ |node| src/main/providers/claude/stream.test.ts (4 tests) 40ms
+ ✓ |node| src/main/session/rewind-command.test.ts (1 test) 119ms
+ ✓ |node| src/main/workflow/official/sdk-package.test.ts (8 tests) 36ms
+ ✓ |node| src/main/workflow/official/operation-approval.test.ts (14 tests) 24ms
+ ✓ |node| src/main/core/llm-budget.test.ts (5 tests) 40ms
+ ✓ |node| src/main/workflow/official/project-inventory.test.ts (4 tests) 41ms
+ ✓ |node| src/main/connections/boundaries.test.ts (30 tests) 27ms
+ ✓ |node| src/main/session/images.test.ts (3 tests) 193ms
+ ✓ |node| src/main/workflow/official/independent-validation.test.ts (16 tests) 30ms
+ ✓ |node| src/main/core/loop-hooks.test.ts (18 tests) 30ms
+ ✓ |node| src/main/session/phase5.test.ts (1 test) 270ms
+ ✓ |node| src/main/notifications.test.ts (17 tests) 11ms
+ ✓ |node| src/main/providers/token-usage.test.ts (5 tests) 32ms
+ ✓ |node| src/main/context/image-compaction.test.ts (2 tests) 27ms
+ ✓ |node| src/main/session/memory-integration.test.ts (2 tests) 72ms
+ ✓ |node| src/main/workflow/official/fixtures.test.ts (7 tests) 54ms
+ ✓ |node| src/main/providers/claude/usage.test.ts (1 test) 26ms
+ ✓ |node| src/main/providers/claude/convert.test.ts (2 tests) 36ms
+ ✓ |node| src/main/core/h2-failures.test.ts (9 tests) 26ms
+ ✓ |node| src/main/home-writer.test.ts (6 tests) 25ms
+ ✓ |node| src/main/session/schedules.test.ts (3 tests) 208ms
+ ✓ |node| src/main/security.test.ts (7 tests) 42ms
+ ✓ |node| src/main/core/loop.test.ts (11 tests) 25ms
+ ✓ |node| src/main/workflow/official/codex-installation.test.ts (6 tests) 29ms
+ ✓ |node| src/main/config/llm-limits.test.ts (7 tests) 23ms
+ ✓ |node| scripts/collect-release.test.ts (3 tests) 20ms
+ ✓ |node| src/main/session/slash-commands.test.ts (4 tests) 19ms
+ ✓ |node| src/main/hooks/shell-hooks.test.ts (14 tests) 19ms
+ ✓ |node| src/main/config/catalog-loading.test.ts (4 tests) 18ms
+ ✓ |node| src/main/session/llm-calls.test.ts (3 tests) 18ms
+ ✓ |node| src/main/session/replay.test.ts (3 tests) 19ms
+ ✓ |node| src/main/session/project-history-integration.test.ts (1 test) 62ms
+ ✓ |node| src/main/config/checkpoint-config.test.ts (1 test) 18ms
+ ✓ |node| src/main/session/system-prompt.test.ts (6 tests) 20ms
+ ✓ |node| src/main/agents/definitions.test.ts (3 tests) 157ms
+ ✓ |node| src/main/workflow/official/git-attributes.test.ts (2 tests) 16ms
+ ✓ |node| src/main/connections/personal-sdk.test.ts (8 tests) 18ms
+ ✓ |node| src/main/checkpoints/purge.test.ts (2 tests) 22ms
+ ✓ |node| src/main/official-workflow-ipc.test.ts (2 tests) 13ms
+ ✓ |node| src/renderer/state/groups.test.ts (6 tests) 15ms
+ ✓ |node| src/main/tools/file-access.test.ts (2 tests) 14ms
+ ✓ |node| src/renderer/state/store.test.ts (11 tests) 10ms
+ ✓ |node| src/main/session/authentication.test.ts (1 test) 82ms
+ ✓ |node| src/main/session/turn-events-retry.test.ts (4 tests) 126ms
+ ✓ |node| src/main/workflow/official/execution-evidence.test.ts (3 tests) 6ms
+ ✓ |node| src/main/session/skills-integration.test.ts (1 test) 66ms
+ ✓ |node| src/main/session/turn-events.test.ts (7 tests) 70ms
+ ✓ |node| src/main/tools/errors.test.ts (7 tests) 12ms
+ ✓ |node| src/main/workflow/plan-validate.test.ts (24 tests) 214ms
+ ✓ |node| src/shared/skill-suggestions.test.ts (4 tests) 9ms
+ ✓ |node| src/main/workflow/official/write-scope.test.ts (7 tests) 7ms
+ ✓ |node| src/main/workflow/official/phase-timer.test.ts (6 tests) 9ms
+ ✓ |node| src/main/workflow/official/public-events.test.ts (4 tests) 9ms
+ ✓ |node| src/main/context/compactor.test.ts (4 tests) 9ms
+ ✓ |node| src/main/session/receipts.test.ts (1 test) 9ms
+ ✓ |node| scripts/builder-config.test.ts (4 tests) 8ms
+ ✓ |node| src/main/session/candidate-quota.test.ts (2 tests) 5ms
+ ✓ |node| src/main/session/transcript.test.ts (14 tests) 7ms
+ ✓ |node| src/main/connections/offline.test.ts (1 test) 8ms
+ ✓ |node| src/shared/images.test.ts (4 tests) 8ms
+ ✓ |node| src/main/workflow/official/communication.test.ts (2 tests) 6ms
+ ✓ |node| src/main/providers/codex/tool-images.test.ts (4 tests) 125ms
+ ✓ |node| src/main/workflow/official/report.test.ts (6 tests) 8ms
+ ✓ |node| src/shared/ipc.test.ts (6 tests) 6ms
+ ✓ |node| src/main/connections/test-profile.test.ts (2 tests) 6ms
+ ✓ |node| src/main/local-links-ipc.test.ts (3 tests) 6ms
+ ✓ |node| src/shared/local-links.test.ts (23 tests | 1 skipped) 6ms
+ ✓ |node| src/main/local-browser-electron.test.ts (1 test) 6ms
+ ✓ |node| src/main/workflow/official/diagnostics.test.ts (3 tests) 6ms
+ ✓ |node| src/main/session/report-readable.test.ts (5 tests) 6ms
+ ✓ |node| src/main/session/quota-events.test.ts (2 tests) 82ms
+ ✓ |node| src/main/fake-profile.test.ts (8 tests) 5ms
+ ✓ |node| src/main/official-profile.test.ts (2 tests) 5ms
+ ✓ |node| src/shared/summary.test.ts (6 tests) 4ms
+ ✓ |node| src/main/connections/siwc-fixture-profile.test.ts (1 test) 4ms
+ ✓ |node| src/shared/rewind.test.ts (2 tests) 5ms
+ ✓ |node| src/main/workflow/official/session-result.test.ts (2 tests) 5ms
+ ✓ |node| src/renderer/state/model-catalog.test.ts (3 tests) 4ms
+ ✓ |node| src/main/auth-confirmation.test.ts (1 test) 4ms
+ ✓ |node| src/main/workflow/official/connection-failure.test.ts (1 test) 5ms
+ ✓ |node| src/main/workflow/official/owned-process.test.ts (7 tests | 6 skipped) 3ms
+ ✓ |node| src/shared/permission-modes.test.ts (9 tests) 4ms
+ ✓ |node| src/main/workflow/official/project-record-path.test.ts (1 test) 3ms
+ ✓ |node| src/main/workflow/official/sdk-executable.test.ts (1 test) 4ms
+ ✓ |node| src/main/connections/siwc-windows.test.ts (2 tests | 1 skipped) 4ms
+ ↓ |node| src/main/tools/environment.test.ts (1 test | 1 skipped)
+ ↓ |node| src/main/tools/powershell-command.test.ts (3 tests | 3 skipped)
+ ✓ |renderer| src/renderer/App.test.tsx (12 tests) 3566ms
+   ✓ App wired to the real SessionController (12)
+     ✓ requires confirmation to delete a session and removes its history through the controller 798ms
+     ✓ warns when saved session images exceed the configured threshold without blocking 314ms
+     ✓ keeps image zoom focused when a running turn completes without typing into the prompt 402ms
+     ✓ keeps superseded saved question choices readable and accepts a new official text reply 398ms
+     ✓ switches between sessions and keeps their transcripts apart 325ms
+ ✓ |renderer| src/renderer/App.official.test.tsx (6 tests) 2127ms
+   ✓ ordinary UI questions use the official bridge and return to idle without a planning loop 533ms
+   ✓ official UI keeps legacy stage history readable and disables its operations and slash suggestions 391ms
+   ✓ a legacy scope notice cannot prepare work without a selected folder 584ms
+   ✓ work uses the original request and selected directory with automatic discovery and no manual scope fields 326ms
+ ✓ |renderer| src/renderer/components/TextLinks.test.tsx (120 tests | 17 skipped) 1953ms
+   ✓ handles long unfinished destinations without hiding a following link: ![a]( 742ms
+   ✓ bounds synchronous SSR time for unfinished image URL 434ms
+ ✓ |renderer| src/renderer/components/components.test.tsx (34 tests) 849ms
+ ✓ |renderer| src/renderer/components/OfficialWorkflowPanel.test.tsx (14 tests) 535ms
+ ✓ |renderer| src/renderer/components/OfficialSkillsManager.test.tsx (6 tests) 574ms
+ ✓ |renderer| src/renderer/components/SkillsManager.test.tsx (6 tests) 557ms
+ ✓ |renderer| src/renderer/components/Transcript.test.tsx (20 tests) 446ms
+ ❯ |renderer| src/renderer/workflow-ui.test.tsx (10 tests | 1 failed) 374ms
+   ✓ App switches the actual StepTabs, LoopFlow and transcript together 256ms
+   ✓ auto-follow keeps main transcript while STEP follows the worker 54ms
+   ✓ retains isolated child transcript and tracks the latest active STEP 1ms
+   ✓ AgentsPanel switches selection and shows permission and branch 10ms
+   ✓ PhaseBar hides classification and provides transcript jumps and progress 11ms
+   ✓ ModelPicker offers catalog efforts, session apply and default separately 18ms
+   × ModelPicker resolves an absent session model to the visible catalog option 8ms
+   ✓ plan approval handles y and preserves edits 6ms
+   ✓ plan approval handles e and preserves edits 5ms
+   ✓ plan approval handles n and preserves edits 4ms
+ ✓ |renderer| src/renderer/components/mcp-ui.test.tsx (6 tests) 369ms
+ ✓ |renderer| src/renderer/components/Activity.test.tsx (5 tests) 283ms
+ ✓ |renderer| src/renderer/components/ConnectionPicker.test.tsx (4 tests) 267ms
+ ✓ |renderer| src/renderer/components/PromptLine.test.tsx (6 tests) 277ms
+ ✓ |renderer| src/renderer/components/OfficialWorkflowReceipts.test.tsx (6 tests) 263ms
+ ✓ |renderer| src/renderer/components/ChatOfficialApprovals.test.tsx (9 tests) 253ms
+ ✓ |renderer| src/renderer/receipt-replay.test.tsx (5 tests) 316ms
+ ✓ |renderer| src/renderer/report-html.test.tsx (3 tests) 309ms
+ ✓ |renderer| src/renderer/components/WorkflowFlow.test.tsx (9 tests) 250ms
+ ✓ |renderer| src/renderer/components/ProjectMemory.test.tsx (2 tests) 251ms
+ ✓ |renderer| src/renderer/components/RewindApproval.test.tsx (2 tests) 196ms
+ ✓ |renderer| src/renderer/components/ModelPicker.test.tsx (4 tests) 190ms
+ ✓ |renderer| src/renderer/components/TodoList.test.tsx (3 tests) 181ms
+ ✓ |renderer| src/renderer/components/AuthenticationPanel.test.tsx (3 tests) 185ms
+ ✓ |renderer| src/renderer/components/OfficialRuntimeSettings.test.tsx (2 tests) 202ms
+ ✓ |renderer| src/renderer/hooks/useFollowScroll.test.tsx (3 tests) 161ms
+ ✓ |renderer| src/renderer/components/ClaudeSdkStatus.test.tsx (1 test) 136ms
+ ✓ |renderer| src/renderer/components/OfficialModelEvidence.test.tsx (1 test) 136ms
+ ✓ |renderer| src/renderer/components/ModelSelectionEvidence.test.tsx (2 tests) 38ms
+ ✓ |renderer| src/renderer/components/OfficialCommunication.test.tsx (1 test) 48ms
+ ✓ |renderer| src/renderer/components/OfficialSkillEvidence.test.tsx (2 tests) 45ms
+ ✓ |renderer| src/renderer/components/OfficialPublicEvents.test.tsx (2 tests) 61ms
+ ✓ |renderer| src/renderer/components/CodexRuntimeSettings.test.tsx (1 test) 54ms
+ ✓ |renderer| src/renderer/state/store.test.ts (11 tests) 9ms
+ ✓ |renderer| src/renderer/state/groups.test.ts (6 tests) 17ms
+ ✓ |renderer| src/renderer/state/model-catalog.test.ts (3 tests) 4ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 11 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  |renderer| src/renderer/workflow-ui.test.tsx > ModelPicker resolves an absent session model to the visible catalog option
+Error: expect(element).toHaveValue(claude-opus-5-5)
+
+Expected the element to have value:
+  claude-opus-5-5
+Received:
+
+ ❯ src/renderer/workflow-ui.test.tsx:352:40
+    350|     />,
+    351|   );
+    352|   expect(screen.getByLabelText("モデル")).toHaveValue("claude-opus-5-5");
+       |                                        ^
+    353|   expect(screen.getByLabelText("effort")).toHaveValue("high");
+    354|   fireEvent.click(screen.getByText("apply · このセッション"));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/11]⎯
+
+ FAIL  |node| src/main/session/phase4.test.ts > applies project model and effort while preserving explicit CLI precedence
+AssertionError: expected 'sonnet' to be 'claude-sonnet-5-5' // Object.is equality
+
+Expected: "claude-sonnet-5-5"
+Received: "sonnet"
+
+ ❯ src/main/session/phase4.test.ts:58:28
+     56|       (s) => s.id === created.sessionId,
+     57|     );
+     58|     expect(session?.model).toBe(cli ? "claude-opus-5-5" : "claude-sonn…
+       |                            ^
+     59|     expect(session?.effort).toBe(cli ? "high" : "low");
+     60|     await c.shutdown();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/11]⎯
+
+ FAIL  |node| src/main/workflow/official/catalog-compat.test.ts > keeps a legacy record's implied models after an alias generation update
+AssertionError: expected 'モデル「gpt-6-luna」に明示されたalias対応がありません。' to match /gpt-6-luna.*無効.*別のモデルへは切り替えていません/
+
+- Expected:
+/gpt-6-luna.*無効.*別のモデルへは切り替えていません/
+
++ Received:
+"モデル「gpt-6-luna」に明示されたalias対応がありません。"
+
+ ❯ src/main/workflow/official/catalog-compat.test.ts:206:22
+    204|   // History keeps fixed IDs; a disabled reviewer stops execution.
+    205|   const view = await restarted.command({ action: "resume", id });
+    206|   expect(view.error).toMatch(
+       |                      ^
+    207|     /gpt-6-luna.*無効.*別のモデルへは切り替えていません/,
+    208|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/11]⎯
+
+ FAIL  |node| src/main/workflow/official/catalog-compat.test.ts > reads a new-format record but refuses its disabled models after the aliases change
+AssertionError: expected [Function] to throw error matching /gpt-6.1-sol.*無効/ but got 'モデル「codex:gpt-6.1-sol」に明示されたalias対応があ…'
+
+- Expected:
+/gpt-6.1-sol.*無効/
+
++ Received:
+"モデル「codex:gpt-6.1-sol」に明示されたalias対応がありません。"
+
+ ❯ src/main/workflow/official/catalog-compat.test.ts:296:5
+    294|   expect(() =>
+    295|     resolvePlannerChoice(recorded, [candidate("codex", "gpt-6.1-sol")]…
+    296|   ).toThrow(/gpt-6.1-sol.*無効/);
+       |     ^
+    297|   const claude = agent("claude", ["claude-sonnet-5-5"]),
+    298|     codex = agent("codex", ["gpt-6.1-sol", "gpt-7-sol"]);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/11]⎯
+
+ FAIL  |node| src/main/workflow/official/catalog-compat.test.ts > still stops a resume when the legacy reviewer it needs is retired
+AssertionError: expected 'モデル「gpt-6-luna」は提供終了（モデルカタログ）です。別のモデル…' to match /^再開できません：モデル「gpt-6-luna」は提供終了/
+
+- Expected:
+/^再開できません：モデル「gpt-6-luna」は提供終了/
+
++ Received:
+"モデル「gpt-6-luna」は提供終了（モデルカタログ）です。別のモデルへは切り替えていません。"
+
+ ❯ src/main/workflow/official/catalog-compat.test.ts:422:24
+    420|       ["gpt-6-luna"],
+    421|     );
+    422|     expect(view.error).toMatch(
+       |                        ^
+    423|       new RegExp(
+    424|         `^再開できません：モデル「${retired.replaceAll(".", "\.")}」は提供終了`,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/11]⎯
+
+ FAIL  |node| src/main/workflow/official/catalog-compat.test.ts > still stops a resume when its implementer is retired
+TypeError: .toMatch() expects to receive a string, but got undefined
+ ❯ src/main/workflow/official/catalog-compat.test.ts:422:24
+    420|       ["gpt-6-luna"],
+    421|     );
+    422|     expect(view.error).toMatch(
+       |                        ^
+    423|       new RegExp(
+    424|         `^再開できません：モデル「${retired.replaceAll(".", "\.")}」は提供終了`,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/11]⎯
+
+ FAIL  |node| src/main/workflow/official/catalog-compat.test.ts > reads historical claude-haiku-4-5-20251001 without rewriting it and refuses execution even if offered
+ FAIL  |node| src/main/workflow/official/catalog-compat.test.ts > reads historical claude-haiku-4-5 without rewriting it and refuses execution even if offered
+TypeError: .toMatch() expects to receive a string, but got undefined
+ ❯ src/main/workflow/official/catalog-compat.test.ts:454:27
+    452|     expect(historical.plan!.tasks[0]!.assignee.model).toBe(model);
+    453|     const resumed = await restarted.command({ action: "resume", id });
+    454|     expect(resumed.error).toMatch(
+       |                           ^
+    455|       /再開できません：.*無効.*別のモデルへは切り替えていません/,
+    456|     );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/11]⎯
+
+ FAIL  |node| src/main/workflow/official/catalog-roles.test.ts > records the selection key, provider, sent ID, effort and catalog version at start
+AssertionError: expected { version: 1, …(2) } to deeply equal { version: 1, …(2) }
+
+- Expected
++ Received
+
+  {
+-   "digest": "7426c543b8075bb55e0a10a36e837c42978f947bcd38305f89233eb925fb125c",
++   "digest": "26d4b3ef4ea744ab77150ac08c732c08dc1da32d4a6aac61fa2ddd5e01149eec",
+    "updatedAt": "2026-10-09",
+    "version": 1,
+  }
+
+ ❯ src/main/workflow/official/catalog-roles.test.ts:165:56
+    163|     doc.models.find((m) => m.id === "gpt-6.1-sol")!.displayName = "cha…
+    164|   });
+    165|   expect(resolvePlannerChoice(chosen, models).catalog).toEqual(chosen.…
+       |                                                        ^
+    166|   // A retired planner model stops; no other model is chosen.
+    167|   useCatalog((doc) => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/11]⎯
+
+ FAIL  |node| src/main/workflow/official/catalog-roles.test.ts > stops resuming a record whose recorded model the catalog retired
+AssertionError: expected 'workflowを開始できませんでした。再送していません。' to match /^再開できません：モデル「gpt-6-luna」は提供終了.*別のモデルへ…/
+
+- Expected:
+/^再開できません：モデル「gpt-6-luna」は提供終了.*別のモデルへは切り替えていません/
+
++ Received:
+"workflowを開始できませんでした。再送していません。"
+
+ ❯ src/main/workflow/official/catalog-roles.test.ts:260:22
+    258|   services.push(restarted);
+    259|   const view = await restarted.command({ action: "resume", id });
+    260|   expect(view.error).toMatch(
+       |                      ^
+    261|     /^再開できません：モデル「gpt-6-luna」は提供終了.*別のモデルへは切り替えていません/,
+    262|   );
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/11]⎯
+
+ FAIL  |node| src/main/workflow/official/vitest-session.test.ts > normal work does not require a Vitest version, installed dependencies or registered test before planning
+Error: Test timed out in 30000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ src/main/workflow/official/vitest-session.test.ts:14:1
+     12| import { OfficialWorkflowService } from "./service.js";
+     13|
+     14| it("normal work does not require a Vitest version, installed dependenc…
+       | ^
+     15|   const root = await mkdtemp(join(tmpdir(), "xh-native-vitest-")),
+     16|     cwd = join(root, "project"),
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/11]⎯
+
+
+ Test Files  5 failed | 207 passed | 2 skipped (214)
+      Tests  11 failed | 1938 passed | 89 skipped (2038)
+   Start at  08:00:43
+   Duration  234.88s (tests 72%, import 14%, environment 10%, transform 2%, setup 2%)
+
+JSON report written to /tmp/xh-nonwin-regression.json

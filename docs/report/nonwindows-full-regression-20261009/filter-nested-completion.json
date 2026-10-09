@@ -1,0 +1,1674 @@
+{
+  "numTotalTestSuites": 7,
+  "numPassedTestSuites": 7,
+  "numFailedTestSuites": 0,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 161,
+  "numPassedTests": 6,
+  "numFailedTests": 0,
+  "numPendingTests": 155,
+  "numTodoTests": 0,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1791533480967,
+  "success": true,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["local drive shell resolution"],
+          "fullName": "local drive shell resolution executes only the resolved absolute pwsh, never the CWD command name",
+          "status": "skipped",
+          "title": "executes only the resolved absolute pwsh, never the CWD command name",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local drive shell resolution"],
+          "fullName": "local drive shell resolution rejects unresolved or relative pwsh (undefined) without executing",
+          "status": "skipped",
+          "title": "rejects unresolved or relative pwsh (undefined) without executing",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local drive shell resolution"],
+          "fullName": "local drive shell resolution rejects unresolved or relative pwsh (pwsh) without executing",
+          "status": "skipped",
+          "title": "rejects unresolved or relative pwsh (pwsh) without executing",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local drive shell resolution"],
+          "fullName": "local drive shell resolution rejects unresolved or relative pwsh (./pwsh.exe) without executing",
+          "status": "skipped",
+          "title": "rejects unresolved or relative pwsh (./pwsh.exe) without executing",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local drive shell resolution"],
+          "fullName": "local drive shell resolution rejects resolution failures without executing",
+          "status": "skipped",
+          "title": "rejects resolution failures without executing",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links decodes local Windows URLs, including spaces and Japanese",
+          "status": "skipped",
+          "title": "decodes local Windows URLs, including spaces and Japanese",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL undefined",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL undefined",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL {}",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL {}",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL https://example.com",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL https://example.com",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL javascript:alert(1)",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL javascript:alert(1)",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file://server/share/a",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file://server/share/a",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file://localhost/C:/a",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file://localhost/C:/a",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:////server/share/a",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:////server/share/a",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:relative",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:relative",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///etc/passwd",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///etc/passwd",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a?query",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a?query",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a#hash",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a#hash",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a%00",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a%00",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a%0A",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a%0A",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a%5cb",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a%5cb",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a%2fb",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a%2fb",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/%zz",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/%zz",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a:stream",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a:stream",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/CON.txt",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/CON.txt",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/COM%C2%B9.txt",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/COM%C2%B9.txt",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/CONOUT$",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/CONOUT$",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a.",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a.",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a%20",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a%20",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/../a",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/../a",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/%2e%2e/a",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/%2e%2e/a",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a\\b",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a\\b",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL  file:///C:/a",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL  file:///C:/a",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a%E2%80%AE.exe",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a%E2%80%AE.exe",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a//b",
+          "status": "skipped",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a//b",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects malformed, remote and ambiguous URL file:///C:/a\n",
+          "status": "passed",
+          "title": "rejects malformed, remote and ambiguous URL file:///C:/a\n",
+          "duration": 2.0209820000000036,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links never confirms or launches without a user gesture",
+          "status": "skipped",
+          "title": "never confirms or launches without a user gesture",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links cancel is safe; every approved open asks again with the full resolved path",
+          "status": "skipped",
+          "title": "cancel is safe; every approved open asks again with the full resolved path",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links reveals files without executing them and opens directories",
+          "status": "skipped",
+          "title": "reveals files without executing them and opens directories",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects mapped remote drives, UNC symlink targets and missing files",
+          "status": "skipped",
+          "title": "rejects mapped remote drives, UNC symlink targets and missing files",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links rejects changes during confirmation and destroyed windows",
+          "status": "skipped",
+          "title": "rejects changes during confirmation and destroyed windows",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links does not stack confirmation dialogs and handles OS errors privately",
+          "status": "skipped",
+          "title": "does not stack confirmation dialogs and handles OS errors privately",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["local file links"],
+          "fullName": "local file links checks the real Windows local drive without opening files",
+          "status": "skipped",
+          "title": "checks the real Windows local drive without opening files",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1791533481471,
+      "endTime": 1791533481473.021,
+      "status": "passed",
+      "message": "",
+      "name": "/workspace/Xharness/src/main/local-links.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows npm test",
+          "status": "skipped",
+          "title": "allows npm test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows pnpm test",
+          "status": "skipped",
+          "title": "allows pnpm test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows pnpm run lint",
+          "status": "skipped",
+          "title": "allows pnpm run lint",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows yarn test",
+          "status": "skipped",
+          "title": "allows yarn test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows npx vitest run",
+          "status": "skipped",
+          "title": "allows npx vitest run",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows node --test",
+          "status": "skipped",
+          "title": "allows node --test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows pytest -q",
+          "status": "skipped",
+          "title": "allows pytest -q",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows .\\scripts\\pnpm.ps1 test",
+          "status": "skipped",
+          "title": "allows .\\scripts\\pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows .\\scripts\\pnpm.ps1 run test",
+          "status": "skipped",
+          "title": "allows .\\scripts\\pnpm.ps1 run test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows .\\scripts\\pnpm.ps1 lint",
+          "status": "skipped",
+          "title": "allows .\\scripts\\pnpm.ps1 lint",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows .\\scripts\\pnpm.ps1 run lint",
+          "status": "skipped",
+          "title": "allows .\\scripts\\pnpm.ps1 run lint",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows .\\scripts\\pnpm.ps1 typecheck",
+          "status": "skipped",
+          "title": "allows .\\scripts\\pnpm.ps1 typecheck",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows .\\scripts\\pnpm.ps1 run typecheck",
+          "status": "skipped",
+          "title": "allows .\\scripts\\pnpm.ps1 run typecheck",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows .\\scripts\\pnpm.ps1 build",
+          "status": "skipped",
+          "title": "allows .\\scripts\\pnpm.ps1 build",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows .\\scripts\\pnpm.ps1 run build",
+          "status": "skipped",
+          "title": "allows .\\scripts\\pnpm.ps1 run build",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows ./scripts/pnpm.ps1 test",
+          "status": "skipped",
+          "title": "allows ./scripts/pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows ./scripts/pnpm.ps1 run test",
+          "status": "skipped",
+          "title": "allows ./scripts/pnpm.ps1 run test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows ./scripts/pnpm.ps1 lint",
+          "status": "skipped",
+          "title": "allows ./scripts/pnpm.ps1 lint",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows ./scripts/pnpm.ps1 run lint",
+          "status": "skipped",
+          "title": "allows ./scripts/pnpm.ps1 run lint",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows ./scripts/pnpm.ps1 typecheck",
+          "status": "skipped",
+          "title": "allows ./scripts/pnpm.ps1 typecheck",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows ./scripts/pnpm.ps1 run typecheck",
+          "status": "skipped",
+          "title": "allows ./scripts/pnpm.ps1 run typecheck",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows ./scripts/pnpm.ps1 build",
+          "status": "skipped",
+          "title": "allows ./scripts/pnpm.ps1 build",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) allows ./scripts/pnpm.ps1 run build",
+          "status": "skipped",
+          "title": "allows ./scripts/pnpm.ps1 run build",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects Set-Location D:\\work\\sample; node sum.test.js; git diff --name-only",
+          "status": "skipped",
+          "title": "rejects Set-Location D:\\work\\sample; node sum.test.js; git diff --name-only",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects node sum.test.js",
+          "status": "skipped",
+          "title": "rejects node sum.test.js",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects npm test; Remove-Item x",
+          "status": "skipped",
+          "title": "rejects npm test; Remove-Item x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects npm test (calc)",
+          "status": "skipped",
+          "title": "rejects npm test (calc)",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects npm install",
+          "status": "skipped",
+          "title": "rejects npm install",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects node -e process.exit(0)",
+          "status": "skipped",
+          "title": "rejects node -e process.exit(0)",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects C:\\work\\scripts\\pnpm.ps1 test",
+          "status": "skipped",
+          "title": "rejects C:\\work\\scripts\\pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects /work/scripts/pnpm.ps1 test",
+          "status": "skipped",
+          "title": "rejects /work/scripts/pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ../scripts/pnpm.ps1 test",
+          "status": "skipped",
+          "title": "rejects ../scripts/pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\..\\pnpm.ps1 test",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\..\\pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\danger.ps1 test",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\danger.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1.exe test",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1.exe test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\.tools\\node_modules\\.bin\\pnpm.cmd test",
+          "status": "skipped",
+          "title": "rejects .\\.tools\\node_modules\\.bin\\pnpm.cmd test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects pwsh -File ./scripts/pnpm.ps1 test",
+          "status": "skipped",
+          "title": "rejects pwsh -File ./scripts/pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects & .\\scripts\\pnpm.ps1 test",
+          "status": "skipped",
+          "title": "rejects & .\\scripts\\pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects . .\\scripts\\pnpm.ps1 test",
+          "status": "skipped",
+          "title": "rejects . .\\scripts\\pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 install",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 install",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 exec node evil.js",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 exec node evil.js",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 run evil",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 run evil",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 run test:evil",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 run test:evil",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test:evil",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test:evil",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 package",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 package",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 release",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 release",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 --dir ../outside test",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 --dir ../outside test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test --dir ../outside",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test --dir ../outside",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test ../evil.ps1",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test ../evil.ps1",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test -File C:\\evil.ps1",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test -File C:\\evil.ps1",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test; Remove-Item x",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test; Remove-Item x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test && calc",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test && calc",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test | Out-File x",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test | Out-File x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test > x",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test > x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test < x",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test < x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test\ncalc",
+          "status": "passed",
+          "title": "rejects .\\scripts\\pnpm.ps1 test\ncalc",
+          "duration": 1.9179840000000183,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test\rcalc",
+          "status": "passed",
+          "title": "rejects .\\scripts\\pnpm.ps1 test\rcalc",
+          "duration": 0.6798359999999946,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test $env:PATH",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test $env:PATH",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test $(calc)",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test $(calc)",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test `ncalc",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test `ncalc",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test (calc)",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test (calc)",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test {calc}",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test {calc}",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test @('calc')",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test @('calc')",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test \"calc\"",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test \"calc\"",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test 'calc'",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test 'calc'",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects .\\scripts\\pnpm.ps1 test # comment",
+          "status": "skipped",
+          "title": "rejects .\\scripts\\pnpm.ps1 test # comment",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 install",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 install",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 exec node evil.js",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 exec node evil.js",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 run evil",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 run evil",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 run test:evil",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 run test:evil",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test:evil",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test:evil",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 package",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 package",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 release",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 release",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 --dir ../outside test",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 --dir ../outside test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test --dir ../outside",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test --dir ../outside",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test ../evil.ps1",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test ../evil.ps1",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test -File C:\\evil.ps1",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test -File C:\\evil.ps1",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test; Remove-Item x",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test; Remove-Item x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test && calc",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test && calc",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test | Out-File x",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test | Out-File x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test > x",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test > x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test < x",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test < x",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test\ncalc",
+          "status": "passed",
+          "title": "rejects ./scripts/pnpm.ps1 test\ncalc",
+          "duration": 0.16252599999998552,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test\rcalc",
+          "status": "passed",
+          "title": "rejects ./scripts/pnpm.ps1 test\rcalc",
+          "duration": 0.3151809999999955,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test $env:PATH",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test $env:PATH",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test $(calc)",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test $(calc)",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test `ncalc",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test `ncalc",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test (calc)",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test (calc)",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test {calc}",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test {calc}",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test @('calc')",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test @('calc')",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test \"calc\"",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test \"calc\"",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test 'calc'",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test 'calc'",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) rejects ./scripts/pnpm.ps1 test # comment",
+          "status": "skipped",
+          "title": "rejects ./scripts/pnpm.ps1 test # comment",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) explains what is allowed when it rejects",
+          "status": "skipped",
+          "title": "explains what is allowed when it rejects",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) tells the reviewer which test command this project uses",
+          "status": "skipped",
+          "title": "tells the reviewer which test command this project uses",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) recommends win32 local pnpm=true wrapper=true: .\\scripts\\pnpm.ps1 test",
+          "status": "skipped",
+          "title": "recommends win32 local pnpm=true wrapper=true: .\\scripts\\pnpm.ps1 test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) recommends win32 local pnpm=false wrapper=true: pnpm test",
+          "status": "skipped",
+          "title": "recommends win32 local pnpm=false wrapper=true: pnpm test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) recommends win32 local pnpm=true wrapper=false: pnpm test",
+          "status": "skipped",
+          "title": "recommends win32 local pnpm=true wrapper=false: pnpm test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) recommends win32 local pnpm=false wrapper=false: pnpm test",
+          "status": "skipped",
+          "title": "recommends win32 local pnpm=false wrapper=false: pnpm test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) recommends linux local pnpm=true wrapper=true: pnpm test",
+          "status": "skipped",
+          "title": "recommends linux local pnpm=true wrapper=true: pnpm test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) recommends darwin local pnpm=true wrapper=true: pnpm test",
+          "status": "skipped",
+          "title": "recommends darwin local pnpm=true wrapper=true: pnpm test",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) does not require a lockfile to recognize the local Windows wrapper",
+          "status": "skipped",
+          "title": "does not require a lockfile to recognize the local Windows wrapper",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) does not recommend the wrapper if .tools/node_modules/.bin/pnpm.cmd is a directory",
+          "status": "skipped",
+          "title": "does not recommend the wrapper if .tools/node_modules/.bin/pnpm.cmd is a directory",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) does not recommend the wrapper if scripts/pnpm.ps1 is a directory",
+          "status": "skipped",
+          "title": "does not recommend the wrapper if scripts/pnpm.ps1 is a directory",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["reviewer Bash (test commands only)"],
+          "fullName": "reviewer Bash (test commands only) does not recommend a test without a test script",
+          "status": "skipped",
+          "title": "does not recommend a test without a test script",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1791533481622,
+      "endTime": 1791533481625.3152,
+      "status": "passed",
+      "message": "",
+      "name": "/workspace/Xharness/src/main/agents/reviewer-commands.test.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation runs actual clone and fetch against a local fixture and switches only a clean checkout",
+          "status": "skipped",
+          "title": "runs actual clone and fetch against a local fixture and switches only a clean checkout",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation aborts a conflicting worktree merge and leaves the original repository clean",
+          "status": "skipped",
+          "title": "aborts a conflicting worktree merge and leaves the original repository clean",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation restores a missing managed worktree from its retained branch only after confirmation",
+          "status": "skipped",
+          "title": "restores a missing managed worktree from its retained branch only after confirmation",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation rejects unsafe URL file:///C:/secret",
+          "status": "skipped",
+          "title": "rejects unsafe URL file:///C:/secret",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation rejects unsafe URL https://user:secret@example.com/a/b.git",
+          "status": "skipped",
+          "title": "rejects unsafe URL https://user:secret@example.com/a/b.git",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation rejects unsafe URL https://example.com/a/b.git?token=secret",
+          "status": "skipped",
+          "title": "rejects unsafe URL https://example.com/a/b.git?token=secret",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation rejects unsafe URL --upload-pack=evil",
+          "status": "skipped",
+          "title": "rejects unsafe URL --upload-pack=evil",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation rejects unsafe URL ssh://git:secret@example.com/a.git",
+          "status": "skipped",
+          "title": "rejects unsafe URL ssh://git:secret@example.com/a.git",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation rejects unsafe URL git@example.com:a.git\ncommand",
+          "status": "passed",
+          "title": "rejects unsafe URL git@example.com:a.git\ncommand",
+          "duration": 2.0998790000000156,
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation accepts credential-manager HTTPS and SSH URLs",
+          "status": "skipped",
+          "title": "accepts credential-manager HTTPS and SSH URLs",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation creates an isolated branch, retains by default, merges committed work and preserves dirty work without confirmation",
+          "status": "skipped",
+          "title": "creates an isolated branch, retains by default, merges committed work and preserves dirty work without confirmation",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation removes only a confirmed managed worktree and explicitly removes its branch",
+          "status": "skipped",
+          "title": "removes only a confirmed managed worktree and explicitly removes its branch",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation clones with shell-free arguments then fetches the same repository instead of cloning again",
+          "status": "skipped",
+          "title": "clones with shell-free arguments then fetches the same repository instead of cloning again",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        },
+        {
+          "ancestorTitles": ["repository / worktree isolation"],
+          "fullName": "repository / worktree isolation handles missing git and abort without exposing raw stderr",
+          "status": "skipped",
+          "title": "handles missing git and abort without exposing raw stderr",
+          "failureMessages": [],
+          "meta": {},
+          "tags": [],
+          "benchmarks": []
+        }
+      ],
+      "startTime": 1791533481246,
+      "endTime": 1791533481248.0999,
+      "status": "passed",
+      "message": "",
+      "name": "/workspace/Xharness/src/main/session/repository.test.ts"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "postfix_type_exit": 0,
+  "changed_test_lint_exit": 0,
+  "changed_test_document_json_format_exit": 0,
+  "checked_local_links": 99,
+  "exact_case_paths": true,
+  "product_code_changed": false,
+  "dependencies_changed": false,
+  "full_regression_rerun_after_fixes": false,
+  "existing_xvfb_run": false,
+  "existing_Xvfb": false,
+  "previous_chromium_receipts_check_is_not_gui_regression": true
+}

@@ -1,0 +1,36 @@
+vite v8.3.1 building ssr environment for production...
+transforming...
+✓ 342 modules transformed.
+rendering chunks...
+out/main/sdk-worker.js                          2.96 kB
+out/main/chunks/sdk-worker-rpc-Crm2DuPA.js    153.47 kB
+out/main/index.js                           9,087.75 kB
+
+✓ built in 1.90s
+vite v8.3.1 building ssr environment for production...
+transforming...
+✓ 15 modules transformed.
+rendering chunks...
+out/preload/index.cjs  1.44 kB
+
+✓ built in 20ms
+vite v8.3.1 building client environment for production...
+transforming...
+✓ 110 modules transformed.
+rendering chunks...
+out/renderer/index.html                                               0.66 kB
+out/renderer/assets/silkscreen-latin-700-normal-BjMPLkh0.woff         4.60 kB
+out/renderer/assets/silkscreen-latin-400-normal-D0DfPJut.woff         4.94 kB
+out/renderer/assets/mark-VCSoGd76.svg                                 5.49 kB
+out/renderer/assets/silkscreen-latin-700-normal-CSE2nhgM.woff2        7.52 kB
+out/renderer/assets/silkscreen-latin-400-normal-CtPo2yA5.woff2        8.40 kB
+out/renderer/assets/jetbrains-mono-latin-400-normal-V6pRDFza.woff2   21.16 kB
+out/renderer/assets/jetbrains-mono-latin-600-normal-C8RAYTDA.woff2   21.86 kB
+out/renderer/assets/jetbrains-mono-latin-700-normal-BYuf6tUa.woff2   21.90 kB
+out/renderer/assets/jetbrains-mono-latin-400-normal-6-qcROiO.woff    27.49 kB
+out/renderer/assets/jetbrains-mono-latin-600-normal-BfsvjouI.woff    28.18 kB
+out/renderer/assets/jetbrains-mono-latin-700-normal-D3wTyLJW.woff    28.20 kB
+out/renderer/assets/index-B4FAQDzj.css                               35.09 kB
+out/renderer/assets/index-Cw1LTIE8.js                               888.38 kB
+
+✓ built in 322ms

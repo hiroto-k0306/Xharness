@@ -1,0 +1,17 @@
+
+ RUN  v5.0.3 /workspace/Xharness
+
+ ↓ |node| src/main/session/repository.test.ts (14 tests | 14 skipped)
+ ✓ |node| src/main/session/official-skills.test.ts (21 tests | 12 skipped) 78ms
+ ↓ |node| src/main/local-links.test.ts (42 tests | 42 skipped)
+ ↓ |node| src/main/agents/reviewer-commands.test.ts (105 tests | 105 skipped)
+ ✓ |node| src/main/workflow/official/skill-stage.test.ts (14 tests | 7 skipped) 16ms
+ ✓ |node| src/shared/local-links.test.ts (23 tests | 22 skipped) 3ms
+ ✓ |renderer| src/renderer/components/TextLinks.test.tsx (120 tests | 103 skipped) 195ms
+
+ Test Files  4 passed | 3 skipped (7)
+      Tests  34 passed | 305 skipped (339)
+   Start at  08:07:22
+   Duration  2.16s (environment 39%, tests 21%, transform 17%, import 12%, setup 8%, worker 2%)
+
+JSON report written to /tmp/xh-nonwin-filter-completion.json

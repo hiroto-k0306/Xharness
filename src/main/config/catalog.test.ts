@@ -104,11 +104,62 @@ it("uses Haiku 5.5 for new aliases while preserving explicit Haiku 4.5 IDs", () 
     expect(resolved.id).toBe(latest.id);
     expect(roleEffort(resolved)).toBe("medium");
   }
-  const previous = catalogLookup("claude:haiku-4.5", catalog)!;
+  expect(catalogLookup("claude:haiku-4.5", catalog)).toBeUndefined();
+  const previous = catalogLookup("claude-haiku-4-5-20251001", catalog)!;
   expect(previous.id).toBe("claude-haiku-4-5-20251001");
   expect(catalogLookup(previous.id, catalog)).toBe(previous);
   expect(catalogLookup("claude-haiku-4-5", catalog)).toBe(previous);
   expect(sendsEffort(previous)).toBe(false);
+  expect(previous.enabled).toBe(false);
+  expect(catalogUnavailableReason(previous.id, catalog)).toMatch(/無効/);
+  expect(catalogUnavailableReason("claude-haiku-4-5", catalog)).toMatch(/無効/);
+});
+
+it("exposes only generation-free aliases for executable shipped models", () => {
+  const catalog = loadCatalog();
+  const aliases = catalogAliases(catalog);
+  expect(Object.keys(aliases).sort()).toEqual([
+    "astra",
+    "haiku",
+    "luna",
+    "opus",
+    "sol",
+    "sonnet",
+  ]);
+  for (const entry of catalog.models.filter((m) => !m.enabled)) {
+    expect(entry.alias).toBeUndefined();
+    expect(Object.values(aliases)).not.toContain(entry.id);
+  }
+});
+
+it("moves a generation-free alias and all its roles by changing only catalog data", () => {
+  const catalog = swapped((doc) => {
+    const old = model(doc, "claude-haiku-5-5");
+    doc.models.push({ ...old, id: "claude-haiku-test-next" });
+    delete old.alias;
+    old.enabled = false;
+  });
+  expect(catalogAliases(catalog).haiku).toBe("claude-haiku-test-next");
+  for (const role of ["question", "utility", "authRefresh"] as const)
+    expect(resolveRole(role, "claude", catalog).id).toBe(
+      "claude-haiku-test-next",
+    );
+  expect(resolveRole("connectionTest", undefined, catalog).id).toBe(
+    "claude-haiku-test-next",
+  );
+  expect(catalogLookup("claude-haiku-5-5", catalog)?.id).toBe(
+    "claude-haiku-5-5",
+  );
+  expect(catalogUnavailableReason("claude-haiku-5-5", catalog)).toMatch(/無効/);
+});
+
+it("does not export aliases of disabled or retired catalog entries", () => {
+  const catalog = swapped((doc) => {
+    model(doc, "claude-haiku-5-5").enabled = false;
+    model(doc, "gpt-6.1-sol").retiresAt = "2026-01-01";
+  });
+  expect(catalogAliases(catalog)).not.toHaveProperty("haiku");
+  expect(catalogAliases(catalog)).not.toHaveProperty("sol");
 });
 
 it("adds a model by changing only the catalog", () => {

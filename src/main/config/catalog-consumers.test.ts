@@ -124,3 +124,22 @@ it("passes the connection-test role's model and effort as startup arguments", as
   });
   expect(connectionTestStartup().effort).toBe("high");
 });
+
+it("moves helper requests and executable model lists to the latest generation using only catalog data", () => {
+  useCatalog((doc) => {
+    const old = doc.models.find((m) => m.id === "claude-haiku-5-5")!;
+    doc.models.push({ ...old, id: "claude-haiku-test-next" });
+    delete old.alias;
+    old.enabled = false;
+  });
+  expect(webSummaryRequest("claude", "q", "page").model).toBe(
+    "claude-haiku-test-next",
+  );
+  const args = refreshArguments("claude", tmpdir());
+  expect(args[args.indexOf("--model") + 1]).toBe("claude-haiku-test-next");
+  const models = new ClaudeAdapter().models().map((m) => m.id);
+  expect(models).toContain("claude-haiku-test-next");
+  expect(models).not.toContain("claude-haiku-5-5");
+  expect(models).not.toContain("claude-haiku-4-5-20251001");
+  expect(models).not.toContain("claude-haiku-4-5");
+});

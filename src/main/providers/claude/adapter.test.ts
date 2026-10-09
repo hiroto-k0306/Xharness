@@ -356,10 +356,10 @@ describe("Claude conversion using Phase 0 recordings", () => {
       { type: "text", text: "answer", cache_control: { type: "ephemeral" } },
     ]);
   });
-  it("omits effort for Haiku even if a common request supplied it", () => {
-    expect(
+  it("rejects effort for the disabled historical Haiku model", () => {
+    expect(() =>
       toClaudeRequest({ ...request, reasoning: { effort: "high" } }),
-    ).not.toHaveProperty("output_config");
+    ).toThrow("Unsupported model effort");
   });
   it.each(["claude-opus-5-5", "claude-sonnet-5-5"])(
     "defaults %s to high without disabling thinking",

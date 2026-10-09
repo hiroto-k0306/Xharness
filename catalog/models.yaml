@@ -7,7 +7,7 @@
 #
 # 項目の意味:
 #   id            Adapter に渡すモデル ID
-#   alias         画面と計画で使う短い名前 (provider:alias)
+#   alias         最新の有効モデルにだけ付ける世代なしの名前 (provider:alias)
 #   strengths     得意な作業 (main が割り当てを判断する材料)
 #   avoid         向かない作業
 #   efforts       指定できる effort。ハーネス共通の名前 → プロバイダ側の名前
@@ -27,7 +27,7 @@
 # 役割のモデルが無効・廃止なら、その役割は理由を示して停止し、別モデルへ置き換えない。
 
 version: 1
-updatedAt: 2026-10-08
+updatedAt: 2026-10-09
 
 models:
 
@@ -92,11 +92,10 @@ models:
 
   - provider: claude
     id: claude-haiku-4-5-20251001
-    alias: haiku-4.5
     displayName: Haiku 4.5
-    enabled: true
+    enabled: false  # 旧世代。履歴のID解決にのみ保持し、実行候補にしない
     verified: true  # C2 / C3 の OAuth 疎通を確認。effort は送らない
-    roles: [worker, utility]
+    roles: []
     strengths:
       - 型定義・単純なテスト追加・定型的な書き換え
       - セッションタイトル生成などの雑務
@@ -109,7 +108,6 @@ models:
 
   - provider: claude
     id: claude-fable-5-1
-    alias: fable
     displayName: Fable 5.1
     enabled: false          # サブスク (Pro / Max) では使えない (ユーザー確認 2026-10-01)
     verified: false
@@ -174,7 +172,6 @@ models:
 
   - provider: codex
     id: gpt-5.5
-    alias: gpt-5.5
     displayName: GPT-5.5
     enabled: false
     verified: false
@@ -187,7 +184,6 @@ models:
   # X5 の実カタログで発見。疎通は未確認のため有効化しない。
   - provider: codex
     id: gpt-6-sol
-    alias: sol-previous
     enabled: false
     verified: false
     roles: []
@@ -196,7 +192,6 @@ models:
 
   - provider: codex
     id: gpt-reserve
-    alias: reserve
     enabled: false
     verified: false
     roles: []
@@ -205,7 +200,6 @@ models:
 
   - provider: codex
     id: gpt-5.6-sol
-    alias: sol-5.6
     enabled: false
     verified: false
     roles: []
@@ -214,7 +208,6 @@ models:
 
   - provider: codex
     id: gpt-5.6-terra
-    alias: terra
     enabled: false
     verified: false
     roles: []
@@ -223,7 +216,6 @@ models:
 
   - provider: codex
     id: gpt-5.6-luna
-    alias: luna-5.6
     enabled: false
     verified: false
     roles: []
@@ -232,7 +224,6 @@ models:
 
   - provider: codex
     id: codex-auto-review
-    alias: auto-review
     enabled: false
     verified: false
     roles: []

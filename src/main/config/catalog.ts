@@ -122,11 +122,16 @@ export function loadCatalog(): Catalog {
   throw new Error("Model catalog unavailable");
 }
 
-/** `alias → id` for every catalog model that declares an alias. */
+/** `alias → id` for executable catalog models; historical IDs remain readable. */
 export function catalogAliases(catalog: Catalog = loadCatalog()) {
   return Object.fromEntries(
     catalog.models
-      .filter((m) => typeof m.alias === "string" && m.alias)
+      .filter(
+        (m) =>
+          typeof m.alias === "string" &&
+          m.alias &&
+          !catalogUnavailableReason(m.id, catalog),
+      )
       .map((m) => [m.alias!, m.id]),
   ) as Record<string, string>;
 }

@@ -106,7 +106,7 @@ pnpm release
 | `src/preload/`、`src/shared/` | IPC の受け渡しと共通の型                                                                |
 | `src/headless.ts`             | 画面なしの REPL                                                                         |
 | `test/fixtures/`              | 実通信の録画(秘密値は除去済み)と試験用の MCP サーバー                                   |
-| `spike/`                      | 実通信の確認スクリプト(Phase 0 の記録は [docs/phase0-spikes.md](docs/phase0-spikes.md)) |
+| `spike/`                      | 実通信の確認スクリプト(Phase 0 の記録は [docs/phase0-spikes.md](Old/docs/phase0-spikes.md)) |
 | `scripts/`                    | アイコン生成・配布物の収集                                                              |
 | `release/`                    | 配布物に同梱するファイル                                                                |
 | `brand/`、`resources/`        | ロゴ・アイコン                                                                          |

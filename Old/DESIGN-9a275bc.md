@@ -1,6 +1,8 @@
+> **旧版・履歴資料（2026-10-09整理）**：現行仕様として使用しない。記載されたリビジョン・環境での記録です。現行仕様は [SPEC.md](../SPEC.md)、移動対応は [Old索引](README.md) を参照。
+
 # XHarness 設計書 (v0.1)
 
-> **過去資料（2026-10-05から）**: 現行仕様は [SPEC.md](SPEC.md) を参照してください。この文書は設計の経緯と過去のレビュー参照先を残すため保存しています。「設計のみ」「未実装」等の状態、権限・認証の説明、フェーズ順には現在と異なる記述があります。以下の本文・章番号は当時の資料として保持し、今後の仕様変更はSPEC.mdへ反映します。旧章からの対応表はSPEC.md §14にあります。
+> **過去資料（2026-10-05から）**: 現行仕様は [SPEC.md](SPEC-9a275bc.md) を参照してください。この文書は設計の経緯と過去のレビュー参照先を残すため保存しています。「設計のみ」「未実装」等の状態、権限・認証の説明、フェーズ順には現在と異なる記述があります。以下の本文・章番号は当時の資料として保持し、今後の仕様変更はSPEC.mdへ反映します。旧章からの対応表はSPEC.md §14にあります。
 
 Claude (Pro/Max) と GPT (ChatGPT Plus/Pro) のサブスク枠を直接利用する、Claude Code ライクな汎用エージェントハーネス。
 
@@ -8,7 +10,7 @@ Claude (Pro/Max) と GPT (ChatGPT Plus/Pro) のサブスク枠を直接利用す
 - 配布形態: Windows デスクトップアプリ (.exe / Electron) — §16, §17
 - 利用形態: 個人利用・ローカル実行
 - ステータス: 設計のみ。実装は別端末で行う
-- UIモック: [mockup/index.html](mockup/index.html)(ブラウザで開くだけで確認可能)
+- UIモック: [mockup/index.html](../mockup/index.html)(ブラウザで開くだけで確認可能)
 
 ---
 
@@ -275,7 +277,7 @@ C2 の実測: Haiku は `pong` / `end_turn`。Opus 5.5 は識別文ありで HTT
 Phase 1: SSE は Content-Type で判定せず、CRLF を含む行区切りで読む。429 の待ち時間は代表枠の `anthropic-ratelimit-unified-*-reset`（Unix 秒）から算出する。reset 自体が欠ける実レスポンスでは待ち時間を未定義にし、推測して自動再送しない。
 Phase 1 の補正: Opus/Sonnet 5.5 に `output_config.effort: high`、thinking 省略、`tool_choice: auto` を各1回送り、両方 HTTP 200 / pong / end_turn。low/medium/xhigh/max は [公式 effort 仕様](https://platform.claude.com/docs/en/build-with-claude/effort) に基づき登録し、実通信は high のみ。履歴と thinking/signature を変えない追記・返送は変換とループのテストで確認。
 C5 の CLI 起動は Haiku で成功し、起動後の読み直しも HTTP 200。期限前のためトークンは変化せず、実更新・期限切れエラーは未実測。自前 refresh は行わず、公式 CLI に更新を委ねる。
-根拠と試験条件: [docs/phase0-findings.md](Old/docs/phase0-findings.md)。Phase 0 のゲートは完了。
+根拠と試験条件: [docs/phase0-findings.md](docs/phase0-findings.md)。Phase 0 のゲートは完了。
 
 ### 7.2 CodexAdapter
 
@@ -298,7 +300,7 @@ X3 は Luna の function_call をそのまま履歴に戻し、同じ call_id �
 X5 の設定では Luna / Sol / Astra の context_window は272000。上限までの入力試験はしていない。
 X4 は Sol の low / medium / xhigh / max、Astra / Luna の low / max が HTTP 200 / pong。high は X2 で確認済み。
 調査した CLI ソースは Ultra を通常リクエスト用 effort に変換し、X5 の Sol / Astra 設定では xhigh に解決する。ユーザー承認2026-10-01: Phase 1 は low / medium / high / xhigh / max とし、Ultra は自動委譲を含む設計まで保留。
-X7 は CLI 起動とその後の直接疎通が成功。期限前でトークンは変化せず、実更新・期限切れエラーは未実測。認証エラー時は再試行を止め、公式 CLI に更新を委ねて資格情報を読み直す。根拠: [docs/phase0-findings.md](Old/docs/phase0-findings.md)。
+X7 は CLI 起動とその後の直接疎通が成功。期限前でトークンは変化せず、実更新・期限切れエラーは未実測。認証エラー時は再試行を止め、公式 CLI に更新を委ねて資格情報を読み直す。根拠: [docs/phase0-findings.md](docs/phase0-findings.md)。
 
 ---
 
@@ -478,7 +480,7 @@ agents: { ... }              # §10
 
 ## 13. 実装フェーズ
 
-> 実装担当は Codex(GPT-6.1 Sol)を想定。作業ルールは [AGENTS.md](AGENTS.md)、Phase 0 の詳しい手順は [docs/phase0-runbook.md](Old/docs/phase0-runbook.md)、結果の記入先は [docs/phase0-findings.md](Old/docs/phase0-findings.md)。
+> 実装担当は Codex(GPT-6.1 Sol)を想定。作業ルールは [AGENTS.md](../AGENTS.md)、Phase 0 の詳しい手順は [docs/phase0-runbook.md](docs/phase0-runbook.md)、結果の記入先は [docs/phase0-findings.md](docs/phase0-findings.md)。
 
 ### Phase 0: 疎通検証（ゲート完了: 2026-10-01）
 - [x] `claude login` 済み環境で資格情報ファイルの場所と構造を確認
@@ -499,7 +501,7 @@ agents: { ... }              # §10
 - `headless.ts` で readline の REPL から動かす。権限は全部 ask で可
 
 ### Phase 2: Electron シェルと exe 化
-- 状態: 画面・IPC・FakeProvider・アイコン生成・electron-builder 設定はクラウドで実装・検証済み。**exe のビルドと起動確認は手元で未実施**([docs/phase2-progress.md](Old/docs/phase2-progress.md)、[docs/phase2-local-check.md](Old/docs/phase2-local-check.md))
+- 状態: 画面・IPC・FakeProvider・アイコン生成・electron-builder 設定はクラウドで実装・検証済み。**exe のビルドと起動確認は手元で未実施**([docs/phase2-progress.md](docs/phase2-progress.md)、[docs/phase2-local-check.md](docs/phase2-local-check.md))
 - フレームレスウィンドウ、TitleBar、Transcript、PromptLine、PermissionDialog、テーマ(§16.2)
 - Sidebar(セッション一覧・新規・再開)と WorkspacePicker の folder タブ(§16.6, §18)
 - IPC イベント(§16.4)で core とつなぐ
@@ -514,7 +516,7 @@ agents: { ... }              # §10
 - Receipts・UsagePopover・LoopFlow・StepTabs・Hero(§16.3, §16.7)
 - WorkspacePicker の repository タブ、worktree による隔離(§18.2, §18.3)
 
-実装記録(2026-10-02): [docs/phase4-progress.md](Old/docs/phase4-progress.md)。権限ルール・モード、プロジェクト設定とメモリ、圧縮チェックポイント、履歴・レシートの再開、可視化、repository / worktree を実装。実 API を追加で呼ばず、fixtures と Windows の一時 Git リポジトリで検証する。
+実装記録(2026-10-02): [docs/phase4-progress.md](docs/phase4-progress.md)。権限ルール・モード、プロジェクト設定とメモリ、圧縮チェックポイント、履歴・レシートの再開、可視化、repository / worktree を実装。実 API を追加で呼ばず、fixtures と Windows の一時 Git リポジトリで検証する。
 
 ### Phase 5: サブエージェントとタスク段階
 - Task ツール、explorer / reviewer の定義、AgentsPanel
@@ -556,7 +558,7 @@ agents: { ... }              # §10
 
 **自動更新（2026-10-05、ユーザー承認）**: `auth.autoRefresh` の既定はtrue。送信前に既知の `expiresAt` を過ぎた場合、またはHTTP 401の場合だけ実行する（403・期限前の定期実行は対象外）。ClaudeはHaikuへの短い `claude -p`、CodexはLuna lowへの短い `codex exec` を読み取り専用で実行する。C5/X7で成功した設定分離を使い、内蔵providerの上書きを行わない。空の一時フォルダー・出力破棄・60秒タイムアウト・終了後の削除を行う。実行後、期限が元より新しく、現在より未来になったことを読み取りで確認する。終了0だけで成功にしない。期限不明の場合は401のみ試行可能だが、延長を確認できなければ失敗する。
 
-全worker・通常送信・圧縮・Web用通信は共通のプロバイダ更新器を使う。プロバイダごとに同時実行1つ、待機者は同じ結果を受け取る。更新成功後の再送は1回のみで、再度401になった場合は停止する。失敗・未更新・CLI不在・時間切れ・頻度上限では公式ログインを案内する。`kind: auth_refresh` のレシートには固定の結果と所要時間だけを記録し、「認証を更新しました」または失敗の案内を画面へ出す。停止したworkerは再送せず、他の待機者の更新は継続する。試行頻度はプロバイダごとに10分に1回。実通信の確認状態は [docs/auth-refresh-progress.md](docs/auth-refresh-progress.md) に記録し、期限を偽造して試さない。
+全worker・通常送信・圧縮・Web用通信は共通のプロバイダ更新器を使う。プロバイダごとに同時実行1つ、待機者は同じ結果を受け取る。更新成功後の再送は1回のみで、再度401になった場合は停止する。失敗・未更新・CLI不在・時間切れ・頻度上限では公式ログインを案内する。`kind: auth_refresh` のレシートには固定の結果と所要時間だけを記録し、「認証を更新しました」または失敗の案内を画面へ出す。停止したworkerは再送せず、他の待機者の更新は継続する。試行頻度はプロバイダごとに10分に1回。実通信の確認状態は [docs/auth-refresh-progress.md](../docs/auth-refresh-progress.md) に記録し、期限を偽造して試さない。
 
 更新の試行日時だけを `~/.xharness/auth-refresh-<provider>.json` に保存し、再起動後も10分の頻度上限を維持する。保存・読み取りが失敗した場合や記録が不正な場合はCLIを起動しない。別アプリや別のXHarnessプロセスとの同時実行まで保証するOS全体のロックではない。
 
@@ -564,13 +566,13 @@ agents: { ... }              # §10
 
 - **ファイル案内はアプリ共通仕様**（2026-10-04、ユーザー指示）: main と子エージェントの共通 system に、ファイル・成果物・インストーラー・フォルダーの案内には毎回明示 Markdown リンクを付ける規則を組み込む。AGENTS.md の有無・メモリ設定・作業フォルダー・scratch に依存させない。絶対 `file:///D:/...` URL、フォルダー末尾 `/`、パス区分の空白と `( ) [ ] % ? #` のエンコード、最新実在成果物の確認を指示する。例示コードのパスは対象外。system はセッション開始時に固定する既存仕様（§24）を維持する。新規会話には索引へ `fileLinkGuidanceVersion: 1` を保存する。版のない更新前の会話は従来の system を再構成し、共通指示を後付けしない。既存の前提ハッシュ・履歴は書き換えず、system/tools の実際の変更は従来どおり停止する。旧会話で生成指示も有効にする場合は新規会話（`/clear`）へ切り替える。表示側のリンク補正は旧会話にも適用する。
 - **子の構造化報告**（2026-10-04、レビュー追対応）: JSON 等の指定された報告形式をリンク案内より優先し、余分な文章・Markdown フェンスを付けない。指摘の `file` などの構造化パスフィールドは要求された生パス・相対パスのまま保持し、Markdown リンクや file URL に変換しない。リンク案内はユーザーにファイルを案内する人向け文章に適用する。「最終報告のみ」の子は進捗文章を省略するが、必要なツール呼び出しや worker の ReportDone 義務は維持する。この補足は子の system にだけ追加し、保存済み main 会話の共通指示・前提ハッシュを変更しない。
-- 表示側は、明示 Markdown リンク先の `D:/...` 等（任意のドライブ文字 + `:/`）も絶対 file URL に補正する。区分単位で一度デコードしてエンコードし、既存のエスケープを二重化しない。不正なエンコード・エンコードされた区切り・dot segment は補正しない。生パス・コード・画像・相対パス・UNC は自動リンク化しない。main の安全検証と毎回の確認は変更しない。これはモデル出力の書式指示と明示リンクの補正であり、任意のモデルが常に正しいリンクを生成する保証やファイルの起動保証ではない。実装と未確認事項は [docs/file-link-guidance.md](docs/file-link-guidance.md)。
+- 表示側は、明示 Markdown リンク先の `D:/...` 等（任意のドライブ文字 + `:/`）も絶対 file URL に補正する。区分単位で一度デコードしてエンコードし、既存のエスケープを二重化しない。不正なエンコード・エンコードされた区切り・dot segment は補正しない。生パス・コード・画像・相対パス・UNC は自動リンク化しない。main の安全検証と毎回の確認は変更しない。これはモデル出力の書式指示と明示リンクの補正であり、任意のモデルが常に正しいリンクを生成する保証やファイルの起動保証ではない。実装と未確認事項は [docs/file-link-guidance.md](../docs/file-link-guidance.md)。
 - 会話の明示的な `file:///C:/...` リンクを許可する。HTMLを直接解釈せず、リンクラベルもエスケープする。コード・画像をリンクとして起動しない。HTTPS は従来どおり既定ブラウザへ渡し、アプリ内ナビゲーションと新規ウィンドウは拒否する。
 - 起動APIはrendererへ公開しない。隔離されたpreloadが信頼されたクリックとユーザーactivationを確認して専用IPCへ送る。mainも自分のウィンドウのメインフレームとChromiumのactivationを確認する。通常のcommand、合成クリック、自動起動では開かない。
 - mainはWindowsのローカル絶対file URLだけを受け付ける。UNC・ホスト付きfile URL・リモート割当ドライブ・デバイスパス・相対パス・不正なエンコード・区切り文字のエンコード・制御文字・双方向表示制御・クエリ/フラグメント・代替ストリーム・予約名・曖昧な末尾を拒否する。実体パスを解決し、その実体とドライブも再検証する。ドライブ照会はWindows `GetDriveType` をPowerShellで行い、照会失敗は拒否する。
 - 毎回、mainのネイティブ確認に解決済みフルパスを表示し、「キャンセル」（既定・Escape）／「実行」／「フォルダを開く」を選ぶ。実行は既定アプリで開くこと、プログラム・スクリプトの実行リスクを警告する。ファイルのフォルダ表示はExplorerでそのファイルを選択し、ディレクトリはそれ自身を開く。承認の保存・自動承認はしない。
 - 確認中は二重確認を拒否する。承認後も実体・ファイル識別情報・ウィンドウの存在を再確認し、変化した対象を開かない。OSへの起動と検証は原子的ではないため、最後の検証後の外部差し替えまで防ぐ隔離機能ではない。OSの生エラーはIPCやログへ転送しない。
-- 実装・検証と未実施GUI確認は [docs/local-links-progress.md](docs/local-links-progress.md)。
+- 実装・検証と未実施GUI確認は [docs/local-links-progress.md](../docs/local-links-progress.md)。
 
 ## 15. 決定事項
 
@@ -604,9 +606,9 @@ agents: { ... }              # §10
 | エディタ | VS Code(任意) | 無料 |
 | アイコン変換 | sharp + png-to-ico(npm) | Apache-2.0 / MIT |
 
-Node代替検索のGlob照合には `node:path.matchesGlob` を使用する（ユーザー承認2026-10-03）。Node 22.20以降ではstable。古いNode 22でのExperimentalWarningと代替案・確認結果は [docs/h4-review-progress.md](docs/h4-review-progress.md) に記録する。開発環境の基準はユーザー環境のNode 24.16.0へ合わせ、enginesは22.20以降の22系および24.16以降の24系を許可する。型定義は22系を維持して互換範囲を越えるAPI追加を避ける。Electron実行時のNodeはElectron同梱の版であり、システムのNodeとは別に確認する。
+Node代替検索のGlob照合には `node:path.matchesGlob` を使用する（ユーザー承認2026-10-03）。Node 22.20以降ではstable。古いNode 22でのExperimentalWarningと代替案・確認結果は [docs/h4-review-progress.md](../docs/h4-review-progress.md) に記録する。開発環境の基準はユーザー環境のNode 24.16.0へ合わせ、enginesは22.20以降の22系および24.16以降の24系を許可する。型定義は22系を維持して互換範囲を越えるAPI追加を避ける。Electron実行時のNodeはElectron同梱の版であり、システムのNodeとは別に確認する。
 
-Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex同梱／WindowsApps・Store版など）を合わせる。PATHは検証プロセスの中だけで設定し、システム全体の設定は変更しない。実測した環境とH3のJob継承の差は [docs/h3-job-investigation.md](docs/h3-job-investigation.md) に記録する。
+Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex同梱／WindowsApps・Store版など）を合わせる。PATHは検証プロセスの中だけで設定し、システム全体の設定は変更しない。実測した環境とH3のJob継承の差は [docs/h3-job-investigation.md](../docs/h3-job-investigation.md) に記録する。
 
 | # | 項目 | 決定 |
 |---|---|---|
@@ -642,7 +644,7 @@ Windows検証ではPowerShellの版だけでなく実体・配布形態（Codex�
 
 ## 16. UI デザイン
 
-参考: ダークなターミナル風UIで、エージェントの各ステップをフローチャートとログで「見える化」するスタイル。完成イメージは [mockup/index.html](mockup/index.html)。
+参考: ダークなターミナル風UIで、エージェントの各ステップをフローチャートとログで「見える化」するスタイル。完成イメージは [mockup/index.html](../mockup/index.html)。
 
 ### 16.1 コンセプト
 - **ターミナルの見た目、アプリの操作性**: 全体を等幅フォントにし、`# コメント`、`❯` プロンプト、`1/6` のようなステップ番号でターミナルらしさを出す。一方で、パネル・バー・ダイアログなどの GUI 部品も使う
@@ -805,8 +807,8 @@ interface Receipt {
 - マーク: **Claude のオレンジ(`--claude`)と GPT のブルー(`--codex`)の2本のピクセルの線が交差する「X」**。2本が交わる中央の 2×2 マスは白く光らせ、「2つのモデルが交わるところで作業が生まれる」ことを表す。斜め下に濃い影を付け、ロゴの文字と同じ立体感を出す
 - 各社のロゴマーク(Claude のマーク、OpenAI のマーク)は商標なので使わない・似せない。色だけをモチーフにする
 - ファイル:
-  - [brand/icon.svg](brand/icon.svg): アプリアイコン(512×512、角丸の暗い背景付き)
-  - [brand/mark.svg](brand/mark.svg): 背景なしのマーク(タイトルバーやロゴの文字の横に使う)
+  - [brand/icon.svg](../brand/icon.svg): アプリアイコン(512×512、角丸の暗い背景付き)
+  - [brand/mark.svg](../brand/mark.svg): 背景なしのマーク(タイトルバーやロゴの文字の横に使う)
 - 使う場所: タイトルバー左上(マーク + `XHARNESS`)、Hero のロゴ(マーク + `HARNESS` のピクセル文字)、exe・タスクバー・インストーラのアイコン
 - `icon.ico` の作り方: ビルド時のスクリプトで `icon.svg` を 16 / 24 / 32 / 48 / 64 / 128 / 256px の PNG に書き出し(sharp)、1つの `.ico` にまとめる(png-to-ico)。16px では線が細くなりすぎないよう、16・24px 用は影を省いた版を使う
 
@@ -859,7 +861,7 @@ asarUnpack:
 - 既存の `--fake` の通信・資格情報読み取り・MCP 起動なしを維持する。実モデルへの切替、権限の自動承認、OS のネイティブ確認ダイアログ、外部リンク・実ファイル起動はテストしない。sandbox / contextIsolation / IPC 検証は緩めず、テスト専用 IPC も作らない。
 - 起動・後片付けを共通 fixture に集約し、各ケースは画面上の role / accessible name で操作する。確認範囲は初期表示、scratch 会話の ping/pong、表示パネルの切替。失敗時と明示した画面の画像だけを `.out/gui/` へ保存し、Git と配布物には含めない。終了時に専用 Electron を閉じ、一時データを削除する。
 - これはコマンド実行＋画像読取による GUI 検証であり、この会話への専用 Computer Use ツール追加や XHarness のエージェントへのデスクトップ操作権限付与ではない。将来の他アプリ操作は、対象・承認・監査の別設計とユーザー承認を要する。共通起動 fixture とシナリオを分け、拡張の入口だけを残す。
-- 利用手順・実測結果・未確認範囲は [docs/gui-testing.md](docs/gui-testing.md)。Windows の GUI 実測が基準。Linux のクラウドでの実 API 通信・exe 作成・PowerShell 依存の確認は行わない。
+- 利用手順・実測結果・未確認範囲は [docs/gui-testing.md](../docs/gui-testing.md)。Windows の GUI 実測が基準。Linux のクラウドでの実 API 通信・exe 作成・PowerShell 依存の確認は行わない。
 
 ---
 
@@ -1201,7 +1203,7 @@ workflow:
 5. `must` または `should` がある → 両方の指摘を main に渡して修正対象とし、implement に戻す(round を +1)
 6. round が上限(既定 5、初回を含むレビュー合計)に達しても `must` / `should` が残る場合 → 止めて、未解決の両方の指摘を報告し、ユーザーに判断を求める
 - `nit` は完了時にまとめて表示する(main は直さない。ユーザーが指示すれば直す)
-- 2026-10-04 ユーザー承認: 修正ループと完了条件を `must` のみから `must` / `should` の両方へ拡張。レビュー回数上限は維持する。検証は [docs/review-should-progress.md](docs/review-should-progress.md)。
+- 2026-10-04 ユーザー承認: 修正ループと完了条件を `must` のみから `must` / `should` の両方へ拡張。レビュー回数上限は維持する。検証は [docs/review-should-progress.md](../docs/review-should-progress.md)。
 - 通常は実装とは異なるプロバイダでレビューする。ユーザー指示（2026-10-04）: 制限による fallback または rate_limited 停止を検出したプロバイダは、同じワークフロー内のレビューで再選択せず、利用可能な実装モデルを使ってレビューする。レビューで初めて制限に遭遇した場合も、既存の短時間再試行の後、実装に使った同じモデルへ fallback する（別プロバイダを使えないときにレビュー自体は省略しない）。制限状態は同じワークフローのメモリに保持し、そのプロバイダの正常応答で解除する。再起動後の状態や解除時刻は推測しない
 
 ### 20.5 ユーザーの操作
@@ -1339,7 +1341,7 @@ main のシステムプロンプトに次の指針を入れ、項目ごとに判
 
 **モデルの知識はモデルの記憶ではなく、ハーネスが持つ。** Claude も GPT も学習時点より後に出たモデルを知らず、サブスクで使えるモデルはプランや時期で変わるため。
 
-- ファイル: `~/.xharness/models.yaml`。初期値の下書きは [catalog/models.yaml](catalog/models.yaml)(2026-10-01 時点の公式ドキュメントをもとに作成)
+- ファイル: `~/.xharness/models.yaml`。初期値の下書きは [catalog/models.yaml](../catalog/models.yaml)(2026-10-01 時点の公式ドキュメントをもとに作成)
 - 各モデルの項目: ID、短い名前、得意・不得意、担当できる役割、使える effort、既定の effort、枠の消費の重さ、提供終了日、実績
 - **main への渡し方**: 計画段階のシステムプロンプトに、`enabled: true` のモデルだけを表にして入れる。使用量(§16.7)も一緒に渡し、枠が残り少ないプロバイダを避けられるようにする
 - **モデル切替(§16.8)の選択肢もカタログから作る**
@@ -1481,7 +1483,7 @@ web:
 
 画面の receipts に「HTML出力」を追加し、親セッションが idle のとき保存ダイアログを開く。headless は `--report <sessionId> --output <new-file.html>` で設定・Provider・ツールの初期化前に終了する。どちらも既存ファイルを上書きしない。レポートはローカルで開ける単一 HTML（外部依存・スクリプトなし）。入力を文字としてエスケープし、秘密値・認証フィールド・暗号化 reasoning・署名を出力時にマスクする。元履歴の opaque ブロックには手を加えない。容量・件数制限と不正記録の除外件数を表示する。
 
-実装・検証と利用方法は [docs/report-export.md](docs/report-export.md) を参照。
+実装・検証と利用方法は [docs/report-export.md](../docs/report-export.md) を参照。
 
 表示改善（2026-10-02）：既定で日本語の見出し・ツールの役割と、LLMに追加した指示・ツール結果、返答・要求操作を簡易表示する。送信履歴の先頭が前回と一致する場合だけ追加分を抽出し、圧縮・プロバイダ切替などで一致しない場合は最新メッセージと説明を表示する。本文は原文を保ち、翻訳・要約のためのモデル通信は行わない。簡易表示は直近4メッセージ・各本文1200文字までで、省略を明示し全文を閉じた詳細JSONに残す。
 
@@ -1516,7 +1518,7 @@ HTMLは直近の分割ファイルを合計16 MB・2万行まで読み、範囲�
 - 自動圧縮ができないとき(要約の失敗・529・サーバー圧縮の無い Haiku)は、上限に収まる間は圧縮せずに続け、同じターンでは再試行しない。上限を超えるときだけ `context_overflow` で止め、モデル名と理由を通知する。手動の `/compact` は失敗を返す
 
 
-2026-10-02 の指示に基づく既存圧縮の修正。Claude のクライアント要約チェックポイントは送信に使わない。Opus/Sonnet 5.5 は `compact-2026-09-04` と `compaction: {type: summarize}` でサーバー圧縮し、返った署名付きブロックを改変せず先頭で返送する。元の保存履歴は追記のみ。今回の実装は全完了ターンを圧縮し、最新の未回答 user ターンを残す。これにより、圧縮後に workflow の system/tools が変わっても過去の thinking を残したまま接頭辞を置き換えない。Haiku は公式互換一覧にないため手元の要約へ戻さず、対応していない旨を返す。Codex は通常、直近2ターンをそのまま残し、古い部分を Luna による要約にする。2026-10-04 のユーザー承認により、保持する末尾が圧縮閾値に収まらない場合はターン途中にも圧縮境界を広げる。未解決の tool_use がないメッセージ境界だけを使い、並列呼び出しを含む tool_use / tool_result の組を分割しない。最新のメッセージ／ツール組と未解決の呼び出しは原文のまま残す。system・tools・要約領域を差し引いた容量の半分以下を末尾の目標とし、安全な境界でも収まらなければ通常どおり停止する。元の保存履歴を変更せず、前回の要約を引き継いでチェックポイントを前進させる。原因と検証は [docs/codex-context-overflow.md](docs/codex-context-overflow.md)。要約の失敗・中断・不完全応答ではチェックポイントを更新しない。fake の決定的圧縮は通信しない試験用。
+2026-10-02 の指示に基づく既存圧縮の修正。Claude のクライアント要約チェックポイントは送信に使わない。Opus/Sonnet 5.5 は `compact-2026-09-04` と `compaction: {type: summarize}` でサーバー圧縮し、返った署名付きブロックを改変せず先頭で返送する。元の保存履歴は追記のみ。今回の実装は全完了ターンを圧縮し、最新の未回答 user ターンを残す。これにより、圧縮後に workflow の system/tools が変わっても過去の thinking を残したまま接頭辞を置き換えない。Haiku は公式互換一覧にないため手元の要約へ戻さず、対応していない旨を返す。Codex は通常、直近2ターンをそのまま残し、古い部分を Luna による要約にする。2026-10-04 のユーザー承認により、保持する末尾が圧縮閾値に収まらない場合はターン途中にも圧縮境界を広げる。未解決の tool_use がないメッセージ境界だけを使い、並列呼び出しを含む tool_use / tool_result の組を分割しない。最新のメッセージ／ツール組と未解決の呼び出しは原文のまま残す。system・tools・要約領域を差し引いた容量の半分以下を末尾の目標とし、安全な境界でも収まらなければ通常どおり停止する。元の保存履歴を変更せず、前回の要約を引き継いでチェックポイントを前進させる。原因と検証は [docs/codex-context-overflow.md](../docs/codex-context-overflow.md)。要約の失敗・中断・不完全応答ではチェックポイントを更新しない。fake の決定的圧縮は通信しない試験用。
 
 公式根拠: [on-demand compaction](https://platform.claude.com/docs/en/build-with-claude/compaction-on-demand)、[preserved thinking](https://platform.claude.com/docs/en/build-with-claude/compaction-thinking-blocks)。対応モデル、先頭ブロック、署名保持、system/tools、完了したツール結果、usage.iterations の条件に従う。実通信結果と未確認事項は docs/stabilize-progress.md。
 
@@ -1660,21 +1662,21 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 ### 26.1 優先度: 高
 
 **H1. TodoWrite（軽量な進捗リスト）**
-- 実装・検証結果は [docs/h1-progress.md](docs/h1-progress.md)。
+- 実装・検証結果は [docs/h1-progress.md](../docs/h1-progress.md)。
 - `TodoWrite({todos: [{content, status: "pending"|"in_progress"|"completed"}]})` を全文置換で受け取る。副作用はなく、権限は常に allow。
 - §20 のタスク段階・計画項目（SubmitPlan）とは独立。ワークフローの状態・レビュー要件・差分判定に影響しない。「提案のみ」「小さな多段作業」ではこれだけで進捗を管理できる。
 - 検証: Claude Code に合わせ、件数・文字数の上限は設けない。in_progress は同時に1件までをツール説明で指示し、複数でも拒否せず受け付ける。形式（status の値・content が空でない）の違反だけ修正可能なエラーで返す。リストは会話欄とレシートに表示し、セッション履歴に保存して再開で復元する。子エージェントは自分の分を持ち、親には混ぜない。
 
 **H2. 環境診断とエラーの構造化**
-- 実装・検証結果は [docs/h2-progress.md](docs/h2-progress.md)。
+- 実装・検証結果は [docs/h2-progress.md](../docs/h2-progress.md)。
 - 起動時（セッション開始時に1回）に `rg` / `pwsh` / `git` の有無と、作業フォルダの存在・読み書き権限を確認する。結果は画面に警告として出し、system には固定の短い一文だけ加える。system はセッションの最初に固定する（§24）。
 - `rg` が無い場合、Grep / Glob は Node 実装へ自動で切り替える（ツールの名前・引数は変えない。`.gitignore` を尊重し、Grep は既定250件で打ち切る）。`pwsh` が無い場合は Bash の説明に原因を返す。
 - ツールの失敗を `{kind, message}` の固定の種別（`missing_cli` / `not_found` / `denied` / `timeout` / `aborted` / `invalid_args` / `failed`）で扱い、レシートにも種別を残す。
 - 同じツール・同じ種別の失敗が同一ターンで3回続いたら、継続せず AskUserQuestion 相当でユーザーへ取り次ぐ（`workflow_stalled` と同様に、未完了の作業は完了扱いにしない）。
 
 **H3. Bash のバックグラウンド実行**
-- 実装・検証結果は [docs/h3-progress.md](docs/h3-progress.md)。
-- Windowsの起動経路の追加検証と追跡方針（2026-10-03、ユーザー承認）は [docs/h3-job-investigation.md](docs/h3-job-investigation.md)。WindowsApps版pwshでは子がJobを継承しない場合があるため、バックグラウンドの非修飾Start-Processをプロキシ化し、戻り値の子PIDを捕捉して同じJobへ明示登録する。PassThruを内部で有効にし、利用者が指定しなければ戻り値は出力しない。登録失敗時は取得できたハンドルで子の終了を試み、固定エラーで親も終了する。昇格・別ユーザー等によりプロセスアクセス権限がない場合は、子の終了も保証できない。
+- 実装・検証結果は [docs/h3-progress.md](../docs/h3-progress.md)。
+- Windowsの起動経路の追加検証と追跡方針（2026-10-03、ユーザー承認）は [docs/h3-job-investigation.md](../docs/h3-job-investigation.md)。WindowsApps版pwshでは子がJobを継承しない場合があるため、バックグラウンドの非修飾Start-Processをプロキシ化し、戻り値の子PIDを捕捉して同じJobへ明示登録する。PassThruを内部で有効にし、利用者が指定しなければ戻り値は出力しない。登録失敗時は取得できたハンドルで子の終了を試み、固定エラーで親も終了する。昇格・別ユーザー等によりプロセスアクセス権限がない場合は、子の終了も保証できない。
 - 終了保証はJobに所属したプロセスと、Start-Processプロキシで捕捉した子に限る。直接のProcess.Start、モジュール名付きStart-Process、プロキシの上書き、外部ブローカー経由、登録前に生成されたJob外の子孫は追跡対象外で、終了を保証しない。バックグラウンドでは非修飾Start-Processを使うようBashの説明にも明記する。プロキシは任意コマンドを隔離するセキュリティ境界ではない。
 - `Bash` に `run_in_background: true` を追加する。起動すると `shellId` を返し、待たない。`BashOutput({shellId, wait?, timeoutSec?})`（前回以降の出力と状態。待機は最大60秒）と `KillShell({shellId})` を新設する。
 - 同時実行は5件まで（Claude Code に件数の上限はないが、Windows の資源を守る XHarness 独自の安全弁）。BashOutput が1回に返す出力は30,000文字（Claude Code の `BASH_MAX_OUTPUT_LENGTH` 既定値）で、超過分は先頭と末尾を残して中略し、未取得分は次の BashOutput で続きを返す。保持する出力は1件につき直近1 MB。ターンの終了・停止・セッション終了で管理対象のプロセスツリーごと終了する（MCP の stdio と同じ後片付け。上記の追跡外の起動経路は除く）。次のターンへの持ち越しはしない。
@@ -1687,45 +1689,45 @@ M4 を実装した(2026-10-02): `/mcp` の状態表示と、再接続・承認�
 - Bash による変更は追跡しない（範囲外）。画面にもその旨を表示する。worktree の worker は worktree ごと破棄できるため対象外。
 - 保存期間は Claude Code の `cleanupPeriodDays` 既定値に合わせて30日（設定 `checkpoints.retentionDays` で変更可）。期限切れとセッション削除の際に削除する。ターン数・容量の上限は設けないが、1ファイル10 MB超は退避せず、そのファイルは巻き戻せないと画面に表示する。
 - 戻す対象の選び方も Claude Code に合わせ、コード・会話・両方から選ぶ（既定はコードのみ。会話を戻すのは履歴の追記に「巻き戻し」を記録し、元の履歴は消さない）。
-- 実装・検証結果は [docs/h4-progress.md](docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](docs/m3-progress.md)、M1は [docs/m1-progress.md](docs/m1-progress.md)、M2は [docs/m2-progress.md](docs/m2-progress.md)、M4は [docs/m4-progress.md](docs/m4-progress.md)、M5は [docs/m5-progress.md](docs/m5-progress.md)。
+- 実装・検証結果は [docs/h4-progress.md](../docs/h4-progress.md)。保存期間はユーザーの `~/.xharness/config.yaml` で設定する。秘密・保護ファイルと秘密値を含む内容は保存せず、復元不可を表示する。M3の記録は [docs/m3-progress.md](../docs/m3-progress.md)、M1は [docs/m1-progress.md](../docs/m1-progress.md)、M2は [docs/m2-progress.md](../docs/m2-progress.md)、M4は [docs/m4-progress.md](../docs/m4-progress.md)、M5は [docs/m5-progress.md](../docs/m5-progress.md)。
 
 ### 26.2 優先度: 中
 
 **M1. 画像入力と Read の画像対応**
 - 画像の省略は§24の圧縮境界でのみ行う。圧縮で置き換わる範囲は要約のみを再送し、元の保存履歴は画像本体を保持する。圧縮前や未圧縮の末尾の接頭辞は変更しない。設定 `images: {maxPerMessage: 5, warnSessionBytes: 20971520}`。添付は最大5枚、保存会話中の画像合計20 MB超で画面に /compact を促す警告を表示し、強制しない。値はユーザー設定で変更できる。圧縮しても保存画像の合計は減らない。
-- Codexの画像入りfunction_call_outputは実通信未確認。[docs/phase0-findings.md](Old/docs/phase0-findings.md)のテキスト結果の往復は画像配列の受理を裏付けない。設定 `providers.codex.toolImageMode: output | user_message`（既定output）で、画像だけを後続userメッセージへ分離する退路を用意する。両方式とも変換テストのみ確認済み。確認手順は [docs/m-codex-image-local-check.md](docs/m-codex-image-local-check.md)。
+- Codexの画像入りfunction_call_outputは実通信未確認。[docs/phase0-findings.md](docs/phase0-findings.md)のテキスト結果の往復は画像配列の受理を裏付けない。設定 `providers.codex.toolImageMode: output | user_message`（既定output）で、画像だけを後続userメッセージへ分離する退路を用意する。両方式とも変換テストのみ確認済み。確認手順は [docs/m-codex-image-local-check.md](../docs/m-codex-image-local-check.md)。
 - Read は png / jpg / gif / webp を画像ブロック（§5）で返す（XHarnessは1枚あたり5 MB・長辺8000pxを上限とし、超過は縮小せずエラー。2026-10-03の公式Vision資料では直接のClaude APIはbase64換算10 MBで、設計時の5 MBとは異なるが、XHarnessの上限は維持する）。入力欄への貼り付け・ドラッグでも添付できる。
 - 内部形式と各 Provider の変換は対応済みのため、変換の単体テストに画像ケースを足す。画像を扱えないモデルでは添付時に画面で警告する。レシート・レポートでは画像本体を埋め込まず、種別とサイズだけ出す。
-- 実装済み（2026-10-03）。Readの画像結果を文字列に切り詰めず、ToolOutputからtool_resultの画像ブロックへ接続した。Codexのfunction_call_outputへの画像配列の変換を実装したが、実通信は未確認。入力欄はプレビュー・削除・画像のみの送信・送信拒否時の復元に対応する。カタログの `imageInput: false` は非対応として警告する。未指定のモデルは警告しない(2026-10-03、ユーザーが画像入力を確認したため「未確認」の表示をやめた)。未実測のモデルに対応済みとは記載しない。保存会話は画像本体を保持し、レシート・トレース・HTMLは形式とバイト数だけ記録する。詳細は [docs/m1-progress.md](docs/m1-progress.md)。
+- 実装済み（2026-10-03）。Readの画像結果を文字列に切り詰めず、ToolOutputからtool_resultの画像ブロックへ接続した。Codexのfunction_call_outputへの画像配列の変換を実装したが、実通信は未確認。入力欄はプレビュー・削除・画像のみの送信・送信拒否時の復元に対応する。カタログの `imageInput: false` は非対応として警告する。未指定のモデルは警告しない(2026-10-03、ユーザーが画像入力を確認したため「未確認」の表示をやめた)。未実測のモデルに対応済みとは記載しない。保存会話は画像本体を保持し、レシート・トレース・HTMLは形式とバイト数だけ記録する。詳細は [docs/m1-progress.md](../docs/m1-progress.md)。
 
 **M2. スラッシュコマンドの体系**
 - 組み込み: `/clear`（新しい会話。履歴は残す）・`/resume`（履歴から再開）・`/model`・`/cost`（通信回数と使用量。M3 と連動）・`/init`（AGENTS.md の雛形を作業フォルダへ作成。既存は上書きしない）に、既存の `/mode` `/stop` `/compact` `/mcp` を加えて、入力欄の補完に一覧する。
 - ユーザー定義: `<project>/.xharness/commands/*.md` と `~/.xharness/commands/*.md` を `/<ファイル名>` として展開する（本文が user メッセージになる。`$ARGUMENTS` を置換）。プロジェクト側はワークスペースの信頼（§9）の対象とし、信頼するまで一覧に出さない。
-- 実装済み（2026-10-03）。`/resume`と`/model`は引数なしで一覧、引数ありで選択する。`/cost`はM3の実通信／模擬通信の回数と、親・子の取得済みレシートのトークン合計を表示する。金額・未取得使用量は推測しない。`/init`は排他的な新規作成で既存のAGENTS.mdを保持し、読み取り専用・planでは作成しない。同名の定義は信頼済みプロジェクトがユーザー定義より優先し、組み込み・MCP名は上書きしない。展開は1回だけで、本文をコマンドとして再解釈しない。信頼確認は通常の送信時に既存のワークスペース確認で行う。headlessの信頼は既存の保存済み承認を使う。詳細は [docs/m2-progress.md](docs/m2-progress.md)。
+- 実装済み（2026-10-03）。`/resume`と`/model`は引数なしで一覧、引数ありで選択する。`/cost`はM3の実通信／模擬通信の回数と、親・子の取得済みレシートのトークン合計を表示する。金額・未取得使用量は推測しない。`/init`は排他的な新規作成で既存のAGENTS.mdを保持し、読み取り専用・planでは作成しない。同名の定義は信頼済みプロジェクトがユーザー定義より優先し、組み込み・MCP名は上書きしない。展開は1回だけで、本文をコマンドとして再解釈しない。信頼確認は通常の送信時に既存のワークスペース確認で行う。headlessの信頼は既存の保存済み承認を使う。詳細は [docs/m2-progress.md](../docs/m2-progress.md)。
 
 **M3. 通信回数と予算の上限**
 - 設定 `limits: {llmCallsPerTurn: 0, llmCallsPerSession: 0}`（0 = 無効が既定。Claude Code の `--max-turns` / `--max-budget-usd` も既定は無制限で、利用者が指定したときだけ効く方式に合わせる）。進展のない通信の防止は、既定で有効な §20.6 の継続停止と §8 の最大ステップ数（100）が担う。`llmCallsPerTurn` は §8 の最大ステップ数と別に、再試行・圧縮・子を含む実際の通信回数を数える。超えたら `budget_exceeded` で停止し、ユーザーの入力を待つ。
 - UsagePopover に今ターン・セッションの通信回数を出す。枠の残量が少ないときの警告は、取得できているヘッダの範囲で出す（推測しない）。
-- 実装済み（2026-10-03）。上限はユーザーの `~/.xharness/config.yaml` から読み、リポジトリの設定では変更しない。送信直前に数え、許可した最後の通信は完了できる。次の送信を拒否した時点で親・子を停止する。セッションの累計は会話の巻き戻しやアプリの再起動でも減らない。FakeProviderの模擬通信は別の内訳を表示する。詳細と検証結果は [docs/m3-progress.md](docs/m3-progress.md)。
+- 実装済み（2026-10-03）。上限はユーザーの `~/.xharness/config.yaml` から読み、リポジトリの設定では変更しない。送信直前に数え、許可した最後の通信は完了できる。次の送信を拒否した時点で親・子を停止する。セッションの累計は会話の巻き戻しやアプリの再起動でも減らない。FakeProviderの模擬通信は別の内訳を表示する。詳細と検証結果は [docs/m3-progress.md](../docs/m3-progress.md)。
 
 **M4. 編集の補助**
 - レビュー修正（2026-10-03）：Read・Edit・MultiEdit・既存Writeはfatal UTF-8検査を行い、UTF-16・NUL入り・不正UTF-8を変更せず拒否する。Readも拒否し、文字化けした日本語を元に編集する事故を避ける。画像Read・新規Writeは従来の経路を使用する。
 - Edit / Write は既存ファイルの最初の改行コード（CRLF / LF）と BOM を保持する。既存ファイルに改行がない場合のWriteは入力の改行を変換しない。新規ファイルは同種のファイルから推定せずLF、ただし `.bat` / `.cmd` はCRLFで作る。
 - `MultiEdit({path, edits: [{old, new}]})`: 同一ファイルの複数置換を原子的に適用（1件でも失敗したら全体を書かない）。Edit と同じ権限・チェックポイントを通る。
 - `NotebookEdit` は需要を見て判断する。今回は実装しない。
-- 実装済み（2026-10-03）。UTF-8 BOMを保持し、既存ファイルの先頭にある改行へ置換入力を合わせる。混在ファイルのEdit／MultiEditは未編集部分の改行を変えない。Writeは先頭の改行へ統一する。レビュー後は、改行がない既存ファイルへのWriteは入力の改行を保持する。新規ファイルはLF、.bat/.cmdはCRLFを使う。MultiEditは指定順に置換し、各oldが直前の結果に1回だけ一致することを確認する。全件の成功後、同じフォルダの一時ファイルからrenameする。Editの権限ルールもMultiEditに適用し、plan・子の対象ファイル制限・チェックポイント・差分・レビューへ接続した。詳細は [docs/m4-progress.md](docs/m4-progress.md)。
+- 実装済み（2026-10-03）。UTF-8 BOMを保持し、既存ファイルの先頭にある改行へ置換入力を合わせる。混在ファイルのEdit／MultiEditは未編集部分の改行を変えない。Writeは先頭の改行へ統一する。レビュー後は、改行がない既存ファイルへのWriteは入力の改行を保持する。新規ファイルはLF、.bat/.cmdはCRLFを使う。MultiEditは指定順に置換し、各oldが直前の結果に1回だけ一致することを確認する。全件の成功後、同じフォルダの一時ファイルからrenameする。Editの権限ルールもMultiEditに適用し、plan・子の対象ファイル制限・チェックポイント・差分・レビューへ接続した。詳細は [docs/m4-progress.md](../docs/m4-progress.md)。
 
 **M5. AskUserQuestion の選択ボタン**
 - 候補がある質問は、番号入力に加えて画面に選択ボタンを出す。押すと入力欄から同じ文章を送るのと同じ扱い（LLM へは通常の返答）。headless では従来どおり番号入力。
-- 実装済み（2026-10-03）。成功したAskUserQuestionの質問・2〜5件の候補を通常の会話欄に表示し、候補の本文を入力欄と同じsend経路で送る。保存会話から再開した場合も表示する。最新の未回答の質問だけ操作でき、実行中・承認待ち・巻き戻し待ち・送信中・回答済みでは無効にする。失敗した送信は再選択できる。子の履歴では親へ誤送信しないよう選択を無効にし、子のセッション自体を再開しない既存仕様を保つ。詳細は [docs/m5-progress.md](docs/m5-progress.md)。
+- 実装済み（2026-10-03）。成功したAskUserQuestionの質問・2〜5件の候補を通常の会話欄に表示し、候補の本文を入力欄と同じsend経路で送る。保存会話から再開した場合も表示する。最新の未回答の質問だけ操作でき、実行中・承認待ち・巻き戻し待ち・送信中・回答済みでは無効にする。失敗した送信は再選択できる。子の履歴では親へ誤送信しないよう選択を無効にし、子のセッション自体を再開しない既存仕様を保つ。詳細は [docs/m5-progress.md](../docs/m5-progress.md)。
 
 ### 26.3 優先度: 低
 
-- L1・L2 の設定例は実装済み（2026-10-03）。[docs/examples/README.md](docs/examples/README.md) に導入方法と制約、[docs/low-review-progress.md](docs/low-review-progress.md) にオフライン検証とL3・L4の保留理由を記録した。サンプルは自動適用せず、system・専用ツールは変更していない。
+- L1・L2 の設定例は実装済み（2026-10-03）。[docs/examples/README.md](../docs/examples/README.md) に導入方法と制約、[docs/low-review-progress.md](../docs/low-review-progress.md) にオフライン検証とL3・L4の保留理由を記録した。サンプルは自動適用せず、system・専用ツールは変更していない。
 - **L1. フックのサンプル同梱**: PreToolUse でのブロック、Edit / Write 後の自動フォーマットなどの設定例を docs/examples に追加する（実装変更なし。§19.10 の入り口の範囲）。
 - **L2. git 手順**: コミット・PR 作成の方針を system に足さず、`/commit` などのユーザー定義コマンド（M2）の例として docs/examples に置く。専用ツールは作らない。
 - **L3. 子エージェントの文脈の引き継ぎ**: 実装済み（2026-10-03、ユーザー指示）。TaskHistoryで同じ親の完了／質問待ちの子を選び、Task.previousChildIdで新しいpromptへ最終結果・質問を参考データとして添える。直近32件・結果6,000文字＋質問合計2,000文字をメモリに保持。秘密マスクを適用し、別親・実行中・失敗／中断した子は選べない。会話や権限は再開せず、親runtime終了時に一覧を破棄する。
-- **L4. 定期実行・イベント待ち（Monitor / cron 相当）**: 実装済み（2026-10-03、ユーザー指示）。アプリ起動中のユーザーコマンド /schedule after|every|idle|event と /signal、一覧・取消を追加。1会話5件／全体20件・7日有効、定期は最低60秒／最大20回。予約は永続化せず起動時に復旧しない。発火時は既存send経路のモデル・権限・上限を適用し、実行中は待機、重複・catch-up送信・失敗の自動再試行なし。停止・会話終了／削除・アプリ終了・失敗ターンで予約を取消。OSサービス・外部イベント接続は作らない。詳細と利用方法は [docs/delegation-and-schedules.md](docs/delegation-and-schedules.md)。
+- **L4. 定期実行・イベント待ち（Monitor / cron 相当）**: 実装済み（2026-10-03、ユーザー指示）。アプリ起動中のユーザーコマンド /schedule after|every|idle|event と /signal、一覧・取消を追加。1会話5件／全体20件・7日有効、定期は最低60秒／最大20回。予約は永続化せず起動時に復旧しない。発火時は既存send経路のモデル・権限・上限を適用し、実行中は待機、重複・catch-up送信・失敗の自動再試行なし。停止・会話終了／削除・アプリ終了・失敗ターンで予約を取消。OSサービス・外部イベント接続は作らない。詳細と利用方法は [docs/delegation-and-schedules.md](../docs/delegation-and-schedules.md)。
 
 ### 26.4 実装の順序と完了条件
 

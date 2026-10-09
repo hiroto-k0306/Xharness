@@ -1,3 +1,5 @@
+> **旧版・履歴資料（2026-10-09整理）**：現行仕様として使用しない。記載されたリビジョン・環境での記録です。現行仕様は [SPEC.md](../../SPEC.md)、移動対応は [Old索引](../README.md) を参照。
+
 # Phase 2: Electron シェルと exe 化の準備
 
 2026-10-01。クラウド(Linux)で実装・検証した範囲。手元(Windows)での確認は [phase2-local-check.md](phase2-local-check.md)。

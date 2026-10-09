@@ -1,6 +1,8 @@
+> **旧版・履歴資料（2026-10-09整理）**：現行仕様として使用しない。記載されたリビジョン・環境での記録です。現行仕様は [SPEC.md](../../SPEC.md)、移動対応は [Old索引](../README.md) を参照。
+
 # Phase 0 の疎通確認スクリプト(旧 README)
 
-2026-10-02 のリポジトリ整理で、ルートの README から移した。Phase 0 当時の記録で、現在の状態は [DESIGN.md](../DESIGN.md) と各 progress を参照する。
+2026-10-02 のリポジトリ整理で、ルートの README から移した。Phase 0 当時の記録で、現在の状態は [DESIGN.md](../DESIGN-9a275bc.md) と各 progress を参照する。
 
 Phase 0 のゲートは2026-10-01に完了。Phase 1 は未着手。[検証結果と未実測事項](phase0-findings.md)、[進捗](phase0-progress.md)を参照。
 
@@ -14,8 +16,8 @@ Haiku のテキスト・ツール往復、Codex のテキスト・関数往復�
 トークンの実更新・期限切れエラーは未実測。Opus は C2 手順2（識別文あり）で成功し、verified: true。Ultra は承認により保留。
 
 - 手順: [docs/phase0-runbook.md](phase0-runbook.md)
-- 設計: [DESIGN.md](../DESIGN.md)
-- 作業規則: [AGENTS.md](../AGENTS.md)
+- 設計: [DESIGN.md](../DESIGN-9a275bc.md)
+- 作業規則: [AGENTS.md](../../AGENTS.md)
 - 進捗: [docs/phase0-progress.md](phase0-progress.md)
 - 実測: [docs/phase0-findings.md](phase0-findings.md)
 - Codex ソース調査: [docs/phase0-codex-source.md](phase0-codex-source.md)

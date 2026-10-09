@@ -1,7 +1,9 @@
+> **旧版・履歴資料（2026-10-09整理）**：現行仕様として使用しない。記載されたリビジョン・環境での記録です。現行仕様は [SPEC.md](../../SPEC.md)、移動対応は [Old索引](../README.md) を参照。
+
 # Phase 0 手順書: OAuth 疎通確認
 
 対象: 別端末で実装する人と、実装を担当するコーディングエージェント(Codex / GPT-6.1 Sol)
-関連: [DESIGN.md](../DESIGN.md) §7(Adapter 詳細)、§13(実装フェーズ)、§21.9(モデルカタログ)
+関連: [DESIGN.md](../DESIGN-9a275bc.md) §7(Adapter 詳細)、§13(実装フェーズ)、§21.9(モデルカタログ)
 
 ---
 
@@ -253,7 +255,7 @@ pnpm add -D typescript tsx vitest @types/node
 
 - 公式ドキュメント上の名前は Light / Low / Medium / High / Extra High / Max / Ultra。**API に渡す実際の値**をソースで確認してから、各モデルで受け付けられるかを試す
 - 全組み合わせを試す必要はない。`gpt-6.1-sol` で全段階、Astra と Luna は両端(最小・最大)だけ試す
-- 結果を [catalog/models.yaml](../catalog/models.yaml) の `efforts` に反映する
+- 結果を [catalog/models.yaml](../../catalog/models.yaml) の `efforts` に反映する
 
 ### X5. モデル一覧の取得(リクエスト 0〜2 回)
 

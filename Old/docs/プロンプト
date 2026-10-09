@@ -1,3 +1,5 @@
+> **旧版・履歴資料（2026-10-09整理）**：現在の仕様・作業指示・実通信許可として使用しない。[現行仕様](../../SPEC.md)、[Old索引](../README.md)。
+
 XHarnessの新ワークフローを、公式Claude Agent SDKと公式Codex App Serverによる実通信で検証してください。既存サブスク枠を使う、必要最小限の合成課題での検証を許可します。
 対象リポジトリ：hiroto-k0306/Xharness
 作業場所：C:/Users/ahwri/Documents/Codex/2026-10-05/task/Xharness-connections

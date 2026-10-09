@@ -55,7 +55,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - `~/.claude/.credentials.json` と `~/.codex/auth.json` はXHarness・開発用スクリプトからは**読むだけ**。自前refresh、資格情報編集、期限の改変、秘密値の保存は禁止
   - 承認済みの製品動作: アプリの許可操作を経た公式CLIログイン、およびSPEC.md §8の期限切れ・401時の公式CLI自動更新。書き込みは公式CLIのみ。自動更新CLIはモデル通信を伴う
   - 製品機能の承認を、開発中の任意の実通信試験の許可に読み替えない。通常の検証はFakeProvider・モック・fixtureを使う。実通信は依頼で承認された範囲・回数だけ行い、結果を記録する
-  - Phase 0〜5やstabilizeの過去の試験許可・通信予算は各docsの履歴であり、新しい作業の恒常的な通信許可ではない（[Phase 0](docs/phase0-findings.md)、[stabilize](docs/stabilize-progress.md)）
+  - Phase 0〜5やstabilizeの過去の試験許可・通信予算は各docsの履歴であり、新しい作業の恒常的な通信許可ではない（[Phase 0](Old/docs/phase0-findings.md)、[stabilize](docs/stabilize-progress.md)）
 - トークンをレンダラプロセス(画面側)に渡さない
 - 使用量を無駄にしない: 承認された実試験も、指定された回数・軽いモデル・短い入力に限定する。未確認なら未確認と記録する
 

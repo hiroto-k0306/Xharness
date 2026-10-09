@@ -1,7 +1,9 @@
+> **旧版・履歴資料（2026-10-09整理）**：現行仕様として使用しない。記載されたリビジョン・環境での記録です。現行仕様は [SPEC.md](../../SPEC.md)、移動対応は [Old索引](../README.md) を参照。
+
 # Phase 2 手元確認の手順書
 
 対象: Windows の手元端末。クラウド(Linux)では実行できない確認だけを集めた。
-関連: [DESIGN.md](../DESIGN.md) §13 Phase 2 / §16 / §17、[phase2-progress.md](phase2-progress.md)
+関連: [DESIGN.md](../DESIGN-9a275bc.md) §13 Phase 2 / §16 / §17、[phase2-progress.md](phase2-progress.md)
 
 クラウドで済んでいること(Linux): 単体テスト・型チェック・lint、`electron-vite build`、`electron-builder.yml` のスキーマ検証、
 実 `SessionController` につないだ画面を Chromium で操作したスクリーンショット確認。

@@ -1,3 +1,5 @@
+> **旧版・履歴資料（2026-10-09整理）**：現行仕様として使用しない。記載されたリビジョン・環境での記録です。現行仕様は [SPEC.md](../../SPEC.md)、移動対応は [Old索引](../README.md) を参照。
+
 # Phase 4 実装・確認記録
 
 2026-10-02、手元 Windows / PowerShell 7。Node 22.23.3、pnpm 10.34.6。
@@ -34,12 +36,12 @@ Phase 3 の未コミット差分を保持して `phase3` ブランチで実装�
 
 ## 通信と未実施
 
-**Phase 4 の実 API 送信は Claude 0回 / Codex 0回。外部リポジトリへの clone / fetch も0回。** Phase 3 の通信回数は `docs/phase3-progress.md` に保持し、今回追加していない。
+**Phase 4 の実 API 送信は Claude 0回 / Codex 0回。外部リポジトリへの clone / fetch も0回。** Phase 3 の通信回数は `Old/docs/phase3-progress.md` に保持し、今回追加していない。
 
 - 実 API の長い会話での圧縮品質、OAuth でのコンテキスト最大入力、実429の画面表示は未実施。録画・合成イベントで検証した。
 - 外部 Git サービスの実認証、clone のネットワーク中断、実競合のマージ UI は未実施。一時 Git リポジトリと部品テストで確認した。
 - Phase 4 の portable exe の再作成・別フォルダ起動、狭い実ウィンドウでの全操作、今回の権限 y/a/n の手元キー操作は未実施。権限の動作は自動テストで確認した。
 - §18.5 の scratch からワークスペースへの移動・削除 UI は未実装。今回の §13 Phase 4 の repository / worktree と保存・再開の範囲には含めていない。
 - サブエージェント、AgentsPanel、workflow / PhaseBar、ModelPicker は Phase 5。意味的な要約を行う追加モデル呼び出しは入れていない。
-- Phase 3 の元の `docs/design-websearch.md` は引き続き別PCにあり、原文との照合は未完了。§22 はユーザー承認済みの暫定仕様のまま。
+- Phase 3 の元の `Old/docs/design-websearch.md` は引き続き別PCにあり、原文との照合は未完了。§22 はユーザー承認済みの暫定仕様のまま。
 - 差分は未コミット。コミット時には Phase 3 と4を目的別に分割し、ステージ済み差分の秘密情報を再検査する。

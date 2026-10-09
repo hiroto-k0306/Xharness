@@ -159,8 +159,6 @@ export class SessionController {
       runtime: (id) => this.runtime(id),
       existingRuntime: (id) => this.runtimes.get(id),
       dropRuntime: (id) => {
-        // MCP サーバーのプロセスもセッションと一緒に止める(§25.3)
-        void this.runtimes.get(id)?.mcp?.close();
         this.runtimes.delete(id);
       },
       load: (id) => this.load(id),
@@ -1931,10 +1929,6 @@ export class SessionController {
     await quotaClosed;
     await Promise.race([
       Promise.all(running),
-      new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),
-    ]);
-    await Promise.race([
-      Promise.all([...this.runtimes.values()].map((rt) => rt.mcp?.close())),
       new Promise<void>((r) => setTimeout(r, timeoutMs).unref?.()),
     ]);
     await this.options.connections?.close?.();

@@ -11,10 +11,6 @@ import { type Rule } from "../core/permissions.js";
 import { type Message } from "../core/types.js";
 import { type Provider } from "../providers/provider.js";
 import { type ToolRegistry } from "../tools/registry.js";
-import { type McpConnector, type McpManager } from "../mcp/manager.js";
-import { type McpOAuth, type SecretStore } from "../mcp/oauth.js";
-import { type McpApprovals } from "../mcp/approvals.js";
-import { type McpServerConfig } from "../mcp/config.js";
 import { type PlanItem } from "../workflow/plan-validate.js";
 import {
   type Effort,
@@ -87,12 +83,6 @@ export interface ControllerOptions {
   fake: boolean;
   version: string;
   createTools?(cwd: string, readOnly: boolean): ToolRegistry;
-  /** 試験用: MCP の接続方法。指定すると --fake でも MCP を準備する(§25.10) */
-  mcpConnector?: McpConnector;
-  /** MCP の OAuth トークンの暗号化した保存先(アプリでは safeStorage。無ければ OAuth を使わない。§25.7) */
-  mcpSecrets?: SecretStore;
-  /** 認可の URL を既定のブラウザで開く */
-  openExternal?(url: string): void;
   sleep?(ms: number, signal: AbortSignal): Promise<void>;
 }
 
@@ -141,17 +131,6 @@ export interface Runtime {
   webSignature?: string;
   /** WebSearch の回数(子エージェントも合算。§22.5) */
   searchBudget?: SearchBudget;
-  /** MCP の接続(セッション開始時に1回だけ準備する。§25.3) */
-  mcp?: McpManager;
-  mcpPrepared?: boolean;
-  /** /mcp の操作に使う、セッション開始時の MCP の設定 */
-  mcpSetup?: {
-    root: string;
-    servers: McpServerConfig[];
-    approvals: McpApprovals;
-    oauth?: McpOAuth;
-    trusted: boolean;
-  };
   receiptSeq: number;
   messageSeq: number;
   /** 実行中のターン(終了待ち用) */

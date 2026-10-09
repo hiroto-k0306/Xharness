@@ -50,7 +50,7 @@ export async function captureQuotaPause(
           rt.trustedSession ||
           rt.trustDeclined
         ? "一時的な権限・信頼の復元は未対応です。手動で確認してください。"
-        : rt.mcp?.states().length || (rt.searchBudget?.used ?? 0) > 0
+        : (rt.searchBudget?.used ?? 0) > 0
           ? "MCP・Web検索の状態復元は未対応です。手動で確認してください。"
           : undefined;
   let conditionsHash = "unavailable";

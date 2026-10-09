@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 const exclude = [
+  "Old/retired-sources/**",
   "**/node_modules/**",
   "spike/.out/**",
   ".tools/**",
@@ -21,7 +22,6 @@ export default defineConfig({
           include: [
             "src/**/*.test.ts",
             "test/**/*.test.ts",
-            "spike/**/*.test.ts",
             "scripts/**/*.test.ts",
           ],
           exclude,

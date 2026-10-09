@@ -52,3 +52,7 @@
 作業場所の [native snapshot](../src/main/workflow/official/native-snapshot.ts) はdocs/Oldを除外せず再帰読込します。[projectMemory](../src/main/config/project.ts) は任意のcontext.memoryFilesを読み、Read/Grep/Glob等も指定された資料を参照できます。旧パスを指定した利用者設定は今回確認していません。動的参照の調査範囲・限界は [調査記録](../docs/documentation-refresh-20261009.md) に記載しています。
 
 旧本文は保存し、旧版表示と相対リンクのみを調整しました。履歴の設計書リンクは当時の設計書へ接続します。ルートREADME/AGENTS/SPEC、関連履歴文書、electron-builderのコメントとPrettier除外参照を更新しました。
+
+## 旧ソースの追加整理（2026-10-09）
+
+PR #26のマージ後、main `991e6e4` を基準に旧ソースを [実行対象外の保存庫](retired-sources/README.md) へ整理しました。削除済みソースもGitから復元し、現行への復活を防ぐため `.txt` として保存しています。全件の移動元・出典は [対応一覧](retired-sources/manifest.tsv)、残す共通機能と検証範囲は [整理記録](../docs/retired-source-archive-20261009.md) を参照してください。

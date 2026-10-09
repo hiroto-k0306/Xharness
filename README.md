@@ -110,14 +110,14 @@ pnpm release
 
 ## リポジトリの構成
 
-| 場所                          | 内容                                                                           |
-| ----------------------------- | ------------------------------------------------------------------------------ |
-| `src/main/`                   | 公式workflow・セッション・保存・認証境界と互換用の実装                         |
-| `src/renderer/`               | 画面(React)                                                                    |
-| `src/preload/`、`src/shared/` | IPC の受け渡しと共通の型                                                       |
-| `src/headless.ts`             | 公式経路の画面なしREPL（GUIと同じworkflow）                                    |
-| `test/fixtures/`              | 実通信の録画(秘密値は除去済み)と試験用の MCP サーバー                          |
-| `spike/`                      | 過去の調査資源。現行の実行手順ではない([旧Phase 0](Old/docs/phase0-spikes.md)) |
-| `scripts/`                    | アイコン生成・配布物の収集                                                     |
-| `release/`                    | 配布物に同梱するファイル                                                       |
-| `brand/`、`resources/`        | ロゴ・アイコン                                                                 |
+| 場所                                                  | 内容                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------ |
+| `src/main/`                                           | 公式workflow・セッション・保存・認証境界と互換用の実装 |
+| `src/renderer/`                                       | 画面(React)                                            |
+| `src/preload/`、`src/shared/`                         | IPC の受け渡しと共通の型                               |
+| `src/headless.ts`                                     | 公式経路の画面なしREPL（GUIと同じworkflow）            |
+| `test/fixtures/`                                      | 実通信の録画(秘密値は除去済み)と現行テストfixture      |
+| [Old/retired-sources/](Old/retired-sources/README.md) | 廃止済みソース・旧spikeの保存庫。実行対象外            |
+| `scripts/`                                            | アイコン生成・配布物の収集                             |
+| `release/`                                            | 配布物に同梱するファイル                               |
+| `brand/`、`resources/`                                | ロゴ・アイコン                                         |

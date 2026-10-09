@@ -13,7 +13,7 @@ rendererは会話・モデル選択・計画/操作承認・履歴/LoopFlowを�
 | 固定課題・模擬DAG | 専用workspace、登録テスト、コミット、独立検証、安全checkpoint                               | [公式workflow](src/main/workflow/official/)、[単一課題](docs/official-workflow-single-task.md)、[DAG](docs/official-workflow-dag.md) |
 | headless          | GUIと同じSessionController officialSession→OfficialWorkflowService。TTY承認と端末管理操作   | [headless.ts](src/headless.ts)、[terminal.ts](src/headless/terminal.ts)                                                              |
 
-旧HTTP Adapter、自前Auth更新、旧Agent Loop、旧workflow/workerと34旧モデル公開ツールを現役経路から除去します。旧記録の読取型・レポート・手動UIのscope/validatorは必要な共通処理として残し、モデルへ再登録しません。明示connection-testのEvalEcho等は通常実行とは別の開発fixtureです。通常入力は画像・旧slashを拒否し、適用できない旧ルール/フック/通信上限設定も停止対象です。headlessの端末専用コマンドはモデルへ旧slashを送る経路ではありません（SPEC §11）。
+旧HTTP Adapter、自前Auth更新、旧Agent Loop、旧workflow/workerと34旧モデル公開ツールを現役経路から除去します。旧記録の読取型・レポート・現役手動UIのscope/validatorは必要な共通処理として残し、モデルへ再登録しません。明示connection-testのEvalEcho等は通常実行とは別の開発fixtureです。通常入力は画像・旧slashを拒否し、適用できない旧ルール/フック/通信上限設定も停止対象です。headlessの端末専用コマンドはモデルへ旧slashを送る経路ではありません（SPEC §11）。
 
 ## 2. 通常作業の状態と比較基準
 
@@ -27,7 +27,7 @@ snapshotは秘密名・リンク・依存物・生成物等を除き、10,000フ
 
 通常作業の計画は [native-dag.ts](src/main/workflow/official/native-dag.ts) の必須parallelizationで直列/並列と理由を決めます。直列1taskは既存直接編集へ戻ります。並列はclean Git・exact scope・最大2並行を条件に [project-dag-workspace](src/main/workflow/official/project-dag-workspace.ts) の所有detached worktreeへ限定し、元checkoutを変更しません。未解決条件/競合/範囲外変更は停止します。
 
-独立検証は統合後のexact Node testと別のコード実行承認が必要です。本番はcreateValidationRuntimeで対応schema、合成ファイルの境界、localhost通信拒否、取消/所有プロセス終了、CLI/Node identityを確認し、成功時だけApp Server command/exec検証portを接続します。未対応の並列計画は計画承認/実装前に停止します。終了確認が不確定なら直列も開始せず保全します。対象Windowsでの実確認は未実施です。fake公式agents・real Git・固定Node fixtureでの実装検証と、本番sandbox/Windows/実モデル成功を分けます。各node/統合callのalias/skillを再検証し、Claudeは元sourceへ固定した選択bundleだけをworktreeの一時pluginへ渡します。Codex選択skillは既存の隔離未確認停止を維持します。推定時間を作らず、履歴評価feedbackは設計だけです。
+独立検証は統合後のexact Node testと別のコード実行承認が必要です。本番はcreateValidationRuntimeで対応schema、合成ファイルの境界、localhost通信拒否、取消/所有プロセス終了、CLI/Node identityを確認し、成功時だけApp Server command/exec検証portを接続します。未対応の並列計画は計画承認/実装前に停止します。終了確認が不確定なら直列も開始せず保全します。対象Windowsでの実確認は未実施です。fake公式agents・real Git・固定Node fixtureでの実装検証と、本番sandbox/Windows/実モデル成功を分けます。各node/統合callのalias/skillを再検証し、Claudeは元sourceへ固定した選択bundleだけをworktreeの一時pluginへ渡します。Codex選択skillは既存の隔離未確認停止を維持します。推定時間を作らず、完了履歴の数値実績を完全モデルID/effort・課題種別/難度で分けて通常plannerへ渡します。選択はLLMに残し、catalog制約を維持します。[実績feedback](docs/model-performance-feedback-20261009.md)。
 
 ## 3. ツール・承認・OS境界
 
@@ -67,7 +67,7 @@ request IDごとに指示/構造化応答を各24,000文字、公開イベント
 
 ## 6. 参考スキルと端末UI
 
-workspace選択時のメモリ・受渡し・改善・ローカルブラウザーは明示手動UI/IPCとして残します。既存のvalidator/scope/PermissionGateを通し、旧toolsを公式モデルへ登録する経路にはしません。今回のソース保持・オフライン確認は各機能の最新公式実機成功を保証しません。受渡しは保存公式記録の受動的な証拠参照、改善ケースの明示実行は通常sendの公式経路です。スキル等の内部wrapperに旧ツール名が残ってもモデルへの汎用登録は0です。共通helperの分離・内部wrapper整理は機能の再有効化とは別です。
+workspace選択時のメモリ・受渡し・ローカルブラウザーは明示手動UI/IPCとして残します。手動改善版比較のUI/IPC/専用実装は利用者指定で退役し、既存比較DBを保持します。旧IPCは廃止理由で拒否し、専用ソースは [Old対応表](Old/retired-sources/manual-improvements-bcca4826/manifest.tsv) に保存します。quota観測のcandidate-quotaと共通型、受渡し/ブラウザー用fixtureは分離して保持します。通常作業のレビュー修正やモデル実績feedbackと混同しません。現役の手動操作は既存のvalidator/scope/PermissionGateを通し、旧toolsを公式モデルへ登録する経路にはしません。
 
 SkillsManagerの明示送信は、mainのpreview IPCでsource/hashを再確認して既存許可を通し、非信頼JSONの本文/出典情報を通常sendへ渡します。全量4000文字以内・非省略に限定し、超過を切り詰めません。SDK skills/MCP/権限・scriptを有効化せず、永続登録ではありません。成功表示は通常sendの受付であり、旧LoadProjectSkillレシート成功とは区別します。付属資料は版確認/プレビューのみで送信未対応です。セッション切替/取消後の遅延previewは無効化します。
 

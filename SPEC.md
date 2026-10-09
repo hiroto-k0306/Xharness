@@ -105,7 +105,7 @@ Claude SDK/Codex App Serverの正規サブスク認証と通常枠を確認し�
 
 Claudeは選択bundleだけを一時local pluginへ構成し、通常nativeのplan/implement/review/fixにSDK skills機構とnative Skillの許可境界を限定適用する。settingSources・未選択plugin・MCP・別agent・背景実行・権限拡大を有効にしない。計画/reviewの読取境界、実装/fixの既存nativeツール承認、別会社レビューは維持する。質問/分類・固定scope課題・模擬DAGで選択skillを使用することは未対応。作業判別の通信が先に行われても、その成功をskill実行と扱わない。
 
-Codexは列挙・プレビュー・選択を保存できるが、選択skillだけへのnative discovery隔離を対象CLIで確認できていないため、native skill実行は未対応。Codexの選択を1件でも含む新workflowはsource/hashを確認した後、分類通信・planner・App Server起動前に理由付き停止recordを保存する（callsは0）。adapterも選択skill要求を起動前に拒否する。通常のskill未選択Codex経路は維持する。両社でnative実行できるとは表示しない。
+Codexは列挙・プレビュー・選択を保存できるが、選択skillだけへのnative discovery隔離を対象CLIで確認できていないため、native skill実行は未対応。Codexの選択を1件でも含む新workflowはsource/hashを確認した後、分類通信・planner・App Server起動前に理由付き停止recordを保存する（callsは0）。adapterも選択skill要求を起動前に拒否する。通常のskill未選択Codex経路は維持する。両社でnative実行できるとは表示しない。[Codex隔離契約調査](docs/codex-skills-isolation-20261009.md)。
 
 記録はrequested（保存選択）、dispatched（公式機構へ渡した対象）、observed（native Skillのrequested/allowed/completed/denied）を分ける。初期化・選択保存・usage取得からskill実使用/完了を推定しない。欠測は欠測とし、思考/秘密/raw SDKイベントを記録しない。実モデル通信・実CLI skill実行・配布GUIの成功は今回未確認。詳細と限定検証範囲は [公式スキル記録](docs/official-skills-20261009.md)。
 
@@ -113,7 +113,7 @@ Codexは列挙・プレビュー・選択を保存できるが、選択skillだ�
 
 手動memory/skillsは登録workspace rootとhomeの実体・SessionStore所有home・保存会話の適格性を再確認する。非Gitのcwdはroot内、Gitのcwdは最寄りrepositoryのcommon Git directoryが登録rootと一致する場合に許可する。同じrepositoryのlinked worktreeは許可し、独立したnested repository・別workspace・scratch・忘れたworkspace・別home・rootのsymlinkは拒否する。cwd文字列が異なるだけで別プロジェクトとは判定しない。
 
-メモリ・受渡し・改善・ローカルブラウザーは、workspace選択時の明示手動UI/IPCとして維持する。既存のvalidator・scope・PermissionGateを通し、旧モデルツールの注入や権限の緩和に使わない。メニューの表示を全処理の公式実機成功の証拠にしない。利用者が選んだ手動操作と、公式モデルが要求できるnativeツールを区別する。受渡しは保存済み公式結果の証拠を読む処理で、新しいproviderを作らない。改善UIは候補/比較記録を保存し、確認済みケースを実行する場合は通常sendの共通公式経路を使う。内部プレビューに旧ListProjectSkills/LoadProjectSkill等のvalidator/gate/trace名が残っても、モデルへの登録数は0であり、将来の内部wrapper分離とは区別する。
+メモリ・受渡し・ローカルブラウザーは、workspace選択時の明示手動UI/IPCとして維持する。既存のvalidator・scope・PermissionGateを通し、旧モデルツールの注入や権限の緩和に使わない。メニューの表示を全処理の公式実機成功の証拠にしない。受渡しは保存済み公式結果の証拠を読む処理で、新しいproviderを作らない。利用者が不要とした手動改善版/評価ケース/モデル候補の比較・採用・復帰UIと実行IPCは退役し、旧actionは廃止理由で拒否する。既存比較DB・会話・ユーザーデータは保持し、移動・削除・書換しない。通常作業のレビュー修正とモデル実績feedbackは別機能。内部プレビューに旧ListProjectSkills/LoadProjectSkill等のvalidator/gate/trace名が残っても、モデルへの登録数は0。退役ソース22件・旧入口snapshot3件は [対応表](Old/retired-sources/manual-improvements-bcca4826/manifest.tsv) に保存する。
 
 旧WebSearch/WebFetch、MCP接続/モデル公開ツール、フック、カスタムslash、旧予約/子委託は通常実行の機能から外す。旧説明は [変更前機能一覧](Old/FEATURES-6370866.md)。公式nativeの未知の外部機能をXHarness対応済みとみなさない。
 
@@ -182,6 +182,10 @@ Windows配布はNSISインストーラーとportable exe(未署名。SmartScreen
 並列はclean Git（untrackedも含む）・2〜16件の非循環task・maxParallel2・独立taskの重ならないexact files・明示依存・担当alias/effortと別会社reviewerに限定する。承認digestへ結合したハーネス所有のdetached task/integration worktreeを使い、元checkout/branchへ自動反映しない。依存成果を統合して後続taskへ渡し、scope外変更・競合・不確定副作用で停止して証跡/worktreeを保全する。
 
 初期の独立検証契約はtask filesに含まれるexact `.test.js` / `.test.mjs` を固定Node `--test` で統合後に検証し、project code実行は別承認とする。本番はcreateValidationRuntimeが対象CLIの対応schema、合成read/write境界・localhost通信拒否、取消と所有プロセス終了、CLI/Node SHA256を確認し、成功時だけ公式App Server command/exec（restricted read・networkAccess:false）のvalidateIntegrationを接続する。未対応の並列計画は計画出力後、計画承認・worktree作成・実装の前に `independent-validation-unavailable` で停止する。承認前/後とnode開始前にもidentityを照合し、変更で失効する。終了確認不確定は直列でも開始せず保全する。対象Windowsの実確認は未実施。直列へ黙って変更しない。実装されたscheduler/worktreeとfake公式agents+real Git+固定Node fixture検証を、本番DAGの実行成功と扱わない。各node/統合工程のmodel aliasとskillをcall直前に再検証する。Claude skillは元sourceに固定した選択bundleだけをworktree側の一時pluginへ渡す。Codex選択skillは既存の隔離未確認停止を維持する。固定合成の模擬DAGのskill未対応とは別契約。[第2段階・DAG記録](docs/chat-layout-native-dag-20261009.md)。
+
+### 通常計画のモデル別実績参考入力
+
+保存された完了workflowのimplement/fixを、provider・送信時完全モデルID・effort・planner申告の課題種別/難度で分け、対応する公開review重大度・修正工程、usage/cache/欠測、ハーネスrequest境界の承認待ちを除くactive時間を計画LLMへ渡す。選択はLLMが行い、現在のcatalog/可用性/effort/別会社review制約を維持する。難課題の指摘数だけで単純順位付けせず、少数標本/欠測/reviewer差/修正工程の依存を考慮する。旧モデルの実績をaliasで新世代へ移さず、観測不一致・模擬・未完了・不確定副作用は参考集計から除外する。旧履歴の不完全なshapeは欠測/除外とし、新規作業の可否へ流用しない。新しい完了記録へversion付き数値実績を追記し、既存データの一括改変や「実績が少ない」UIを追加しない。実LLMの選択改善は未検証。[記録と限定検証](docs/model-performance-feedback-20261009.md)。
 
 ### 通常作業の公式ツール探索（2026-10-09、利用者承認）
 

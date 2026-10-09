@@ -10,7 +10,7 @@
 
 ## 実装修正と維持した境界
 
-- [improvement-results.ts](../src/main/session/improvement-results.ts)、[improvements.ts](../src/main/session/improvements.ts)：current taskを公式UUIDとして解決。保存された公式record・receipt・最終回答・固定入力・project適格性を照合し、旧evaluationTask/traceだけに依存する評価を修復。比較/採用時にも再照合し、record/replay/historyのhash変更を無効扱いする。旧記録は受動読取のfallbackを保持し、旧モデル実行を復活させない。
+- [improvement-results.ts](../Old/retired-sources/manual-improvements-bcca4826/src/main/session/improvement-results.ts.txt)、[improvements.ts](../Old/retired-sources/manual-improvements-bcca4826/src/main/session/improvements.ts.txt)：current taskを公式UUIDとして解決。保存された公式record・receipt・最終回答・固定入力・project適格性を照合し、旧evaluationTask/traceだけに依存する評価を修復。比較/採用時にも再照合し、record/replay/historyのhash変更を無効扱いする。旧記録は受動読取のfallbackを保持し、旧モデル実行を復活させない。
 - 同adapter：模擬区分/送信区分の欠測・不正型、usage provider/scope不整合を登録前に拒否。欠測はnull、模擬は参考値。累積thread usageを独立呼出しとして加算せず、複数モデル観測を単一モデルの比較可能な実測にしない。品質は明示評価と厳密な完了証拠を併用し、トークン量だけで優劣を決めない。
 - [controller.ts](../src/main/session/controller.ts)：公式モデル候補を空の旧provider登録で絞っていた実装漏れを修復。enabledかつcatalogUnavailableReason無しのモデルを列挙し、fake・disabled・提供終了済みを公式候補へ入れない。候補閲覧はpassiveでSDK通信を追加せず、送信時の認証・枠・能力検証を維持する。
 
@@ -22,8 +22,8 @@
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [handoff fixture](../src/main/session/handoffs.fixture.ts) / [handoff](../src/main/session/handoffs.test.ts) / [CLI](../src/main/session/handoffs-cli.test.ts)                             | 公式WorkflowRecordと一致するtext-only最終回答を保存。11+1ケースを維持し、再開、重複、取消、失効、同project境界、原子的書込、排他、秘密/reasoning非転送を検証                                                      |
 | [スキルUI](../src/main/session/skill-ui.test.ts)                                                                                                                                           | 5ケースを維持。ローカル読取の権限/予算/版/取消、全量の非信頼参考資料送信と保存、ready後の再送なし・暗黙承認なし・停止、付属資料の送信未対応を確認。旧モデル内LoadProjectSkill承認待ちを現行送信へ移行             |
-| [改善fixture](../src/main/session/improvements.fixture.ts) / [改善操作](../src/main/session/improvements.test.ts) / [モデル候補](../src/main/session/model-candidates.integration.test.ts) | 固定入力を公式callbackと模擬保存recordへ移行。品質優先、入力/出典/結果改変、未確定、複数固定課題、明示採用/復元、模擬観測、alias/readonly/deny/期限/取消/再起動を維持。新しい退役候補caseを追加                   |
-| [公式改善証拠](../src/main/session/improvements-official.test.ts)                                                                                                                          | 13ケース追加。current UUID、再起動後の受動比較、SDK tokensの欠測/模擬、累積usage非加算、登録前simulation/dispatch欠測・usage provider不一致、登録後の回答/入力/session/未完了/pending/usage/receipt改変拒否を確認 |
+| [改善fixture](../Old/retired-sources/manual-improvements-bcca4826/src/main/session/improvements.fixture.ts.txt) / [改善操作](../Old/retired-sources/manual-improvements-bcca4826/src/main/session/improvements.test.ts.txt) / [モデル候補](../Old/retired-sources/manual-improvements-bcca4826/src/main/session/model-candidates.integration.test.ts.txt) | 固定入力を公式callbackと模擬保存recordへ移行。品質優先、入力/出典/結果改変、未確定、複数固定課題、明示採用/復元、模擬観測、alias/readonly/deny/期限/取消/再起動を維持。新しい退役候補caseを追加                   |
+| [公式改善証拠](../Old/retired-sources/manual-improvements-bcca4826/src/main/session/improvements-official.test.ts.txt)                                                                                                                          | 13ケース追加。current UUID、再起動後の受動比較、SDK tokensの欠測/模擬、累積usage非加算、登録前simulation/dispatch欠測・usage provider不一致、登録後の回答/入力/session/未完了/pending/usage/receipt改変拒否を確認 |
 
 旧18失敗のケースを削除・skipで隠さず、同等検証へ移行した。旧skillツールのモデル実行を再現することと、現行の参考資料送信の保存・取消・権限境界を維持することは区別する。callbackはoffline fixtureであり、実SDKのnative承認成功の証拠にはしない。
 

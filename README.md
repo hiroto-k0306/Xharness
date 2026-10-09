@@ -10,7 +10,7 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 ## 並列判断と限定DAG
 
-通常作業の計画は直列/並列の理由と条件を決めます。並列の実装はclean Git・exact scope・所有worktree・最大2並行に限定しますが、本番は対象CLIの対応schemaと合成隔離検査に成功したruntimeだけを独立検証へ接続し、未対応なら計画承認/実装前に停止します。対象Windowsでの利用可否は未検証です。模擬agents+real Git+固定Node検証は本番実行成功ではありません。質問はこの判断経路を通りません。[現在の範囲](docs/chat-layout-native-dag-20261009.md)。
+通常作業の計画は直列/並列の理由と条件を決めます。並列の実装はclean Git・exact scope・所有worktree・最大2並行に限定しますが、本番は対象CLIの対応schemaと合成隔離検査に成功したruntimeだけを独立検証へ接続し、未対応なら計画承認/実装前に停止します。対象Windowsでの利用可否は未検証です。模擬agents+real Git+固定Node検証は本番実行成功ではありません。質問はこの判断経路を通りません。通常計画には完全モデルID/effortと課題種別/難度を分けた完了実績を参考入力し、LLMが担当を選びます。[実績feedback](docs/model-performance-feedback-20261009.md)。[現在の範囲](docs/chat-layout-native-dag-20261009.md)。
 
 ## 公式スキルと参考資料
 

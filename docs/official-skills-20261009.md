@@ -68,4 +68,4 @@ Linux・Node24.19.0・既存node_modulesで、mock/fixture・一時ファイル�
 
 同じ固定課題・同じ品質基準で、選択skill/hash/bundleHash、各callの実モデル/effort/catalog、nativeValidationの出典、独立テストの有無、明示品質判定、取得済みusage/欠測率、時間・停止/修正理由を揃えれば比較の根拠になります。ただしskillの完了は課題の品質充足ではなく、モデル報告テストは独立合格ではありません。初期化・累積thread usageをcall単位の効率へ昇格しません。
 
-今回追加するのは選択/送付/公開された使用状態の証拠です。skill使用有無を同条件の比較へ関連付ける専用集計、品質を先に判定する効率評価、試行間の統制や自動改善ループは将来検討で、未実装です。旧評価設計は [品質・使用量の評価](task-evaluation.md)、現在の証拠照合は [improvement-results.ts](../src/main/session/improvement-results.ts) を参照してください。
+今回追加するのは選択/送付/公開された使用状態の証拠です。skill使用有無を同条件の比較へ関連付ける専用集計、品質を先に判定する効率評価、試行間の統制や自動改善ループは将来検討で、未実装です。旧評価設計は [品質・使用量の評価](task-evaluation.md)、現在の証拠照合は [improvement-results.ts](../Old/retired-sources/manual-improvements-bcca4826/src/main/session/improvement-results.ts.txt) を参照してください。

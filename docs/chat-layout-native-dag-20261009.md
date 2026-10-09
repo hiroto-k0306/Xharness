@@ -44,11 +44,11 @@
 
 書込scope付きDAGタスクではopaque shell操作を承認前に拒否します。直接file editは承認済みexact filesに限定し、所有worktreeの差分も再照合します。統合レビューは固定readOnlyです。これはファイル別OS sandbox保証を新たに検証したことではありません。資源評価は既知の制約の理由説明と最大2の検査で、実機資源測定や予測所要時間はありません。runtime検査による可否と固定理由もplanner入力へ渡し、直列案を選ぶ場合に理由を示させます。
 
-表示画像のLibrary保存: `libfile_130b669e44cc8191afcc9f0b3faa0356`（チャット承認）、`libfile_31e719eefc148191b828647eb317276e`（Receipts）、いずれもversion 0。画像はリポジトリ配布物へ追加していません。
+表示画像のLibrary保存: `libfile_130b669e44cc8191afcc9f0b3faa0356`（チャット承認）、`libfile_31e719eefc148191b828647eb317276e`（Receipts）、初期保存はいずれもversion 0、[既定折りたたみへの後続更新](receipts-default-collapsed-20261009.md) は同じIDのversion 1。画像はリポジトリ配布物へ追加していません。
 
-## 評価feedbackは設計のみ
+## 初期段階の評価feedbackと後続実装
 
-モデル履歴からreview重大度・修正結果・usage/欠測・時間を比較して次のモデル選択/plannerへfeedbackする機能は未実装です。新しい評価案に「実績不足」ラベルを設けず、内部でsample件数/欠測を考慮する設計判断を維持します。推定時間の数値は追加しません。既存手動比較DB/UIの削除・新しい評価ループの実装はこの画面移設/DAG検証の成果に含めません。
+初期画面移設/DAG検証の時点では、モデル履歴からreview重大度・修正結果・usage/欠測・時間を比較して次のモデル選択/plannerへfeedbackする機能は未実装でした。新しい評価案に「実績不足」ラベルを設けず、内部でsample件数/欠測を考慮する設計判断を維持します。推定時間の数値は追加しません。後続の利用者承認で [モデル別実績の参考入力](model-performance-feedback-20261009.md) を実装し、手動改善比較UI/IPCを退役しました。既存DBは保持し、これらは初期画面移設/DAG検証の成果とは区別します。
 
 ## 変更一覧と旧版保存
 
@@ -83,3 +83,14 @@ Codexの選択skill実行も未対応です。`codex.ts` はofficialSkills非空
 対象Windowsの最初の隔離確認には [非モデル診断スクリプト](../scripts/verify-parallel-runtime.ts) を使えます。既存のNode/依存物と絶対パスのCLIを指定して `node --import tsx scripts/verify-parallel-runtime.ts --codex-path <CLIの絶対パス>` を実行します。必要なら `--node-path <Nodeの絶対パス>` を指定します。モデル/thread・project codeは送信せず、インストール・ログイン・設定変更も行いません。合成一時領域とlocalhost listenerによるfactoryの検査だけを実行し、固定理由と `modelDispatched:false` を出します。exit 0はruntime検査成功、2は未対応、3は終了確認等の不確定、130は取消です。今回実行したのは `--help` と型/lint/format検査だけで、対象Windowsの診断結果は未取得です。
 
 リモート照合は2026-10-09 05:29 UTC時点の `origin/main=f7f7350e426185078aa6869f802024d9b59c5be8` まで成功しました。06:06 UTCの最終fetchはHTTPS認証情報を取得できず失敗しました。認証設定は変更しておらず、その後の最新リモート状態は未確認です。push/mergeは実施していません。
+
+## 後続の利用者承認による追加完了
+
+- [既定折りたたみ](receipts-default-collapsed-20261009.md): `e5bb268`。関連7ファイル40件成功。チャット主表示、手動開閉、会話切替/再読込の折りたたみを通信なしで確認。Library画像は同じIDのversion 1。
+- 手動改善比較の退役: `1482be7` とApp入口撤去 `bf26cb9`。旧ソース22件と旧入口snapshot3件を保存し、25件のgit blob/hash/サイズ一致を確認。関連9ファイル95件成功。既存DBは不変、旧IPCは拒否。
+- [モデル別実績参考入力](model-performance-feedback-20261009.md): `df75c3b`。関連6ファイル114件成功、lint修正後service integration 1件再成功。独立再レビューで旧履歴欠測・モデル誤帰属等の重大指摘を解消。
+- [Codex skill隔離調査](codex-skills-isolation-20261009.md): 停止診断は `e5bb268`、版固定の追加調査は `b50a8c5`。Codex関連84件成功。通常App Serverのhost provider登録により開発中フラグだけではselected-onlyにならず、native実行STOPを維持。
+
+各件数は別の限定実行で重複を含み、合算した全回帰ではありません。最終統合の型・変更コードlint/format・diff検査成功。モデル実績入力の実装を、実LLMの選択改善や対象Windowsの本番実行成功と扱いません。push/merge/インストール/認証・ACL変更/実モデル通信は行っていません。
+
+後続最終の文書検査は36文書のローカルリンク先530件、欠損0。既存保存148件（969,922 bytes）、手動比較保存25件（270,877 bytes）、f7f7350文書旧版6件のhash/サイズ・原本一致を確認。main f7f7350比の変更一覧は189ファイルです。

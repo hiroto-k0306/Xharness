@@ -52,7 +52,7 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - 質問を除く通常作業はparallelizationの直列/並列判断と理由/条件を必須とする。根拠のない時間数値を作らない。
 - 並列はclean Git・exact scope/依存・最大2並行・ハーネス所有detached worktreeのみ。元checkoutへ自動反映せず、競合/不確定副作用を保全する。
 - 本番の独立App Server command/exec検証portはruntime factoryの対応schema・合成隔離/取消・CLI/Node identity検査に成功した時だけ接続する。未対応の並列計画は承認/実装前STOPで、黙って直列へ変えない。終了確認不確定は全作業STOP。対象Windowsの実確認は未実施。fake agents/real Git/固定Node fixtureの成功を本番sandbox・Windows・実モデル成功と扱わない。
-- モデル履歴評価feedbackは設計のみ。新評価案のUIに「実績不足」ラベルは設けず、内部sample/欠測は考慮する。[第2段階記録](docs/chat-layout-native-dag-20261009.md)。
+- モデル履歴評価feedbackは完了履歴の完全ID/effort・課題種別/難度ごとの参考入力。選択はLLM、catalog/利用可能性制約を維持し、世代移植・単純ランキングをしない。新評価案のUIに「実績不足」ラベルは設けず、内部sample/欠測は考慮する。手動改善比較UI/IPCは退役し既存DBを保持する。[実績feedback](docs/model-performance-feedback-20261009.md)。
 
 ## 公式スキルの限定境界
 

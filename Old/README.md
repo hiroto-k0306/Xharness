@@ -69,3 +69,7 @@ PR #26のマージ後、main `991e6e4` を基準に旧ソースを [実行対象
 | `README.md`         | [README-f7f7350.md](README-f7f7350.md)                 | alias最新追従・安全再開・検証範囲の更新前資料 |
 | `AGENTS.md`         | [AGENTS-f7f7350.md](AGENTS-f7f7350.md)                 | alias最新追従・安全再開・検証範囲の更新前資料 |
 | `release/README.md` | [release-README-f7f7350.md](release-README-f7f7350.md) | alias最新追従・安全再開・検証範囲の更新前資料 |
+
+## 手動改善比較の退役（bcca4826）
+
+利用者が不要とした手動改善版・評価ケース・モデル候補の比較入口を退役しました。旧ソース22件は移動、共通入口3件は旧版snapshot保存し、現役の共通処理は保持します。[保存庫](retired-sources/manual-improvements-bcca4826/README.md) と [25件の移動前後・hash対応表](retired-sources/manual-improvements-bcca4826/manifest.tsv) を参照してください。既存比較DB・会話・ユーザーデータは移動/削除/書換していません。

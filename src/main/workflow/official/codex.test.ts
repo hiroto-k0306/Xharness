@@ -207,6 +207,67 @@ const request = (phase: AgentRequest["phase"] = "review"): AgentRequest => ({
   tool: vi.fn(async () => {}),
   approve: vi.fn(async () => false),
 });
+it.each(["plan", "implement", "fix", "review"] as const)(
+  "refuses selected native skills before starting Codex in %s until isolation is verified",
+  async (phase) => {
+    const mock = fakeServer(),
+      start = vi.fn(() => mock.server),
+      selected = {
+        provider: "codex" as const,
+        scope: "project" as const,
+        name: "selected-skill",
+        source: ".agents/skills/selected-skill/SKILL.md",
+        hash: "a".repeat(64),
+        bundleHash: "b".repeat(64),
+        files: [
+          {
+            relativePath: "SKILL.md",
+            body: "private skill body",
+            hash: "a".repeat(64),
+          },
+        ],
+      };
+    const result = await new CodexWorkflowAgent(start).run(
+      { ...request(phase), nativeWork: true, officialSkills: [selected] },
+      new AbortController().signal,
+    );
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("公式skill実行は未対応");
+    expect(result.dispatched).toBe(false);
+    expect(start).not.toHaveBeenCalled();
+    expect(mock.calls).toEqual([]);
+    expect(result.officialSkillsEvidence).toEqual({
+      requested: [
+        {
+          provider: selected.provider,
+          scope: selected.scope,
+          name: selected.name,
+          source: selected.source,
+          hash: selected.hash,
+          bundleHash: selected.bundleHash,
+        },
+      ],
+      dispatched: [],
+      observed: [],
+    });
+    expect(JSON.stringify(result)).not.toContain("private skill body");
+  },
+);
+it("an empty skill selection preserves ordinary Codex execution", async () => {
+  const mock = fakeServer();
+  const result = await new CodexWorkflowAgent(() => mock.server).run(
+    { ...request(), officialSkills: [] },
+    new AbortController().signal,
+  );
+  expect(result.status).toBe("completed");
+  expect(result.dispatched).toBe(true);
+  expect(result.officialSkillsEvidence).toBeUndefined();
+  const turn = mock.calls.find(([method]) => method === "turn/start")![1];
+  expect(turn.input).toEqual([{ type: "text", text: "Synthetic only" }]);
+  expect(mock.calls.some(([method]) => method === "skills/config/write")).toBe(
+    false,
+  );
+});
 it.each(["new.ts", "../outside.ts", "auth.json"])(
   "native file changes can exceed hints but keep workspace and secret boundaries: %s",
   async (path) => {

@@ -10,6 +10,7 @@ import {
 } from "./connections.js";
 import { parseMemoryAction } from "./project-memory.js";
 import { parseSkillUiRequest } from "./project-skills.js";
+import { parseOfficialSkillAction } from "./official-skills.js";
 import { parseImprovementAction } from "./improvements.js";
 import { parseHandoffAction } from "./handoffs.js";
 import { parseLocalBrowserAction } from "./local-browser.js";
@@ -367,6 +368,11 @@ export type HarnessCommand =
       request: import("./project-skills.js").SkillUiRequest;
     }
   | {
+      type: "official_skills";
+      sessionId: string;
+      request: import("./official-skills.js").OfficialSkillAction;
+    }
+  | {
       type: "project_memory";
       sessionId: string;
       request: import("./project-memory.js").MemoryAction;
@@ -468,6 +474,7 @@ export type CommandResult =
       localBrowser?: import("./local-browser.js").LocalBrowserView;
       preparedPrompt?: string;
       modelCandidates?: import("./model-candidates.js").ModelCandidateView;
+      officialSkills?: import("./official-skills.js").OfficialSkillsView;
       skills?:
         | import("./project-skills.js").SkillListing
         | import("./project-skills.js").SkillPreview
@@ -554,6 +561,12 @@ export function parseCommand(value: unknown): HarnessCommand | undefined {
       const request = parseSkillUiRequest(c.request);
       return str(c.sessionId) && request
         ? { type: "project_skills", sessionId: c.sessionId, request }
+        : undefined;
+    }
+    case "official_skills": {
+      const request = parseOfficialSkillAction(c.request);
+      return str(c.sessionId) && /^[\w-]{1,128}$/.test(c.sessionId) && request
+        ? { type: "official_skills", sessionId: c.sessionId, request }
         : undefined;
     }
     case "improvements": {

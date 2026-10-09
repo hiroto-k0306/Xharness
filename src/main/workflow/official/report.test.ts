@@ -32,6 +32,39 @@ const selectionCall: WorkflowRecord["calls"][number] = {
   effort: "high",
   status: "running",
 };
+it("exports escaped skill dispatch and observed use as different evidence", () => {
+  const record = selectionRecord({
+    ...selectionCall,
+    provider: "claude",
+    officialSkills: {
+      requested: [
+        {
+          provider: "claude",
+          scope: "project",
+          name: "<guide>",
+          source: "<source>",
+          hash: "a".repeat(64),
+          bundleHash: "b".repeat(64),
+        },
+      ],
+      dispatched: [{ name: "<guide>", mechanism: "claude-plugin" }],
+    },
+  });
+  const before = JSON.stringify(record),
+    html = officialWorkflowReport(record);
+  expect(html).toContain("&lt;guide&gt; · claude-plugin");
+  expect(html).toContain("&lt;source&gt;");
+  expect(html).toContain("使用は未確認");
+  expect(html).not.toContain("<guide>");
+  expect(JSON.stringify(record)).toBe(before);
+  record.calls[0]!.officialSkills!.observed = [
+    { name: "<guide>", status: "completed" },
+  ];
+  expect(officialWorkflowReport(record)).toContain("&lt;guide&gt; · 呼出完了");
+  expect(officialWorkflowReport(record)).toContain(
+    "タスク全体の成功を証明しません",
+  );
+});
 it("exports escaped saved alias resolutions and changes without rewriting history", () => {
   const record = selectionRecord({
     ...selectionCall,

@@ -73,7 +73,7 @@ mainがセッション・公式接続・ファイル・子プロセス・記録�
 
 開始・安全checkpoint再開・次のモデル通信の直前に、その時点のカタログでpolicyを完全IDへ解決する。質問/分類はroles.question、計画は利用者の選択policy、実装/別会社レビューは計画で選ばれたpolicyを使う。解決後の1通信では実ID/effort/catalogを固定し、SDK/App Server呼出途中に変えない。カタログのalias先が更新されれば、次の通信は新しい有効IDを使う。SDK版のタスク固定とモデルaliasの通信ごとの解決は別の契約。
 
-過去の実ID・effort・catalog・計画・実行条件digest・レシート・結果は書換えない。新しいpolicyと各callのmodelSelectionを追記し、過去の実行に新世代名を付け直さない。modelSelectionはpolicy、今回resolved（実provider/ID/effort/catalog version・updatedAt・digest）、任意のprevious、changedを分ける。UI/LoopFlowは保存された通信事実を表示し、旧callでpolicy/catalogが未記録なら未記録と表示する。
+過去の実ID・effort・catalog・計画・実行条件digest・レシート・結果は書換えない。新しいpolicyと各callのmodelSelectionを追記し、過去の実行に新世代名を付け直さない。保存policyがあっても、承認済みplanner/planの元完全ID・effort・providerから同じalias/familyへの現カタログの明示対応を照合する。世代更新時の旧IDをhistoricalIds等で確認できなければ閲覧はできるが次送信/再開は停止する。modelSelectionはpolicy、今回resolved（実provider/ID/effort/catalog version・updatedAt・digest）、任意のprevious、changedを分ける。UI/LoopFlowは保存された通信事実を表示し、旧callでpolicy/catalogが未記録なら未記録と表示する。
 
 旧完全IDから現選択policyへの正規化は、カタログに明示された同じprovider/familyのID・acceptedIds・historicalIds対応だけを使う。名前の似方・世代番号・モデル一覧順で推測しない。historicalIdsは将来の選択policyをaliasへ対応付ける情報で、保存済み旧IDの履歴解決や再実行許可とは別。gpt-6-sol/gpt-5.6-solはsol、gpt-5.6-lunaはluna、旧Haiku4.5はhaikuへ明示対応する。指定effortは保持し、新しい世代が対応しなければ停止する。
 
@@ -89,11 +89,25 @@ Claude SDK/Codex App Serverの正規サブスク認証と通常枠を確認し�
 
 公式SDK版固定、Codex自動追従/明示固定、更新候補検査は§15。管理runtimeの準備や公開npm更新確認と、モデル通信・ログインを区別する。旧SIWC等の明示的な開発実験は通常実行へfallbackする経路ではない。
 
-## 9. プロジェクトスキル・メモリ・拡張
+## 9. 参考スキル・公式スキル・メモリ・拡張
 
-スキル管理UIは同プロジェクトのSKILL.mdを出典・SHA-256付きで列挙/プレビューする。ローカル読取は既存main validator・scope・秘密フィルター・権限確認を通す。「この版を参考資料として送る」はクリック後にpreview IPCで同じsource/hashを再確認し、許可された本文とname/description/source/hashを非信頼JSON参考資料として通常会話へ送る。本文指示の実行、権限変更、script/install、SDK skills/MCPの有効化や永続スキル登録ではない。
+スキル管理UIは同プロジェクトのSKILL.mdを出典・SHA-256付きで列挙/プレビューする。ローカル読取は既存main validator・scope・秘密フィルター・権限確認を通す。「この版を参考資料として送る」はクリック後にpreview IPCで同じsource/hashを再確認し、許可された本文とname/description/source/hashを非信頼JSON参考資料として通常会話へ送る。この4000文字参考資料の操作は本文指示の実行、権限変更、script/install、SDK skills/MCPの有効化や永続スキル登録ではない。別の明示「公式スキル」選択は以下の限定契約を使う。
 
 本文とメタデータを全量含めて通常入力4000文字以内の場合だけ送信する。省略された本文・上限超過は理由を表示して無効化し、切り詰めて送らない。付属テキスト資料は版確認/プレビューだけに対応し、公式会話への送信は明示未対応。「参考資料送信済」は通常sendの受付を示し、旧LoadProjectSkillレシートや永続登録成功と同一視しない。セッション切替・取消後の遅延previewから送信しない。実装: [スキル管理](src/renderer/components/SkillsManager.tsx)、[送信形式](src/shared/project-skills.ts)。
+
+### 明示選択する公式スキル（参考資料送信とは別）
+
+「公式スキル」UIはproviderの固定ルートだけを列挙する。Claudeは利用者homeとsession.cwdの `.claude/skills/`、Codexは同じ場所の `.agents/skills/`。任意のrenderer指定rootや他社のrootを探索しない。登録workspace・home・会話所有範囲をmainで再確認し、既存PermissionGateで読取を確認する。公式機構への接続は、スキルの提供元による作成・監修・安全性認定を意味しない。
+
+選択はprovider/scope/name/source/hash/bundleHashを保存し、次の通常workflowから使う。選択時・送信準備時・各工程call直前に、同じ本文/関連資料と固定rootを再検証する。更新・欠損・リンク・秘密・hash/bundleHash不一致は停止し、別版や4000文字参考資料へ自動置換しない。
+
+初期対応はSKILL.mdを含むmd/txt/rstの最大20ファイル、bundle全量16KiB、深さ8。UTF-8のみ。script/binary、権限/モデル指定、hooks/agents/context fork、動的 `!command` 展開等は未対応とし、省略して読み込まない。frontmatterはname/descriptionと任意user-invocable:trueだけを受理する。読取でeligibleでもnative実行互換性を保証せず、原文CRLF/BOMを保持してhashを確認する。Claude SDK境界でBOM付きbundleは未確認として拒否する。8件まで明示選択でき、同じproviderの同名を同時選択しない。
+
+Claudeは選択bundleだけを一時local pluginへ構成し、通常nativeのplan/implement/review/fixにSDK skills機構とnative Skillの許可境界を限定適用する。settingSources・未選択plugin・MCP・別agent・背景実行・権限拡大を有効にしない。計画/reviewの読取境界、実装/fixの既存nativeツール承認、別会社レビューは維持する。質問/分類・固定scope課題・模擬DAGで選択skillを使用することは未対応。作業判別の通信が先に行われても、その成功をskill実行と扱わない。
+
+Codexは列挙・プレビュー・選択を保存できるが、選択skillだけへのnative discovery隔離を対象CLIで確認できていないため、native skill実行は未対応。Codexの選択を1件でも含む新workflowはsource/hashを確認した後、分類通信・planner・App Server起動前に理由付き停止recordを保存する（callsは0）。adapterも選択skill要求を起動前に拒否する。通常のskill未選択Codex経路は維持する。両社でnative実行できるとは表示しない。
+
+記録はrequested（保存選択）、dispatched（公式機構へ渡した対象）、observed（native Skillのrequested/allowed/completed/denied）を分ける。初期化・選択保存・usage取得からskill実使用/完了を推定しない。欠測は欠測とし、思考/秘密/raw SDKイベントを記録しない。実モデル通信・実CLI skill実行・配布GUIの成功は今回未確認。詳細と限定検証範囲は [公式スキル記録](docs/official-skills-20261009.md)。
 
 プロジェクトメモリの手動候補・採用/却下/編集等と同プロジェクト履歴のscope検証は共通UIとして残す。旧SearchProjectHistory/SearchProjectMemory/ProposeProjectMemoryをモデルへ登録せず、自動でsystemへ注入・過去記録を再実行しない。
 

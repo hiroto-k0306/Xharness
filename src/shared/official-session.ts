@@ -23,6 +23,8 @@ export function parseOfficialTaskScope(
   return { files: [...v.files] as string[], testFile: v.testFile };
 }
 export interface OfficialSessionSubmission {
+  /** Selected native provider skills; metadata only, never renderer-provided bodies. */
+  officialSkills?: import("./official-skills.js").OfficialSkillSelection[];
   sessionId: string;
   cwd: string;
   /** Source repository for an existing session worktree; supplied by main, never renderer. */

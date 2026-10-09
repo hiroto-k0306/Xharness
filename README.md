@@ -4,6 +4,10 @@ Claude(Pro / Max)と ChatGPT(Plus / Pro)のサブスクリプションの枠を�
 
 このファイルは**開発者向け**。アプリを使う人向けの説明(インストール・起動・使い方)は [release/README.md](release/README.md) にあり、配布物に同梱する。
 
+## 公式スキルと参考資料
+
+「公式スキル」は固定provider rootの候補を既存許可でプレビュー・明示選択します。Claude通常nativeのplan/implement/review/fixだけを選択bundle限定のSDK Skill機構へ接続します。Codexは列挙/選択可能ですがnative実行は隔離未確認のためApp Server起動前に停止します。質問/固定scope/DAGは未対応。md/txt/rst最大20ファイル・全量16KiBのみで、script/hooks/agents/動的command等は停止します。4000文字参考資料sendとは別で、自動置換・権限緩和をしません。実モデル/実CLI成功は未確認。[詳細と証跡](docs/official-skills-20261009.md)。
+
 ## モデルaliasの最新追従
 
 選択は世代なし `provider:alias`（opus/sonnet/haiku/astra/sol/luna）と別のeffortです。開始・安全再開・各モデル通信直前に現カタログから完全IDを解決し、その1通信中は固定します。旧IDは明示historicalIds等の同じ会社/family対応だけで将来の選択policyへ正規化します。過去の実ID/effort/catalog/plan/digestを変えず、各callに今回のpolicy/実ID・変更有無を追記します。

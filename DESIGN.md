@@ -63,6 +63,10 @@ workspace選択時のメモリ・受渡し・改善・ローカルブラウザ�
 
 SkillsManagerの明示送信は、mainのpreview IPCでsource/hashを再確認して既存許可を通し、非信頼JSONの本文/出典情報を通常sendへ渡します。全量4000文字以内・非省略に限定し、超過を切り詰めません。SDK skills/MCP/権限・scriptを有効化せず、永続登録ではありません。成功表示は通常sendの受付であり、旧LoadProjectSkillレシート成功とは区別します。付属資料は版確認/プレビューのみで送信未対応です。セッション切替/取消後の遅延previewは無効化します。
 
+公式スキルの明示選択は参考資料sendと別に、固定provider rootと既存PermissionGateから本文/hash/bundleHashを検査して保存します。関連資料はmd/txt/rst最大20ファイル・全量16KiBのみ。選択・送信準備・各工程callで再検証し、変更/未対応を省略・別版置換しません。Claude通常nativeのplan/implement/review/fixでは選択bundleだけの一時local pluginとSkill gateを使い、settingSourcesや未選択plugin/MCP/agents/hooksを有効化しません。質問/固定scope/DAGは未対応です。
+
+Codexは候補列挙/プレビュー/選択だけを扱います。未選択skill discoveryを隔離できる保証が未確認なので、Codex選択を含むworkflowはserviceのpreflightで分類通信・planner・App Server起動前に停止recordを保存します。adapterにも起動前の拒否を残します。requested/dispatched/observedのrequested・allowed・completed・deniedを分け、初期化/usageを実使用証跡へ昇格しません。提供元の作成認定・安全認定とは別です。詳細は [公式スキル](docs/official-skills-20261009.md)。
+
 headlessは実行要求時に共通OfficialWorkflowServiceを準備します。入力・出力ともTTYの場合だけ計画/操作を承認でき、非TTYの承認要求は取消・理由表示・終了1です。非TTYのEOFは入力完了であり受領済みの質問を処理します。TTYの実行中EOF/Ctrl+Cは取消・終了130。report/replayはモデル初期化なしの読取互換経路で、旧資格情報readerを使いません。旧sessionのresumeは保存値を保持して閲覧し、公式作業の自動再開ではありません。
 
 ## 7. 配布・検証・将来項目

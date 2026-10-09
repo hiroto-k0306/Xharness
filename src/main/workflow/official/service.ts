@@ -1,3 +1,10 @@
+import { OfficialSkills } from "../../session/official-skills.js";
+import {
+  parseSkillSelections,
+  skillSelections,
+  validateSavedSkillSelections,
+} from "./skill-selection.js";
+import type { OfficialSkillSelection } from "../../../shared/official-skills.js";
 import {
   resolveCallSelection,
   validateSavedModelSelections,
@@ -325,6 +332,7 @@ export class OfficialWorkflowService {
         )
           continue;
         validateSavedModelSelections(record);
+        validateSavedSkillSelections(record);
         if (record.plan) record.plan = planContract.parse(record.plan);
         if (record.simulated !== this.settings.fake) continue;
         if (
@@ -518,6 +526,28 @@ export class OfficialWorkflowService {
       await rename(temporary, target);
     }
     this.records.set(record.id, structuredClone(record));
+  }
+  private configureOfficialSkills(
+    options: WorkflowOptions,
+    selections: OfficialSkillSelection[],
+    sourceCwd: string,
+  ) {
+    if (!selections.length) return;
+    options.officialSkills = skillSelections(selections);
+    options.resolveOfficialSkills = async (pinned, signal) => {
+      const bundles = [];
+      for (const selected of pinned) {
+        signal.throwIfAborted();
+        bundles.push(
+          await new OfficialSkills({
+            cwd: sourceCwd,
+            provider: selected.provider,
+          }).select(selected),
+        );
+      }
+      signal.throwIfAborted();
+      return bundles;
+    };
   }
   private callResolver(
     cwd: string | (() => string),
@@ -1120,6 +1150,27 @@ export class OfficialWorkflowService {
       throw new Error(
         "公式workflowの保存領域が使えないか、別の実行が進行中です。旧HTTPへ切り替えません。",
       );
+    let officialSkills: OfficialSkillSelection[];
+    try {
+      officialSkills = parseSkillSelections(request.officialSkills ?? []);
+    } catch {
+      throw new Error(
+        "公式スキルの選択情報が不正です。本文・権限設定を受け取っていません。",
+      );
+    }
+    if (request.task && officialSkills.length)
+      throw new Error(
+        "公式スキルは通常のnative作業だけに対応しています。固定範囲・登録テスト経路へ転用していません。",
+      );
+    // Trusted roots and every pinned file are validated before classification.
+    for (const skill of officialSkills) {
+      signal.throwIfAborted();
+      await new OfficialSkills({
+        cwd: request.cwd,
+        provider: skill.provider,
+      }).select(skill);
+    }
+    signal.throwIfAborted();
     const selected = this.settings.fake
       ? resolveModel(request.model)
       : (() => {
@@ -1152,6 +1203,43 @@ export class OfficialWorkflowService {
         resolve(directory).toLowerCase()
       )
         throw new Error("Linked workflow storage");
+      controller.signal.throwIfAborted();
+      // No classifier or planner is dispatched for a known unsupported provider.
+      // Retain requested metadata, with no invented dispatch/observation facts.
+      if (officialSkills.some((skill) => skill.provider === "codex")) {
+        const stopped: WorkflowRecord = {
+          version: 1,
+          simulated: this.settings.fake,
+          id,
+          sessionId: request.sessionId,
+          sourceCwd: request.cwd,
+          cwd: await mkdtemp(join(directory, "workspace-question-")),
+          goal: request.text,
+          officialSkills: skillSelections(officialSkills),
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          status: "failed",
+          next: "complete",
+          base: "0".repeat(40),
+          head: "0".repeat(40),
+          correctionRounds: 0,
+          calls: [],
+          tools: [],
+          checks: [],
+          reviews: [],
+          commits: [],
+          error: "official-skills-codex-isolation-unverified",
+          answer:
+            "Codexの選択したskillsだけを公式基盤へ渡す隔離境界を確認できないため停止しました。分類・計画・skills送信は行っていません。別のskillsや参考資料へ置き換えていません。",
+        };
+        await this.save(stopped);
+        return {
+          workflowId: id,
+          status: stopped.status,
+          summary: stopped.answer!,
+          taskRequired: false,
+        };
+      }
       const provider = selected.provider as "claude" | "codex";
       if (request.task) {
         const snapshot = await prepareProjectTask(
@@ -1198,6 +1286,9 @@ export class OfficialWorkflowService {
         );
         const record: WorkflowRecord = {
           version: 1,
+          ...(officialSkills.length
+            ? { officialSkills: skillSelections(officialSkills) }
+            : {}),
           simulated: this.settings.fake,
           id,
           sessionId: request.sessionId,
@@ -1249,6 +1340,21 @@ export class OfficialWorkflowService {
         throw new Error(
           "公式実行の保存状態を確認できません。再送していません。",
         );
+      if (
+        officialSkills.length &&
+        record.status === "completed" &&
+        (record.inputIntent !== "work" || request.automaticWork === undefined)
+      ) {
+        record.status = "failed";
+        record.error =
+          record.inputIntent === "question"
+            ? "official-skills-question-unsupported"
+            : "official-skills-native-work-required";
+        record.answer =
+          "選択した公式スキルは通常のnative作業だけに対応しています。質問の参考資料へ変換したり、スキルを実行した扱いにはしていません。";
+        record.finishedAt = new Date().toISOString();
+        await this.save(record);
+      }
       let automaticTask = false;
       if (
         !request.task &&
@@ -1274,6 +1380,7 @@ export class OfficialWorkflowService {
           );
           options.goal = request.text;
           options.nativeWork = true;
+          this.configureOfficialSkills(options, officialSkills, request.cwd);
           options.cwd = request.cwd;
           options.files = [];
           options.tests = [];
@@ -1547,6 +1654,11 @@ export class OfficialWorkflowService {
           );
         }
         options.goal = record.goal;
+        this.configureOfficialSkills(
+          options,
+          record.officialSkills ?? [],
+          record.sourceCwd ?? record.cwd,
+        );
         this.launch(record.id, options, record);
       }
     } catch (error) {

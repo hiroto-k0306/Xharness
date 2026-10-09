@@ -12,6 +12,7 @@ import {
 import { CandidateQuotas } from "./candidate-quota.js";
 import { modelCandidates } from "./model-candidates.js";
 import { readSkillUi } from "./skill-ui.js";
+import { officialSkillUi } from "./official-skill-ui.js";
 import { decidePermission } from "../core/permissions.js";
 import { captureQuotaPause } from "./quota-capture.js";
 import { resumeConditions, resumeHash } from "./resume-conditions.js";
@@ -509,6 +510,43 @@ export class SessionController {
               this.handoffBusy.delete(id);
             }
           }
+        }
+        case "official_skills": {
+          const session = this.sessions.get(command.sessionId);
+          if (!session || this.stopped)
+            return { ok: false, error: "Session unavailable" };
+          const rt = this.runtime(session.id);
+          if (this.ctx.sessionBusy.has(session.id) || rt.status !== "idle")
+            return {
+              ok: false,
+              error: "実行終了後に公式スキルを確認してください。",
+            };
+          const abort = new AbortController();
+          this.ctx.sessionBusy.add(session.id);
+          rt.abort = abort;
+          rt.status = "running";
+          const job = (async () => {
+            await this.load(session.id);
+            return officialSkillUi(
+              this.ctx,
+              this.gate,
+              session,
+              rt,
+              command.request,
+              abort.signal,
+            );
+          })().finally(async () => {
+            this.ctx.sessionBusy.delete(session.id);
+            rt.status = "idle";
+            rt.abort = undefined;
+            await this.emitState();
+            if (rt.closing) this.ctx.dropRuntime(session.id);
+          });
+          rt.done = job.then(
+            () => undefined,
+            () => undefined,
+          );
+          return await job;
         }
         case "project_skills": {
           const request = command.request;

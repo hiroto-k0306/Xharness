@@ -6,6 +6,7 @@ import type {
 import styles from "./OfficialWorkflowPanel.module.css";
 import { OfficialModelEvidence } from "./OfficialModelEvidence.js";
 import { ModelSelectionEvidence } from "./ModelSelectionEvidence.js";
+import { OfficialSkillEvidence } from "./OfficialSkillEvidence.js";
 import { OfficialCommunication } from "./OfficialCommunication.js";
 import { OfficialPlanAssignments } from "./OfficialPlanAssignments.js";
 import { ClaudeSdkStatus } from "./ClaudeSdkStatus.js";
@@ -577,6 +578,7 @@ export function OfficialWorkflowPanel({
               <details>
                 <summary>使用量・native状態・保存証跡</summary>
                 <ModelSelectionEvidence record={r} />
+                <OfficialSkillEvidence record={r} />
                 {r.calls.map((call) =>
                   "diagnostics" in call && call.diagnostics ? (
                     <OfficialModelEvidence

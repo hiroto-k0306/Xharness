@@ -172,6 +172,8 @@ export interface RuntimeUsage {
   complete: boolean;
 }
 export interface AgentRequest {
+  /** Main-validated pinned bundles for native work, filtered to this provider. */
+  officialSkills?: import("../../../shared/official-skills.js").OfficialSkillBundle[];
   /** Delegates normal work to the official native agent within its sandbox. */
   nativeWork?: boolean;
   /** Only explicitly approved synthetic diagnostics may retain response text. */
@@ -198,6 +200,8 @@ export interface AgentRequest {
   ): Promise<boolean | "declined" | "expired" | "cancelled">;
 }
 export interface AgentResult {
+  /** Provider dispatch/observation facts, distinct from the requested selection. */
+  officialSkillsEvidence?: import("../../../shared/official-skills.js").OfficialSkillEvidence;
   diagnostics?: import("./diagnostics.js").AgentDiagnostics;
   status: "completed" | "failed" | "cancelled" | "timeout" | "quota-paused";
   dispatched: boolean;

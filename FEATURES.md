@@ -41,6 +41,14 @@
 
 「参考資料送信済」は送信受付の表示です。永続スキル登録、SDK skills/MCP/権限の有効化、付属script/install実行、旧LoadProjectSkill成功とは別です。本文は非信頼の参考データとして送り、受領のみを回答するよう指定します。
 
+## 公式スキルの明示選択
+
+別の「公式スキル」画面で、Claudeはuser/projectの.claude/skills、Codexはuser/projectの.agents/skillsだけから候補を確認します。既存読取許可と所有範囲/hash/bundleHashを確認して選択を保存し、次のworkflow/各callで同じ版を再確認します。公式機構への接続は提供元の作成・監修や安全性認定ではありません。
+
+Claudeの通常native plan/implement/review/fixに限り、選択bundleだけを一時pluginとしてSDKのSkill機構へ渡します。Codexは候補の列挙・プレビュー・選択までで、native実行は隔離未確認のためApp Server起動前に停止します。両社でskill実行対応とは表示しません。質問・固定scope・DAGも未対応です。
+
+md/txt/rst最大20ファイル・全量16KiB、script/binary/hooks/agent/context fork/動的commandは未対応で、省略読込をしません。選択・送信済み・実際のSkill要求/許可/完了/拒否を別々に表示し、初期化やusageから使用成功を推測しません。実モデル/実CLI/GUI配布確認は未実施。[対応範囲と記録](docs/official-skills-20261009.md)。4000文字の参考資料送信は従来の別操作のままです。
+
 ## headless
 
 GUIと同じSessionController/OfficialWorkflowServiceを使います。`--model` / `--effort` / `--cwd` / `--resume` / `--mode` / `--fake` / `--codex-path`を受け付けます。最新引数は [headless.ts](src/headless.ts) のhelp/parserを参照してください。

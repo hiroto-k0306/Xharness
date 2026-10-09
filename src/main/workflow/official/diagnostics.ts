@@ -1,3 +1,4 @@
+import { skillSelections } from "./skill-selection.js";
 import {
   normalizeFile,
   type AgentRequest,
@@ -36,6 +37,8 @@ export interface CommandRunDiagnostic {
 }
 
 export interface AgentDiagnostics {
+  /** Requested metadata only; adapter dispatch/observation evidence is separate. */
+  officialSkillsRequested?: import("../../../shared/official-skills.js").OfficialSkillSelection[];
   requestId: string;
   requestedModel: string;
   resolvedRequestedModel?: string;
@@ -77,6 +80,9 @@ export function diagnostics(
 ) {
   const data: AgentDiagnostics = {
     requestId: request.requestId,
+    ...(request.officialSkills?.length
+      ? { officialSkillsRequested: skillSelections(request.officialSkills) }
+      : {}),
     requestedModel: request.model.model,
     resolvedRequestedModel: modelName(request.model.resolvedModel)
       ? request.model.resolvedModel

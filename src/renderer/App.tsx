@@ -30,6 +30,7 @@ import { ImprovementsPanel } from "./components/Improvements.js";
 import { HandoffsPanel } from "./components/Handoffs.js";
 import { LocalBrowserPanel } from "./components/LocalBrowser.js";
 import { SkillsManager } from "./components/SkillsManager.js";
+import { OfficialSkillsManager } from "./components/OfficialSkillsManager.js";
 import { Sidebar } from "./components/Sidebar.js";
 import { StepTabs } from "./components/StepTabs.js";
 import { TitleBar } from "./components/TitleBar.js";
@@ -649,6 +650,14 @@ export function App() {
               receipts={view?.receipts ?? []}
               permission={view?.pending}
               draft={skillDraft}
+            />
+          )}
+          {current && app.officialDefault && (
+            <OfficialSkillsManager
+              key={`official-skills-${current}`}
+              sessionId={current}
+              provider={providerOf(model)}
+              running={!!view?.running || waiting}
             />
           )}
           {current && session?.workspaceId && (

@@ -49,7 +49,29 @@ function clean(value: unknown, depth = 0): unknown {
     return Object.fromEntries(
       Object.entries(value).map(([key, v]) => [
         key,
-        excluded.test(key) ? "[除去]" : clean(v, depth + 1),
+        excluded.test(key)
+          ? "[除去]"
+          : key === "officialSkills" && Array.isArray(v)
+            ? v.map((skill) =>
+                skill && typeof skill === "object"
+                  ? clean(
+                      Object.fromEntries(
+                        [
+                          "provider",
+                          "scope",
+                          "name",
+                          "source",
+                          "hash",
+                          "bundleHash",
+                        ]
+                          .filter((k) => k in skill)
+                          .map((k) => [k, skill[k]]),
+                      ),
+                      depth + 1,
+                    )
+                  : "[不正なスキル情報を除去]",
+              )
+            : clean(v, depth + 1),
       ]),
     );
   }

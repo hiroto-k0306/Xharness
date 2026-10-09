@@ -257,6 +257,9 @@ export async function runOfficialSessionTurn(
         effort: session.effort,
         text: ctx.clean(text),
         history,
+        ...(session.officialSkills?.length
+          ? { officialSkills: structuredClone(session.officialSkills) }
+          : {}),
         automaticWork:
           !!session.workspaceId &&
           !session.readOnly &&

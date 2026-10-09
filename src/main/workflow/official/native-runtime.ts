@@ -1,4 +1,9 @@
 import {
+  resolveCallSkills,
+  skillSelections,
+  skillEvidence,
+} from "./skill-selection.js";
+import {
   policyCandidate,
   planAvailability,
   recordTaskPolicies,
@@ -55,6 +60,9 @@ export async function runNativeTask(
   let baseline: NativeSnapshot;
   const record: WorkflowRecord = {
     version: 1,
+    ...(options.officialSkills?.length
+      ? { officialSkills: skillSelections(options.officialSkills) }
+      : {}),
     id: options.id ?? randomUUID(),
     sessionId: options.sessionId,
     sourceCwd: options.cwd,
@@ -120,6 +128,13 @@ export async function runNativeTask(
     );
     model = selected.model;
     effort = selected.effort;
+    const officialSkills = await resolveCallSkills(
+      { ...options, nativeWork: true },
+      record,
+      model.provider,
+      phase,
+      signal,
+    );
     if (record.calls.filter((c) => c.phase !== "conversation").length >= 7)
       throw new WorkflowFailure("call-budget-exceeded");
     const requestId = randomUUID(),
@@ -132,6 +147,9 @@ export async function runNativeTask(
     const index = record.calls.length;
     record.calls.push({
       requestId,
+      ...(officialSkills.length
+        ? { officialSkills: { requested: skillSelections(officialSkills) } }
+        : {}),
       ...(selected.modelSelection
         ? { modelSelection: selected.modelSelection }
         : {}),
@@ -154,6 +172,7 @@ export async function runNativeTask(
       options.agents[model.provider].run(
         {
           nativeWork: true,
+          ...(officialSkills.length ? { officialSkills } : {}),
           requestId,
           taskId: record.id,
           phase,
@@ -180,9 +199,12 @@ export async function runNativeTask(
         signal,
       ),
     );
-    const { output, ...metadata } = result;
+    const { output, officialSkillsEvidence, ...metadata } = result;
     record.calls[index] = {
       requestId,
+      ...(officialSkills.length
+        ? { officialSkills: { requested: skillSelections(officialSkills) } }
+        : {}),
       ...(selected.modelSelection
         ? { modelSelection: selected.modelSelection }
         : {}),
@@ -191,6 +213,14 @@ export async function runNativeTask(
       requestedModel: model.model,
       effort,
       ...metadata,
+      ...(officialSkills.length
+        ? {
+            officialSkills: skillEvidence(
+              officialSkills,
+              officialSkillsEvidence,
+            ),
+          }
+        : {}),
       communication: {
         ...communication,
         ...(output !== undefined ? { output: communicationText(output) } : {}),

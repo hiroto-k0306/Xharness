@@ -41,6 +41,13 @@ XHarness は、Claude(Pro/Max)と GPT(ChatGPT Plus/Pro)の**サブスク枠**を
 - モデル実行: 公式Claude Agent SDK / Codex App Server。GUIとheadlessで同じ認証・通常枠・sandbox・承認境界を使い、旧HTTPへfallbackしない
 - MCP SDKや旧検索の依存が互換処理に残っていても、通常の公式モデルへ旧ツールを公開する根拠にはしない
 
+## 公式スキルの限定境界
+
+- 4000文字参考資料送信と公式スキル選択を混同しない。固定provider root・登録workspace/会話所有範囲・既存PermissionGate・source/hash/bundleHashを選択/次workflow/各callで再検証する。
+- bundleはmd/txt/rst最大20ファイル・全量16KiB。script/binary/hooks/agents/context fork/動的command等を有効化せず、省略して利用可能にしない。
+- Claude通常nativeのplan/implement/review/fixだけを選択bundle限定local plugin/Skill gateへ接続する。settingSourcesや未選択plugin/MCPを有効化しない。Codex選択skill付きnativeは隔離未確認でApp Server起動前停止、両社実行成功と報告しない。
+- requested/dispatched/observedの要求/許可/完了/拒否を分け、初期化・usageから実使用を推測しない。提供元の作成認定と扱わず、実通信検証は明示承認なしで行わない。[記録](docs/official-skills-20261009.md)。
+
 ## モデルpolicyと履歴
 
 - 利用者の選択は世代なしprovider:aliasと独立effort。開始/安全再開/各call直前に現catalogで解決し、1通信中は実ID/effort/catalogを固定する。

@@ -1,4 +1,10 @@
 import {
+  resolveCallSkills,
+  skillSelections,
+  skillEvidence,
+  type ResolveOfficialSkills,
+} from "./skill-selection.js";
+import {
   policyCandidate,
   planAvailability,
   recordTaskPolicies,
@@ -71,6 +77,8 @@ export const approvalDigest = (
     ? digest({ plan: record.plan, executionDigest: record.executionDigest })
     : digest(record.plan);
 export interface WorkflowRecord {
+  /** Requested pinned native skills. Bodies are never stored in workflow records. */
+  officialSkills?: import("../../../shared/official-skills.js").OfficialSkillSelection[];
   nativeWork?: { validation: "agent-reported"; baseline: "files" };
   nativeValidation?: {
     command: string;
@@ -142,6 +150,8 @@ export interface WorkflowRecord {
   calls: (
     | {
         requestId: string;
+        /** Requested skills for this provider/phase; not evidence of actual use. */
+        officialSkills?: import("../../../shared/official-skills.js").OfficialSkillEvidence;
         modelSelection?: ModelSelectionEvidence;
         communication?: import("./communication.js").WorkflowCommunication;
         nodeId?: string;
@@ -153,6 +163,8 @@ export interface WorkflowRecord {
       }
     | ({
         requestId: string;
+        /** Requested skills for this provider/phase; not evidence of actual use. */
+        officialSkills?: import("../../../shared/official-skills.js").OfficialSkillEvidence;
         modelSelection?: ModelSelectionEvidence;
         communication?: import("./communication.js").WorkflowCommunication;
         nodeId?: string;
@@ -169,6 +181,8 @@ export interface WorkflowRecord {
   error?: string;
 }
 export interface WorkflowOptions {
+  officialSkills?: import("../../../shared/official-skills.js").OfficialSkillSelection[];
+  resolveOfficialSkills?: ResolveOfficialSkills;
   /** Official path resolves/rechecks once immediately before each communication. */
   resolveCallModel?: ResolveCallModel;
   nativeWork?: boolean;
@@ -311,6 +325,8 @@ export async function runOfficialSingleTask(
     delete record.finishedAt;
     delete record.error;
   }
+  if (!options.resume && options.officialSkills?.length)
+    record.officialSkills = skillSelections(options.officialSkills);
   record.executionDigest = executionDigest;
   let tail: Promise<void> = Promise.resolve();
   const save = () => {
@@ -445,6 +461,13 @@ export async function runOfficialSingleTask(
     );
     model = selected.model;
     effort = selected.effort;
+    const officialSkills = await resolveCallSkills(
+      options,
+      record,
+      model.provider,
+      phase,
+      signal,
+    );
     const requestId = randomUUID();
     const tests = options.project
       ? options.tests.map((test) => ({ ...test, command: "" }))
@@ -457,6 +480,9 @@ export async function runOfficialSingleTask(
           : schemas.implement;
     const entry = {
       requestId,
+      ...(officialSkills.length
+        ? { officialSkills: { requested: skillSelections(officialSkills) } }
+        : {}),
       ...(selected.modelSelection
         ? { modelSelection: selected.modelSelection }
         : {}),
@@ -497,6 +523,7 @@ export async function runOfficialSingleTask(
         options.agents[model.provider].run(
           {
             requestId,
+            ...(officialSkills.length ? { officialSkills } : {}),
             diagnosticText: options.diagnosticText,
             taskId: record.id,
             phase,
@@ -532,7 +559,7 @@ export async function runOfficialSingleTask(
           signal,
         ),
     );
-    const { output, ...metadata } = result;
+    const { output, officialSkillsEvidence, ...metadata } = result;
     observe({
       actor: "harness",
       kind: "end",
@@ -543,6 +570,14 @@ export async function runOfficialSingleTask(
     record.calls[record.calls.length - 1] = {
       ...entry,
       ...metadata,
+      ...(officialSkills.length
+        ? {
+            officialSkills: skillEvidence(
+              officialSkills,
+              officialSkillsEvidence,
+            ),
+          }
+        : {}),
       communication: {
         ...entry.communication,
         ...(output !== undefined ? { output: communicationText(output) } : {}),

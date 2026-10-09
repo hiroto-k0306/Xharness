@@ -204,6 +204,33 @@ export class CodexWorkflowAgent implements OfficialAgent {
     }
   }
   async run(request: AgentRequest, signal: AbortSignal): Promise<AgentResult> {
+    if (request.officialSkills?.length) {
+      // Explicit skill input is supported by the protocol, but skills/list does
+      // not prove that all repo/ancestor/user/admin/system discovery is isolated.
+      // Do not persist skills/config/write or claim that a thread override is an
+      // allowlist without verifying that guarantee for the selected CLI version.
+      return {
+        status: signal.aborted ? "cancelled" : "failed",
+        dispatched: false,
+        observedModels: [],
+        usage: null,
+        elapsedMs: 0,
+        error:
+          "Codexの公式skill実行は未対応です。選択したskillだけに限定する隔離をこの公式CLIで確認できないため、モデル入力を送信していません。",
+        officialSkillsEvidence: {
+          requested: request.officialSkills.map((skill) => ({
+            provider: skill.provider,
+            scope: skill.scope,
+            name: skill.name,
+            source: skill.source,
+            hash: skill.hash,
+            bundleHash: skill.bundleHash,
+          })),
+          dispatched: [],
+          observed: [],
+        },
+      };
+    }
     const started = Date.now(),
       controller = new AbortController(),
       cancel = () => controller.abort();

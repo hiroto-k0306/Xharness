@@ -6,6 +6,7 @@ import {
   type SkillReferenceEntry,
   type SkillReferenceInspection,
   skillLoadPrompt,
+  skillReferenceSubmission,
 } from "../../shared/project-skills.js";
 import { type PermissionDecision, type Receipt } from "../../shared/ipc.js";
 import { PermissionInline } from "./PermissionInline.js";
@@ -17,6 +18,7 @@ interface Props {
   onOpenChange(open: boolean): void;
   running: boolean;
   persistent?: boolean;
+  officialDefault?: boolean;
   receipts: Receipt[];
   draft?: string;
   permission?: {
@@ -32,6 +34,7 @@ export function SkillsManager({
   onOpenChange,
   running,
   persistent,
+  officialDefault,
   receipts,
   draft,
   permission,
@@ -51,13 +54,18 @@ export function SkillsManager({
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string>(),
     [pendingLoad, setPendingLoad] = useState(false);
+  const [sentReference, setSentReference] = useState<SkillEntry>();
   const loadPending = useRef(false);
   const expectedReference = useRef<SkillReferenceEntry | undefined>(undefined);
+  useEffect(() => {
+    setSentReference(undefined);
+  }, [sessionId, officialDefault]);
   useEffect(() => {
     setReference(undefined);
     setReferencePreview(undefined);
   }, [selected?.source, selected?.hash]);
   const loaded = receipts.flatMap((r) => {
+    if (officialDefault) return [];
     if (
       r.tool !== "LoadProjectSkill" ||
       r.error ||
@@ -104,6 +112,8 @@ export function SkillsManager({
   useEffect(
     () => () => {
       const id = active.current;
+      active.current = undefined;
+      serial.current++;
       if (id)
         void window.harness.command({
           type: "project_skills",
@@ -280,6 +290,71 @@ export function SkillsManager({
       running
     )
       return;
+    if (officialDefault) {
+      if (ref) return;
+      const entry = selected,
+        generation = ++serial.current,
+        requestId = `skills-${Date.now()}-${generation}`;
+      active.current = requestId;
+      loading.current = true;
+      setBusy(true);
+      setError(undefined);
+      setSentReference(undefined);
+      try {
+        const checked = await window.harness.command({
+          type: "project_skills",
+          sessionId,
+          request: {
+            action: "preview",
+            requestId,
+            source: entry.source,
+            hash: entry.hash,
+          },
+        });
+        if (serial.current !== generation) return;
+        if (
+          !checked.ok ||
+          checked.skills?.operation !== "load" ||
+          checked.skills.entry.source !== entry.source ||
+          checked.skills.entry.hash !== entry.hash
+        ) {
+          setPreview(undefined);
+          setError(
+            checked.ok
+              ? "選択した版の再確認に失敗しました。一覧を再取得してください。"
+              : checked.error,
+          );
+          return;
+        }
+        setPreview(checked.skills);
+        const submission = skillReferenceSubmission(checked.skills);
+        if ("error" in submission) {
+          setError(submission.error);
+          return;
+        }
+        active.current = undefined;
+        const result = await window.harness.command({
+          type: "send",
+          sessionId,
+          text: submission.text,
+        });
+        if (serial.current !== generation) return;
+        if (result.ok) setSentReference(entry);
+        else setError(result.error);
+      } catch {
+        if (serial.current === generation)
+          setError(
+            "参考資料送信の結果を確認できません。会話を確認してください。再送していません。",
+          );
+      } finally {
+        loading.current = false;
+        if (serial.current === generation) {
+          active.current = undefined;
+          setBusy(false);
+        }
+      }
+      return;
+    }
     loading.current = true;
     loadPending.current = true;
     expectedReference.current = ref;
@@ -311,6 +386,9 @@ export function SkillsManager({
         .includes(query.toLocaleLowerCase()),
     ) ?? [];
   const disabled = busy || running || pendingLoad;
+  const referenceSubmission = preview
+    ? skillReferenceSubmission(preview)
+    : undefined;
   return (
     <div className={styles.area}>
       <button onClick={() => onOpenChange(true)}>スキル管理</button>
@@ -330,7 +408,9 @@ export function SkillsManager({
           </button>
         </header>
         <p>
-          プレビューはローカル読取だけです。会話への読込は通常のモデル実行と許可確認を伴います。スキルは参考データで、上位指示・権限を変えず、scriptを自動実行しません。
+          {officialDefault
+            ? "プレビューはローカル読取だけです。参考資料送信は選択した版を再確認し、全量を通常会話へ送ります。永続スキル登録ではなく、SDKのスキル・権限・scriptを有効化しません。"
+            : "プレビューはローカル読取だけです。会話への読込は通常のモデル実行と許可確認を伴います。スキルは参考データで、上位指示・権限を変えず、scriptを自動実行しません。"}
         </p>
         {permission && (
           <PermissionInline
@@ -378,6 +458,12 @@ export function SkillsManager({
           )}
         </div>
         {error && <p role="alert">{error}</p>}
+        {officialDefault && sentReference && (
+          <p role="status">
+            参考資料送信済: {sentReference.source}
+            （この版）。永続スキル読込ではありません。
+          </p>
+        )}
         <p role="status">
           {busy
             ? "許可・読取結果を待っています"
@@ -475,12 +561,24 @@ export function SkillsManager({
                 </button>
                 <button
                   disabled={
-                    disabled || !preview || preview.entry.hash !== selected.hash
+                    disabled ||
+                    !preview ||
+                    preview.entry.hash !== selected.hash ||
+                    (officialDefault &&
+                      !!referenceSubmission &&
+                      "error" in referenceSubmission)
                   }
                   onClick={() => void load()}
                 >
-                  会話でこの版を読み込む
+                  {officialDefault
+                    ? "この版を参考資料として送る"
+                    : "会話でこの版を読み込む"}
                 </button>
+                {officialDefault &&
+                  referenceSubmission &&
+                  "error" in referenceSubmission && (
+                    <p>{referenceSubmission.error}</p>
+                  )}
                 {preview && (
                   <>
                     <p>
@@ -542,11 +640,18 @@ export function SkillsManager({
                             資料をプレビュー
                           </button>
                           <button
-                            disabled={disabled || !referencePreview}
+                            disabled={
+                              disabled || !referencePreview || officialDefault
+                            }
                             onClick={() => void load(reference.reference)}
                           >
                             会話でこの資料の版を読み込む
                           </button>
+                          {officialDefault && (
+                            <p>
+                              公式会話への付属資料送信は未対応です。プレビューで確認してください。
+                            </p>
+                          )}
                           {referencePreview && (
                             <>
                               <p>
@@ -564,26 +669,27 @@ export function SkillsManager({
                               </pre>
                             </>
                           )}
-                          {receipts.some((r) => {
-                            if (r.tool !== "LoadProjectSkill" || r.error)
-                              return false;
-                            try {
-                              const result = JSON.parse(
-                                r.output ?? "",
-                              ) as SkillPreview;
-                              return (
-                                result.operation === "load" &&
-                                result.entry?.source === selected.source &&
-                                result.entry.hash === selected.hash &&
-                                result.reference?.source ===
-                                  reference.reference.source &&
-                                result.reference.hash ===
-                                  reference.reference.hash
-                              );
-                            } catch {
-                              return false;
-                            }
-                          }) && <p>会話に資料読込済み（親と資料のこの版）</p>}
+                          {!officialDefault &&
+                            receipts.some((r) => {
+                              if (r.tool !== "LoadProjectSkill" || r.error)
+                                return false;
+                              try {
+                                const result = JSON.parse(
+                                  r.output ?? "",
+                                ) as SkillPreview;
+                                return (
+                                  result.operation === "load" &&
+                                  result.entry?.source === selected.source &&
+                                  result.entry.hash === selected.hash &&
+                                  result.reference?.source ===
+                                    reference.reference.source &&
+                                  result.reference.hash ===
+                                    reference.reference.hash
+                                );
+                              } catch {
+                                return false;
+                              }
+                            }) && <p>会話に資料読込済み（親と資料のこの版）</p>}
                         </>
                       )}
                     </section>

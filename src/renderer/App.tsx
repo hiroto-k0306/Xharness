@@ -388,7 +388,11 @@ export function App() {
           <PhaseBar
             view={view}
             model={model}
-            onPhase={(phase) => void s.send(`/phase ${phase}`)}
+            onPhase={
+              app.officialDefault
+                ? undefined
+                : (phase) => void s.send(`/phase ${phase}`)
+            }
             onJump={(phase) => {
               setPane("transcript");
               if (current)
@@ -401,6 +405,11 @@ export function App() {
               );
             }}
           />
+          {app.officialDefault && view?.workflow && (
+            <p role="status">
+              旧workflow段階の変更は公式経路に未対応です。保存された段階は閲覧のみです。
+            </p>
+          )}
           {!app.phase4 && agentsPanel}
           {!app.officialDefault && (
             <StepTabs
@@ -434,6 +443,7 @@ export function App() {
           <div className={styles.agentArea}>
             <div className={styles.middle} data-pane={pane}>
               <Transcript
+                officialDefault={app.officialDefault}
                 key={transcriptKey}
                 items={transcriptItems}
                 running={!!view?.running}
@@ -613,7 +623,9 @@ export function App() {
               DEFAULT_IMAGES.warnSessionBytes) && (
             <div role="status">
               セッションの画像合計が警告値を超えています。再送する履歴を減らすには
-              /compact を実行してください（保存済み画像は残ります）。
+              {app.officialDefault
+                ? "公式経路は画像の再送・旧 /compact に未対応です。保存済み画像は履歴として閲覧できます。"
+                : "/compact を実行してください（保存済み画像は残ります）。"}
             </div>
           )}
           {session?.quotaPause && current && (
@@ -621,6 +633,7 @@ export function App() {
           )}
           {current && session?.workspaceId && (
             <SkillsManager
+              officialDefault={app.officialDefault}
               key={`skills-${current}`}
               sessionId={current}
               open={skillsOpen}
@@ -677,7 +690,7 @@ export function App() {
               </p>
               <p>
                 質問・作業を同じ会社のHaiku /
-                Lunaで自動判別します。質問はその場で回答し、作業は対象・既存テスト・作業場所を自動提案して計画の承認を待ちます。
+                Lunaで自動判別します。質問はその場で回答し、作業は公式エージェントが選択中のフォルダーを探索して計画を提案します。承認後はそのフォルダー／worktreeを直接編集し、検証結果はモデルの実行報告として表示します。
               </p>
               {view?.officialScopeText && (
                 <>
@@ -709,6 +722,7 @@ export function App() {
             </section>
           )}
           <PromptLine
+            officialDefault={app.officialDefault}
             onDraftChange={setSkillDraft}
             maxImages={app.images?.maxPerMessage}
             sessionId={current}

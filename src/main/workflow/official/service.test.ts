@@ -1274,6 +1274,10 @@ it.each([
     if (status === "completed")
       expect(result.summary).toBe((output as { summary: string }).summary);
     expect(requests).toHaveLength(1);
+    expect(requests[0]!.prompt).toContain("official read-only tools");
+    expect(requests[0]!.prompt).not.toContain(
+      "propose target files and an existing registered Node/Vitest test",
+    );
     expect(requests[0]).toMatchObject({
       phase: "conversation",
       files: [],

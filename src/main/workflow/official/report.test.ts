@@ -246,3 +246,51 @@ it("separates model evidence and escapes it without leaking diagnostic answer te
   record.calls[0]!.requestedModel = "<script>";
   expect(officialWorkflowReport(record)).toContain("&lt;script&gt;");
 });
+
+it("separates native DAG Git commits, independent processes and model reports", () => {
+  const record = selectionRecord(selectionCall);
+  record.nativeWork = { baseline: "files", validation: "independent-process" };
+  record.nativeDagWorkspace = {
+    source: "<source>",
+    sourceBase: "a",
+    sourceBranch: "main",
+    approvalDigest: "a".repeat(64),
+    ownedDirectory: "owned",
+    tasks: [],
+    integration: { cwd: "owned/integration", head: "b", status: "completed" },
+  };
+  record.dag = {
+    maxParallel: 2,
+    phase: "complete",
+    nodes: [],
+    nativeConversationResume: false,
+  };
+  record.checks = [
+    {
+      head: "b",
+      tests: [
+        {
+          id: "independent",
+          passed: true,
+          exitCode: 0,
+          elapsedMs: 1,
+          source: "process",
+          output: "fixture",
+        },
+      ],
+    },
+  ];
+  record.nativeValidation = [
+    { command: "agent-only", status: "failed", summary: "model report" },
+  ];
+  const html = officialWorkflowReport(record);
+  expect(html).toContain("base/headは所有する隔離Git worktreeのGitコミット");
+  expect(html).toContain("独立プロセスの結果はchecks表");
+  expect(html).toContain("agent-only: failed");
+  expect(html).toContain("process");
+  expect(html).not.toContain("固定合成課題の模擬実行");
+  record.nativeDagWorkspace.integration = undefined;
+  expect(officialWorkflowReport(record)).toContain(
+    "base/headはファイル比較digest",
+  );
+});

@@ -1,3 +1,4 @@
+import { OfficialPlanPolicy } from "./OfficialPlanPolicy.js";
 import { useEffect, useRef, useState } from "react";
 import type {
   OfficialWorkflowCommand,
@@ -120,6 +121,7 @@ export function ChatOfficialApprovals({
           <h3>計画を確認してください</h3>
           <p>{plan.goal}</p>
           <p>{plan.plan.summary}</p>
+          <OfficialPlanPolicy plan={plan.plan} />
           <p>
             会話：{sessionId} / workflow：{plan.id} / 承認ID：
             {approval.approvalId}
@@ -203,7 +205,22 @@ export function ChatOfficialApprovals({
           data-approval-id={operation.approvalId}
           className={styles.card}
         >
-          <h3>操作の許可が必要です</h3>
+          <h3>
+            {operation.source === "harness-test"
+              ? "独立検証の実行許可が必要です"
+              : "操作の許可が必要です"}
+          </h3>
+          {operation.source === "harness-test" && (
+            <>
+              <p>
+                ハーネスの独立プロセス検証です。毎回明示確認し、フロー許可・自動許可へ切り替えません。
+              </p>
+              <p>実行プログラム：{operation.program}</p>
+              <p>argv：{JSON.stringify(operation.args)}</p>
+              <p>テスト対象：{operation.testFiles.join(", ")}</p>
+              <p>検証仕様digest：{operation.testSpecDigest}</p>
+            </>
+          )}
           <p>操作：{operation.command}</p>
           <p>対象：{operation.targets.join(", ")}</p>
           <p>作業場所：{operation.cwd}</p>
@@ -212,16 +229,27 @@ export function ChatOfficialApprovals({
             会話：{sessionId} / workflow：{operation.workflowId} / request：
             {operation.requestId} / 承認ID：{operation.approvalId}
           </p>
+          {operation.source !== "harness-test" && (
+            <p>
+              実行基盤のセッション：{operation.sessionId} / turn：
+              {operation.turnId} / item：{operation.itemId}
+            </p>
+          )}
           <p>承認digest：{operation.digest}</p>
           <p>期限：{new Date(operation.expiresAt).toLocaleString()}</p>
           <p>
-            許可は今回の操作だけです。フロー許可も終了・停止時に失効し、禁止操作は許可しません。期限切れは拒否されます。
+            {operation.source === "harness-test"
+              ? "許可は今回の独立検証だけです。期限切れは拒否されます。"
+              : "許可は今回の操作だけです。フロー許可も終了・停止時に失効し、禁止操作は許可しません。期限切れは拒否されます。"}
           </p>
           {now >= operation.expiresAt && <p>期限切れです。承認できません。</p>}
           {[
             true,
             false,
-            ...(operationRecord.nativeWork ? ["flow" as const] : []),
+            ...(operation.source !== "harness-test" &&
+            operationRecord.nativeWork
+              ? ["flow" as const]
+              : []),
           ].map((allow) => (
             <button
               key={String(allow)}

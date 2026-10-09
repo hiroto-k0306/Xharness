@@ -106,6 +106,10 @@ export function WorkflowFlow({
   const color = (phases: Phase[]) =>
     request(phases)?.provider === "codex" ? "var(--codex)" : "var(--claude)";
   const tests = record?.checks.at(-1)?.tests;
+  const agentReported =
+    !!record?.nativeWork &&
+    !record.nativeDagWorkspace &&
+    record.nativeWork.validation === "agent-reported";
   const stopped = !!record && !!endings[record.status];
   const nodes = [
     {
@@ -159,12 +163,12 @@ export function WorkflowFlow({
     },
     {
       id: "verify",
-      title: record?.nativeWork ? "モデルのテスト実行報告" : "独立テスト",
-      actor: record?.nativeWork
+      title: agentReported ? "モデルのテスト実行報告" : "独立テスト",
+      actor: agentReported
         ? actor(["implement", "fix"])
         : "ハーネスがローカルプロセスを実行",
-      status: record?.nativeWork
-        ? record.nativeValidation?.length
+      status: agentReported
+        ? record?.nativeValidation?.length
           ? record.nativeValidation
               .map((t) => `${t.command}: ${t.status}`)
               .join(" / ")
@@ -206,9 +210,11 @@ export function WorkflowFlow({
       {record && <OfficialSkillEvidence record={record} />}
       {record && <OfficialCommunication record={record} />}
       <p>
-        {record?.nativeWork
-          ? "探索・編集・テストは公式SDK / App Serverのエージェントが実行します。ハーネスは計画承認・操作確認・別会社レビュー・停止・記録を担当します。"
-          : "モデルは指示・返答を生成。ツールは公式SDK / App Server、独立テスト・Git・記録はハーネスが実行します。"}
+        {record?.nativeDagWorkspace
+          ? "公式エージェントが隔離Git worktreeで実装します。ハーネスは承認済みテストの独立プロセス検証と所有作業領域のコミット・統合を担当し、利用者のブランチは変更しません。モデルのテスト報告は独立検証と区別します。"
+          : record?.nativeWork
+            ? "探索・編集・テストは公式SDK / App Serverのエージェントが実行します。ハーネスは計画承認・操作確認・別会社レビュー・停止・記録を担当します。"
+            : "モデルは指示・返答を生成。ツールは公式SDK / App Server、独立テスト・Git・記録はハーネスが実行します。"}
       </p>
       <p>
         保存状態を表示します。公式基盤内部の全往復を示すものではありません。

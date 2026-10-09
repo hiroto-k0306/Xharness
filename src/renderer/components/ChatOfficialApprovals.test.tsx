@@ -182,3 +182,44 @@ it("notification focus identifies the bound card and never grants", async () => 
     true,
   );
 });
+it("independent harness test request shows exact argv and never offers flow grant", async () => {
+  const { view, api } = fixture({ approval: undefined });
+  view.operationApproval = {
+    source: "harness-test",
+    workflowId: "workflow",
+    approvalId: "test-grant",
+    conversationSessionId: "chat",
+    digest: "test-digest",
+    expiresAt: Date.now() + 60000,
+    requestId: "test-request",
+    command: '"C:/node.exe" "--test" "--test-reporter=tap" "a.test.mjs"',
+    program: "C:/node.exe",
+    args: ["--test", "--test-reporter=tap", "a.test.mjs"],
+    testFiles: ["a.test.mjs"],
+    testSpecDigest: "spec-digest",
+    cwd: "C:/project",
+    targets: ["a.test.mjs"],
+    reason: "Independent acceptance",
+  };
+  render(<ChatOfficialApprovals sessionId="chat" />);
+  const card = await screen.findByRole("alertdialog");
+  expect(card).toHaveTextContent("独立検証の実行許可");
+  expect(card).toHaveTextContent(
+    'argv：["--test","--test-reporter=tap","a.test.mjs"]',
+  );
+  expect(card).toHaveTextContent("spec-digest");
+  expect(
+    screen.queryByRole("button", { name: "このフローのみ許可" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "今回の操作だけ許可" }));
+  await waitFor(() =>
+    expect(api).toHaveBeenCalledWith({
+      action: "tool_decision",
+      id: "workflow",
+      approvalId: "test-grant",
+      digest: "test-digest",
+      sessionId: "chat",
+      allow: true,
+    }),
+  );
+});

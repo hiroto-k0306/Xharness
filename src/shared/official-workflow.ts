@@ -65,6 +65,8 @@ export interface OfficialWorkflowView {
     message: string;
   };
   activeId?: string;
+  /** App conversation owner, including preparation before the first record exists. */
+  activeSessionId?: string;
   approval?: {
     id: string;
     approvalId: string;

@@ -85,10 +85,12 @@ export function LoopFlow({
   );
 }
 export function Receipts({
+  children,
   receipts = [],
   sessionId,
   running = false,
 }: {
+  children?: import("react").ReactNode;
   receipts?: Receipt[];
   sessionId?: string;
   running?: boolean;
@@ -177,6 +179,7 @@ export function Receipts({
           </button>
         ))}
       </div>
+      {children}
       {replay && (
         <ReceiptReplayDialog
           replay={replay}

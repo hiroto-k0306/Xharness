@@ -4,6 +4,8 @@ import { builtinCommands } from "../shared/commands.js";
 import { AgentsPanel } from "./components/AgentsPanel.js";
 import { AuthenticationPanel } from "./components/AuthenticationPanel.js";
 import { ChatOfficialApprovals } from "./components/ChatOfficialApprovals.js";
+import { OfficialRuntimeSettings } from "./components/OfficialRuntimeSettings.js";
+import { OfficialWorkflowReceipts } from "./components/OfficialWorkflowReceipts.js";
 import { OfficialWorkflowPanel } from "./components/OfficialWorkflowPanel.js";
 import { WorkflowFlow } from "./components/WorkflowFlow.js";
 import { PhaseBar } from "./components/PhaseBar.js";
@@ -562,6 +564,20 @@ export function App() {
                   )
                 )}
 
+                {view?.rewind && current && (
+                  <RewindApproval
+                    key={view.rewind.requestId}
+                    preview={view.rewind.preview}
+                    onRespond={(choice) => {
+                      void window.harness.command({
+                        type: "rewind_response",
+                        sessionId: current,
+                        requestId: view.rewind!.requestId,
+                        choice,
+                      });
+                    }}
+                  />
+                )}
                 {current && app.officialDefault && (
                   <ChatOfficialApprovals
                     key={current}
@@ -593,21 +609,11 @@ export function App() {
               receipts={view?.receipts}
               sessionId={current ?? undefined}
               running={session?.status !== "idle"}
-            />
-          )}
-          {view?.rewind && current && (
-            <RewindApproval
-              key={view.rewind.requestId}
-              preview={view.rewind.preview}
-              onRespond={(choice) => {
-                void window.harness.command({
-                  type: "rewind_response",
-                  sessionId: current,
-                  requestId: view.rewind!.requestId,
-                  choice,
-                });
-              }}
-            />
+            >
+              {current && app.officialDefault && (
+                <OfficialWorkflowReceipts key={current} sessionId={current} />
+              )}
+            </Receipts>
           )}
           {app.connections && current && (
             <ConnectionPicker
@@ -757,7 +763,9 @@ export function App() {
               onOpenChange={setImprovementsOpen}
             />
           )}
+          {app.officialDefault && <OfficialRuntimeSettings />}
           <OfficialWorkflowPanel
+            verificationOnly
             openSignal={officialOpenSignal}
             mainModel={model}
             mainEffort={effort}

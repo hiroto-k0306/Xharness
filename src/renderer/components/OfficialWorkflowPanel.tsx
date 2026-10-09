@@ -13,11 +13,13 @@ import { ClaudeSdkStatus } from "./ClaudeSdkStatus.js";
 import { CodexRuntimeSettings } from "./CodexRuntimeSettings.js";
 import { officialFailureMessage } from "../../main/workflow/official/session-result.js";
 export function OfficialWorkflowPanel({
+  verificationOnly = false,
   mainModel,
   mainEffort,
   mainProvider,
   openSignal,
 }: {
+  verificationOnly?: boolean;
   /** Company of the main model; questions use only this connection. */
   mainProvider?: "claude" | "codex";
   openSignal?: number;
@@ -75,6 +77,7 @@ export function OfficialWorkflowPanel({
       setPending(false);
     }
   };
+  if (verificationOnly && !view?.simulated && !view?.verification) return null;
   return (
     <>
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open}>
@@ -386,10 +389,21 @@ export function OfficialWorkflowPanel({
               </small>
               <p>
                 {r.nativeWork &&
-                  "ファイル内容の比較digest（Git HEADではありません）："}
+                  (r.nativeDagWorkspace?.integration?.head
+                    ? "隔離Git worktreeのコミット（利用者ブランチ未変更）："
+                    : "ファイル内容の比較digest（Git HEADではありません）：")}
                 base {/^0+$/.test(r.base) ? "未測定" : r.base.slice(0, 12)} →
                 head {/^0+$/.test(r.head) ? "未測定" : r.head.slice(0, 12)}
               </p>
+              {r.nativeDagWorkspace && (
+                <p>
+                  所有する隔離Git worktrees：source base{" "}
+                  {r.nativeDagWorkspace.sourceBase.slice(0, 12)} / 統合HEAD{" "}
+                  {r.nativeDagWorkspace.integration?.head?.slice(0, 12) ??
+                    "未取込"}
+                  。利用者のブランチは変更しません。
+                </p>
+              )}
               {r.plan && (
                 <>
                   <h4>確認する計画</h4>
@@ -399,10 +413,15 @@ export function OfficialWorkflowPanel({
                       <p>
                         公式エージェントに対象探索・編集・テスト選択を任せます。作業場所：
                         {r.cwd}
-                        （選択中のフォルダー／worktree）。既存の変更を保全し、自動commit・reset・mergeは行いません。
+                        {r.nativeDagWorkspace
+                          ? "（所有する隔離Git worktree）。承認済み変更だけをハーネスがcommit・統合し、利用者のブランチへmerge/resetは行いません。"
+                          : "（選択中のフォルダー／worktree）。既存の変更を保全し、自動commit・reset・mergeは行いません。"}
                       </p>
                       <p>
-                        ファイル一覧は計画時点の候補です。公式sandboxを維持します。通常モードでは操作ごとに確認し、「このフローのみ許可」も選べます。追加課金は禁止のままです。
+                        {r.nativeDagWorkspace
+                          ? "ファイル一覧は各taskの承認済み編集範囲です。"
+                          : "ファイル一覧は計画時点の候補です。"}
+                        公式sandboxを維持します。通常モードでは操作ごとに確認し、「このフローのみ許可」も選べます。追加課金は禁止のままです。
                       </p>
                       {view.approval?.id === r.id &&
                         view.approval.autoOperations && (
@@ -411,7 +430,9 @@ export function OfficialWorkflowPanel({
                           </p>
                         )}
                       <p>
-                        テスト結果はモデルの実行報告です。ハーネスの独立プロセス検証ではありません。別会社レビューと最大2回の修正を行います。
+                        {r.nativeDagWorkspace
+                          ? "各taskのモデル報告と、統合後に別承認で実行する独立プロセステストを分けて記録します。統合レビューで重大指摘があれば停止し、作業領域を保全します。"
+                          : "テスト結果はモデルの実行報告です。ハーネスの独立プロセス検証ではありません。別会社レビューと最大2回の修正を行います。"}
                       </p>
                     </section>
                   )}
@@ -561,7 +582,10 @@ export function OfficialWorkflowPanel({
               )}
               <h4>
                 {r.nativeWork
-                  ? "モデルの検証報告と別会社レビュー"
+                  ? r.nativeDagWorkspace ||
+                    r.nativeWork.validation === "independent-process"
+                    ? "独立プロセス検証・モデル報告・別会社レビュー"
+                    : "モデルの検証報告と別会社レビュー"
                   : "実テストとレビューの証跡"}
               </h4>
               {r.nativeValidation?.map((test, index) => (

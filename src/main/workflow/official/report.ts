@@ -138,11 +138,11 @@ export function officialWorkflowReport(record: WorkflowRecord) {
         .join("")}</table>`
     : "";
   const dagSummary = record.dag
-    ? `<h3>DAG / 最大2並列 / native会話resume未対応</h3><p>固定合成課題の模擬実行。実provider並行実行は未検証。</p><table><tr><th>node</th><th>状態</th><th>base</th><th>取込HEAD</th></tr>${record.dag.nodes.map((n) => `<tr>${cells([n.id, n.state, n.base, n.integratedHead])}</tr>`).join("")}</table>`
+    ? `<h3>DAG / 最大2並列 / native会話resume未対応</h3><p>${record.nativeDagWorkspace ? "通常作業の隔離Git worktree実行。利用者のブランチは変更しません。" : "固定合成課題の記録。"}${record.simulated ? " 模擬通信で、実provider並行実行の検証ではありません。" : " 実provider並行実行の検証範囲は対象リビジョンの記録を参照してください。"}</p><table><tr><th>node</th><th>状態</th><th>base</th><th>取込HEAD</th></tr>${record.dag.nodes.map((n) => `<tr>${cells([n.id, n.state, n.base, n.integratedHead])}</tr>`).join("")}</table>`
     : "";
   const reviews =
     (record.nativeWork
-      ? `<h3>通常作業の検証報告</h3><p>base/headはファイル比較digestです。Gitコミットではありません。作業場所: ${escape(record.cwd)}。以下はモデルの実行報告で、ハーネス独立検証ではありません。</p>${record.nativeValidation?.length ? record.nativeValidation.map((t) => `<p>${escape(t.command)}: ${escape(t.status)} / ${escape(t.summary)}</p>`).join("") : "<p>テスト実行報告なし</p>"}`
+      ? `<h3>通常作業の検証報告</h3><p>${record.nativeDagWorkspace?.integration?.head ? "base/headは所有する隔離Git worktreeのGitコミットです。利用者のブランチは変更しません。" : "base/headはファイル比較digestです。Gitコミットではありません。"}${record.nativeDagWorkspace ? ` source base ${escape(record.nativeDagWorkspace.sourceBase)} / 統合HEAD ${escape(record.nativeDagWorkspace.integration?.head ?? "未取込")}。独立プロセスの結果はchecks表、モデル報告は以下に分けて表示します。` : ""}作業場所: ${escape(record.cwd)}。以下はモデルの実行報告で、ハーネス独立検証ではありません。</p>${record.nativeValidation?.length ? record.nativeValidation.map((t) => `<p>${escape(t.command)}: ${escape(t.status)} / ${escape(t.summary)}</p>`).join("") : "<p>テスト実行報告なし</p>"}`
       : "") +
     dagSummary +
     record.reviews

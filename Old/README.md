@@ -1,8 +1,8 @@
 # Old：旧版と履歴資料の索引
 
-このフォルダーは履歴保存用です。現行仕様は [SPEC.md](../SPEC.md)、現行設計は [DESIGN.md](../DESIGN.md)。旧版の未実装案・古い検証成功を現在の要件・成功として扱わないでください。
+このフォルダーは履歴保存用です。現行仕様は [Spec.md](../docs/Spec.md)、現行設計は [Architecture.md](../docs/design/Architecture.md)。旧版の未実装案・古い検証成功を現在の要件・成功として扱わないでください。
 
-整理基準：main `9a275bc99272b34f0c418a59a8fcc63dcabd20fe`。削除はせず、初期フェーズ・過去の文書更新記録・統合済み原稿・完了済み依頼の20ファイルを移動しました。移動元への固定参照なし（任意設定や汎用ツール参照は除く）という調査結果に基づく整理です。初回の文書整理では最近の障害/実機記録、test/archived、fixtures、spike、mockup、release、brand、resources、docs/examples、紹介資料を維持しました。その後の追加依頼による旧実行器・直結テストの撤去は、Git履歴を残す別の整理です。[変更記録](../docs/official-only-consolidation-20261009.md)を参照してください。
+整理基準：main `9a275bc99272b34f0c418a59a8fcc63dcabd20fe`。削除はせず、初期フェーズ・過去の文書更新記録・統合済み原稿・完了済み依頼の20ファイルを移動しました。移動元への固定参照なし（任意設定や汎用ツール参照は除く）という調査結果に基づく整理です。初回の文書整理では最近の障害/実機記録、test/archived、fixtures、spike、mockup、release、brand、resources、docs/examples、紹介資料を維持しました。その後の追加依頼による旧実行器・直結テストの撤去は、Git履歴を残す別の整理です。[変更記録](../docs/report/official-only-consolidation-20261009.md)を参照してください。
 
 ## 移動前後の対応
 
@@ -49,13 +49,13 @@
 
 「固定参照なし」は、追跡済みコード・スクリプト・テスト・設定等711ファイルで、20移動元の完全パス・ファイル名を検索した範囲です。リンク・コメント・Prettier除外はOldへ対応させました。任意の利用者設定・外部スクリプト・汎用ツールからの参照がないことを保証するものではありません。
 
-作業場所の [native snapshot](../src/main/workflow/official/native-snapshot.ts) はdocs/Oldを除外せず再帰読込します。[projectMemory](../src/main/config/project.ts) は任意のcontext.memoryFilesを読み、Read/Grep/Glob等も指定された資料を参照できます。旧パスを指定した利用者設定は今回確認していません。動的参照の調査範囲・限界は [調査記録](../docs/documentation-refresh-20261009.md) に記載しています。
+作業場所の [native snapshot](../src/main/workflow/official/native-snapshot.ts) はdocs/Oldを除外せず再帰読込します。[projectMemory](../src/main/config/project.ts) は任意のcontext.memoryFilesを読み、Read/Grep/Glob等も指定された資料を参照できます。旧パスを指定した利用者設定は今回確認していません。動的参照の調査範囲・限界は [調査記録](../docs/report/documentation-refresh-20261009.md) に記載しています。
 
 旧本文は保存し、旧版表示と相対リンクのみを調整しました。履歴の設計書リンクは当時の設計書へ接続します。ルートREADME/AGENTS/SPEC、関連履歴文書、electron-builderのコメントとPrettier除外参照を更新しました。
 
 ## 旧ソースの追加整理（2026-10-09）
 
-PR #26のマージ後、main `991e6e4` を基準に旧ソースを [実行対象外の保存庫](retired-sources/README.md) へ整理しました。削除済みソースもGitから復元し、現行への復活を防ぐため `.txt` として保存しています。全件の移動元・出典は [対応一覧](retired-sources/manifest.tsv)、残す共通機能と検証範囲は [整理記録](../docs/retired-source-archive-20261009.md) を参照してください。
+PR #26のマージ後、main `991e6e4` を基準に旧ソースを [実行対象外の保存庫](retired-sources/README.md) へ整理しました。削除済みソースもGitから復元し、現行への復活を防ぐため `.txt` として保存しています。全件の移動元・出典は [対応一覧](retired-sources/manifest.tsv)、残す共通機能と検証範囲は [整理記録](../docs/report/retired-source-archive-20261009.md) を参照してください。
 
 ## 最新世代alias追従前の文書（f7f7350）
 
@@ -77,3 +77,7 @@ PR #26のマージ後、main `991e6e4` を基準に旧ソースを [実行対象
 ## 2026-10-09 文書階層の再構成
 
 [再構成直前の原本](doc-layout-0e5fa40/INDEX.md)27件を追加保存しました。既存Old本文は変更していません。現行正本は[文書索引](../docs/README.md)、[移動対応](../docs/report/documentation-layout-20261009/moves.tsv)、[整理報告](../docs/report/documentation-layout-20261009.md)を参照してください。
+
+## 移管済み案内の整理（2026-10-13）
+
+移転案内だけの69件を[原本保存庫](migration-notices-4215534/INDEX.md)へ移動しました。現行のroot/docsには同じ案内を残さず、正本・移動済み記録へ直接参照します。旧版本文は保全し、この索引のリンクだけ現行配置へ更新しています。

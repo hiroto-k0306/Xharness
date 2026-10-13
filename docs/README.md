@@ -12,7 +12,7 @@
 | 操作・開発・配布手順                     | [開発案内](development.md)、[配布README](../release/README.md) |
 | 過去の仕様/設計・退役実装                | [Old索引](../Old/README.md)                                    |
 
-ファイル名は `Requirements.md` と `Spec.md` です。root `SPEC.md`・`DESIGN.md`・`FEATURES.md` は互換移転案内で、別の正本ではありません。
+ファイル名は `Requirements.md` と `Spec.md` です。移管済みの移転案内はOldへ保存し、現行の入口には残しません。
 
 ## 機能別
 

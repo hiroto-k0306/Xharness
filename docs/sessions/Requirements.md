@@ -54,6 +54,6 @@
 ## 関連文書
 
 - 外部仕様と受入条件: [Spec.md](Spec.md)。内部実現: [Architecture.md](design/Architecture.md)。
-- 横断基準: [現行仕様](../../SPEC.md)、[AGENTS](../../AGENTS.md)。
+- 横断基準: [現行仕様](../Spec.md)、[AGENTS](../../AGENTS.md)。
 - workflow契約: [通常作業の境界](../workflow/report/native-workflow-boundary-20261009.md)、[チャット・通知・receipts移設の記録](../workflow/report/chat-approvals-notifications-20261009.md)。
-- 専門機能: [公式スキル](../skills/report/official-skills-20261009.md)、[結果受渡し](report/official-result-handoff-20261008.md)、[ローカル観測](../local-computer-use.md)、[保存整合性](../storage-consistency.md)。
+- 専門機能: [公式スキル](../skills/report/official-skills-20261009.md)、[結果受渡し](report/official-result-handoff-20261008.md)、[ローカル観測](Spec.md#6-手動管理レポート退役境界)、[保存整合性](Spec.md)。

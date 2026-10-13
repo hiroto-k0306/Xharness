@@ -1,0 +1,21 @@
+file	old	new
+Old/README.md	../SPEC.md	../docs/Spec.md
+Old/README.md	../DESIGN.md	../docs/design/Architecture.md
+Old/README.md	../docs/official-only-consolidation-20261009.md	../docs/report/official-only-consolidation-20261009.md
+Old/README.md	../docs/documentation-refresh-20261009.md	../docs/report/documentation-refresh-20261009.md
+Old/README.md	../docs/retired-source-archive-20261009.md	../docs/report/retired-source-archive-20261009.md
+docs/presentations/20261008/README.md	../../../SPEC.md	../../Spec.md
+docs/presentations/20261008/README.md	../../codex-prerelease-live-20261008.md	../../workflow/report/codex-prerelease-live-20261008.md
+docs/presentations/20261008/README.md	../../loopflow-live-20261008.md	../../workflow/report/loopflow-live-20261008.md
+docs/presentations/20261008/receipts/README.md	../../../codex-prerelease-live-20261008.md	../../../workflow/report/codex-prerelease-live-20261008.md
+docs/sessions/Requirements.md	../../SPEC.md	../Spec.md
+docs/sessions/Requirements.md	../local-computer-use.md	Spec.md#6-手動管理レポート退役境界
+docs/sessions/Requirements.md	../storage-consistency.md	Spec.md
+docs/sessions/design/Architecture.md	../../storage-consistency.md	../Spec.md
+AGENTS.md	root SPEC/DESIGN/FEATURESは移転案内で、正本ではありません。	移管済みの移転案内だけの文書はOldへ保存し、元の場所には残しません。現行参照は正本や移動済み記録へ直接つなぎます。
+docs/README.md	root `SPEC.md`・`DESIGN.md`・`FEATURES.md` は互換移転案内で、別の正本ではありません。	移管済みの移転案内はOldへ保存し、現行の入口には残しません。
+docs/Spec.md	旧root SPEC/DESIGN/FEATURESは移転案内です。	移管済みの旧文書・移転案内はOldに保存し、現行参照は各正本へ直接接続します。
+docs/Spec.md	旧pathへの必要な案内を照合する	現行参照先への直接リンクを照合する
+electron.vite.config.ts	一括ビルド(DESIGN.md §17.2)	一括ビルド(docs/design/Architecture.md「配布」)
+docs/examples/README.md	DESIGN.md §26.3 のLow項目のサンプルです。	[旧設計 §26.3](../../Old/doc-layout-0e5fa40/DESIGN.md) のLow項目のサンプルです。現行の提供範囲は[全体仕様](../Spec.md)を参照してください。
+.prettierignore	DESIGN.md（rootの除外）	Old/migration-notices-4215534/DESIGN.md 等（保存原本の除外）

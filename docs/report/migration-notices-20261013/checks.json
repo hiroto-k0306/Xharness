@@ -1,0 +1,22 @@
+{
+  "base": "42155341d9b8dc4aadf4c36083141e73aa0c1796",
+  "moved_notices": 69,
+  "byte_identical_archived_notices": 69,
+  "removed_source_paths": 69,
+  "existing_Old_preserved_excluding_index": 239,
+  "historical_reports_and_evidence_preserved": 183,
+  "assets_preserved_excluding_navigation_READMEs": 120,
+  "markdown_files_checked": 162,
+  "local_links_checked": 1050,
+  "canonical_anchors_checked": 4,
+  "preservation_errors": [],
+  "link_errors": [],
+  "stale_active_links": [],
+  "remaining_notice_files": [],
+  "behavior_or_test_changes": [],
+  "test_expectations_changed": false,
+  "archive_link_policy": "Old raw originals retain historical relative links; use archive INDEX. Historical TSV/JSON path records are unchanged.",
+  "prettier_changed_documents": "passed",
+  "git_diff_check": "passed",
+  "existing_checkout_unchanged": true
+}

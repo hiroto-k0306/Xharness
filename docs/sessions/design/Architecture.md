@@ -87,7 +87,7 @@ finallyでcontroller、公式service、SDK manager、端末を閉じ、writerを
 
 受入条件とテストの対応は [Spec §7](../Spec.md#7-受入条件と根拠)。実装済みの保存・UI・CLI・手動管理境界と、今回の環境で確認済みの範囲を区別する。文書更新では内部リンクと参照先を検査し、実モデル・Windows通知・配布/インストールを再実行しない。
 
-[チャット/通知検証](../../workflow/report/chat-approvals-notifications-20261009.md)、[保存整合性](../../storage-consistency.md)、[結果受渡し](../report/official-result-handoff-20261008.md)、[ローカル観測検証](../report/local-computer-use-validation-20261005.md)は対象日付/HEAD付きの根拠である。以前の実機成功を今回HEADでの全機能成功として読まない。
+[チャット/通知検証](../../workflow/report/chat-approvals-notifications-20261009.md)、[保存整合性](../Spec.md)、[結果受渡し](../report/official-result-handoff-20261008.md)、[ローカル観測検証](../report/local-computer-use-validation-20261005.md)は対象日付/HEAD付きの根拠である。以前の実機成功を今回HEADでの全機能成功として読まない。
 
 ## 準備操作と証跡の開閉
 

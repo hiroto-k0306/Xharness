@@ -5,7 +5,6 @@ pnpm-lock.yaml
 brand/
 mockup/
 catalog/
-DESIGN.md
 AGENTS.md
 Old/docs/phase0-runbook.md
 Old/docs/phase0-findings.md
@@ -41,3 +40,9 @@ Old/release-README-f7f7350.md
 
 # 文書構造整理前の原本（再整形しない）
 Old/doc-layout-0e5fa40/**
+
+# 移管済み案内の原本（再整形しない）
+Old/migration-notices-4215534/SPEC.md
+Old/migration-notices-4215534/DESIGN.md
+Old/migration-notices-4215534/FEATURES.md
+Old/migration-notices-4215534/docs/**

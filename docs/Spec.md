@@ -2,7 +2,7 @@
 
 ## 正本と適用範囲
 
-基準コードは `0e5fa40da0d8bc39b71fb36b83cce82a8fe18087`。この文書はシステム全体・横断事項・未分割機能のWhat正本です。個別の契約は[作業実行](workflow/Spec.md)、[会話・保存](sessions/Spec.md)、[スキル](skills/Spec.md)に一度だけ定めます。[要求](Requirements.md)はWhy、[設計](design/Architecture.md)はHow、reportは対象リビジョンと環境に対する証拠です。旧root SPEC/DESIGN/FEATURESは移転案内です。
+基準コードは `0e5fa40da0d8bc39b71fb36b83cce82a8fe18087`。この文書はシステム全体・横断事項・未分割機能のWhat正本です。個別の契約は[作業実行](workflow/Spec.md)、[会話・保存](sessions/Spec.md)、[スキル](skills/Spec.md)に一度だけ定めます。[要求](Requirements.md)はWhy、[設計](design/Architecture.md)はHow、reportは対象リビジョンと環境に対する証拠です。移管済みの旧文書・移転案内はOldに保存し、現行参照は各正本へ直接接続します。
 
 「実装済み」はコード上の経路が存在すること、「限定検証済み」は指定したmock/fixture等の結果、「未検証」は対象環境で確認していないこと、「未実装」は利用可能な経路がないことを指します。実装済みから実機成功を推定しません。
 
@@ -79,7 +79,7 @@ Claudeは配布seedから管理領域へSDK/native/依存を準備し、専用Wo
 | -------------------------- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | SYS-A01 (SYS-F01/F02)      | 通常desktop/headless→共通service→公式Adapterを追跡し、旧custom tools登録0とfixture分離を確認する | コード・既存test定義を読取照合。実通信は未実施                                                                                                                                                      |
 | SYS-A02                    | 各要件の仕様/受入条件と実装根拠、未対応/未確認が単一正本で参照できる                             | 新文書・索引・内部リンクを限定確認                                                                                                                                                                  |
-| SYS-A03                    | 旧版原本hashと出典、移動前後対応、旧pathへの必要な案内を照合する                                 | 文書移行manifestとOldの原本一致を確認                                                                                                                                                               |
+| SYS-A03                    | 旧版原本hashと出典、移動前後対応、現行参照先への直接リンクを照合する                             | 文書移行manifestとOldの原本一致を確認                                                                                                                                                               |
 | SYS-A04 (SYS-F03/F05, N03) | runtime・seed・配布・IPCの不正/欠損を成功へ変換しない関連testを識別する                          | [runtime test](../src/main/workflow/official/sdk-manager.test.ts)、[配布test](../scripts/collect-release.test.ts)、[IPC test](../src/shared/ipc.test.ts)等の定義を参照。今回再実行を意味しない      |
 | SYS-A05 (SYS-F03, N02)     | 未知・無効・非対応effort・通常枠不明/拒否で代替通信しない                                        | [catalog](../src/main/config/catalog.test.ts)、[Codex](../src/main/workflow/official/codex.test.ts)、[model selection](../src/main/workflow/official/model-selection.test.ts)定義を照合。再実行なし |
 | SYS-A06 (SYS-N01/N02/N04)  | 秘密値非公開、sandbox/scopeを包括許可で拡張しない、履歴を書換えない                              | [redact](../src/main/core/redact.ts)、[Claude](../src/main/workflow/official/claude.test.ts)、各機能受入条件のsource/test定義を照合。実機保証なし                                                   |

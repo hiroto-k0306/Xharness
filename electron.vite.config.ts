@@ -2,7 +2,7 @@ import { defineConfig } from "electron-vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
-// main / preload / renderer を一括ビルド(DESIGN.md §17.2)。
+// main / preload / renderer を一括ビルド(docs/design/Architecture.md「配布」)。
 export default defineConfig({
   main: {
     plugins: [
